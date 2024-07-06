@@ -4,7 +4,6 @@ import os
 
 from code.widgets import MainWindow_Setting
 
-
 from Qt_core import *
 
 
@@ -12,10 +11,15 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
         self.ui = MainWindow_Setting()
         self.ui.setup_ui(self)
+        self.showMaximized()  # 最大化窗口
 
-        # self.show()
+        self.hide_grips = True  # 隐藏窗口
+
 
 
 if __name__ == "__main__":

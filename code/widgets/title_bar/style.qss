@@ -1,0 +1,39 @@
+QFrame
+{
+    background-color: #f36609;
+    color: #f85109;
+    max-height: 100px;
+    max-width: 580px;
+    min-height: 100px;
+    min-width: 580px;
+}
+
+QPushButton#menu_button
+{
+    background-color: #097af3;
+    border: 1px solid #091df8;
+    border-radius: 5px;
+    color: #096df8;
+    font-size: 12px;
+    font-weight: bold;
+    max-height: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    min-width: 30px;
+    padding: 5px;
+}
+
+QPushButton#selec_button
+{
+    background-color: #09f367;
+    border: 1px solid #06fd61;
+    border-radius: 5px;
+    color: #07f523;
+    font-size: 12px;
+    font-weight: bold;
+    max-height: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    min-width: 30px;
+    padding: 5px;
+}
