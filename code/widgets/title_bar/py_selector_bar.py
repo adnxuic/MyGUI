@@ -1,5 +1,5 @@
 from Qt_core import *
-from code.widgets.title_bar.py_title_button import selectbutton
+from code.widgets.title_bar.py_title_button import SelectButton
 
 class PySelectorBar(QWidget):
     def __init__(self):

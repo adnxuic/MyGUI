@@ -1,8 +1,9 @@
 from Qt_core import *
 
 from code.widgets import qss_func
-from code.widgets.title_bar.py_title_button import changebutton, menubutton, selectbutton
+from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
 from code.widgets.title_bar.py_selector_bar import PySelectorBar
+from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar
 
 import os
 
@@ -15,32 +16,34 @@ class PyTitleBar(QFrame):
         super().__init__()
         self.parent = parent
 
+        # 样式设置
         self.setObjectName("title_bar")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
+        # 设置布局
         self.layout = QVBoxLayout(self)
         self.sublayout = QHBoxLayout()
+        self.sublayout.setSpacing(0)
+        self.stacklayout_top = QStackedLayout()
+        self.stacklayout_bottom = QStackedLayout()
 
-        # 添加按钮
-        # 选择按钮
-        self.change_button = changebutton('change_button')
+        # 堆叠布局添加菜单栏
+        self.stacklayout_top.addWidget(SelectorMenuBar())
+        self.stacklayout_top.addWidget(MenuBar())
 
+        # 添加布局元素
+        # 选择更改按钮
+        self.change_button = ChangeButton('change_button')
+        self.change_button.toggled.connect(self.the_button_was_toggled)
         self.sublayout.addWidget(self.change_button)
-        #
 
-        button01 = menubutton('button01')
-        self.sublayout.addWidget(button01)
+        # 添加堆叠布局
+        self.sublayout.addLayout(self.stacklayout_top)
 
-        button02 = menubutton('button02')
-        self.sublayout.addWidget(button02)
-
-        button03 = menubutton('button03')
-        self.sublayout.addWidget(button03)
-
-        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
-        self.sublayout.addItem(spacer)
-
+        # 添加弹性空间
+        sub_spacer = QSpacerItem(0, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.sublayout.addItem(sub_spacer)
 
         # 关闭按钮
         button_close = QPushButton(QIcon("pictures/icons/close.svg"), "")
@@ -51,12 +54,19 @@ class PyTitleBar(QFrame):
         # 添加上方布局
         self.layout.addLayout(self.sublayout)
 
+        # 添加弹性空间
+        spacer = QSpacerItem(0, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.layout.addItem(spacer)
+
         # 下方选择栏
         selector_bar = PySelectorBar()
         self.layout.addWidget(selector_bar)
 
-
-
+    def the_button_was_toggled(self, checked):
+        if checked:
+            self.stacklayout_top.setCurrentIndex(1)
+        else:
+            self.stacklayout_top.setCurrentIndex(0)
 
     # 移动窗口事件
     # def moveWindow(self, event):
@@ -69,5 +79,3 @@ class PyTitleBar(QFrame):
     #         self.parent.move(self.parent.pos() + event.globalPos() - self.parent.dragPos)
     #         self.parent.dragPos = event.globalPos()
     #         event.accept()
-
-
