@@ -24,7 +24,7 @@ class MainWindow_Setting(object):
 
 
         # 自定义窗口标题栏:左上部分
-        self.title_bar = PyTitleBar()
+        self.title_bar = PyTitleBar(parent)
         self.left_layout.addWidget(self.title_bar)
 
         # 左中部分

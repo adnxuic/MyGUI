@@ -11,6 +11,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # 设置窗口为无边框
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
@@ -19,6 +20,12 @@ class MainWindow(QMainWindow):
         self.showMaximized()  # 最大化窗口
 
         self.hide_grips = True  # 隐藏窗口
+
+
+    # def mousePressEvent(self, event):
+    #     # SET DRAG POS WINDOW
+    #     # 设置窗口拖动位置
+    #     self.dragPos = event.globalPosition().toPoint()
 
 
 
