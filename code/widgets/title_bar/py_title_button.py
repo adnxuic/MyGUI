@@ -84,7 +84,6 @@ class MenuButton(QPushButton):
 
 
 
-
 class SelectButton(QPushButton):
     def __init__(self, button_name):
         super().__init__()

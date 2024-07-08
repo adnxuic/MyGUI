@@ -14,3 +14,8 @@
 <a href="https://iconscout.com/icons/statistics" class="text-underline font-size-sm" target="_blank">statistics</a> by <a href="https://iconscout.com/contributors/efeaco" class="text-underline font-size-sm">Ferdi Setiadi</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/file" class="text-underline font-size-sm" target="_blank">File</a> by <a href="https://iconscout.com/contributors/font-awesome" class="text-underline font-size-sm">Font Awesome</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/minimize" class="text-underline font-size-sm" target="_blank">minimize</a> by <a href="https://iconscout.com/contributors/google-inc" class="text-underline font-size-sm">Google Inc.</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/tables" class="text-underline font-size-sm" target="_blank">Tables</a> by <a href="https://iconscout.com/contributors/ibm-design" class="text-underline font-size-sm">Ibm-design</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+

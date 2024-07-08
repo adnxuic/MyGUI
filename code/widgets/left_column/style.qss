@@ -1,0 +1,10 @@
+QFrame#left_column
+{
+    background-color: #9b9595;
+    max-height: 600px;
+    max-width: 50px;
+    min-height: 600px;
+    min-width: 50px;
+    padding: 0px;
+    margin-bottom: 50px;
+}

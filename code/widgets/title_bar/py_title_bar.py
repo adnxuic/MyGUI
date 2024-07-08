@@ -3,7 +3,7 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
 from code.widgets.title_bar.py_selector_bar import PySelectorBar
-from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar
+from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar
 
 import os
 
@@ -23,6 +23,7 @@ class PyTitleBar(QFrame):
 
         # 设置布局
         self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(0)
         self.sublayout = QHBoxLayout()
         self.sublayout.setSpacing(0)
         self.stacklayout_top = QStackedLayout()
@@ -45,7 +46,15 @@ class PyTitleBar(QFrame):
         sub_spacer = QSpacerItem(0, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.sublayout.addItem(sub_spacer)
 
-        # 关闭按钮
+        # 添加最小化按钮
+        minmize_button = QPushButton(QIcon("pictures/icons/minimize.svg"), "")
+        minmize_button.setObjectName("minimize_button")
+        minmize_button.clicked.connect(self.parent.showMinimized)
+        self.sublayout.addWidget(minmize_button)
+
+        # 添加最大化按钮
+
+        # 添加关闭按钮
         button_close = QPushButton(QIcon("pictures/icons/close.svg"), "")
         button_close.setObjectName("close_button")
         button_close.clicked.connect(self.parent.close)
@@ -53,10 +62,6 @@ class PyTitleBar(QFrame):
 
         # 添加上方布局
         self.layout.addLayout(self.sublayout)
-
-        # 添加弹性空间
-        spacer = QSpacerItem(0, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
-        self.layout.addItem(spacer)
 
         # 下方选择栏
         selector_bar = PySelectorBar()

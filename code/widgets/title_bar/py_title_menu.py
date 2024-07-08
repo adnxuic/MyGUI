@@ -2,9 +2,11 @@ from Qt_core import *
 from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton
 
 
-class SelectorMenuBar(QWidget):
+class SelectorMenuBar(QFrame):
     def __init__(self):
         super().__init__()
+
+        self.setObjectName("selector_menu_bar")
 
         self.layout = QHBoxLayout(self)
 
@@ -55,6 +57,10 @@ class MenuBar(QFrame):
         spacer = QSpacerItem(10, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.layout.addItem(spacer)
 
+        # 设置对齐
+        self.layout.setAlignment(Qt.AlignTop)
+
+
 
 
         # 设置文件菜单
@@ -71,6 +77,38 @@ class MenuBar(QFrame):
 
     def show_menu(self, menu_name, button_name):
         menu_name.exec(button_name.mapToGlobal(button_name.rect().bottomLeft()))
+
+
+class ControlBar(QFrame):
+    def __init__(self, parent=None):
+        super().__init__()
+        # 设置对象名称
+        self.setObjectName("control_bar")
+        # 设置布局
+        self.layout = QHBoxLayout(self)
+
+        self.parent = parent
+
+        # 添加弹性空间
+        spacer = QSpacerItem(10, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.layout.addItem(spacer)
+
+        # 添加最小化按钮
+        minmize_button = QPushButton(QIcon("pictures/icons/minimize.svg"), "")
+        minmize_button.setObjectName("minimize_button")
+        minmize_button.clicked.connect(self.parent.showMinimized)
+        self.layout.addWidget(minmize_button)
+
+
+
+        # 添加最大化按钮
+
+
+        # 添加关闭按钮
+        button_close = QPushButton(QIcon("pictures/icons/close.svg"), "")
+        button_close.setObjectName("close_button")
+        button_close.clicked.connect(self.parent.close)
+        self.layout.addWidget(button_close)
 
 
 class SelectorMenu(QFrame):

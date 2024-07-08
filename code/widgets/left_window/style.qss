@@ -1,0 +1,8 @@
+QFrame#left_middle_window
+{
+    max-height: 600px;
+    max-width: 580px;
+    min-height: 600px;
+    min-width: 580px;
+    margin-bottom: 100px;
+}

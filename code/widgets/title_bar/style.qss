@@ -19,28 +19,22 @@ QPushButton#change_button
     color: transparent;
     font-size: 12px;
     font-weight: bold;
-    max-height: 30px;
+    max-height: 36px;
     max-width: 30px;
-    min-height: 30px;
+    min-height: 36px;
     min-width: 30px;
-    icon-size: 30px;
+    icon-size: 28px;
     padding: 0px;
-    margin-top: 10px;
+    margin-bottom: 30px;
 }
 QPushButton#change_button:checked
 {
     background-color: #f8faf8; /* 选中状态的背景颜色 */
-    max-height: 30px;
-    max-width: 30px;
-    min-height: 30px;
-    min-width: 30px;
     border-color: #ffffff;
     border-top-left-radius: 10px; 
     border-bottom-left-radius: 10px;
     border-top-right-radius: 0px;
     border-bottom-right-radius: 0px;
-    icon-size: 30px;
-    margin-top: 1px;
 }
 QPushButton#change_button:hover
 {
@@ -48,31 +42,34 @@ QPushButton#change_button:hover
     border: 1px solid #ffffff; 
     border-radius: 5px;
     color: #ffffff;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 30px;
-    max-width: 30px;
-    min-height: 30px;
-    min-width: 30px;
-    padding: 0px;
-    margin-top: 1px;
+}
+
+/*选择组件的菜单*/
+QFrame#selector_menu_bar
+{
+    background-color: transparent;
+    max-height: 40px;
+    max-width: 380px;
+    min-height: 40px;
+    min-width: 380px;
+    margin-top: 0px;
 }
 
 /* 选择组件的菜单按钮 */
 QPushButton#select_menu_button
 {
     background-color: transparent;
-    border: 1px solid transparent;
+    border: 0px solid transparent;
     border-radius: 5px;
     color: #ffffff;
-    font-size: 15px;
+    font-size: 12px;
     font-weight: bold;
     max-height: 30px;
     max-width: 80px;
     min-height: 30px;
     min-width: 80px;
     padding: 0px;
-    icon-size: 28px;
+    icon-size: 24px;
 }
 QPushButton#select_menu_button:checked
 {
@@ -80,14 +77,6 @@ QPushButton#select_menu_button:checked
     border: 1px solid transparent;
     border-radius: 5px;
     color: #000000;
-    font-size: 15px;
-    font-weight: bold;
-    max-height: 30px;
-    max-width: 80px;
-    min-height: 30px;
-    min-width: 80px;
-    padding: 0px;
-    icon-size: 28px;
 }
 QPushButton#select_menu_button:hover
 {
@@ -95,45 +84,36 @@ QPushButton#select_menu_button:hover
     border: 1px solid #ffffff;
     border-radius: 5px;
     color: #ffffff;
-    font-size: 15px;
-    font-weight: bold;
-    max-height: 30px;
-    max-width: 80px;
-    min-height: 30px;
-    min-width: 80px;
-    padding: 0px;
 }
 
 /* 菜单栏 */
 QFrame#menu_bar
 {
     background-color: #f8faf8;
-    max-height: 32px;
+    max-height: 36px;
     max-width: 380px;
-    min-height: 32px;
+    min-height: 36px;
     min-width: 380px;
     border-color: #ffffff;
     border-top-right-radius: 10px; 
     border-bottom-right-radius: 10px;
     padding-left: 5px;
-    margin-top: 5px;
+    padding-bottom: 2px;
+    margin-top: 6px;
 }
 
 /* 菜单按钮  */
 QPushButton#menu_button
 {
     background-color: transparent;
-    border: 1px solid transparent;
-    border-radius: 5px;
     color: #000000;
-    font-size: 15px;
+    font-size: 12px;
     font-weight: bold;
-    max-height: 28px;
-    max-width: 80px;
-    min-height: 28px;
-    min-width: 80px;
-    padding: 0px;
-    icon-size: 25px;
+    max-height: 24px;
+    max-width: 50px;
+    min-height: 24px;
+    min-width: 50px;
+    icon-size: 24px;
 }
 QPushButton#menu_button:hover
 {
@@ -141,15 +121,6 @@ QPushButton#menu_button:hover
     border: 1px solid #464a46;
     border-radius: 5px;
     color: #ffffff;
-    font-size: 15px;
-    font-weight: bold;
-    max-height: 28px;
-    max-width: 80px;
-    min-height: 28px;
-    min-width: 80px;
-    padding: 0px;
-    icon-size: 25px;
-    margin-bottom: 2px;
 }
 
 /* 选择按钮 */
@@ -168,21 +139,54 @@ QPushButton#select_button
     padding: 5px;
 }
 
-/* 关闭按钮 */
-QPushButton#close_button
+/*控制栏*/
+QFrame#control_bar
 {
     background-color: transparent;
-    border: 1px solid transparent;
+    border: 1px solid #ffffff;
+    max-height: 30px;
+    max-width: 160px;
+    min-height: 30px;
+    min-width: 160px;
+    margin-bottom: 20px;
+}
+
+/* 最小化按钮 */
+QPushButton#minimize_button
+{
+    background-color: transparent;
+
     border-radius: 5px;
-    color: transparent;
-    font-size: 12px;
-    font-weight: bold;
     max-height: 30px;
     max-width: 30px;
     min-height: 30px;
     min-width: 30px;
     padding: 1px;
-    icon-size: 30px;
+    icon-size: 18px;
+    margin-bottom: 30px;
+}
+QPushButton#minimize_button:hover
+{
+    background-color: #464a46;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: transparent;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* 关闭按钮 */
+QPushButton#close_button
+{
+    background-color: transparent;
+    border-radius: 5px;
+    max-height: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    min-width: 30px;
+    padding: 1px;
+    icon-size: 18px;
+    margin-bottom: 30px;
 }
 QPushButton#close_button:hover
 {
@@ -192,11 +196,5 @@ QPushButton#close_button:hover
     color: transparent;
     font-size: 12px;
     font-weight: bold;
-    max-height: 30px;
-    max-width: 30px;
-    min-height: 30px;
-    min-width: 30px;
-    padding: 1px;
-    icon-size: 30px;
 }
 
