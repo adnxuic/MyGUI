@@ -19,13 +19,26 @@ class PyLeftColumn(QFrame):
 
         self.layout = QVBoxLayout(self)
 
+        # 图表按钮
         self.table_button = QPushButton(QIcon("pictures/icons/tables.svg"), "")
         self.table_button.setObjectName("table_button")
         self.table_button.setCheckable(True)
         self.table_button.setChecked(True)
         self.table_button.toggled.connect(self.the_button_was_toggled)
-
         self.layout.addWidget(self.table_button)
+
+        # 添加弹性空间
+        self.layout.addStretch(1)
+
+
+        # 设置按钮
+        self.setting_button = QPushButton(QIcon("pictures/icons/setting.svg"), "")
+        self.setting_button.setObjectName("setting_button")
+        self.setting_button.setCheckable(True)
+        self.setting_button.setChecked(False)
+        self.layout.addWidget(self.setting_button)
+
+
 
     def the_button_was_toggled(self, checked):
         if checked:

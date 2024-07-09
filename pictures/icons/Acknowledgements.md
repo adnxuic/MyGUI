@@ -23,4 +23,4 @@
 
 <a href="https://iconscout.com/icons/matlab" class="text-underline font-size-sm" target="_blank">matlab</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
-
+<a href="https://iconscout.com/icons/setting" class="text-underline font-size-sm" target="_blank">Setting</a> by <a href="https://iconscout.com/contributors/lucia-gonzalez" class="text-underline font-size-sm">Lucía González</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>

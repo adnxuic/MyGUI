@@ -39,17 +39,8 @@ class MainWindow_Setting(object):
         self.fig_control_window = PyFigControlWindow()
         self.left_column = PyLeftColumn(self.table, self.fig_control_window)
 
-        # matlab和tex悬浮窗口
-        # self.matlab_window = PyMatlabWindow()
-        # self.matlab_window.move(0, 0)
-        # self.matlab_window.hide()
-        #
-        # self.tex_window = PyTexWindow()
-        # self.tex_window.move(0, 0)
-        # self.tex_window.hide()
-
         # 右边栏
-        self.right_column = PyRightColumn()
+        self.right_column = PyRightColumn(parent)
 
         self.left_middle_layout = QHBoxLayout()
         self.left_middle_layout.setSpacing(0)
@@ -62,7 +53,8 @@ class MainWindow_Setting(object):
 
 
         # 左下状态栏
-        self.left_layout.addWidget(PyBottomBar())
+        self.bottom_bar = PyBottomBar()
+        self.left_layout.addWidget(self.bottom_bar)
 
         # 添加左侧窗口
         self.central_widget_layout.addLayout(self.left_layout)

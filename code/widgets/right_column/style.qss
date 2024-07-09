@@ -76,9 +76,9 @@ QFrame#tex_window
 {
     background-color: #ff0000;
     max-height: 620px;
-    max-width: 240px;
+    max-width: 480px;
     min-height: 620px;
-    min-width: 240px;
+    min-width: 480px;
     padding: 0px;
     margin: 0px;
 }
@@ -86,7 +86,7 @@ QFrame#tex_window
 /* Matlab的窗口 */
 QFrame#matlab_window
 {
-    background-color: #ff0000;
+    background-color: #1800f4;
     max-height: 620px;
     max-width: 240px;
     min-height: 620px;

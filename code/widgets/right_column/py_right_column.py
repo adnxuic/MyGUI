@@ -9,20 +9,18 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
 
 class PyRightColumn(QFrame):
-    def __init__(self):
+    def __init__(self, parent=None):
         super().__init__()
+
+        self.parent = parent
 
         self.setObjectName("right_column")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
-        self.tex_window = PyTexWindow()
-        self.tex_window.move(0, 0)
-        self.tex_window.hide()
-
-        self.matlab_window = PyMatlabWindow()
-        self.matlab_window.move(0, 0)
-        self.matlab_window.hide()
+        # 创建两个窗口
+        self.tex_window = PyTexWindow(parent)
+        self.matlab_window = PyMatlabWindow(parent)
 
         self.layout = QVBoxLayout(self)
 
@@ -46,6 +44,7 @@ class PyRightColumn(QFrame):
 
     def matlab_show(self):
         self.matlab_window.setVisible(not self.matlab_window.isVisible())
+
 
 
 

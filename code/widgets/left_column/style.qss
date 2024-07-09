@@ -33,3 +33,28 @@ QPushButton#table_button:checked
     margin: 0px;
     icon-size: 30px;
 }
+
+QPushButton#setting_button
+{
+    background-color: transparent;
+    border: 0px;
+    border-radius: 0px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: bold;
+    max-height: 50px;
+    max-width: 50px;
+    min-height: 50px;
+    min-width: 50px;
+    padding: 0px;
+    margin: 0px;
+    icon-size: 30px;
+}
+QPushButton#setting_button:checked
+{
+    background-color: #ffffff;
+    border-radius: 10px;
+    padding: 0px;
+    margin: 0px;
+    icon-size: 30px;
+}

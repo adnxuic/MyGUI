@@ -34,6 +34,7 @@ class MenuBar(QFrame):
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(0, 6, 0, 0)
 
         # 创建触发文件菜单的按钮
         self.file_button = MenuButton('file', 'pictures/icons/file.svg', self)
@@ -114,6 +115,8 @@ class ControlBar(QFrame):
 class SelectorMenu(QFrame):
     def __init__(self):
         super().__init__()
+
+        self.setObjectName("selector_menu")
 
         self.layout = QHBoxLayout(self)
 

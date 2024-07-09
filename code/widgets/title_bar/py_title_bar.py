@@ -3,7 +3,7 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
 from code.widgets.title_bar.py_selector_bar import PySelectorBar
-from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar
+from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar, SelectorMenu
 
 import os
 
@@ -25,7 +25,8 @@ class PyTitleBar(QFrame):
         self.setStyleSheet(qss_file)
 
         # 设置布局
-        self.layout = QVBoxLayout(self)
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
         self.sublayout = QHBoxLayout()
         self.sublayout.setSpacing(0)
@@ -67,8 +68,11 @@ class PyTitleBar(QFrame):
         self.layout.addLayout(self.sublayout)
 
         # 下方选择栏
-        selector_bar = PySelectorBar()
-        self.layout.addWidget(selector_bar)
+        self.selector_bar = SelectorMenu()
+        self.layout.addWidget(self.selector_bar)
+
+        self.setLayout(self.layout)
+
 
     def the_button_was_toggled(self, checked):
         if checked:
