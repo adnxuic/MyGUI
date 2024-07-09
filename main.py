@@ -22,12 +22,6 @@ class MainWindow(QMainWindow):
         self.hide_grips = True  # 隐藏窗口
 
 
-    # def mousePressEvent(self, event):
-    #     # SET DRAG POS WINDOW
-    #     # 设置窗口拖动位置
-    #     self.dragPos = event.globalPosition().toPoint()
-
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

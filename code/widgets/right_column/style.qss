@@ -1,10 +1,96 @@
 QFrame#right_column
 {
     background-color: #021036;
-    max-height: 600px;
+    max-height: 620px;
     max-width: 50px;
-    min-height: 600px;
+    min-height: 620px;
     min-width: 50px;
     padding: 0px;
-    margin-bottom: 50px;
+    margin: 0px;
+}
+
+/* Tex的按钮 */
+QPushButton#tex_button
+{
+    background-color: transparent;
+    border: 0px solid transparent;
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: bold;
+    max-height: 30px;
+    max-width: 50px;
+    min-height: 30px;
+    min-width: 50px;
+    padding: 0px;
+    icon-size: 24px;
+}
+QPushButton#tex_button:checked
+{
+    background-color: #ffffff;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: #000000;
+}
+QPushButton#tex_button:hover
+{
+    background-color: #464a46;
+    border: 1px solid #ffffff;
+    border-radius: 5px;
+    color: #ffffff;
+}
+
+/* Matlab的按钮 */
+QPushButton#matlab_button
+{
+    background-color: transparent;
+    border: 0px solid transparent;
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: bold;
+    max-height: 30px;
+    max-width: 50px;
+    min-height: 30px;
+    min-width: 50px;
+    padding: 0px;
+    icon-size: 24px;
+}
+QPushButton#matlab_button:checked
+{
+    background-color: #ffffff;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: #000000;
+}
+QPushButton#matlab_button:hover
+{
+    background-color: #464a46;
+    border: 1px solid #ffffff;
+    border-radius: 5px;
+    color: #ffffff;
+}
+
+/* Tex的窗口 */
+QFrame#tex_window
+{
+    background-color: #ff0000;
+    max-height: 620px;
+    max-width: 240px;
+    min-height: 620px;
+    min-width: 240px;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* Matlab的窗口 */
+QFrame#matlab_window
+{
+    background-color: #ff0000;
+    max-height: 620px;
+    max-width: 240px;
+    min-height: 620px;
+    min-width: 240px;
+    padding: 0px;
+    margin: 0px;
 }

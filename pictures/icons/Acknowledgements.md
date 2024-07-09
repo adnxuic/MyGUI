@@ -19,3 +19,8 @@
 
 <a href="https://iconscout.com/icons/tables" class="text-underline font-size-sm" target="_blank">Tables</a> by <a href="https://iconscout.com/contributors/ibm-design" class="text-underline font-size-sm">Ibm-design</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
+<a href="https://iconscout.com/icons/tex" class="text-underline font-size-sm" target="_blank">tex</a> by <a href="https://iconscout.com/contributors/jagathish" class="text-underline font-size-sm">Jagathish Saravanan</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/matlab" class="text-underline font-size-sm" target="_blank">matlab</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+

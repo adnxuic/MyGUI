@@ -16,6 +16,9 @@ class PyTitleBar(QFrame):
         super().__init__()
         self.parent = parent
 
+        self.move = False
+        self.start_pos = None
+
         # 样式设置
         self.setObjectName("title_bar")
         qss_file = qss_func.qss_loader(qss_path)
@@ -73,14 +76,22 @@ class PyTitleBar(QFrame):
         else:
             self.stacklayout_top.setCurrentIndex(0)
 
-    # 移动窗口事件
-    # def moveWindow(self, event):
-    #     if self.parent.isMaximized():
-    #         curso_x = self.parent.pos().x()
-    #         curso_y = self.parent.pos().y() - QCursor.pos().y()
-    #         self.parent.move(curso_x, curso_y)
-    #
-    #     if event.button() == Qt.LeftButton:
-    #         self.parent.move(self.parent.pos() + event.globalPos() - self.parent.dragPos)
-    #         self.parent.dragPos = event.globalPos()
-    #         event.accept()
+
+    # 鼠标按下事件
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.move = True
+            self.start_pos = event.globalPos()
+
+    # 鼠标移动事件
+    def mouseMoveEvent(self, event):
+        if self.move:
+            delta = event.globalPos() - self.start_pos
+            self.parent.move(self.parent.pos()+delta)
+            self.start_pos = event.globalPos()
+
+    # 鼠标释放事件
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.move = False
+
