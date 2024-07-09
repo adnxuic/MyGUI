@@ -1,9 +1,9 @@
 QFrame#right_column
 {
     background-color: #021036;
-    max-height: 620px;
+    max-height: 640px;
     max-width: 50px;
-    min-height: 620px;
+    min-height: 640px;
     min-width: 50px;
     padding: 0px;
     margin: 0px;

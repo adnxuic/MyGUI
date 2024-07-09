@@ -9,6 +9,7 @@ class SelectorMenuBar(QFrame):
         self.setObjectName("selector_menu_bar")
 
         self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
 
         # 设置按钮组
         self.buttonGroup = QButtonGroup(self)
@@ -34,7 +35,7 @@ class MenuBar(QFrame):
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 6, 0, 0)
+        self.layout.setContentsMargins(0, 0, 0, 4)
 
         # 创建触发文件菜单的按钮
         self.file_button = MenuButton('file', 'pictures/icons/file.svg', self)
@@ -57,11 +58,6 @@ class MenuBar(QFrame):
         # 添加弹性空间
         spacer = QSpacerItem(10, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.layout.addItem(spacer)
-
-        # 设置对齐
-        self.layout.setAlignment(Qt.AlignTop)
-
-
 
 
         # 设置文件菜单

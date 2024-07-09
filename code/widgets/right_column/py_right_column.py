@@ -23,6 +23,7 @@ class PyRightColumn(QFrame):
         self.matlab_window = PyMatlabWindow(parent)
 
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
 
         self.tex_button = QPushButton(QIcon("pictures/icons/tex.svg"), "")
         self.tex_button.setObjectName("tex_button")

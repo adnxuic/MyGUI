@@ -2,9 +2,9 @@
 QFrame#title_bar
 {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgb(55, 65, 81), stop:0.5 rgb(17, 24, 39), stop:1 rgb(0, 0, 0));
-    max-height: 100px;
+    max-height: 120px;
     max-width: 580px;
-    min-height: 100px;
+    min-height: 120px;
     min-width: 580px;
     border-top-left-radius: 10px; /* 调整半径 */
     border-top-right-radius: 10px; /* 调整半径 */
@@ -24,7 +24,7 @@ QPushButton#change_button
     min-height: 36px;
     min-width: 30px;
     icon-size: 28px;
-    margin-bottom: 0px;
+    margin-top: 0px;
     margin-left: 2px;
 }
 QPushButton#change_button:checked
@@ -48,11 +48,11 @@ QPushButton#change_button:hover
 QFrame#selector_menu_bar
 {
     background-color: transparent;
-    max-height: 50px;
+    max-height: 56px;
     max-width: 380px;
-    min-height: 50px;
+    min-height: 56px;
     min-width: 380px;
-    margin-top: 0px;
+    margin-top: 8px;
 }
 
 /* 选择组件的菜单按钮 */
@@ -64,17 +64,17 @@ QPushButton#select_menu_button
     color: #ffffff;
     font-size: 12px;
     font-weight: bold;
-    max-height: 30px;
+    max-height: 50px;
     max-width: 80px;
-    min-height: 30px;
+    min-height: 50px;
     min-width: 80px;
-    margin-top: 0px;
+    margin-bottom: 9px;
+    padding-bottom: 5px;
     icon-size: 24px;
 }
 QPushButton#select_menu_button:checked
 {
     background-color: #ffffff;
-    border: 1px solid transparent;
     border-radius: 5px;
     color: #000000;
 }
@@ -90,16 +90,16 @@ QPushButton#select_menu_button:hover
 QFrame#menu_bar
 {
     background-color: #f8faf8;
-    max-height: 36px;
+    max-height: 32px;
     max-width: 380px;
-    min-height: 36px;
+    min-height: 32px;
     min-width: 380px;
     border-color: #ffffff;
     border-top-right-radius: 10px; 
     border-bottom-right-radius: 10px;
     padding-left: 5px;
-    padding-bottom: 2px;
-    margin-top: 6px;
+    padding-top: 6px;
+    margin-top: 11px;
 }
 
 /* 菜单按钮  */
@@ -203,11 +203,9 @@ QPushButton#close_button:hover
 QWidget#selector_menu
 {
     background-color: #ffffff;
-    max-height: 100px;
+    max-height: 80px;
     max-width: 580px;
-    min-height: 100px;
+    min-height: 80px;
     min-width: 580px;
     margin-top: 0px;
-    margin-left: 0px;
 }
-

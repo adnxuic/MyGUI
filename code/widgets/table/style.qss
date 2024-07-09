@@ -1,9 +1,9 @@
 QFrame#table
 {
     background-color: #ffffff;
-    max-height: 620px;
+    max-height: 640px;
     max-width: 240px;
-    min-height: 620px;
+    min-height: 640px;
     min-width: 240px;
     padding: 0px;
     margin: 0px;

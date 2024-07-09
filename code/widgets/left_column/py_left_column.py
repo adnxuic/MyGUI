@@ -18,6 +18,7 @@ class PyLeftColumn(QFrame):
         self.setStyleSheet(qss_file)
 
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 4, 0, 44)
 
         # 图表按钮
         self.table_button = QPushButton(QIcon("pictures/icons/tables.svg"), "")
@@ -43,7 +44,7 @@ class PyLeftColumn(QFrame):
     def the_button_was_toggled(self, checked):
         if checked:
             self.table.setVisible(True)
-            self.fig_control_window.setFixedSize(240, 620)
+            self.fig_control_window.setFixedSize(240, 640)
         else:
             self.table.setVisible(False)
-            self.fig_control_window.setFixedSize(480, 620)
+            self.fig_control_window.setFixedSize(480, 640)
