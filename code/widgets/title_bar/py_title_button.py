@@ -84,9 +84,15 @@ class MenuButton(QPushButton):
 
 
 
-class SelectButton(QPushButton):
-    def __init__(self, button_name):
+class SelectButton(QToolButton):
+    def __init__(self, button_name, icon_name=None):
         super().__init__()
         self.setText(button_name)
+        self.setIcon(QIcon(icon_name))
         self.setObjectName("select_button")
+
+        # 设置按钮的文本位于图标下方
+        self.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+
+
 

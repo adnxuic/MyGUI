@@ -1,9 +1,7 @@
 import sys
 
 from code.widgets.mainwindow_init import mainwindow_qss
-from code.widgets.left_window.py_left_window import PyLeftWindow
 from code.widgets.title_bar.py_title_bar import PyTitleBar
-from code.widgets.left_window.py_left_middle_window import PyLeftMiddleWindow
 from code.widgets.left_column.py_left_column import PyLeftColumn
 from code.widgets.table.py_table import PyTable
 from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow

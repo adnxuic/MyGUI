@@ -2,8 +2,7 @@ from Qt_core import *
 
 from code.widgets import qss_func
 from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
-from code.widgets.title_bar.py_selector_bar import PySelectorBar
-from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar, SelectorMenu
+from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar, SelectorStyleMenu, SelectorLayoutMenu, SelectorChartMenu
 
 import os
 
@@ -33,8 +32,17 @@ class PyTitleBar(QFrame):
         self.stacklayout_top = QStackedLayout()
         self.stacklayout_bottom = QStackedLayout()
 
-        # 堆叠布局添加菜单栏
-        self.stacklayout_top.addWidget(SelectorMenuBar())
+        # 下方堆叠布局选择按钮
+        self.selector_style_bar = SelectorStyleMenu()
+        self.selector_layout_bar = SelectorLayoutMenu()
+        self.selector_chart_bar = SelectorChartMenu()
+
+        self.stacklayout_bottom.addWidget(self.selector_style_bar)
+        self.stacklayout_bottom.addWidget(self.selector_layout_bar)
+        self.stacklayout_bottom.addWidget(self.selector_chart_bar)
+
+        # 上方堆叠布局添加菜单栏
+        self.stacklayout_top.addWidget(SelectorMenuBar(self.stacklayout_bottom))
         self.stacklayout_top.addWidget(MenuBar())
 
         # 添加布局元素
@@ -68,9 +76,9 @@ class PyTitleBar(QFrame):
         self.layout.addLayout(self.sublayout)
 
         # 下方选择栏
-        self.selector_bar = SelectorMenu()
-        self.layout.addWidget(self.selector_bar)
+        self.layout.addLayout(self.stacklayout_bottom)
 
+        # 设置标题栏整体布局
         self.setLayout(self.layout)
 
 

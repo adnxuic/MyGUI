@@ -1,9 +1,9 @@
 from Qt_core import *
-from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton
+from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, SelectButton
 
 
 class SelectorMenuBar(QFrame):
-    def __init__(self):
+    def __init__(self, stacklayout_bottom = None):
         super().__init__()
 
         self.setObjectName("selector_menu_bar")
@@ -11,22 +11,40 @@ class SelectorMenuBar(QFrame):
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
 
+        self.stacklayout_bottom = stacklayout_bottom
+
         # 设置按钮组
         self.buttonGroup = QButtonGroup(self)
         self.buttonGroup.setExclusive(True)  # 设置互斥
 
         # 添加按钮
-        style_button = SelectMenuButton('style', 'pictures/icons/style.svg')
-        self.layout.addWidget(style_button)
-        self.buttonGroup.addButton(style_button)
+        self.style_button = SelectMenuButton('style', 'pictures/icons/style.svg')
+        self.style_button.setChecked(True)
+        self.style_button.toggled.connect(self.the_button_was_toggled)
+        self.layout.addWidget(self.style_button)
+        self.buttonGroup.addButton(self.style_button)
 
-        layout_button = SelectMenuButton('layout', 'pictures/icons/layout.svg')
-        self.layout.addWidget(layout_button)
-        self.buttonGroup.addButton(layout_button)
+        self.layout_button = SelectMenuButton('layout', 'pictures/icons/layout.svg')
+        self.layout_button.toggled.connect(self.the_button_was_toggled)
+        self.layout.addWidget(self.layout_button)
+        self.buttonGroup.addButton(self.layout_button)
 
-        chart_button = SelectMenuButton('chart', 'pictures/icons/chart.svg')
-        self.layout.addWidget(chart_button)
-        self.buttonGroup.addButton(chart_button)
+        self.chart_button = SelectMenuButton('chart', 'pictures/icons/chart.svg')
+        self.chart_button.toggled.connect(self.the_button_was_toggled)
+        self.layout.addWidget(self.chart_button)
+        self.buttonGroup.addButton(self.chart_button)
+
+
+    def the_button_was_toggled(self, checked):
+        if not checked:
+            return
+
+        if self.style_button.isChecked():
+            self.stacklayout_bottom.setCurrentIndex(0)
+        elif self.layout_button.isChecked():
+            self.stacklayout_bottom.setCurrentIndex(1)
+        elif self.chart_button.isChecked():
+            self.stacklayout_bottom.setCurrentIndex(2)
 
 
 class MenuBar(QFrame):
@@ -108,13 +126,50 @@ class ControlBar(QFrame):
         self.layout.addWidget(button_close)
 
 
-class SelectorMenu(QFrame):
+class SelectorStyleMenu(QFrame):
     def __init__(self):
         super().__init__()
 
         self.setObjectName("selector_menu")
 
-        self.layout = QHBoxLayout(self)
+        self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+
+        self.layout.setContentsMargins(0, 0, 0, 20)
+
+        self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
+        self.layout.addWidget(self.curve_button)
+
+        self.setLayout(self.layout)
+
+
+
+class SelectorLayoutMenu(QFrame):
+    def __init__(self):
+        super().__init__()
+
+        self.setObjectName("selector_menu")
+
+        self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 20)
+
+        self.setLayout(self.layout)
+
+
+class SelectorChartMenu(QFrame):
+    def __init__(self):
+        super().__init__()
+
+        self.setObjectName("selector_menu")
+
+        self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 20)
+
+        self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
+
+
+        self.layout.addWidget(self.curve_button)
+        self.setLayout(self.layout)
 
 
 

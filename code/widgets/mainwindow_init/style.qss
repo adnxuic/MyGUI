@@ -2,6 +2,6 @@ QMainWindow
 {
     max-height: 800px;
     max-width: 1980px;
-    min-height: 800px;
-    min-width: 1980px;
+    min-height: 600px;
+    min-width: 980px;
 }

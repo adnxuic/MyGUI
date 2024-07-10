@@ -3,7 +3,7 @@ QFrame#fig_control_window
     background-color: #bcbec5;
     max-height: 640px;
     max-width: 240px;
-    min-height: 640px;
+    min-height: 440px;
     min-width: 240px;
     padding: 0px;
     margin: 0px;

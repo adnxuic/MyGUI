@@ -3,7 +3,7 @@ QFrame#left_column
     background-color: #9b9595;
     max-height: 640px;
     max-width: 50px;
-    min-height: 640px;
+    min-height: 440px;
     min-width: 50px;
     padding: 0px;
     margin: 0px;
