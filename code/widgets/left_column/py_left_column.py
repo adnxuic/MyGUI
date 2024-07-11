@@ -42,9 +42,14 @@ class PyLeftColumn(QFrame):
 
 
     def the_button_was_toggled(self, checked):
+        # 获取当前窗口的宽度
+        current_width = self.fig_control_window.width()
+        current_height = self.fig_control_window.height()
         if checked:
+            new_width = current_width // 2
             self.table.setVisible(True)
-            self.fig_control_window.setFixedSize(240, 640)
+            self.fig_control_window.setFixedSize(new_width, current_height)
         else:
+            new_width = current_width * 2
             self.table.setVisible(False)
-            self.fig_control_window.setFixedSize(480, 640)
+            self.fig_control_window.setFixedSize(new_width, current_height)

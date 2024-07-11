@@ -1,9 +1,14 @@
 from Qt_core import *
-from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, SelectButton
+from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, SelectButton, PullDownButton
+from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 
+import json
+import os
+
+current_path = os.path.dirname(os.path.abspath(__file__))
 
 class SelectorMenuBar(QFrame):
-    def __init__(self, stacklayout_bottom = None):
+    def __init__(self, stacklayout_bottom=None):
         super().__init__()
 
         self.setObjectName("selector_menu_bar")
@@ -34,7 +39,6 @@ class SelectorMenuBar(QFrame):
         self.layout.addWidget(self.chart_button)
         self.buttonGroup.addButton(self.chart_button)
 
-
     def the_button_was_toggled(self, checked):
         if not checked:
             return
@@ -57,7 +61,7 @@ class MenuBar(QFrame):
 
         # 创建触发文件菜单的按钮
         self.file_button = MenuButton('file', 'pictures/icons/file.svg', self)
-        self.file_button.clicked.connect(lambda : self.show_menu(self.file_menu, self.file_button))
+        self.file_button.clicked.connect(lambda: self.show_menu(self.file_menu, self.file_button))
         self.layout.addWidget(self.file_button)
 
         # 添加分割线
@@ -69,14 +73,12 @@ class MenuBar(QFrame):
         # 创建触发编辑菜单的按钮
         self.edit_button = QPushButton('edit', self)
         self.edit_button.setObjectName('menu_button')
-        self.edit_button.clicked.connect(lambda : self.show_menu(self.edit_menu, self.edit_button))
+        self.edit_button.clicked.connect(lambda: self.show_menu(self.edit_menu, self.edit_button))
         self.layout.addWidget(self.edit_button)
-
 
         # 添加弹性空间
         spacer = QSpacerItem(10, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.layout.addItem(spacer)
-
 
         # 设置文件菜单
         self.file_menu = QMenu(self)
@@ -91,6 +93,7 @@ class MenuBar(QFrame):
         self.edit_menu.addAction('cut')
 
     def show_menu(self, menu_name, button_name):
+        # 显示菜单
         menu_name.exec(button_name.mapToGlobal(button_name.rect().bottomLeft()))
 
 
@@ -114,10 +117,7 @@ class ControlBar(QFrame):
         minmize_button.clicked.connect(self.parent.showMinimized)
         self.layout.addWidget(minmize_button)
 
-
-
         # 添加最大化按钮
-
 
         # 添加关闭按钮
         button_close = QPushButton(QIcon("pictures/icons/close.svg"), "")
@@ -126,54 +126,62 @@ class ControlBar(QFrame):
         self.layout.addWidget(button_close)
 
 
-class SelectorStyleMenu(QFrame):
+class SelectorStyleMenuBar(QFrame):
+    def __init__(self):
+        super().__init__()
+
+        # 读取可用的样式
+        style_json_path = os.path.join(current_path, 'available_styles.json')
+        with open(style_json_path, 'r') as json_file:
+            self.available_styles_dict = json.load(json_file)
+
+        # 设置对象名称
+        self.setObjectName("selector_menu")
+
+        # 设置布局
+        self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 10)
+
+        self.button_dict = {}
+        for index, style in enumerate(self.available_styles_dict):
+            button = SelectButton(style, f'pictures/icons/style_images/{style}.svg', style, f'pictures/icons/style_images/{style}.svg')
+            self.button_dict[style] = button
+            if index < 8:
+                self.layout.addWidget(button)
+
+
+        # 添加下拉按钮及其菜单
+        self.pulldown_button = PullDownButton()
+        self.stylemenu = StyleMenu(self.pulldown_button, self.button_dict)
+        self.pulldown_button.connect_menu(self.stylemenu)
+
+        self.layout.addWidget(self.pulldown_button)
+
+        self.setLayout(self.layout)
+
+
+class SelectorLayoutMenuBar(QFrame):
     def __init__(self):
         super().__init__()
 
         self.setObjectName("selector_menu")
 
         self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setContentsMargins(0, 0, 0, 20)
 
+        self.setLayout(self.layout)
+
+
+class SelectorChartMenuBar(QFrame):
+    def __init__(self):
+        super().__init__()
+
+        self.setObjectName("selector_menu")
+
+        self.layout = QHBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 20)
 
         self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
-        self.layout.addWidget(self.curve_button)
-
-        self.setLayout(self.layout)
-
-
-
-class SelectorLayoutMenu(QFrame):
-    def __init__(self):
-        super().__init__()
-
-        self.setObjectName("selector_menu")
-
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 20)
-
-        self.setLayout(self.layout)
-
-
-class SelectorChartMenu(QFrame):
-    def __init__(self):
-        super().__init__()
-
-        self.setObjectName("selector_menu")
-
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 20)
-
-        self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
-
 
         self.layout.addWidget(self.curve_button)
         self.setLayout(self.layout)
-
-
-
-
-
-
-
