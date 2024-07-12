@@ -18,7 +18,9 @@ class MainWindow(QMainWindow):
         self.ui = MainWindow_Setting()
         self.ui.setup_ui(self)
 
+
         self.hide_grips = True  # 隐藏窗口
+
 
 
 

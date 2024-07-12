@@ -20,6 +20,8 @@ class MainWindow_Setting(object):
 
         parent.setStyleSheet(mainwindow_qss)
 
+        self.parent = parent
+
         # 整个窗口布局
         self.central_widget = QFrame()
         self.central_widget_layout = QHBoxLayout(self.central_widget)
@@ -34,7 +36,9 @@ class MainWindow_Setting(object):
 
         # 左中部分
         self.table = PyTable()
+        self.table.setMouseTracking(True)
         self.fig_control_window = PyFigControlWindow()
+        self.fig_control_window.setMouseTracking(True)
         self.left_column = PyLeftColumn(self.table, self.fig_control_window)
 
         # 右边栏
@@ -63,6 +67,23 @@ class MainWindow_Setting(object):
 
         parent.setCentralWidget(self.central_widget)
 
+
+    def mouseMoveEvent(self, event):
+        x_pos = event.position().toPoint().x()
+        if self.is_in_draggable_area(x_pos):
+            self.table.setCursor(Qt.SizeHorCursor)  # Change cursor to horizontal resize
+            print('Change cursor to horizontal resize')
+        else:
+            self.table.unsetCursor()  # Reset cursor
+            print('Reset cursor')
+
+
+    def is_in_draggable_area(self, x):
+        # 扩大可拖动边界的宽度
+        boundary_width = 50  # 可根据需要调整
+        left_boundary = self.table.geometry().right() - boundary_width
+        right_boundary = self.fig_control_window.geometry().left() + boundary_width
+        return left_boundary <= x <= right_boundary
 
 
 
