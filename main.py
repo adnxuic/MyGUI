@@ -92,24 +92,25 @@ class MainWindow(QMainWindow):
         if event.buttons() == Qt.LeftButton:
             if self.is_in_draggable_area(event.position().toPoint().x()):
                 self.table_fig_dragging = True
-                self.drag_position = event.position().toPoint().x()
+                self.table_fig_drag_position = event.position().toPoint().x()
                 print("dragging")
 
     def mouseMoveEvent(self, event):
         x_pos = event.position().toPoint().x()
         if self.is_in_draggable_area(x_pos):
             self.central_widget.setCursor(Qt.SizeHorCursor)  # Change cursor to horizontal resize
+            print(x_pos)
         else:
             self.central_widget.unsetCursor()  # Reset cursor
 
         if self.table_fig_dragging:
-            self.drag_position = x_pos
+            self.table_fig_drag_position = x_pos
             if not self.table_fig_timer.isActive():
                 self.table_fig_timer.start()  # Start the table_fig_timer if not already started
                 print("move")
 
     def mouseReleaseEvent(self, event):
-        self.dragging = False
+        self.table_fig_dragging = False
         self.table_fig_timer.stop()
         self.updatePositions()
         self.unsetCursor()  # 还原到默认光标
@@ -134,17 +135,26 @@ class MainWindow(QMainWindow):
 
     def updatePositions(self):
         if self.table_fig_dragging:
-            new_x = self.drag_position
-            total_width = self.width() - 20  # 假设总宽度减去左右两侧的边距
 
-            # 调整table的宽度
-            new_width_table = new_x - 10  # new_x是分隔线的位置，减去左边距
-            new_width_fig_control_window = total_width - new_width_table  # 确保两个组件的宽度之和不变
+            #
+            x_table = self.table.x()
+            sum_widht = self.table.width() + self.fig_control_window.width()
 
-            # 设置新宽度，保持table的左边和fig_control_window的右边固定
-            self.table.setFixedWidth(new_width_table)
-            self.fig_control_window.setGeometry(self.width() - 10 - new_width_fig_control_window, 10,
-                                                new_width_fig_control_window, self.fig_control_window.height())
+            #
+            x_now = self.table_fig_drag_position
+
+            # 设置新宽度
+            if 30 < x_now - x_table and 30 < sum_widht - self.table.width():
+                    new_table_width = x_now - x_table
+                    new_fig_control_window_width = sum_widht - new_table_width
+                    self.table.setFixedWidth(new_table_width)
+                    self.fig_control_window.setFixedWidth(new_fig_control_window_width)
+            elif 30 < x_now - x_table and x_now <= x_table + self.table.width() and  sum_widht - self.table.width() <= 30:
+                new_table_width = x_now - x_table
+                new_fig_control_window_width = sum_widht - new_table_width
+                self.table.setFixedWidth(new_table_width)
+                self.fig_control_window.setFixedWidth(new_fig_control_window_width)
+
 
             self.update()  # 请求重绘窗口
 
