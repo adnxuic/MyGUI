@@ -7,8 +7,6 @@ from code.widgets.left_column.py_left_column import PyLeftColumn
 from code.widgets.table.py_table import PyTable
 from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
 from code.widgets.right_column.py_right_column import PyRightColumn
-from code.widgets.right_column.py_matlab_window import PyMatlabWindow
-from code.widgets.right_column.py_tex_window import PyTexWindow
 from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
 
 from Qt_core import *
@@ -93,54 +91,32 @@ class MainWindow(QMainWindow):
             if self.is_in_draggable_area(event.position().toPoint().x()):
                 self.table_fig_dragging = True
                 self.table_fig_drag_position = event.position().toPoint().x()
-                print("dragging")
 
     def mouseMoveEvent(self, event):
         x_pos = event.position().toPoint().x()
         if self.is_in_draggable_area(x_pos):
-            self.central_widget.setCursor(Qt.SizeHorCursor)  # Change cursor to horizontal resize
-            print(x_pos)
+            self.central_widget.setCursor(Qt.SizeHorCursor)  # 改变光标为水平拉伸光标
         else:
-            self.central_widget.unsetCursor()  # Reset cursor
+            self.central_widget.unsetCursor()  # 改变光标为默认光标
 
         if self.table_fig_dragging:
             self.table_fig_drag_position = x_pos
             if not self.table_fig_timer.isActive():
-                self.table_fig_timer.start()  # Start the table_fig_timer if not already started
-                print("move")
+                self.table_fig_timer.start()
+
 
     def mouseReleaseEvent(self, event):
         self.table_fig_dragging = False
         self.table_fig_timer.stop()
         self.updatePositions()
         self.unsetCursor()  # 还原到默认光标
-        print("dragging end")
 
-    # def updatePositions(self):
-    #     if self.table_fig_dragging:
-    #         new_x = self.drag_position
-    #         table_height = self.table.height()
-    #         fig_control_window_height = self.fig_control_window.height()
-    #         # 调整第一个组件的宽度
-    #         new_width1 = new_x - 10
-    #         if 10 <= new_width1 <= (self.width() - 20 - self.fig_control_window.width()):
-    #             self.table.setFixedWidth(new_width1)
-    #
-    #         # 调整第二个组件的位置和宽度
-    #         new_width2 = self.width() - new_x - 10
-    #         if 10 <= new_width2 <= (self.width() - 20 - self.table.width()):
-    #             self.fig_control_window.setFixedWidth(new_width2)
-    #
-    #         self.update()  # 请求重绘窗口
 
     def updatePositions(self):
         if self.table_fig_dragging:
-
             #
             x_table = self.table.x()
             sum_widht = self.table.width() + self.fig_control_window.width()
-
-            #
             x_now = self.table_fig_drag_position
 
             # 设置新宽度
@@ -155,7 +131,6 @@ class MainWindow(QMainWindow):
                 self.table.setFixedWidth(new_table_width)
                 self.fig_control_window.setFixedWidth(new_fig_control_window_width)
 
-
             self.update()  # 请求重绘窗口
 
     def is_in_draggable_area(self, x):
@@ -163,7 +138,7 @@ class MainWindow(QMainWindow):
         boundary_width = 10  # 可根据需要调整
         left_boundary = self.table.geometry().right() - boundary_width
         right_boundary = self.fig_control_window.geometry().left() + boundary_width
-        return left_boundary <= x <= right_boundary
+        return self.fig_control_window.geometry().left() + 5 <= x <= right_boundary+10
 
 
 if __name__ == "__main__":
