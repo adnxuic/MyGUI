@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         self.table_fig_timer.timeout.connect(self.updatePositions)  # 连接计时器超时信号到更新函数
 
         # 右边栏
-        self.right_column = PyRightColumn(self, self.fig_control_window)
+        self.right_column = PyRightColumn(self.fig_control_window.layout)
 
         self.left_middle_layout = QHBoxLayout()
         self.left_middle_layout.setSpacing(0)

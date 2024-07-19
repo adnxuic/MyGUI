@@ -251,5 +251,5 @@ class PySubTable(QFrame):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_sheet_name = f"Sheet{index + 1}"
-        self.tabWidget.insertTab(index, MyTableWidget(10, 10), new_sheet_name)
+        self.tabWidget.insertTab(index, MyTableWidget(20, 5), new_sheet_name)
         self.tabWidget.setCurrentIndex(index)

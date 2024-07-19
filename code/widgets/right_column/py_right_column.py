@@ -1,7 +1,4 @@
 from Qt_core import *
-from code.widgets.right_column.py_tex_window import PyTexWindow
-from code.widgets.right_column.py_matlab_window import PyMatlabWindow
-
 from code.widgets import qss_func
 
 import os
@@ -11,18 +8,15 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyRightColumn(QFrame):
-    def __init__(self, parent=None, fig_control_window=None):
+    def __init__(self, fig_control_layout = None):
         super().__init__()
 
-        self.parent = parent
+        self.fig_control_layout = fig_control_layout
 
         self.setObjectName("right_column")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
-        # 创建两个窗口
-        self.tex_window = PyTexWindow(fig_control_window)
-        self.matlab_window = PyMatlabWindow(fig_control_window)
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -42,11 +36,17 @@ class PyRightColumn(QFrame):
         self.layout.addWidget(self.matlab_button)
 
     def tex_show(self, checked):
-        if checked and self.matlab_button.isChecked():
-            self.matlab_button.setChecked(False)
-        self.tex_window.setVisible(checked)
+        if checked:
+            if self.matlab_button.isChecked():
+                self.matlab_button.setChecked(False)
+            self.fig_control_layout.setCurrentIndex(1)
+        else:
+            self.fig_control_layout.setCurrentIndex(0)
 
     def matlab_show(self, checked):
-        if checked and self.tex_button.isChecked():
-            self.tex_button.setChecked(False)
-        self.matlab_window.setVisible(checked)
+        if checked:
+            if self.tex_button.isChecked():
+                self.tex_button.setChecked(False)
+            self.fig_control_layout.setCurrentIndex(2)
+        else:
+            self.fig_control_layout.setCurrentIndex(0)

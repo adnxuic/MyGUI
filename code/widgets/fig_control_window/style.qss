@@ -8,3 +8,39 @@ QFrame#fig_control_window
     padding: 0px;
     margin: 0px;
 }
+
+/* 图片修改窗口 */
+QFrame#fig_modify_window
+{
+    background-color: #7b93eb;
+    max-height: 640px;
+    max-width: 480px;
+    min-height: 440px;
+    min-width: 240px;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* Tex的窗口 */
+QFrame#tex_window
+{
+    background-color: #ff0000;
+    max-height: 620px;
+    max-width: 480px;
+    min-height: 620px;
+    min-width: 480px;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* Matlab的窗口 */
+QFrame#matlab_window
+{
+    background-color: #1800f4;
+    max-height: 620px;
+    max-width: 480px;
+    min-height: 620px;
+    min-width: 240px;
+    padding: 0px;
+    margin: 0px;
+}

@@ -1,5 +1,6 @@
 from Qt_core import *
 from code.widgets import qss_func
+from code.widgets.left_column.py_setting_dialog import PySettingDialog
 
 import os
 
@@ -12,6 +13,7 @@ class PyLeftColumn(QFrame):
         super().__init__()
         self.table = table
         self.fig_control_window = fig_control_window
+        self.setting_dialog = PySettingDialog()
 
         self.setObjectName("left_column")
         qss_file = qss_func.qss_loader(qss_path)
@@ -35,8 +37,7 @@ class PyLeftColumn(QFrame):
         # 设置按钮
         self.setting_button = QPushButton(QIcon("pictures/icons/setting.svg"), "")
         self.setting_button.setObjectName("setting_button")
-        self.setting_button.setCheckable(True)
-        self.setting_button.setChecked(False)
+        self.setting_button.clicked.connect(self.show_setting_dialog)
         self.layout.addWidget(self.setting_button)
 
 
@@ -49,3 +50,6 @@ class PyLeftColumn(QFrame):
             sum_width = self.fig_control_window.width() + self.table.width()
             self.table.setVisible(False)
             self.fig_control_window.setFixedWidth(sum_width)
+
+    def show_setting_dialog(self):
+        self.setting_dialog.exec()

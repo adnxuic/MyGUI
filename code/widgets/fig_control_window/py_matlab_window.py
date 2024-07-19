@@ -11,13 +11,10 @@ class PyMatlabWindow(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.setMouseTracking(True)
         self.setObjectName("matlab_window")
 
         qss_path = os.path.join(current_path, "style.qss")
         self.setStyleSheet(qss_loader(qss_path))
 
-        self.move(0, 0)
-        self.hide()
-
-        self.layout = QVBoxLayout(self)
 

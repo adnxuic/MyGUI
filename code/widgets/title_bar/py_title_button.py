@@ -150,7 +150,7 @@ class PullDownButton(QPushButton):
             global_position = self.mapToGlobal(button_rect.bottomLeft()) # 获取按钮的全局位置
 
             # 可以调整位置，比如使菜单向右偏移20像素
-            adjusted_position = global_position + QPoint(-500, 0)
+            adjusted_position = global_position + QPoint(-500, -8)
 
             # 显示菜单在计算后的位置
             self.connect_menu.exec(adjusted_position)
