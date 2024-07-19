@@ -50,9 +50,7 @@ class MainWindow(QMainWindow):
 
         # 左中部分
         self.table = PyTable()
-        self.table.setMouseTracking(True)
         self.fig_control_window = PyFigControlWindow()
-        self.fig_control_window.setMouseTracking(True)
         self.left_column = PyLeftColumn(self.table, self.fig_control_window)
 
         # 拖动鼠标改变窗口大小相关
@@ -63,7 +61,7 @@ class MainWindow(QMainWindow):
         self.table_fig_timer.timeout.connect(self.updatePositions)  # 连接计时器超时信号到更新函数
 
         # 右边栏
-        self.right_column = PyRightColumn(self)
+        self.right_column = PyRightColumn(self, self.fig_control_window)
 
         self.left_middle_layout = QHBoxLayout()
         self.left_middle_layout.setSpacing(0)
@@ -135,16 +133,14 @@ class MainWindow(QMainWindow):
 
     def is_in_draggable_area(self, x):
         # 扩大可拖动边界的宽度
-        boundary_width = 10  # 可根据需要调整
+        boundary_width = 5  # 可根据需要调整
         left_boundary = self.table.geometry().right() - boundary_width
         right_boundary = self.fig_control_window.geometry().left() + boundary_width
-        return self.fig_control_window.geometry().left() + 5 <= x <= right_boundary+10
+        return left_boundary <= x <= right_boundary
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     window = MainWindow()
     window.show()
-
     app.exec()

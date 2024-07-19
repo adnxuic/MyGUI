@@ -1,11 +1,38 @@
 from Qt_core import *
 from code.widgets import qss_func
-from code.widgets.table.py_subtable import CustomTabWidget, PySubTable
+from code.widgets.table.py_subtable import PySubTable
 
 
 import os
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
+
+
+class TableTabWidget(QTabWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setMouseTracking(True)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.RightButton:
+            clicked_tab_index = self.tabBar().tabAt(event.position().toPoint())
+            if clicked_tab_index != -1:
+                self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
+        super().mousePressEvent(event)
+
+    def show_context_menu(self, position, tab_index):
+        menu = QMenu()
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(position)  # 显示菜单
+
+        if action == delete_action:
+            if self.count() > 1 and tab_index != self.count() - 1:  # 确保至少有一个标签页，且不是"+"标签
+                response = QMessageBox.question(self, "Confirm Delete",
+                                                "Are you sure you want to delete this Table?",
+                                                QMessageBox.Yes | QMessageBox.No)
+                if response == QMessageBox.Yes:
+                    self.removeTab(tab_index)
 
 class PyTable(QFrame):
     def __init__(self):
@@ -15,7 +42,9 @@ class PyTable(QFrame):
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
-        self.tabWidget = CustomTabWidget(self)
+        self.setMouseTracking(True)
+
+        self.tabWidget = TableTabWidget(self)
         self.tabWidget.addTab(PySubTable(), "Table1")
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
@@ -28,7 +57,7 @@ class PyTable(QFrame):
 
         # 将tabWidget添加到布局中
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 10, 0)
         layout.addWidget(self.tabWidget)
         self.setLayout(layout)
 

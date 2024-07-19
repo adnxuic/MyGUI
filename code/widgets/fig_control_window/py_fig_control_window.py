@@ -12,3 +12,6 @@ class PyFigControlWindow(QFrame):
         self.setObjectName("fig_control_window")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
+
+        self.setMouseTracking(True)
+

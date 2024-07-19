@@ -5,11 +5,13 @@ from code.widgets.right_column.py_matlab_window import PyMatlabWindow
 from code.widgets import qss_func
 
 import os
+
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
 
+
 class PyRightColumn(QFrame):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, fig_control_window=None):
         super().__init__()
 
         self.parent = parent
@@ -19,8 +21,8 @@ class PyRightColumn(QFrame):
         self.setStyleSheet(qss_file)
 
         # 创建两个窗口
-        self.tex_window = PyTexWindow(parent)
-        self.matlab_window = PyMatlabWindow(parent)
+        self.tex_window = PyTexWindow(fig_control_window)
+        self.matlab_window = PyMatlabWindow(fig_control_window)
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -29,24 +31,22 @@ class PyRightColumn(QFrame):
         self.tex_button.setObjectName("tex_button")
         self.tex_button.setCheckable(True)
         self.tex_button.setChecked(False)
-        self.tex_button.clicked.connect(self.tex_show)
+        self.tex_button.toggled.connect(self.tex_show)
         self.layout.addWidget(self.tex_button)
 
         self.matlab_button = QPushButton(QIcon("pictures/icons/matlab.svg"), "")
         self.matlab_button.setObjectName("matlab_button")
         self.matlab_button.setCheckable(True)
         self.matlab_button.setChecked(False)
-        self.matlab_button.clicked.connect(self.matlab_show)
+        self.matlab_button.toggled.connect(self.matlab_show)
         self.layout.addWidget(self.matlab_button)
 
+    def tex_show(self, checked):
+        if checked and self.matlab_button.isChecked():
+            self.matlab_button.setChecked(False)
+        self.tex_window.setVisible(checked)
 
-    def tex_show(self):
-        self.tex_window.setVisible(not self.tex_window.isVisible())
-
-    def matlab_show(self):
-        self.matlab_window.setVisible(not self.matlab_window.isVisible())
-
-
-
-
-
+    def matlab_show(self, checked):
+        if checked and self.tex_button.isChecked():
+            self.tex_button.setChecked(False)
+        self.matlab_window.setVisible(checked)

@@ -11,6 +11,9 @@ class MyTableWidget(QTableWidget):
 
     def __init__(self, rows, columns, parent=None):
         super().__init__(rows, columns, parent)
+
+        self.setMouseTracking(True)
+
         self.initializeShortcuts()  # 初始化快捷键
         self.initializeColumnHeaders(columns)  # 初始化列标题
 
@@ -159,14 +162,17 @@ class MyTableWidget(QTableWidget):
             self.setItem(index.row(), index.column(), QTableWidgetItem(""))
 
 # 自定义的QTabWidget
-class CustomTabWidget(QTabWidget):
+class SheetTabWidget(QTabWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.setMouseTracking(True)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
-            # 使用 position().toPoint() 来代替 pos()
-            clicked_tab_index = self.tabBar().tabAt(event.position().toPoint())
+            pos = event.position().toPoint()
+            pos.setY(pos.y() - self.tabBar().y())
+            clicked_tab_index = self.tabBar().tabAt(pos)
             if clicked_tab_index != -1:
                 self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
         super().mousePressEvent(event)
@@ -174,7 +180,7 @@ class CustomTabWidget(QTabWidget):
     def show_context_menu(self, position, tab_index):
         menu = QMenu()
         delete_action = menu.addAction("Delete")
-        action = menu.exec(position)
+        action = menu.exec(position)  # 显示菜单
 
         if action == delete_action:
             if self.count() > 1 and tab_index != self.count() - 1:  # 确保至少有一个标签页，且不是"+"标签
@@ -188,8 +194,10 @@ class PySubTable(QFrame):
     def __init__(self):
         super().__init__()
 
+        self.setMouseTracking(True)
+
         # 使用自定义的QTabWidget
-        self.tabWidget = CustomTabWidget()
+        self.tabWidget = SheetTabWidget()
         self.tabWidget.setTabPosition(QTabWidget.South)
         self.tabWidget.addTab(MyTableWidget(20, 5), "Sheet1")
 
@@ -215,6 +223,7 @@ class PySubTable(QFrame):
         # self.tableWidget.textChanged.connect(self.updateFullContentDisplayManual)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.fullContentDisplay)
         layout.addWidget(self.tabWidget)
         self.setLayout(layout)
