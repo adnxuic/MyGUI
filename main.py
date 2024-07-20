@@ -33,12 +33,14 @@ class MainWindow(QMainWindow):
         if not self.objectName():
             self.setObjectName("MainWindow")
 
-        self.setStyleSheet(mainwindow_qss)
+        # self.setStyleSheet(mainwindow_qss)
 
         # 整个窗口布局
         self.central_widget = QWidget()
         self.central_widget.setMouseTracking(True)
         self.central_widget_layout = QHBoxLayout(self.central_widget)
+        self.central_widget_layout.setSpacing(0)
+        self.central_widget_layout.setContentsMargins(0, 0, 0, 0)
 
         # 左侧布局：非画布区域
         self.left_layout = QVBoxLayout()
@@ -77,11 +79,35 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(self.bottom_bar)
 
         # 添加左侧窗口
+        # 添加弹性空间
+        self.central_widget_layout.addStretch(0)
         self.central_widget_layout.addLayout(self.left_layout)
 
-        # 右侧布局：画布区域
 
         self.setCentralWidget(self.central_widget)
+
+        # 右侧布局：画布区域
+        self.dock_font = QDockWidget("字体", self)  # 创建停靠控件
+        self.dock_font.setFixedWidth(650)
+        self.dock_font.setFixedHeight(400)
+        # 设置背景颜色
+        self.dock_font.setStyleSheet("background-color: #f0f0f0;")
+        self.addDockWidget(Qt.RightDockWidgetArea, self.dock_font)  # 主窗口中添加停靠控件
+        self.dock_font.setFeatures(QDockWidget.NoDockWidgetFeatures)  # 设置停靠控件的特征
+        self.dock_font.setFeatures(QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
+
+        fw = QWidget()  # 创建悬停控件上的控件
+        self.dock_font.setWidget(fw)  # 设置悬停控件上的控件
+        fv = QVBoxLayout(fw)  # 在控件上添加布局
+        fv.setContentsMargins(0, 0, 0, 0)  # 设置布局的上、右、下、左边距都为0
+        fv.setSpacing(0)  # 设置布局中控件间的间隔为0
+
+        self.fontComboBox = QFontComboBox()
+        self.sizeComboBox = QComboBox()  # 创建下拉框
+        for i in range(5, 50):
+            self.sizeComboBox.addItem(str(i))
+        fv.addWidget(self.fontComboBox)  # 布局中添加控件
+        fv.addWidget(self.sizeComboBox)  # 布局中添加控件
 
 
     def mousePressEvent(self, event):
