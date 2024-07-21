@@ -3,6 +3,7 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
 from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar, SelectorStyleMenuBar, SelectorLayoutMenuBar, SelectorChartMenuBar
+from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 
 import os
 
@@ -11,7 +12,7 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyTitleBar(QFrame):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, figure_window=None):
         super().__init__()
         self.parent = parent
 
@@ -33,7 +34,9 @@ class PyTitleBar(QFrame):
         self.stacklayout_bottom = QStackedLayout()
 
         # 下方堆叠布局选择按钮
-        self.selector_style_bar = SelectorStyleMenuBar()
+        self.figure_window = figure_window
+
+        self.selector_style_bar = SelectorStyleMenuBar(figure_window=self.figure_window)
         self.selector_layout_bar = SelectorLayoutMenuBar()
         self.selector_chart_bar = SelectorChartMenuBar()
 

@@ -1,11 +1,13 @@
 from Qt_core import *
 from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, SelectButton, PullDownButton
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
+from code.widgets.title_bar.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog, PyChartDialog
 
 import json
 import os
 
 current_path = os.path.dirname(os.path.abspath(__file__))
+
 
 class SelectorMenuBar(QFrame):
     def __init__(self, stacklayout_bottom=None):
@@ -127,7 +129,7 @@ class ControlBar(QFrame):
 
 
 class SelectorStyleMenuBar(QFrame):
-    def __init__(self):
+    def __init__(self, figure_window=None):
         super().__init__()
 
         # 读取可用的样式
@@ -143,12 +145,15 @@ class SelectorStyleMenuBar(QFrame):
         self.layout.setContentsMargins(0, 0, 0, 10)
 
         self.button_dict = {}
+
         for index, style in enumerate(self.available_styles_dict):
-            button = SelectButton(style, f'pictures/icons/style_images/{style}.svg', style, f'pictures/icons/style_images/{style}.svg')
+            dialog = PyStyleDialog(dialog_name=style,figure_window=figure_window)
+            button = SelectButton(style, f'pictures/icons/style_images/{style}.svg', style,
+                                  f'pictures/icons/style_images/{style}.svg',
+                                  dialog)
             self.button_dict[style] = button
             if index < 8:
                 self.layout.addWidget(button)
-
 
         # 添加下拉按钮及其菜单
         self.pulldown_button = PullDownButton()

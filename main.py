@@ -8,8 +8,13 @@ from code.widgets.table.py_table import PyTable
 from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
 from code.widgets.right_column.py_right_column import PyRightColumn
 from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
+from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 
 from Qt_core import *
+
+import matplotlib
+
+matplotlib.use("QtAgg")
 
 
 class MainWindow(QMainWindow):
@@ -39,13 +44,18 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.central_widget.setMouseTracking(True)
         self.central_widget_layout = QHBoxLayout(self.central_widget)
+        self.central_widget_layout.setSpacing(0)
+        self.central_widget_layout.setContentsMargins(0, 0, 0, 0)
 
         # 左侧布局：非画布区域
         self.left_layout = QVBoxLayout()
         self.left_layout.setSpacing(0)
 
         # 自定义窗口标题栏:左上部分
-        self.title_bar = PyTitleBar(self)
+        # 右侧布局：画布区域
+        self.figure_window = PyFigureWindow()
+
+        self.title_bar = PyTitleBar(self, self.figure_window)
         self.left_layout.addWidget(self.title_bar)
 
         # 左中部分
@@ -80,9 +90,10 @@ class MainWindow(QMainWindow):
         self.central_widget_layout.addLayout(self.left_layout)
 
         # 右侧布局：画布区域
+        self.central_widget_layout.addWidget(self.figure_window)
+
 
         self.setCentralWidget(self.central_widget)
-
 
     def mousePressEvent(self, event):
         if event.buttons() == Qt.LeftButton:
@@ -102,13 +113,11 @@ class MainWindow(QMainWindow):
             if not self.table_fig_timer.isActive():
                 self.table_fig_timer.start()
 
-
     def mouseReleaseEvent(self, event):
         self.table_fig_dragging = False
         self.table_fig_timer.stop()
         self.updatePositions()
         self.unsetCursor()  # 还原到默认光标
-
 
     def updatePositions(self):
         if self.table_fig_dragging:
@@ -119,11 +128,11 @@ class MainWindow(QMainWindow):
 
             # 设置新宽度
             if 30 < x_now - x_table and 30 < sum_widht - self.table.width():
-                    new_table_width = x_now - x_table
-                    new_fig_control_window_width = sum_widht - new_table_width
-                    self.table.setFixedWidth(new_table_width)
-                    self.fig_control_window.setFixedWidth(new_fig_control_window_width)
-            elif 30 < x_now - x_table and x_now <= x_table + self.table.width() and  sum_widht - self.table.width() <= 30:
+                new_table_width = x_now - x_table
+                new_fig_control_window_width = sum_widht - new_table_width
+                self.table.setFixedWidth(new_table_width)
+                self.fig_control_window.setFixedWidth(new_fig_control_window_width)
+            elif 30 < x_now - x_table and x_now <= x_table + self.table.width() and sum_widht - self.table.width() <= 30:
                 new_table_width = x_now - x_table
                 new_fig_control_window_width = sum_widht - new_table_width
                 self.table.setFixedWidth(new_table_width)

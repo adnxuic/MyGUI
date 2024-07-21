@@ -1,0 +1,8 @@
+QFrame#figure_window
+{
+    background-color: #f0f0f0;
+    border: 1px solid #d0d0d0;
+    border-radius: 5px;
+    max-height: 800px;
+    max-width: 1200px;
+}

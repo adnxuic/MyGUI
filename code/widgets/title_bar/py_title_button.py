@@ -83,7 +83,7 @@ class MenuButton(QPushButton):
 
 
 class SelectButton(QToolButton):
-    def __init__(self, button_name, icon_name=None, tooltip_text=None, tooltip_text_image_path=None):
+    def __init__(self, button_name, icon_name=None, tooltip_text=None, tooltip_text_image_path=None, dialog=None):
         super().__init__()
         self.setText(button_name)
         self.setIcon(QIcon(icon_name))
@@ -99,6 +99,10 @@ class SelectButton(QToolButton):
         self.timer.timeout.connect(self.showTooltip)  # 连接到显示工具提示的槽
         self.timer.setInterval(1000)  # 设置定时器间隔为1000毫秒（一秒）
 
+        # 链接对话框
+        self.dialog = dialog
+        self.clicked.connect(self.connect_dialog)
+
     def enterEvent(self, event):
         self.timer.stop()  # 停止定时器
         self.timer.start()  # 重新启动定时器
@@ -112,6 +116,10 @@ class SelectButton(QToolButton):
     def showTooltip(self):
         # 定时器触发后显示工具提示
         QToolTip.showText(self.mapToGlobal(QPoint(0, 0)), self.toolTip(), self)
+
+    # 链接对话框
+    def connect_dialog(self, dialog):
+        self.dialog.exec()
 
 
 
@@ -156,8 +164,3 @@ class PullDownButton(QPushButton):
             self.connect_menu.exec(adjusted_position)
         else:  # 如果按钮被设置为未按下状态
             self.connect_menu.hide()
-
-
-
-
-
