@@ -92,7 +92,6 @@ class MainWindow(QMainWindow):
         # 右侧布局：画布区域
         self.central_widget_layout.addWidget(self.figure_window)
 
-
         self.setCentralWidget(self.central_widget)
 
     def mousePressEvent(self, event):

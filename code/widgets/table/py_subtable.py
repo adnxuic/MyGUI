@@ -1,122 +1,154 @@
-'''
+"""
 完成批量复制粘贴和删除 以及右键菜单添加数字
-'''
+"""
 
 import sys
 from Qt_core import *
+import numpy as np
 
 
-class MyTableWidget(QTableWidget):
-    textChanged = Signal(str)  # 定义一个信号，用于发送字符串类型的数据
+class TableModel(QAbstractTableModel):
+    def __init__(self):
+        super().__init__()
+        data = [["" for _ in range(5)] for _ in range(20)]
+        self._data = np.array(data, dtype=object)
 
-    def __init__(self, rows, columns, parent=None):
-        super().__init__(rows, columns, parent)
+    def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            value = self._data[index.row(), index.column()]
+            return str(value) if value is not None else ""
 
-        self.setMouseTracking(True)
+    def rowCount(self, index=QModelIndex()):
+        return self._data.shape[0]
 
-        self.initializeShortcuts()  # 初始化快捷键
-        self.initializeColumnHeaders(columns)  # 初始化列标题
+    def columnCount(self, index=QModelIndex()):
+        return self._data.shape[1]
 
-        # self.textChanged = Signal(str)  # 定义一个信号，用于发送字符串类型的数据
+    def flags(self, index):
+        return super().flags(index) | Qt.ItemIsEditable
 
-        # 设置所有列的宽度和所有行的高度
-        min_width, min_height = 100, 30
-        for col in range(self.columnCount()):
-            self.setColumnWidth(col, min_width)
-        for row in range(self.rowCount()):
-            self.setRowHeight(row, min_height)
+    def setData(self, index, value, role=Qt.EditRole):
+        if role == Qt.EditRole:
+            self._data[index.row(), index.column()] = value
+            self.dataChanged.emit(index, index)
+            return True
+        return False
 
-        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)  # 设置自定义上下文菜单策略
-        self.horizontalHeader().customContextMenuRequested.connect(self.headerContextMenu)  # 连接自定义上下文菜单信号
+    def addRow(self):
+        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
+        new_row = np.array([[""] * self._data.shape[1]], dtype=object)
+        self._data = np.vstack([self._data, new_row])
+        self.endInsertRows()
 
-        self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)  # 水平滚动
-        self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)  # 垂直滚动
-        self.setSelectionBehavior(QTableWidget.SelectItems)  # 选择单个单元格
+    def addColumn(self):
+        self.beginInsertColumns(QModelIndex(), self.columnCount(), self.columnCount())
+        new_col = np.array([[""] * self._data.shape[0]], dtype=object).T
+        self._data = np.hstack([self._data, new_col])
+        self.endInsertColumns()
 
-        self.currentCellChanged.connect(self.check_need_more_cells)  # 连接当前单元格改变信号
+    def clearData(self, indexes):
+        for index in indexes:
+            if index.isValid():
+                self.setData(index, "", Qt.EditRole)
 
-    def check_need_more_cells(self, currentRow, currentColumn, previousRow, previousColumn):
-        if currentRow == self.rowCount() - 1:
-            self.insertRow(self.rowCount())
-            self.setRowHeight(self.rowCount() - 1, 30)
-        if currentColumn == self.columnCount() - 1:
-            new_column_index = self.columnCount()
-            self.insertColumn(new_column_index)
-            self.setColumnWidth(new_column_index, 100)
-            self.setHorizontalHeaderItem(new_column_index, QTableWidgetItem(f"x{new_column_index + 1}"))
+    def Individual_sort(self, column, order):
+        self.layoutAboutToBeChanged.emit()
+        # 提取列数据
+        col_data = self._data[:, column]
+        # 分离出非空值和空值
+        non_null_data = np.array([x for x in col_data if x != ''])
+        null_data = np.array([x for x in col_data if x == ''])
 
-    def headerContextMenu(self, pos):
-        menu = QMenu()
-        column = self.horizontalHeader().logicalIndexAt(pos)
-        if column != -1:
-            sort_asc_action = menu.addAction("Sort Ascending")
-            sort_desc_action = menu.addAction("Sort Descending")
-            add_numbers_action = menu.addAction("添加数字")
-
-            action = menu.exec(self.horizontalHeader().mapToGlobal(pos))
-            if action == sort_asc_action:
-                self.sortItems(column, Qt.AscendingOrder)
-            elif action == sort_desc_action:
-                self.sortItems(column, Qt.DescendingOrder)
-            elif action == add_numbers_action:
-                self.addNumbersToColumn(column)
-
-    def addNumbersToColumn(self, column):
-        startNum, ok = QInputDialog.getInt(self, "输入起始数字", "起始数字:")
-        if not ok:
-            return
-        step, ok = QInputDialog.getInt(self, "输入间隔", "间隔:")
-        if not ok:
-            return
-        count, ok = QInputDialog.getInt(self, "输入个数", "个数:")
-        if not ok:
-            return
-
-        for i in range(count):
-            if self.rowCount() <= i:
-                self.insertRow(self.rowCount())
-            self.setItem(i, column, QTableWidgetItem(str(startNum + step * i)))
-
-    def keyPressEvent(self, event):
-        current_item = self.currentItem()
-        if not current_item:
-            self.setItem(self.currentRow(), self.currentColumn(), QTableWidgetItem(""))
-            current_item = self.currentItem()
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-            self.editItem(current_item)
-        elif event.key() == Qt.Key_Delete:
-            self.deleteItems()
+        # 检查非空数据是否全部为数字
+        if all(self.is_number(item) for item in non_null_data):
+            # 数字排序
+            non_null_data = non_null_data.astype(float)
+            sorted_indices = np.argsort(non_null_data, kind='mergesort')
         else:
-            super().keyPressEvent(event)
+            # 字符串排序
+            sorted_indices = np.argsort(non_null_data, kind='mergesort')
 
-        if self.currentItem() and self.state() == QAbstractItemView.EditingState:
-            editor = self.findChild(QLineEdit)
-            if editor and not hasattr(editor, 'is_connected'):
-                editor.textChanged.connect(self.handleTextChange)
-                setattr(editor, 'is_connected', True)  # 设置属性，避免重复连接
+        if order == Qt.DescendingOrder:
+            sorted_indices = sorted_indices[::-1]
 
-    def handleTextChange(self, text):
-        self.textChanged.emit(text)  # 当编辑器的文本变化时，发射信号
+        # 重建整列数据，将非空数据排序后与空数据结合
+        sorted_data = np.concatenate((non_null_data[sorted_indices], null_data))
+        self._data[:, column] = sorted_data
+        self.layoutChanged.emit()
 
-    def mouseDoubleClickEvent(self, event):
-        pos = event.position().toPoint()
-        index = self.indexAt(pos)
-        if index.isValid():
-            self.edit(index)
-        super().mouseDoubleClickEvent(event)
+    def sort(self, column, order=Qt.AscendingOrder):
+        self.layoutAboutToBeChanged.emit()
+        # 提取列数据
+        col_data = self._data[:, column]
+        # 分离出非空值和对应的索引
+        valid_indices = [i for i, x in enumerate(col_data) if x != '']
+        valid_data = col_data[valid_indices]
 
-    # 添加快捷键
-    def initializeShortcuts(self):
-        copyShortcut = QShortcut(QKeySequence.Copy, self)
-        copyShortcut.activated.connect(self.copyItems)
-        pasteShortcut = QShortcut(QKeySequence.Paste, self)
-        pasteShortcut.activated.connect(self.pasteItems)
-        deleteShortcut = QShortcut(QKeySequence.Delete, self)
-        deleteShortcut.activated.connect(self.deleteItems)
+        # 检查非空数据是否全部为数字
+        if all(self.is_number(item) for item in valid_data):
+            # 数字排序
+            valid_data = valid_data.astype(float)
+            sorted_indices = np.argsort(valid_data, kind='mergesort')
+        else:
+            # 字符串排序
+            sorted_indices = np.argsort(valid_data, kind='mergesort')
 
-    def initializeColumnHeaders(self, columns):
-        headers = [f"x{i + 1}" for i in range(columns)]
-        self.setHorizontalHeaderLabels(headers)
+        if order == Qt.DescendingOrder:
+            sorted_indices = sorted_indices[::-1]
+
+        # 获取最终排序的完整行索引
+        final_indices = np.array(valid_indices)[sorted_indices].tolist()
+        final_indices += [i for i in range(len(col_data)) if i not in valid_indices]  # 添加空值索引
+
+        # 重排整个数组
+        self._data = self._data[final_indices]
+        self.layoutChanged.emit()
+
+    @staticmethod
+    def is_number(s):
+        try:
+            float(s)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+
+class TableView(QTableView):
+    def __init__(self):
+        super().__init__()
+
+        model = TableModel()
+        self.setModel(model)
+        self.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.selectionModel().currentChanged.connect(self.check_need_more_cells)
+        self.initActions()
+
+        # 添加表头右键菜单
+        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.horizontalHeader().customContextMenuRequested.connect(self.headerContextMenu)
+
+    def check_need_more_cells(self, current, previous):
+        if current.row() == self.model().rowCount() - 1:
+            self.model().addRow()
+        if current.column() == self.model().columnCount() - 1:
+            self.model().addColumn()
+
+    def initActions(self):
+        copyAction = QAction("Copy", self)
+        copyAction.setShortcut("Ctrl+C")
+        copyAction.triggered.connect(self.copyItems)
+
+        pasteAction = QAction("Paste", self)
+        pasteAction.setShortcut("Ctrl+V")
+        pasteAction.triggered.connect(self.pasteItems)
+
+        deleteAction = QAction("Delete", self)
+        deleteAction.setShortcut("Delete")
+        deleteAction.triggered.connect(self.deleteItems)
+
+        self.addAction(copyAction)
+        self.addAction(pasteAction)
+        self.addAction(deleteAction)
 
     def copyItems(self):
         selection = self.selectedIndexes()
@@ -132,34 +164,52 @@ class MyTableWidget(QTableWidget):
                 for c in range(colcount):
                     if c > 0:
                         table_contents += '\t'
-                    item = self.item(rows[0] + r, cols[0] + c)
+                    index = self.model().index(rows[0] + r, cols[0] + c)
+                    item = self.model().data(index, Qt.DisplayRole)
                     if item:
-                        table_contents += item.text()
-            QApplication.clipboard().setText(table_contents)
+                        table_contents += item
+            QGuiApplication.clipboard().setText(table_contents)
 
     def pasteItems(self):
-        clipboard = QApplication.clipboard().text()
+        clipboard = QGuiApplication.clipboard().text()
         if clipboard:
-            startPosition = self.currentRow(), self.currentColumn()
+            startPosition = self.currentIndex()
             rows = clipboard.split('\n')
             for i, row in enumerate(rows):
                 columns = row.split('\t')
                 for j, column in enumerate(columns):
-                    rowPosition = startPosition[0] + i
-                    colPosition = startPosition[1] + j
-                    if rowPosition < self.rowCount() and colPosition < self.columnCount():
-                        self.setItem(rowPosition, colPosition, QTableWidgetItem(column))
-                    else:
-                        if rowPosition >= self.rowCount():
-                            self.insertRow(self.rowCount())
-                        if colPosition >= self.columnCount():
-                            self.insertColumn(self.columnCount())
-                        self.setItem(rowPosition, colPosition, QTableWidgetItem(column))
+                    rowPosition = startPosition.row() + i
+                    colPosition = startPosition.column() + j
+                    if rowPosition >= self.model().rowCount():
+                        self.model().addRow()
+                    if colPosition >= self.model().columnCount():
+                        self.model().addColumn()
+                    index = self.model().index(rowPosition, colPosition)
+                    self.model().setData(index, column, Qt.EditRole)
 
     def deleteItems(self):
         selection = self.selectedIndexes()
-        for index in selection:
-            self.setItem(index.row(), index.column(), QTableWidgetItem(""))
+        self.model().clearData(selection)
+
+    def headerContextMenu(self, pos):
+        menu = QMenu()
+
+        Individual_sortAscAction = menu.addAction("单独升序")
+        Individual_sortDescAction = menu.addAction("单独逆序")
+        sortAscAction = menu.addAction("升序")
+        sortDescAction = menu.addAction("逆序")
+
+        action = menu.exec(self.horizontalHeader().mapToGlobal(pos))
+        column = self.horizontalHeader().logicalIndexAt(pos)
+        if action == Individual_sortAscAction:
+            self.model().Individual_sort(column, Qt.AscendingOrder)
+        elif action == Individual_sortDescAction:
+            self.model().Individual_sort(column, Qt.DescendingOrder)
+        elif action == sortAscAction:
+            self.model().sort(column, Qt.AscendingOrder)
+        elif action == sortDescAction:
+            self.model().sort(column, Qt.DescendingOrder)
+
 
 # 自定义的QTabWidget
 class SheetTabWidget(QTabWidget):
@@ -190,6 +240,7 @@ class SheetTabWidget(QTabWidget):
                 if response == QMessageBox.Yes:
                     self.removeTab(tab_index)
 
+
 class PySubTable(QFrame):
     def __init__(self):
         super().__init__()
@@ -199,7 +250,7 @@ class PySubTable(QFrame):
         # 使用自定义的QTabWidget
         self.tabWidget = SheetTabWidget()
         self.tabWidget.setTabPosition(QTabWidget.South)
-        self.tabWidget.addTab(MyTableWidget(20, 5), "Sheet1")
+        self.tabWidget.addTab(TableView(), "Sheet1")
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
         self.plusButton = QPushButton("+")
@@ -212,44 +263,18 @@ class PySubTable(QFrame):
         # 连接标签页切换信号
         self.currentSheet = self.tabWidget.currentWidget()
         self.tabWidget.currentChanged.connect(self.updateCurrentSheet)
-        # 连接当前单元格改变信号
-        self.currentSheet.textChanged.connect(self.updateFullContentDisplayManual)
-        self.currentSheet.currentItemChanged.connect(self.updateFullContentDisplay)
-
-        self.fullContentDisplay = QLineEdit()
-        self.fullContentDisplay.setReadOnly(True)
-        # # 连接当前单元格改变信号
-        # self.tableWidget.currentItemChanged.connect(self.updateFullContentDisplay)
-        # self.tableWidget.textChanged.connect(self.updateFullContentDisplayManual)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.fullContentDisplay)
         layout.addWidget(self.tabWidget)
         self.setLayout(layout)
 
     def updateCurrentSheet(self):
-        # 更新当前标签页引用
-        self.currentSheet = self.tabWidget.currentWidget()
-        # 连接信号
-        self.currentSheet.textChanged.connect(self.updateFullContentDisplayManual)
-        self.currentSheet.currentItemChanged.connect(self.updateFullContentDisplay)
-
-    # 更新全文显示
-    def updateFullContentDisplay(self, current):
-        # 如果当前单元格不为空，则显示当前单元格的文本
-        if current and current.text().strip() != "":
-            self.fullContentDisplay.setText(current.text())
-        else:
-            self.fullContentDisplay.clear()
-
-    # 更新全文显示
-    def updateFullContentDisplayManual(self, text):
-        self.fullContentDisplay.setText(text)
+        pass
 
     def add_new_sheet(self):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_sheet_name = f"Sheet{index + 1}"
-        self.tabWidget.insertTab(index, MyTableWidget(20, 5), new_sheet_name)
+        self.tabWidget.insertTab(index, TableView(), new_sheet_name)
         self.tabWidget.setCurrentIndex(index)
