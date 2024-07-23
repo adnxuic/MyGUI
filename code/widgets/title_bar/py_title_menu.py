@@ -129,7 +129,7 @@ class ControlBar(QFrame):
 
 
 class SelectorStyleMenuBar(QFrame):
-    def __init__(self, figure_window=None):
+    def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
 
         # 读取可用的样式
@@ -147,7 +147,7 @@ class SelectorStyleMenuBar(QFrame):
         self.button_dict = {}
 
         for index, style in enumerate(self.available_styles_dict):
-            dialog = PyStyleDialog(dialog_name=style,figure_window=figure_window)
+            dialog = PyStyleDialog(dialog_name=style,figure_window=figure_window, fig_control_window=fig_control_window)
             button = SelectButton(style, f'pictures/icons/style_images/{style}.svg', style,
                                   f'pictures/icons/style_images/{style}.svg',
                                   dialog)
@@ -166,19 +166,34 @@ class SelectorStyleMenuBar(QFrame):
 
 
 class SelectorLayoutMenuBar(QFrame):
-    def __init__(self):
+    def __init__(self,figure_window=None, fig_control_window=None):
         super().__init__()
+        # 读取可用的样式
+        style_json_path = os.path.join(current_path, 'available_layout.json')
+        with open(style_json_path, 'r') as json_file:
+            self.available_layout_dict = json.load(json_file)
+
 
         self.setObjectName("selector_menu")
 
         self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 20)
+        self.layout.setContentsMargins(0, 0, 0, 10)
+
+        self.button_dict = {}
+
+        for index, layout in enumerate(self.available_layout_dict):
+            dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, fig_control_window=fig_control_window)
+            button = SelectButton(layout, f'pictures/icons/layout_images/{layout}.svg', layout,
+                                  f'pictures/icons/layout_images/{layout}.svg', dialog)
+            self.button_dict[layout] = button
+            if index < 8:
+                self.layout.addWidget(button)
 
         self.setLayout(self.layout)
 
 
 class SelectorChartMenuBar(QFrame):
-    def __init__(self):
+    def __init__(self, figure_window=None):
         super().__init__()
 
         self.setObjectName("selector_menu")

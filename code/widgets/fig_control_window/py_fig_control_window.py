@@ -12,6 +12,7 @@ class PyFigControlWindow(QFrame):
     def __init__(self):
         super().__init__()
 
+
         self.setObjectName("fig_control_window")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
@@ -23,6 +24,7 @@ class PyFigControlWindow(QFrame):
         self.matlab_window = PyMatlabWindow()
 
         self.layout = QStackedLayout()
+
         self.layout.addWidget(self.figmod_window)
         self.layout.addWidget(self.tex_window)
         self.layout.addWidget(self.matlab_window)

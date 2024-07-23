@@ -24,3 +24,15 @@
 <a href="https://iconscout.com/icons/matlab" class="text-underline font-size-sm" target="_blank">matlab</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/setting" class="text-underline font-size-sm" target="_blank">Setting</a> by <a href="https://iconscout.com/contributors/lucia-gonzalez" class="text-underline font-size-sm">Lucía González</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/layout" class="text-underline font-size-sm" target="_blank">Layout</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/customization" class="text-underline font-size-sm" target="_blank">Customization</a> by <a href="https://iconscout.com/contributors/andrigraphic" class="text-underline font-size-sm">Andri Graphic</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/layout" class="text-underline font-size-sm" target="_blank">Layout</a> by <a href="https://iconscout.com/contributors/sonisokell" class="text-underline font-size-sm">Soni Sokell</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/grid" class="text-underline font-size-sm" target="_blank">Grid</a> by <a href="https://iconscout.com/contributors/sonisokell" class="text-underline font-size-sm" target="_blank">Soni Sokell</a> on <a href="https://iconscout.com" class="text-underline font-size-sm" target="_blank">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/grid" class="text-underline font-size-sm" target="_blank">Grid</a> by <a href="https://iconscout.com/contributors/sonisokell" class="text-underline font-size-sm">Soni Sokell</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/web-layout" class="text-underline font-size-sm" target="_blank">Web Layout</a> by <a href="https://iconscout.com/contributors/shahsoft" class="text-underline font-size-sm">Shahsoft Production</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>

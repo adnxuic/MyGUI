@@ -53,14 +53,15 @@ class MainWindow(QMainWindow):
 
         # 自定义窗口标题栏:左上部分
         # 右侧布局：画布区域
-        self.figure_window = PyFigureWindow()
+        self.table = PyTable()
+        self.fig_control_window = PyFigControlWindow()
 
-        self.title_bar = PyTitleBar(self, self.figure_window)
+        self.figure_window = PyFigureWindow(fig_modify_window=self.fig_control_window.figmod_window)
+
+        self.title_bar = PyTitleBar(self, self.figure_window, self.fig_control_window)
         self.left_layout.addWidget(self.title_bar)
 
         # 左中部分
-        self.table = PyTable()
-        self.fig_control_window = PyFigControlWindow()
         self.left_column = PyLeftColumn(self.table, self.fig_control_window)
 
         # 拖动鼠标改变窗口大小相关

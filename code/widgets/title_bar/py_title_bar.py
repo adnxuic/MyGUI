@@ -12,7 +12,7 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyTitleBar(QFrame):
-    def __init__(self, parent=None, figure_window=None):
+    def __init__(self, parent=None, figure_window=None, fig_control_window=None):
         super().__init__()
         self.parent = parent
 
@@ -36,9 +36,9 @@ class PyTitleBar(QFrame):
         # 下方堆叠布局选择按钮
         self.figure_window = figure_window
 
-        self.selector_style_bar = SelectorStyleMenuBar(figure_window=self.figure_window)
-        self.selector_layout_bar = SelectorLayoutMenuBar()
-        self.selector_chart_bar = SelectorChartMenuBar()
+        self.selector_style_bar = SelectorStyleMenuBar(figure_window=self.figure_window, fig_control_window=fig_control_window)
+        self.selector_layout_bar = SelectorLayoutMenuBar(figure_window=self.figure_window, fig_control_window=fig_control_window)
+        self.selector_chart_bar = SelectorChartMenuBar(figure_window=self.figure_window)
 
         self.stacklayout_bottom.addWidget(self.selector_style_bar)
         self.stacklayout_bottom.addWidget(self.selector_layout_bar)

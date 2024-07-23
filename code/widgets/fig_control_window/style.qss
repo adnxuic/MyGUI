@@ -25,9 +25,9 @@ QFrame#fig_modify_window
 QFrame#tex_window
 {
     background-color: #ff0000;
-    max-height: 620px;
+    max-height: 640px;
     max-width: 480px;
-    min-height: 620px;
+    min-height: 640px;
     min-width: 480px;
     padding: 0px;
     margin: 0px;
@@ -37,7 +37,7 @@ QFrame#tex_window
 QFrame#matlab_window
 {
     background-color: #1800f4;
-    max-height: 620px;
+    max-height: 640px;
     max-width: 480px;
     min-height: 620px;
     min-width: 240px;

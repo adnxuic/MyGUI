@@ -2,12 +2,12 @@ from Qt_core import *
 from code.widgets import qss_func
 import os
 
-
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
 
+
 class PyStyleDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None, figure_window=None):
+    def __init__(self, parent=None, dialog_name=None, figure_window=None, fig_control_window=None):
         super().__init__()
         self.style = dialog_name
 
@@ -20,6 +20,7 @@ class PyStyleDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
+        self.figure_control_window = fig_control_window
         self.figure_window = figure_window
 
         # 传入Figure创建函数的数据
@@ -48,7 +49,6 @@ class PyStyleDialog(QDialog):
         self.layout.addWidget(self.canva_name_label)
         self.layout.addWidget(self.canva_name_line)
 
-
         # 确定和取消按钮
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
@@ -68,7 +68,9 @@ class PyStyleDialog(QDialog):
         dpi = int(self.dpi_line.text())
         canva_name = self.canva_name_line.text()
 
-        self.figure_window.add_figure(width=width, height=height, dpi=dpi, style=self.style, canva_name=canva_name)
+        self.figure_window.add_figure(width=width, height=height, dpi=dpi,
+                                      style=self.style, canva_name=canva_name)
+
 
         super().accept()
 
@@ -76,9 +78,8 @@ class PyStyleDialog(QDialog):
         super().reject()
 
 
-
 class PyLayoutDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None):
+    def __init__(self, parent=None, dialog_name=None, figure_window=None, fig_control_window=None):
         super().__init__()
         self.setObjectName("layout_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -86,6 +87,32 @@ class PyLayoutDialog(QDialog):
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon("pictures/icons/layout.svg"))
+
+        self.figure_window = figure_window
+        self.fig_control_window = fig_control_window
+
+        self.layout = QVBoxLayout()
+
+        # 确定和取消按钮
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        self.button_layout = QHBoxLayout()
+        self.button_layout.addStretch(1)
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addWidget(self.cancel_button)
+        self.layout.addLayout(self.button_layout)
+
+        self.setLayout(self.layout)
+
+    def accept(self):
+        axe = self.figure_window.current_canva.axes_modify.add_axes()
+        self.figure_window.current_fig_modify_widget.add_all_mod_widget(axe)
+        super().accept()
+
+    def reject(self):
+        super().reject()
 
 
 class PyChartDialog(QDialog):

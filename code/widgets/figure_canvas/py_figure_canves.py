@@ -10,6 +10,8 @@ from matplotlib.backends.backend_qtagg import (
 from matplotlib.figure import Figure
 from matplotlib.style import use
 
+from code.figuremodify.py_axes_modify import PyAxesModify
+
 mpl.use("QtAgg")
 
 
@@ -17,14 +19,16 @@ class PyFigureCanvas(QWidget):
     def __init__(self, parent=None, width=4, height=3, dpi=200, style=None):
         super().__init__()
         self.style = style
-        self.scroArea = QScrollArea()
-
         with mpl.style.context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
 
+        self.axes_modify = PyAxesModify(self.fig, style)
+
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
+
         # 添加滚动条
+        self.scroArea = QScrollArea()
         self.scroArea.setWidget(self.canva)
         self.scroArea.setAlignment(Qt.AlignCenter)
         self.scroArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 设置显示策略

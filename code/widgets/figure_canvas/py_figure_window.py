@@ -14,27 +14,22 @@ matplotlib.use("QtAgg")
 
 
 class PyFigureWindow(QFrame):
-    def __init__(self):
+    def __init__(self, fig_modify_window=None):
         super().__init__()
 
         self.setObjectName('figure_window')
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
+        self.fig_modify_window = fig_modify_window
+        self.current_canva = None
         self.canvas = {}
+
+        self.current_fig_modify_widget = None
 
         self.layout = QVBoxLayout()
         self.tabwindow = QTabWidget()
-
-        # self.sc1 = PyFigureCanvas(self, width=10, height=5, dpi=100, style='dark_background')
-        # axes = self.sc1.add_axes()
-        # axes.plot([0, 1, 2, 3, 4], [10, 1, 20, 3, 40])
-        # self.tabwindow.addTab(self.sc1, 'dark_background')
-        #
-        # self.sc2 = PyFigureCanvas(self, width=10, height=3, dpi=100, style='ggplot')
-        # axes = self.sc2.add_axes()
-        # axes.plot([0, 1, 2, 3, 4], [10, 1, 20, 3, 40])
-        # self.tabwindow.addTab(self.sc2, 'ggplot')
+        self.tabwindow.currentChanged.connect(self.change_current_canvas)
 
         self.layout.addWidget(self.tabwindow)
         self.setLayout(self.layout)
@@ -43,11 +38,17 @@ class PyFigureWindow(QFrame):
         canva = PyFigureCanvas(self, width=width, height=height, dpi=dpi, style=style)
         self.canvas['canva' + str(len(self.canvas) + 1)] = canva
 
-        if canva_name is not None:
+        self.fig_modify_window.add_figmod_widget()
+
+        if canva_name != '':
             self.tabwindow.addTab(canva, canva_name)
-        elif canva_name == '':
-            self.tabwindow.addTab(canva, 'canva' + str(len(self.canvas) + 1))
         else:
             self.tabwindow.addTab(canva, 'canva' + str(len(self.canvas) + 1))
 
         self.tabwindow.setCurrentWidget(canva)
+
+
+    def change_current_canvas(self):
+        self.current_canva = self.tabwindow.currentWidget()
+        self.fig_modify_window.stacklayout.setCurrentIndex(self.tabwindow.currentIndex())
+        self.current_fig_modify_widget = self.fig_modify_window.stacklayout.currentWidget()
