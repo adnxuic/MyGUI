@@ -41,6 +41,11 @@ class SelectorMenuBar(QFrame):
         self.layout.addWidget(self.chart_button)
         self.buttonGroup.addButton(self.chart_button)
 
+        self.element_button = SelectMenuButton('element', 'pictures/icons/element.svg')
+        self.element_button.toggled.connect(self.the_button_was_toggled)
+        self.layout.addWidget(self.element_button)
+        self.buttonGroup.addButton(self.element_button)
+
     def the_button_was_toggled(self, checked):
         if not checked:
             return
@@ -51,6 +56,8 @@ class SelectorMenuBar(QFrame):
             self.stacklayout_bottom.setCurrentIndex(1)
         elif self.chart_button.isChecked():
             self.stacklayout_bottom.setCurrentIndex(2)
+        elif self.element_button.isChecked():
+            self.stacklayout_bottom.setCurrentIndex(3)
 
 
 class MenuBar(QFrame):
@@ -181,8 +188,8 @@ class SelectorLayoutMenuBar(QFrame):
 
         self.button_dict = {}
 
-        for index, layout in enumerate(self.available_layout_dict):
-            dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, fig_control_window=fig_control_window)
+        for index, (layout, value) in enumerate(self.available_layout_dict.items()):
+            dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, fig_control_window=fig_control_window, layout=value)
             button = SelectButton(layout, f'pictures/icons/layout_images/{layout}.svg', layout,
                                   f'pictures/icons/layout_images/{layout}.svg', dialog)
             self.button_dict[layout] = button
@@ -199,9 +206,24 @@ class SelectorChartMenuBar(QFrame):
         self.setObjectName("selector_menu")
 
         self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 20)
+        self.layout.setContentsMargins(0, 0, 0, 10)
 
         self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
 
         self.layout.addWidget(self.curve_button)
+        self.setLayout(self.layout)
+
+
+class SelectorElementMenuBar(QFrame):
+    def __init__(self, figure_window=None):
+        super().__init__()
+
+        self.setObjectName("selector_menu")
+
+        self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 10)
+
+        self.element_button = SelectButton('Text', 'pictures/icons/element_images/text.svg')
+
+        self.layout.addWidget(self.element_button)
         self.setLayout(self.layout)

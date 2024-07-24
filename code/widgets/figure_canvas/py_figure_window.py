@@ -1,7 +1,10 @@
 import sys
+from typing import Optional
 
 from Qt_core import *
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
+
 from code.widgets import qss_func
 import matplotlib
 
@@ -22,10 +25,10 @@ class PyFigureWindow(QFrame):
         self.setStyleSheet(qss_file)
 
         self.fig_modify_window = fig_modify_window
-        self.current_canva = None
+        self.current_canva : Optional[PyFigureCanvas] = None
         self.canvas = {}
 
-        self.current_fig_modify_widget = None
+        self.current_fig_modify_widget = PyFigModWidget()
 
         self.layout = QVBoxLayout()
         self.tabwindow = QTabWidget()
@@ -38,7 +41,9 @@ class PyFigureWindow(QFrame):
         canva = PyFigureCanvas(self, width=width, height=height, dpi=dpi, style=style)
         self.canvas['canva' + str(len(self.canvas) + 1)] = canva
 
-        self.fig_modify_window.add_figmod_widget()
+        figmod_widget = self.fig_modify_window.add_figmod_widget()
+
+        canva.setFigModifyWidget(figmod_widget)
 
         if canva_name != '':
             self.tabwindow.addTab(canva, canva_name)

@@ -1,4 +1,7 @@
 from Qt_core import *
+
+from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
+
 from code.widgets import qss_func
 import os
 
@@ -71,7 +74,6 @@ class PyStyleDialog(QDialog):
         self.figure_window.add_figure(width=width, height=height, dpi=dpi,
                                       style=self.style, canva_name=canva_name)
 
-
         super().accept()
 
     def reject(self):
@@ -79,7 +81,7 @@ class PyStyleDialog(QDialog):
 
 
 class PyLayoutDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None, figure_window=None, fig_control_window=None):
+    def __init__(self, parent=None, dialog_name=None, figure_window=None, fig_control_window=None, layout=None):
         super().__init__()
         self.setObjectName("layout_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -88,8 +90,10 @@ class PyLayoutDialog(QDialog):
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon("pictures/icons/layout.svg"))
 
-        self.figure_window = figure_window
+        self.figure_window: PyFigureWindow = figure_window
         self.fig_control_window = fig_control_window
+
+        self.layout_value = layout
 
         self.layout = QVBoxLayout()
 
@@ -107,8 +111,7 @@ class PyLayoutDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
-        axe = self.figure_window.current_canva.axes_modify.add_axes()
-        self.figure_window.current_fig_modify_widget.add_all_mod_widget(axe)
+        self.figure_window.current_canva.add_axes(nrows=self.layout_value[0], ncols=self.layout_value[1])
         super().accept()
 
     def reject(self):

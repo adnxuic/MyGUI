@@ -2,7 +2,8 @@ from Qt_core import *
 
 from code.widgets import qss_func
 from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
-from code.widgets.title_bar.py_title_menu import MenuBar, SelectorMenuBar, ControlBar, SelectorStyleMenuBar, SelectorLayoutMenuBar, SelectorChartMenuBar
+from code.widgets.title_bar.py_title_menu import (MenuBar, SelectorMenuBar, ControlBar,
+                                                  SelectorStyleMenuBar, SelectorLayoutMenuBar, SelectorChartMenuBar, SelectorElementMenuBar)
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 
 import os
@@ -39,10 +40,12 @@ class PyTitleBar(QFrame):
         self.selector_style_bar = SelectorStyleMenuBar(figure_window=self.figure_window, fig_control_window=fig_control_window)
         self.selector_layout_bar = SelectorLayoutMenuBar(figure_window=self.figure_window, fig_control_window=fig_control_window)
         self.selector_chart_bar = SelectorChartMenuBar(figure_window=self.figure_window)
+        self.selector_element_bar = SelectorElementMenuBar(figure_window=self.figure_window)
 
         self.stacklayout_bottom.addWidget(self.selector_style_bar)
         self.stacklayout_bottom.addWidget(self.selector_layout_bar)
         self.stacklayout_bottom.addWidget(self.selector_chart_bar)
+        self.stacklayout_bottom.addWidget(self.selector_element_bar)
 
         # 上方堆叠布局添加菜单栏
         self.stacklayout_top.addWidget(SelectorMenuBar(self.stacklayout_bottom))

@@ -2,6 +2,8 @@ import sys
 
 from Qt_core import *
 
+from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
+
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qtagg import (
@@ -21,6 +23,8 @@ class PyFigureCanvas(QWidget):
         self.style = style
         with mpl.style.context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
+
+        self.fig_modify_widget = PyFigModWidget()
 
         self.axes_modify = PyAxesModify(self.fig, style)
 
@@ -43,10 +47,19 @@ class PyFigureCanvas(QWidget):
 
         self.setLayout(layout)
 
-    def add_axes(self):
+    def setFigModifyWidget(self, fig_modify_widget):
+        self.fig_modify_widget = fig_modify_widget
+
+    def redraw(self):
+        self.fig.canvas.draw()
+
+    def add_axes(self, nrows=1, ncols=1):
         with mpl.style.context(self.style):
-            axes = self.fig.add_subplot(111)
-        return axes
+            for i in range(nrows * ncols):
+                axe = self.fig.add_subplot(nrows, ncols, 1 + i)
+                self.fig_modify_widget.add_all_mod_widget(axe)
+
+        self.redraw()
 
     def save(self, filename, dpi=None):
         if dpi is None:
