@@ -81,7 +81,7 @@ class PyStyleDialog(QDialog):
 
 
 class PyLayoutDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None, figure_window=None, fig_control_window=None, layout=None):
+    def __init__(self, parent=None, dialog_name=None, figure_window=None, layout=None):
         super().__init__()
         self.setObjectName("layout_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -91,7 +91,6 @@ class PyLayoutDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/layout.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
-        self.fig_control_window = fig_control_window
 
         self.layout_value = layout
 
@@ -118,12 +117,4 @@ class PyLayoutDialog(QDialog):
         super().reject()
 
 
-class PyChartDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None):
-        super().__init__()
-        self.setObjectName("chart_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
-        self.setStyleSheet(qss_file)
 
-        self.setWindowTitle(dialog_name)
-        self.setWindowIcon(QIcon("pictures/icons/chart.svg"))

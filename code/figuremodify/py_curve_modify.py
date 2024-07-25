@@ -2,21 +2,19 @@ from Qt_core import *
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
-from matplotlib.axes import Axes
 from matplotlib.style import use
 
 
-class PyAxesModify:
-    def __init__(self, fig: Figure, axe: Axes, style=None):
+class PyCurveModify:
+    def __init__(self, fig, style=None, line=None):
         self.style = style
         self.fig = fig
 
-        self.axe = axe
+        self.line = line
 
 
     def redraw(self):
         self.fig.canvas.draw()
 
-    def change_axes(self, axes, **kwargs):
-        axes.set(**kwargs)
-        return axes
+
+

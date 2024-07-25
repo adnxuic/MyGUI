@@ -1,7 +1,9 @@
 from Qt_core import *
+
 from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, SelectButton, PullDownButton
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
-from code.widgets.title_bar.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog, PyChartDialog
+from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
+from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
 
 import json
 import os
@@ -189,7 +191,7 @@ class SelectorLayoutMenuBar(QFrame):
         self.button_dict = {}
 
         for index, (layout, value) in enumerate(self.available_layout_dict.items()):
-            dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, fig_control_window=fig_control_window, layout=value)
+            dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, layout=value)
             button = SelectButton(layout, f'pictures/icons/layout_images/{layout}.svg', layout,
                                   f'pictures/icons/layout_images/{layout}.svg', dialog)
             self.button_dict[layout] = button
@@ -200,6 +202,9 @@ class SelectorLayoutMenuBar(QFrame):
 
 
 class SelectorChartMenuBar(QFrame):
+    """
+    按钮链接的对话框由chart_dialog_dict提供
+    """
     def __init__(self, figure_window=None):
         super().__init__()
 
@@ -208,9 +213,17 @@ class SelectorChartMenuBar(QFrame):
         self.layout = QHBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 10)
 
-        self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
+        # self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
+        #
+        # self.layout.addWidget(self.curve_button)
 
-        self.layout.addWidget(self.curve_button)
+        for index, (name, value) in enumerate(chart_dialog_dict.items()):
+            dialog = value(dialog_name=name, figure_window=figure_window)
+            button = SelectButton(name, f'pictures/icons/chart_images/{name}.svg', name,
+                                  f'pictures/icons/chart_images/{name}.svg', dialog)
+            if index < 8:
+                self.layout.addWidget(button)
+
         self.setLayout(self.layout)
 
 

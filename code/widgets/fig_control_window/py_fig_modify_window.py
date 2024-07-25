@@ -1,7 +1,8 @@
 from Qt_core import *
+from typing import Optional
 
-from code.widgets.fig_control_window.py_all_mod_widget import (
-    PyAxesModWidget, PyCurveModWindow, PyElementModWindow)
+from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import (
+    PyAxesModWindow, PyCurveModWindow, PyElementModWindow)
 
 from code.widgets.qss_func import qss_loader
 
@@ -12,6 +13,11 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyAllModWidget(QFrame):
+    """
+    所有元素的修改窗口
+    一个坐标系对应一个
+    """
+
     def __init__(self, axe):
         super().__init__()
 
@@ -20,6 +26,8 @@ class PyAllModWidget(QFrame):
         self.setMouseTracking(True)
 
         self.layout = QVBoxLayout()
+
+        self.axe = axe
 
         self.btn_bars = []
         self.curve_btn_bar = QFrame()
@@ -32,13 +40,13 @@ class PyAllModWidget(QFrame):
         self.curve_btn_bar_layout = QHBoxLayout()
         self.element_btn_bar_layout = QHBoxLayout()
 
-        self.axes_mod_widget = PyAxesModWidget(axe)
+        self.axes_mod_window = PyAxesModWindow(axe)
         self.curve_mod_window = PyCurveModWindow(axe)
         self.element_mod_window = PyElementModWindow(axe)
 
         self.stackwidget = QStackedWidget()
 
-        self.stackwidget.addWidget(self.axes_mod_widget)
+        self.stackwidget.addWidget(self.axes_mod_window)
         self.stackwidget.addWidget(self.curve_mod_window)
         self.stackwidget.addWidget(self.element_mod_window)
 
@@ -50,6 +58,9 @@ class PyAllModWidget(QFrame):
         self.layout.addWidget(self.element_btn_bar)
 
         self.setLayout(self.layout)
+
+    def change_stackwidget(self, index):
+        self.stackwidget.setCurrentIndex(index)
 
     def updateLayout(self, active_index):
         # 清空当前布局
@@ -66,18 +77,35 @@ class PyAllModWidget(QFrame):
         if active_index == len(self.btn_bars):
             self.layout.addWidget(self.stackwidget)
 
-    def add_curve_btn(self, btn_name, btn_func):
+    def add_chart_box(self, btn_name: str):
+        """
+        调用curve_mod_window的add_curve_box方法
+        添加一个新的曲线修改窗口
+        按钮名和工具箱名相同
+        """
         btn = QPushButton(btn_name)
-        btn.clicked.connect(btn_func)
+
+        btn.clicked.connect(lambda: self.change_stackwidget(1))
+        self.curve_mod_window.add_box(btn_name, btn)
+        btn.clicked.connect(lambda: self.updateLayout(1))
+
         self.curve_btn_bar_layout.addWidget(btn)
 
     def add_element_btn(self, btn_name, btn_func):
         btn = QPushButton(btn_name)
-        btn.clicked.connect(btn_func)
+        btn.clicked.connect(lambda: self.updateLayout(2))
+
         self.element_btn_bar_layout.addWidget(btn)
 
 
+
+
 class PyFigModWidget(QFrame):
+    """
+    画布修改窗口
+    一个画布关联一个
+    """
+
     def __init__(self):
         super().__init__()
 
@@ -100,6 +128,10 @@ class PyFigModWidget(QFrame):
         self.setLayout(self.layout)
 
     def add_all_mod_widget(self, axe):
+        """
+        添加坐标系中所有元素的修改窗口
+        返回按钮以便切换窗口是改变画布的当前坐标系
+        """
         all_mod_widget = PyAllModWidget(axe)
         self.stacklayout.addWidget(all_mod_widget)
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
@@ -107,13 +139,34 @@ class PyFigModWidget(QFrame):
         btn_name = 'axe' + str(self.stacklayout.count())
         btn = QPushButton(btn_name)
         btn.clicked.connect(lambda: self.change_all_mod_widget(all_mod_widget))
+        btn.clicked.connect(lambda: all_mod_widget.change_stackwidget(0))
+        btn.clicked.connect(lambda: all_mod_widget.updateLayout(0))
+
         self.axes_btn_bar_layout.addWidget(btn)
+
+        return btn
 
     def change_all_mod_widget(self, all_mod_widget):
         self.stacklayout.setCurrentWidget(all_mod_widget)
 
+    def fine_all_mod_widget(self, axe) -> Optional[PyAllModWidget]:
+        """
+        通过坐标系找到对应的修改窗口
+        """
+        for i in range(self.stacklayout.count()):
+            widget = self.stacklayout.widget(i)
+            if isinstance(widget, PyAllModWidget) and widget.axe == axe:
+                return widget
+        return None
+
 
 class PyFigModWindow(QFrame):
+    """
+    总画布修改窗口
+    整个窗口的布局只有一个
+    与matlab窗口和Tex窗口并列
+    """
+
     def __init__(self):
         super().__init__()
 
