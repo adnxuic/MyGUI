@@ -79,8 +79,8 @@ class PyAllModWidget(QFrame):
 
     def add_chart_box(self, btn_name: str):
         """
-        调用curve_mod_window的add_curve_box方法
-        添加一个新的曲线修改窗口
+        调用curve_mod_window的add_box方法
+        添加一个新的图表修改窗口
         按钮名和工具箱名相同
         """
         btn = QPushButton(btn_name)
@@ -91,8 +91,16 @@ class PyAllModWidget(QFrame):
 
         self.curve_btn_bar_layout.addWidget(btn)
 
-    def add_element_btn(self, btn_name, btn_func):
+    def add_element_box(self, btn_name: str):
+        """
+        调用element_mod_window的add_box方法
+        添加一个新的曲线元素修改窗口
+        按钮名和工具箱名相同
+        """
         btn = QPushButton(btn_name)
+
+        btn.clicked.connect(lambda: self.change_stackwidget(2))
+        self.element_mod_window.add_box(btn_name, btn)
         btn.clicked.connect(lambda: self.updateLayout(2))
 
         self.element_btn_bar_layout.addWidget(btn)

@@ -4,6 +4,7 @@ from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton,
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
+from code.widgets.title_bar.titlebar_dialog.py_element_dialog import element_dialog_dict
 
 import json
 import os
@@ -213,10 +214,6 @@ class SelectorChartMenuBar(QFrame):
         self.layout = QHBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 10)
 
-        # self.curve_button = SelectButton('curve', 'pictures/icons/curve.svg')
-        #
-        # self.layout.addWidget(self.curve_button)
-
         for index, (name, value) in enumerate(chart_dialog_dict.items()):
             dialog = value(dialog_name=name, figure_window=figure_window)
             button = SelectButton(name, f'pictures/icons/chart_images/{name}.svg', name,
@@ -236,7 +233,11 @@ class SelectorElementMenuBar(QFrame):
         self.layout = QHBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 10)
 
-        self.element_button = SelectButton('Text', 'pictures/icons/element_images/text.svg')
+        for index, (name, value) in enumerate(element_dialog_dict.items()):
+            dialog = value(dialog_name=name, figure_window=figure_window)
+            button = SelectButton(name, f'pictures/icons/element_images/{name}.svg', name,
+                                  f'pictures/icons/element_images/{name}.svg', dialog)
+            if index < 8:
+                self.layout.addWidget(button)
 
-        self.layout.addWidget(self.element_button)
         self.setLayout(self.layout)

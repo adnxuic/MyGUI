@@ -5,9 +5,11 @@ from Qt_core import *
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import PyModBox
 from code.widgets.fig_control_window.all_mod_widgets.py_curve_mod_widgets import PyCurveModWidget
+from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 
 from code.figuremodify.py_axes_modify import PyAxesModify
 from code.figuremodify.py_curve_modify import PyCurveModify
+from code.figuremodify.py_text_modify import PyTextModify
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -81,6 +83,7 @@ class PyFigureCanvas(QWidget):
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
 
+        # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
 
         # 如果all_mod_widget中没有curve_box，则添加一个
@@ -92,6 +95,30 @@ class PyFigureCanvas(QWidget):
 
         curve_box: PyModBox = all_mod_widget.curve_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')
+
+        self.redraw()
+
+    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int):
+        with mpl.style.context(self.style):
+            text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize)
+
+        # 获取当前坐标系的所有修改窗口
+        all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
+
+        # 如果all_mod_widget中没有text_box，则添加一个
+        if all_mod_widget.element_mod_window.boxs.get('text_box') is None:
+            all_mod_widget.add_element_box('text_box')
+
+        # 添加文本调整窗口
+        text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text))
+
+        text_box: PyModBox = all_mod_widget.element_mod_window.boxs['text_box']
+        text_box.add_widget(text_mod_widget, 'text')
+
+        self.redraw()
+
+
+
 
         self.redraw()
 
