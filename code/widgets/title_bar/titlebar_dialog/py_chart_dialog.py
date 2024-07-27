@@ -1,9 +1,12 @@
 from Qt_core import *
 
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
-
 from code.widgets import qss_func
+
+from code.database.py_database import databases, PyDatabase
+
 import os
+from typing import cast
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
@@ -99,7 +102,29 @@ class PyPlotDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
+        # 选择数据
+        self.data_input = QComboBox(self)
+        print(databases)
+        for key1, value1 in databases.items():
+            for key2, value2 in value1.items():
+                for key3, value3 in value2.data.items():
+                    self.data_input.addItem(f"{key1}/{key2}/{key3}")
+                    print(f"{key1}/{key2}/{key3}")
 
+        self.layout.addWidget(QLabel('Data:'))
+        self.layout.addWidget(self.data_input)
+
+
+        # 选择线条样式
+        self.style_input = QComboBox(self)
+        self.style_input.addItems(['-', '--', '-.', ':'])
+        self.layout.addWidget(QLabel('Line Style:'))
+        self.layout.addWidget(self.style_input)
+
+        # 输入图例标签
+        self.label_input = QLineEdit(self)
+        self.layout.addWidget(QLabel('Label:'))
+        self.layout.addWidget(self.label_input)
 
         # 确定和取消按钮
         self.ok_button = QPushButton("确定")

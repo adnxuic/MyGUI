@@ -157,6 +157,7 @@ class SelectorStyleMenuBar(QFrame):
         self.button_dict = {}
 
         for index, style in enumerate(self.available_styles_dict):
+            # 传类进去，不传实例，点击按钮时才会创建实例，以便实时更新数据
             dialog = PyStyleDialog(dialog_name=style,figure_window=figure_window, fig_control_window=fig_control_window)
             button = SelectButton(style, f'pictures/icons/style_images/{style}.svg', style,
                                   f'pictures/icons/style_images/{style}.svg',

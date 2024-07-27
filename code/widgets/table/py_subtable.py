@@ -122,7 +122,9 @@ class TableModel(QAbstractTableModel):
                 except ValueError:
                     non_null_data = non_null_data.astype(str)
                 # 保存到数据库
-                self.database.add_data(i + 1, non_null_data)
+                self.database.update_data(i + 1, non_null_data)
+
+            print(databases)
 
 
 
@@ -133,6 +135,8 @@ class TableView(QTableView):
 
         model = TableModel(database)
         self.setModel(model)
+        self.model = cast(TableModel, self.model())
+
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.selectionModel().currentChanged.connect(self.check_need_more_cells)
         self.initActions()
@@ -142,10 +146,10 @@ class TableView(QTableView):
         self.horizontalHeader().customContextMenuRequested.connect(self.headerContextMenu)
 
     def check_need_more_cells(self, current, previous):
-        if current.row() == self.model().rowCount() - 1:
-            self.model().addRow()
-        if current.column() == self.model().columnCount() - 1:
-            self.model().addColumn()
+        if current.row() == self.model.rowCount() - 1:
+            self.model.addRow()
+        if current.column() == self.model.columnCount() - 1:
+            self.model.addColumn()
 
     def initActions(self):
         copyAction = QAction("Copy", self)
@@ -178,8 +182,8 @@ class TableView(QTableView):
                 for c in range(colcount):
                     if c > 0:
                         table_contents += '\t'
-                    index = self.model().index(rows[0] + r, cols[0] + c)
-                    item = self.model().data(index, Qt.DisplayRole)
+                    index = self.model.index(rows[0] + r, cols[0] + c)
+                    item = self.model.data(index, Qt.DisplayRole)
                     if item:
                         table_contents += item
             QGuiApplication.clipboard().setText(table_contents)
@@ -194,16 +198,16 @@ class TableView(QTableView):
                 for j, column in enumerate(columns):
                     rowPosition = startPosition.row() + i
                     colPosition = startPosition.column() + j
-                    if rowPosition >= self.model().rowCount():
-                        self.model().addRow()
-                    if colPosition >= self.model().columnCount():
-                        self.model().addColumn()
-                    index = self.model().index(rowPosition, colPosition)
-                    self.model().setData(index, column, Qt.EditRole)
+                    if rowPosition >= self.model.rowCount():
+                        self.model.addRow()
+                    if colPosition >= self.model.columnCount():
+                        self.model.addColumn()
+                    index = self.model.index(rowPosition, colPosition)
+                    self.model.setData(index, column, Qt.EditRole)
 
     def deleteItems(self):
         selection = self.selectedIndexes()
-        self.model().clearData(selection)
+        self.model.clearData(selection)
 
     def headerContextMenu(self, pos):
         menu = QMenu()
@@ -216,13 +220,13 @@ class TableView(QTableView):
         action = menu.exec(self.horizontalHeader().mapToGlobal(pos))
         column = self.horizontalHeader().logicalIndexAt(pos)
         if action == Individual_sortAscAction:
-            self.model().Individual_sort(column, Qt.AscendingOrder)
+            self.model.Individual_sort(column, Qt.AscendingOrder)
         elif action == Individual_sortDescAction:
-            self.model().Individual_sort(column, Qt.DescendingOrder)
+            self.model.Individual_sort(column, Qt.DescendingOrder)
         elif action == sortAscAction:
-            self.model().sort(column, Qt.AscendingOrder)
+            self.model.sort(column, Qt.AscendingOrder)
         elif action == sortDescAction:
-            self.model().sort(column, Qt.DescendingOrder)
+            self.model.sort(column, Qt.DescendingOrder)
 
 
 # 自定义的QTabWidget
@@ -258,17 +262,19 @@ class SheetTabWidget(QTabWidget):
 
         elif action == save_to_database_action:
             current_widget = cast(TableView, self.currentWidget())
-            model = cast(TableModel, current_widget.model())
+            model = cast(TableModel, current_widget.model)
             model.save_data_to_database()
 
 
 class PySubTable(QFrame):
-    def __init__(self):
+    def __init__(self, table_name: str):
         super().__init__()
+
+        self.table_name = table_name
 
         self.setMouseTracking(True)
 
-        databases['Table1']['Sheet1'] = PyDatabase()
+        databases[self.table_name]['Sheet1'] = PyDatabase()
 
         # 使用自定义的QTabWidget
         self.tabWidget = SheetTabWidget()
@@ -299,6 +305,6 @@ class PySubTable(QFrame):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_sheet_name = f"Sheet{index + 1}"
-        databases['Table1'][new_sheet_name] = PyDatabase()
-        self.tabWidget.insertTab(index, TableView(databases['Table1'][new_sheet_name]), new_sheet_name)
+        databases[self.table_name][new_sheet_name] = PyDatabase()
+        self.tabWidget.insertTab(index, TableView(databases[self.table_name][new_sheet_name]), new_sheet_name)
         self.tabWidget.setCurrentIndex(index)

@@ -49,7 +49,7 @@ class PyTable(QFrame):
         databases['Table1'] = {}
 
         self.tabWidget = TableTabWidget(self)
-        self.tabWidget.addTab(PySubTable(), "Table1")
+        self.tabWidget.addTab(PySubTable('Table1'), "Table1")
 
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
@@ -71,7 +71,7 @@ class PyTable(QFrame):
         index = self.tabWidget.count() - 1
         new_table_name = f"Table{index + 1}"
         databases[new_table_name] = {}
-        self.tabWidget.insertTab(index, PySubTable(), new_table_name)
+        self.tabWidget.insertTab(index, PySubTable(new_table_name), new_table_name)
         self.tabWidget.setCurrentIndex(index)
 
 
