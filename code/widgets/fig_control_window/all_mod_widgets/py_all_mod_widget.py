@@ -1,6 +1,6 @@
 from Qt_core import *
 from code.widgets.qss_func import qss_loader
-from code.widgets.fig_control_window.all_mod_widgets.py_curve_mod_widgets import PyCurveModWidget
+from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget
 
 import os
 

@@ -3,13 +3,21 @@
 """
 
 import sys
+from typing import cast
+
 from Qt_core import *
 import numpy as np
 
+from code.database.py_database import databases
+from code.database.py_database import PyDatabase
+
 
 class TableModel(QAbstractTableModel):
-    def __init__(self):
+    def __init__(self, database: PyDatabase):
         super().__init__()
+
+        self.database = database
+
         data = [["" for _ in range(5)] for _ in range(20)]
         self._data = np.array(data, dtype=object)
 
@@ -56,23 +64,20 @@ class TableModel(QAbstractTableModel):
         # 提取列数据
         col_data = self._data[:, column]
         # 分离出非空值和空值
-        non_null_data = np.array([x for x in col_data if x != ''])
-        null_data = np.array([x for x in col_data if x == ''])
+        non_null_data = col_data[col_data != '']
+        null_data = col_data[col_data == '']
 
-        # 检查非空数据是否全部为数字
-        if all(self.is_number(item) for item in non_null_data):
-            # 数字排序
+        try:
             non_null_data = non_null_data.astype(float)
-            sorted_indices = np.argsort(non_null_data, kind='mergesort')
-        else:
-            # 字符串排序
-            sorted_indices = np.argsort(non_null_data, kind='mergesort')
+            non_null_data = np.sort(non_null_data, kind='mergesort')
+        except ValueError:
+            non_null_data = np.sort(non_null_data, kind='mergesort')
 
         if order == Qt.DescendingOrder:
-            sorted_indices = sorted_indices[::-1]
+            non_null_data = non_null_data[::-1]
 
         # 重建整列数据，将非空数据排序后与空数据结合
-        sorted_data = np.concatenate((non_null_data[sorted_indices], null_data))
+        sorted_data = np.concatenate((non_null_data, null_data))
         self._data[:, column] = sorted_data
         self.layoutChanged.emit()
 
@@ -81,43 +86,52 @@ class TableModel(QAbstractTableModel):
         # 提取列数据
         col_data = self._data[:, column]
         # 分离出非空值和对应的索引
-        valid_indices = [i for i, x in enumerate(col_data) if x != '']
+        valid_indices = np.where(col_data != '')[0]
         valid_data = col_data[valid_indices]
 
-        # 检查非空数据是否全部为数字
-        if all(self.is_number(item) for item in valid_data):
-            # 数字排序
+        null_data_indices = np.where(col_data == '')[0]
+
+        try:
             valid_data = valid_data.astype(float)
             sorted_indices = np.argsort(valid_data, kind='mergesort')
-        else:
-            # 字符串排序
+        except ValueError:
             sorted_indices = np.argsort(valid_data, kind='mergesort')
 
         if order == Qt.DescendingOrder:
             sorted_indices = sorted_indices[::-1]
 
-        # 获取最终排序的完整行索引
-        final_indices = np.array(valid_indices)[sorted_indices].tolist()
-        final_indices += [i for i in range(len(col_data)) if i not in valid_indices]  # 添加空值索引
+        # 合并索引数组获取最终排序的完整行索引
+        final_indices = np.concatenate((valid_indices[sorted_indices], null_data_indices))
 
         # 重排整个数组
         self._data = self._data[final_indices]
         self.layoutChanged.emit()
 
-    @staticmethod
-    def is_number(s):
-        try:
-            float(s)
-            return True
-        except (ValueError, TypeError):
-            return False
+    # 有关database的操作
+    def save_data_to_database(self):
+        # 提取每一列的数据
+        for i in range(self.columnCount()):
+            col_data = self._data[:, i]
+            # 检查是否有数据
+            if col_data.any():
+                # 分离出非空值和空值
+                non_null_data = col_data[col_data != '']
+                # 转换
+                try:
+                    non_null_data = non_null_data.astype(float)
+                except ValueError:
+                    non_null_data = non_null_data.astype(str)
+                # 保存到数据库
+                self.database.add_data(i + 1, non_null_data)
+
+
 
 
 class TableView(QTableView):
-    def __init__(self):
+    def __init__(self, database: PyDatabase):
         super().__init__()
 
-        model = TableModel()
+        model = TableModel(database)
         self.setModel(model)
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.selectionModel().currentChanged.connect(self.check_need_more_cells)
@@ -229,6 +243,8 @@ class SheetTabWidget(QTabWidget):
 
     def show_context_menu(self, position, tab_index):
         menu = QMenu()
+
+        save_to_database_action = menu.addAction("Save to Database")
         delete_action = menu.addAction("Delete")
         action = menu.exec(position)  # 显示菜单
 
@@ -240,6 +256,11 @@ class SheetTabWidget(QTabWidget):
                 if response == QMessageBox.Yes:
                     self.removeTab(tab_index)
 
+        elif action == save_to_database_action:
+            current_widget = cast(TableView, self.currentWidget())
+            model = cast(TableModel, current_widget.model())
+            model.save_data_to_database()
+
 
 class PySubTable(QFrame):
     def __init__(self):
@@ -247,10 +268,12 @@ class PySubTable(QFrame):
 
         self.setMouseTracking(True)
 
+        databases['Table1']['Sheet1'] = PyDatabase()
+
         # 使用自定义的QTabWidget
         self.tabWidget = SheetTabWidget()
         self.tabWidget.setTabPosition(QTabWidget.South)
-        self.tabWidget.addTab(TableView(), "Sheet1")
+        self.tabWidget.addTab(TableView(databases['Table1']['Sheet1']), "Sheet1")
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
         self.plusButton = QPushButton("+")
@@ -276,5 +299,6 @@ class PySubTable(QFrame):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_sheet_name = f"Sheet{index + 1}"
-        self.tabWidget.insertTab(index, TableView(), new_sheet_name)
+        databases['Table1'][new_sheet_name] = PyDatabase()
+        self.tabWidget.insertTab(index, TableView(databases['Table1'][new_sheet_name]), new_sheet_name)
         self.tabWidget.setCurrentIndex(index)

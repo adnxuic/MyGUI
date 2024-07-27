@@ -9,6 +9,7 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
+# 曲线创建对话框
 class PyCurveDialog(QDialog):
     def __init__(self, parent=None, dialog_name=None, figure_window=None):
         super().__init__()
@@ -17,7 +18,7 @@ class PyCurveDialog(QDialog):
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
-        self.setWindowIcon(QIcon("pictures/icons/chart.svg"))
+        self.setWindowIcon(QIcon("pictures/icons/chart_images/curve.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
 
@@ -83,6 +84,44 @@ class PyCurveDialog(QDialog):
         super().reject()
 
 
+# 折线图对话框
+class PyPlotDialog(QDialog):
+    def __init__(self, dialog_name=None, figure_window=None):
+        super().__init__()
+        self.setObjectName("chart_dialog")
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
+
+        self.setWindowTitle(dialog_name)
+        self.setWindowIcon(QIcon("pictures/icons/chart_images/plot.svg"))
+
+        self.figure_window: PyFigureWindow = figure_window
+
+        self.layout = QVBoxLayout()
+
+
+
+        # 确定和取消按钮
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        self.button_layout = QHBoxLayout()
+        self.button_layout.addStretch(1)
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addWidget(self.cancel_button)
+        self.layout.addLayout(self.button_layout)
+
+        self.setLayout(self.layout)
+
+    def accept(self):
+        super().accept()
+
+    def reject(self):
+        super().reject()
+
+
 chart_dialog_dict = {
-    'curve': PyCurveDialog
+    'curve': PyCurveDialog,
+    'plot': PyPlotDialog
 }

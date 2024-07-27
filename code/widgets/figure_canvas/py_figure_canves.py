@@ -4,7 +4,7 @@ from Qt_core import *
 
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import PyModBox
-from code.widgets.fig_control_window.all_mod_widgets.py_curve_mod_widgets import PyCurveModWidget
+from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 
 from code.figuremodify.py_axes_modify import PyAxesModify

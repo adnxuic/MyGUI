@@ -1,7 +1,9 @@
 from Qt_core import *
+
 from code.widgets import qss_func
 from code.widgets.table.py_subtable import PySubTable
 
+from code.database.py_database import databases
 
 import os
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -44,8 +46,11 @@ class PyTable(QFrame):
 
         self.setMouseTracking(True)
 
+        databases['Table1'] = {}
+
         self.tabWidget = TableTabWidget(self)
         self.tabWidget.addTab(PySubTable(), "Table1")
+
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
         self.plusButton = QPushButton("+")
@@ -65,6 +70,7 @@ class PyTable(QFrame):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_table_name = f"Table{index + 1}"
+        databases[new_table_name] = {}
         self.tabWidget.insertTab(index, PySubTable(), new_table_name)
         self.tabWidget.setCurrentIndex(index)
 
