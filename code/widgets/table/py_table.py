@@ -3,7 +3,7 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.table.py_subtable import PySubTable
 
-from code.database.py_database import databases
+from code.database.py_database import databases, PyDatabase
 
 import os
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -49,7 +49,10 @@ class PyTable(QFrame):
         databases['Table1'] = {}
 
         self.tabWidget = TableTabWidget(self)
-        self.tabWidget.addTab(PySubTable('Table1'), "Table1")
+
+        database = PyDatabase()
+        subtable = PySubTable('Table1', database)
+        self.tabWidget.addTab(subtable, "Table1")
 
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
@@ -71,7 +74,11 @@ class PyTable(QFrame):
         index = self.tabWidget.count() - 1
         new_table_name = f"Table{index + 1}"
         databases[new_table_name] = {}
-        self.tabWidget.insertTab(index, PySubTable(new_table_name), new_table_name)
+
+        pydatabase = PyDatabase()
+        subtable = PySubTable(new_table_name, pydatabase)
+
+        self.tabWidget.insertTab(index, subtable, new_table_name)
         self.tabWidget.setCurrentIndex(index)
 
 

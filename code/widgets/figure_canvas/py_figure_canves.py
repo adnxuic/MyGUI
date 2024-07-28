@@ -65,6 +65,7 @@ class PyFigureCanvas(QWidget):
     def redraw(self):
         self.fig.canvas.draw()
 
+    # 添加坐标系
     def add_axes(self, nrows=1, ncols=1):
         with mpl.style.context(self.style):
             for i in range(nrows * ncols):
@@ -76,10 +77,11 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-    def add_curve(self, func_test: str, style, color, label: str):
+    # 添加自定义曲线
+    def add_curve(self, func_text: str, style, color, label: str):
 
         x = np.linspace(0, 10, 1000)
-        y = eval(func_test)
+        y = eval(func_text)
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
 
@@ -98,6 +100,28 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
+
+    # 添加散点图
+    def add_scatter(self, x, y, style, color, label):
+        with mpl.style.context(self.style):
+            scatter = self.current_axes.scatter(x, y, s=20, c=color, label=label)
+
+        # 获取当前坐标系的所有修改窗口
+        all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
+
+        # 如果all_mod_widget中没有curve_box，则添加一个
+        if all_mod_widget.curve_mod_window.boxs.get('scatter_box') is None:
+            all_mod_widget.add_chart_box('scatter_box')
+
+        # 添加曲线调整窗口
+        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.style, scatter))
+
+        curve_box: PyModBox = all_mod_widget.curve_mod_window.boxs['scatter_box']
+        curve_box.add_widget(curve_mod_widget, 'scatter')
+
+        self.redraw()
+
+    # 添加文本
     def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int):
         with mpl.style.context(self.style):
             text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize)
@@ -117,10 +141,6 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-
-
-
-        self.redraw()
 
     def save(self, filename, dpi=None):
         if dpi is None:

@@ -14,7 +14,7 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 # 曲线创建对话框
 class PyCurveDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None, figure_window=None):
+    def __init__(self, dialog_name=None, figure_window=None):
         super().__init__()
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -104,12 +104,10 @@ class PyPlotDialog(QDialog):
 
         # 选择数据
         self.data_input = QComboBox(self)
-        print(databases)
         for key1, value1 in databases.items():
             for key2, value2 in value1.items():
                 for key3, value3 in value2.data.items():
                     self.data_input.addItem(f"{key1}/{key2}/{key3}")
-                    print(f"{key1}/{key2}/{key3}")
 
         self.layout.addWidget(QLabel('Data:'))
         self.layout.addWidget(self.data_input)
@@ -146,7 +144,73 @@ class PyPlotDialog(QDialog):
         super().reject()
 
 
+class PyScatterDialog(QDialog):
+    def __init__(self, dialog_name=None, figure_window=None):
+        super().__init__()
+        self.setObjectName("chart_dialog")
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
+
+        self.setWindowTitle(dialog_name)
+        self.setWindowIcon(QIcon("pictures/icons/chart_images/scatter.svg"))
+
+        self.figure_window: PyFigureWindow = figure_window
+
+        self.layout = QVBoxLayout()
+
+        # 选择数据
+        self.x_data_input = QComboBox(self)
+        self.x_data_layout = QHBoxLayout()
+        self.y_data_input = QComboBox(self)
+        self.y_data_layout = QHBoxLayout()
+
+        for key1, value1 in databases.items():
+            for key2, value2 in value1.items():
+                for key3, value3 in value2.data.items():
+                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
+                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+
+        self.x_data_layout.addWidget(QLabel('X Data:'))
+        self.x_data_layout.addWidget(self.x_data_input)
+        self.y_data_layout.addWidget(QLabel('Y Data:'))
+        self.y_data_layout.addWidget(self.y_data_input)
+        self.layout.addLayout(self.x_data_layout)
+        self.layout.addLayout(self.y_data_layout)
+
+        # 选择散点样式
+        self.style_input = QComboBox(self)
+        self.style_input.addItems(['o', 's', 'D', 'x', '+'])
+        self.layout.addWidget(QLabel('Marker Style:'))
+        self.layout.addWidget(self.style_input)
+
+
+        # 输入图例标签
+        self.label_input = QLineEdit(self)
+        self.layout.addWidget(QLabel('Label:'))
+        self.layout.addWidget(self.label_input)
+
+        # 确定和取消按钮
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        self.button_layout = QHBoxLayout()
+        self.button_layout.addStretch(1)
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addWidget(self.cancel_button)
+        self.layout.addLayout(self.button_layout)
+
+        self.setLayout(self.layout)
+
+    def accept(self):
+        super().accept()
+
+    def reject(self):
+        super().reject()
+
+
 chart_dialog_dict = {
     'curve': PyCurveDialog,
-    'plot': PyPlotDialog
+    'plot': PyPlotDialog,
+    'scatter': PyScatterDialog
 }

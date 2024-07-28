@@ -10,7 +10,7 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
 class PyStyleDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None, figure_window=None, fig_control_window=None):
+    def __init__(self, dialog_name=None, figure_window=None):
         super().__init__()
         self.style = dialog_name
 
@@ -23,7 +23,6 @@ class PyStyleDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        self.figure_control_window = fig_control_window
         self.figure_window = figure_window
 
         # 传入Figure创建函数的数据
@@ -81,7 +80,7 @@ class PyStyleDialog(QDialog):
 
 
 class PyLayoutDialog(QDialog):
-    def __init__(self, parent=None, dialog_name=None, figure_window=None, layout=None):
+    def __init__(self, dialog_name=None, figure_window=None, layout=None):
         super().__init__()
         self.setObjectName("layout_dialog")
         qss_file = qss_func.qss_loader(qss_path)

@@ -21,4 +21,6 @@ class PyDatabase:
         else:
             self.data[index][0] = data
 
+        # print(self.data[index][0])
+
 

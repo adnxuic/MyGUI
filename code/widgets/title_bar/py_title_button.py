@@ -82,7 +82,7 @@ class MenuButton(QPushButton):
 
 
 
-class SelectButton(QToolButton):
+class StaticSelectButton(QToolButton):
     def __init__(self, button_name, icon_name=None, tooltip_text=None, tooltip_text_image_path=None, dialog=None):
         super().__init__()
         self.setText(button_name)
@@ -118,9 +118,53 @@ class SelectButton(QToolButton):
         QToolTip.showText(self.mapToGlobal(QPoint(0, 0)), self.toolTip(), self)
 
     # 链接对话框
-    def connect_dialog(self, dialog):
+    def connect_dialog(self):
         self.dialog.exec()
 
+
+class DynSelectButton(QToolButton):
+    def __init__(self, button_name, icon_name=None, tooltip_text=None, tooltip_text_image_path=None, dialog=None, figure_window=None):
+        super().__init__()
+        self.setText(button_name)
+        self.setIcon(QIcon(icon_name))
+        self.setObjectName("select_button")
+
+        self.dialog_name = button_name
+        self.figure_window = figure_window
+
+
+        # 设置按钮的文本位于图标下方
+        self.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+
+        # 在工具提示中添加文字和图片
+        tooltip_text = f"<b>{tooltip_text}</b><br><img src='{tooltip_text_image_path}'>"
+        self.setToolTip(tooltip_text)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.showTooltip)  # 连接到显示工具提示的槽
+        self.timer.setInterval(1000)  # 设置定时器间隔为1000毫秒（一秒）
+
+        # 链接对话框
+        self.dialog = dialog
+        self.clicked.connect(self.connect_dialog)
+
+    def enterEvent(self, event):
+        self.timer.stop()  # 停止定时器
+        self.timer.start()  # 重新启动定时器
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.timer.stop()  # 鼠标离开时停止定时器
+        QToolTip.hideText()  # 隐藏工具提示
+        super().leaveEvent(event)
+
+    def showTooltip(self):
+        # 定时器触发后显示工具提示
+        QToolTip.showText(self.mapToGlobal(QPoint(0, 0)), self.toolTip(), self)
+
+    # 链接对话框
+    def connect_dialog(self):
+        dialog = self.dialog(self.dialog_name, self.figure_window)
+        dialog.exec()
 
 
 class PullDownButton(QPushButton):

@@ -39,6 +39,8 @@ class TableModel(QAbstractTableModel):
         if role == Qt.EditRole:
             self._data[index.row(), index.column()] = value
             self.dataChanged.emit(index, index)
+            print('setData:', value)
+            print(self._data)
             return True
         return False
 
@@ -109,6 +111,7 @@ class TableModel(QAbstractTableModel):
 
     # 有关database的操作
     def save_data_to_database(self):
+        print(self._data)
         # 提取每一列的数据
         for i in range(self.columnCount()):
             col_data = self._data[:, i]
@@ -123,10 +126,6 @@ class TableModel(QAbstractTableModel):
                     non_null_data = non_null_data.astype(str)
                 # 保存到数据库
                 self.database.update_data(i + 1, non_null_data)
-
-            print(databases)
-
-
 
 
 class TableView(QTableView):
@@ -261,25 +260,41 @@ class SheetTabWidget(QTabWidget):
                     self.removeTab(tab_index)
 
         elif action == save_to_database_action:
+            # 提取前如果当前单元格有未保存的数据，先保存
             current_widget = cast(TableView, self.currentWidget())
             model = cast(TableModel, current_widget.model)
+            #
+            # editor = current_widget.focusWidget()
+            # current_index = current_widget.currentIndex()  # 获取当前编辑的索引
+            # value = editor.text()  # 从 QLineEdit 获取文本
+            # model.setData(current_index, value, Qt.EditRole)  # 提交到模型
+            # current_widget.update(current_index)  # 更新视图
+            # current_index = current_widget.currentIndex()
+            # # 退出编辑状态
+            # current_widget.closePersistentEditor(current_index)
+            #
+            #
+            # next_index = model.index(current_index.row(), current_index.column() + 1)
+            # current_widget.setCurrentIndex(next_index)
+            # current_widget.edit(next_index)
+
             model.save_data_to_database()
 
 
 class PySubTable(QFrame):
-    def __init__(self, table_name: str):
+    def __init__(self, table_name: str, pydatabase: PyDatabase):
         super().__init__()
 
         self.table_name = table_name
 
         self.setMouseTracking(True)
 
-        databases[self.table_name]['Sheet1'] = PyDatabase()
+        databases[self.table_name]['Sheet1'] = pydatabase
 
         # 使用自定义的QTabWidget
         self.tabWidget = SheetTabWidget()
         self.tabWidget.setTabPosition(QTabWidget.South)
-        self.tabWidget.addTab(TableView(databases['Table1']['Sheet1']), "Sheet1")
+        self.tabWidget.addTab(TableView(databases[table_name]['Sheet1']), "Sheet1")
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
         self.plusButton = QPushButton("+")

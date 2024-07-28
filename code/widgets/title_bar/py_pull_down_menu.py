@@ -1,5 +1,5 @@
 from Qt_core import *
-from code.widgets.title_bar.py_title_button import SelectButton
+from code.widgets.title_bar.py_title_button import StaticSelectButton
 from code.widgets import qss_func
 import json
 import os

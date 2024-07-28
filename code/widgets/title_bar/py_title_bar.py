@@ -1,7 +1,7 @@
 from Qt_core import *
 
 from code.widgets import qss_func
-from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, SelectButton
+from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, StaticSelectButton
 from code.widgets.title_bar.py_title_menu import (MenuBar, SelectorMenuBar, ControlBar,
                                                   SelectorStyleMenuBar, SelectorLayoutMenuBar, SelectorChartMenuBar, SelectorElementMenuBar)
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow

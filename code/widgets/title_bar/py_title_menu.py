@@ -1,6 +1,6 @@
 from Qt_core import *
 
-from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, SelectButton, PullDownButton
+from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, StaticSelectButton, DynSelectButton, PullDownButton
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
@@ -157,11 +157,10 @@ class SelectorStyleMenuBar(QFrame):
         self.button_dict = {}
 
         for index, style in enumerate(self.available_styles_dict):
-            # 传类进去，不传实例，点击按钮时才会创建实例，以便实时更新数据
-            dialog = PyStyleDialog(dialog_name=style,figure_window=figure_window, fig_control_window=fig_control_window)
-            button = SelectButton(style, f'pictures/icons/style_images/{style}.svg', style,
+            dialog = PyStyleDialog(dialog_name=style,figure_window=figure_window)
+            button = StaticSelectButton(style, f'pictures/icons/style_images/{style}.svg', style,
                                   f'pictures/icons/style_images/{style}.svg',
-                                  dialog)
+                                        dialog)
             self.button_dict[style] = button
             if index < 8:
                 self.layout.addWidget(button)
@@ -194,7 +193,7 @@ class SelectorLayoutMenuBar(QFrame):
 
         for index, (layout, value) in enumerate(self.available_layout_dict.items()):
             dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, layout=value)
-            button = SelectButton(layout, f'pictures/icons/layout_images/{layout}.svg', layout,
+            button = StaticSelectButton(layout, f'pictures/icons/layout_images/{layout}.svg', layout,
                                   f'pictures/icons/layout_images/{layout}.svg', dialog)
             self.button_dict[layout] = button
             if index < 8:
@@ -216,9 +215,9 @@ class SelectorChartMenuBar(QFrame):
         self.layout.setContentsMargins(0, 0, 0, 10)
 
         for index, (name, value) in enumerate(chart_dialog_dict.items()):
-            dialog = value(dialog_name=name, figure_window=figure_window)
-            button = SelectButton(name, f'pictures/icons/chart_images/{name}.svg', name,
-                                  f'pictures/icons/chart_images/{name}.svg', dialog)
+            # 传类进去，不传实例，点击按钮时才会创建实例，以便实时更新数据
+            button = DynSelectButton(name, f'pictures/icons/chart_images/{name}.svg', name,
+                                  f'pictures/icons/chart_images/{name}.svg', value, figure_window)
             if index < 8:
                 self.layout.addWidget(button)
 
@@ -236,7 +235,7 @@ class SelectorElementMenuBar(QFrame):
 
         for index, (name, value) in enumerate(element_dialog_dict.items()):
             dialog = value(dialog_name=name, figure_window=figure_window)
-            button = SelectButton(name, f'pictures/icons/element_images/{name}.svg', name,
+            button = StaticSelectButton(name, f'pictures/icons/element_images/{name}.svg', name,
                                   f'pictures/icons/element_images/{name}.svg', dialog)
             if index < 8:
                 self.layout.addWidget(button)

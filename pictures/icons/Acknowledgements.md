@@ -42,3 +42,6 @@
 <a href="https://iconscout.com/icons/text" class="text-underline font-size-sm" target="_blank">Text</a> by <a href="https://iconscout.com/contributors/google-inc" class="text-underline font-size-sm">Google Inc.</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/line-chart" class="text-underline font-size-sm" target="_blank">line chart</a> by <a href="https://iconscout.com/contributors/leappicon" class="text-underline font-size-sm">Leapp Icon</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/scatter" class="text-underline font-size-sm" target="_blank">Scatter</a> by <a href="https://iconscout.com/contributors/vaadin-icons" class="text-underline font-size-sm" target="_blank">Vaadin Icons</a></br>
+
