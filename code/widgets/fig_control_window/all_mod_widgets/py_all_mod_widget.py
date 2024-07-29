@@ -25,7 +25,7 @@ class PyAxesModWindow(QFrame):
 
 
 # 调整曲线
-class PyCurveModWindow(QFrame):
+class PyChartModWindow(QFrame):
     """
     曲线调整窗口
     一个坐标系对应一个

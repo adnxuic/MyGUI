@@ -25,6 +25,15 @@ class PyTextDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
+        # 选择是全局还是局部选择框
+        self.global_local_layout = QHBoxLayout()
+        self.global_button = QRadioButton('全局')
+        self.local_button = QRadioButton('局部')
+        self.local_button.setChecked(True)
+        self.global_local_layout.addWidget(self.global_button)
+        self.global_local_layout.addWidget(self.local_button)
+        self.layout.addLayout(self.global_local_layout)
+
         # 输入文本
         self.text_label = QLabel("Text:")
         self.text_edit = QLineEdit()
@@ -35,17 +44,16 @@ class PyTextDialog(QDialog):
         self.position_input_layout = QHBoxLayout()
         self.x_input = QDoubleSpinBox()
         self.x_input.setFixedSize(100, 20)
-        self.x_input.setMinimum(0)
-        self.x_input.setMaximum(1)
+        self.x_input.setRange(-1, 2)
         self.x_input.setSingleStep(0.01)
         self.x_input.setValue(0.5)
 
         self.y_input = QDoubleSpinBox()
         self.y_input.setFixedSize(100, 20)
-        self.y_input.setMinimum(0)
-        self.y_input.setMaximum(1)
+        self.y_input.setRange(-1, 2)
         self.y_input.setSingleStep(0.01)
         self.y_input.setValue(0.5)
+
         self.position_input_layout.addWidget(QLabel('x:'))
         self.position_input_layout.addWidget(self.x_input)
         self.position_input_layout.addWidget(QLabel('y:'))
@@ -104,11 +112,21 @@ class PyTextDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
-        self.figure_window.current_canva.add_text(text=self.text_edit.text(),
-                                                  x=self.x_input.value(),
-                                                  y=self.y_input.value(),
-                                                  fontfamily=self.font_input.currentText(),
-                                                  fontsize=self.font_size_input.value())
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
+        # 如果current_axes为空，弹出警告
+        if self.figure_window.current_canva.current_axes is None:
+            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            return
+        if self.local_button.isChecked():
+            self.figure_window.current_canva.add_text(text=self.text_edit.text(),
+                                                      x=self.x_input.value(),
+                                                      y=self.y_input.value(),
+                                                      fontfamily=self.font_input.currentText(),
+                                                      fontsize=self.font_size_input.value())
         super().accept()
 
     def reject(self):

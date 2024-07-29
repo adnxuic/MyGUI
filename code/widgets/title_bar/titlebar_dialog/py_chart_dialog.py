@@ -6,7 +6,6 @@ from code.widgets import qss_func
 from code.database.py_database import databases, PyDatabase
 
 import os
-from typing import cast
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
@@ -77,7 +76,17 @@ class PyCurveDialog(QDialog):
             self.color_display.setStyleSheet(f"background-color: {self.selected_color}")
 
     def accept(self):
-        self.figure_window.current_canva.add_curve(func_test=self.expression_edit.text(),
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
+        # 如果current_axes为空，弹出警告
+        if self.figure_window.current_canva.current_axes is None:
+            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            return
+
+        self.figure_window.current_canva.add_curve(func_text=self.expression_edit.text(),
                                                    style=self.style_input.currentText(),
                                                    color=self.selected_color,
                                                    label=self.label_input.text())
@@ -103,15 +112,44 @@ class PyPlotDialog(QDialog):
         self.layout = QVBoxLayout()
 
         # 选择数据
-        self.data_input = QComboBox(self)
+        self.x_data_input = QComboBox(self)
+        self.x_data_layout = QHBoxLayout()
+        self.y_data_input = QComboBox(self)
+        self.y_data_layout = QHBoxLayout()
+
         for key1, value1 in databases.items():
             for key2, value2 in value1.items():
                 for key3, value3 in value2.data.items():
-                    self.data_input.addItem(f"{key1}/{key2}/{key3}")
+                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
+                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
 
-        self.layout.addWidget(QLabel('Data:'))
-        self.layout.addWidget(self.data_input)
+        self.x_data_layout.addWidget(QLabel('X Data:'))
+        self.x_data_layout.addWidget(self.x_data_input)
+        self.y_data_layout.addWidget(QLabel('Y Data:'))
+        self.y_data_layout.addWidget(self.y_data_input)
+        self.layout.addLayout(self.x_data_layout)
+        self.layout.addLayout(self.y_data_layout)
 
+        # 选择大小
+        self.size_input = QDoubleSpinBox(self)
+        self.size_input.setRange(0.1, 10)
+        self.size_input.setSingleStep(0.1)
+        self.size_input.setValue(2)
+        self.layout.addWidget(QLabel('Size:'))
+        self.layout.addWidget(self.size_input)
+
+        # 选择颜色和颜色预览
+        self.color_layout = QHBoxLayout()
+        self.color_input = QPushButton('Choose Color', self)
+        self.color_input.clicked.connect(self.choose_color)
+        self.color_display = QFrame(self)
+        self.color_display.setFixedSize(20, 20)
+        self.color_display.setStyleSheet("background-color: #000000")
+        self.layout.addWidget(QLabel('Color:'))
+        self.color_layout.addWidget(self.color_display)
+        self.color_layout.addWidget(self.color_input)
+        self.layout.addLayout(self.color_layout)
+        self.selected_color = '#000000'
 
         # 选择线条样式
         self.style_input = QComboBox(self)
@@ -137,13 +175,46 @@ class PyPlotDialog(QDialog):
 
         self.setLayout(self.layout)
 
+    def choose_color(self):
+        color = QColorDialog.getColor(self.selected_color)
+        if color.isValid():
+            self.selected_color = color.name()
+            self.color_display.setStyleSheet(f"background-color: {self.selected_color}")
+
     def accept(self):
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
+        # 如果current_axes为空，弹出警告
+        if self.figure_window.current_canva.current_axes is None:
+            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            return
+
+        x_data = PyDatabase.get_data(self.x_data_input.currentText())
+        y_data = PyDatabase.get_data(self.y_data_input.currentText())
+
+        # 如果x_data和y_data长度不一致，弹出警告
+        if len(x_data) != len(y_data):
+            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+            return
+
+        self.figure_window.current_canva.add_plot(x=x_data, y=y_data,
+                                                  style=self.style_input.currentText(),
+                                                  size=self.size_input.value(),
+                                                  color=self.selected_color,
+                                                  label=self.label_input.text(),
+                                                  x_data_name=self.x_data_input.currentText(),
+                                                  y_data_name=self.y_data_input.currentText())
+
         super().accept()
 
     def reject(self):
         super().reject()
 
 
+# 散点图对话框
 class PyScatterDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None):
         super().__init__()
@@ -177,12 +248,31 @@ class PyScatterDialog(QDialog):
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
 
+        # 选择大小
+        self.size_input = QSpinBox(self)
+        self.size_input.setRange(0, 100)
+        self.size_input.setValue(20)
+        self.layout.addWidget(QLabel('Size:'))
+        self.layout.addWidget(self.size_input)
+
+        # 选择颜色和颜色预览
+        self.color_layout = QHBoxLayout()
+        self.color_input = QPushButton('Choose Color', self)
+        self.color_input.clicked.connect(self.choose_color)
+        self.color_display = QFrame(self)
+        self.color_display.setFixedSize(20, 20)
+        self.color_display.setStyleSheet("background-color: #000000")
+        self.layout.addWidget(QLabel('Color:'))
+        self.color_layout.addWidget(self.color_display)
+        self.color_layout.addWidget(self.color_input)
+        self.layout.addLayout(self.color_layout)
+        self.selected_color = '#000000'
+
         # 选择散点样式
         self.style_input = QComboBox(self)
         self.style_input.addItems(['o', 's', 'D', 'x', '+'])
         self.layout.addWidget(QLabel('Marker Style:'))
         self.layout.addWidget(self.style_input)
-
 
         # 输入图例标签
         self.label_input = QLineEdit(self)
@@ -202,7 +292,39 @@ class PyScatterDialog(QDialog):
 
         self.setLayout(self.layout)
 
+    def choose_color(self):
+        color = QColorDialog.getColor(self.selected_color)
+        if color.isValid():
+            self.selected_color = color.name()
+            self.color_display.setStyleSheet(f"background-color: {self.selected_color}")
+
     def accept(self):
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
+        # 如果current_axes为空，弹出警告
+        if self.figure_window.current_canva.current_axes is None:
+            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            return
+
+        x_data = PyDatabase.get_data(self.x_data_input.currentText())
+        y_data = PyDatabase.get_data(self.y_data_input.currentText())
+
+        # 如果x_data和y_data长度不一致，弹出警告
+        if len(x_data) != len(y_data):
+            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+            return
+
+        self.figure_window.current_canva.add_scatter(x=x_data, y=y_data,
+                                                     size=self.size_input.value(),
+                                                     color=self.selected_color,
+                                                     marker=self.style_input.currentText(),
+                                                     label=self.label_input.text(),
+                                                     x_data_name=self.x_data_input.currentText(),
+                                                        y_data_name=self.y_data_input.currentText())
+
         super().accept()
 
     def reject(self):

@@ -109,6 +109,11 @@ class PyLayoutDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
         self.figure_window.current_canva.add_axes(nrows=self.layout_value[0], ncols=self.layout_value[1])
         super().accept()
 

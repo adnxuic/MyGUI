@@ -2,7 +2,7 @@ from Qt_core import *
 from typing import Optional
 
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import (
-    PyAxesModWindow, PyCurveModWindow, PyElementModWindow)
+    PyAxesModWindow, PyChartModWindow, PyElementModWindow)
 
 from code.widgets.qss_func import qss_loader
 
@@ -41,13 +41,13 @@ class PyAllModWidget(QFrame):
         self.element_btn_bar_layout = QHBoxLayout()
 
         self.axes_mod_window = PyAxesModWindow(axe)
-        self.curve_mod_window = PyCurveModWindow(axe)
+        self.cahrt_mod_window = PyChartModWindow(axe)
         self.element_mod_window = PyElementModWindow(axe)
 
         self.stackwidget = QStackedWidget()
 
         self.stackwidget.addWidget(self.axes_mod_window)
-        self.stackwidget.addWidget(self.curve_mod_window)
+        self.stackwidget.addWidget(self.cahrt_mod_window)
         self.stackwidget.addWidget(self.element_mod_window)
 
         self.curve_btn_bar.setLayout(self.curve_btn_bar_layout)
@@ -86,7 +86,7 @@ class PyAllModWidget(QFrame):
         btn = QPushButton(btn_name)
 
         btn.clicked.connect(lambda: self.change_stackwidget(1))
-        self.curve_mod_window.add_box(btn_name, btn)
+        self.cahrt_mod_window.add_box(btn_name, btn)
         btn.clicked.connect(lambda: self.updateLayout(1))
 
         self.curve_btn_bar_layout.addWidget(btn)

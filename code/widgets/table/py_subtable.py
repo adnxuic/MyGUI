@@ -39,8 +39,8 @@ class TableModel(QAbstractTableModel):
         if role == Qt.EditRole:
             self._data[index.row(), index.column()] = value
             self.dataChanged.emit(index, index)
-            print('setData:', value)
-            print(self._data)
+            # print('setData:', value)
+            # print(self._data)
             return True
         return False
 
@@ -163,9 +163,14 @@ class TableView(QTableView):
         deleteAction.setShortcut("Delete")
         deleteAction.triggered.connect(self.deleteItems)
 
+        saveAction = QAction("Save", self)
+        saveAction.setShortcut("Ctrl+S")
+        saveAction.triggered.connect(self.model.save_data_to_database)
+
         self.addAction(copyAction)
         self.addAction(pasteAction)
         self.addAction(deleteAction)
+        self.addAction(saveAction)
 
     def copyItems(self):
         selection = self.selectedIndexes()

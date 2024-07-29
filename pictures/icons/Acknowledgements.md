@@ -35,7 +35,7 @@
 
 <a href="https://iconscout.com/icons/grid" class="text-underline font-size-sm" target="_blank">Grid</a> by <a href="https://iconscout.com/contributors/sonisokell" class="text-underline font-size-sm">Soni Sokell</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
-<a href="https://iconscout.com/icons/web-layout" class="text-underline font-size-sm" target="_blank">Web Layout</a> by <a href="https://iconscout.com/contributors/shahsoft" class="text-underline font-size-sm">Shahsoft Production</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+<a href="https://iconscout.com/icons/rows" class="text-underline font-size-sm" target="_blank">Rows</a> by <a href="https://iconscout.com/contributors/graphic-room" class="text-underline font-size-sm">Venus</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/abc" class="text-underline font-size-sm" target="_blank">abc</a> by <a href="https://iconscout.com/contributors/iconika" class="text-underline font-size-sm" target="_blank">Iconika</a></br>
 

@@ -1,6 +1,5 @@
 QFrame#fig_control_window
 {
-    background-color: #bcbec5;
     max-height: 640px;
     max-width: 240px;
     min-height: 440px;
@@ -12,7 +11,7 @@ QFrame#fig_control_window
 /* 图片修改窗口 */
 QFrame#fig_modify_window
 {
-    background-color: #7b93eb;
+    background-color: #ffc5c5c5;
     max-height: 640px;
     max-width: 480px;
     min-height: 440px;

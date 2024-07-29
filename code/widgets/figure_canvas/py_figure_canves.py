@@ -4,12 +4,15 @@ from Qt_core import *
 
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import PyModBox
-from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget
+from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget, PyScatterModWidget, \
+    PyPlotModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 
 from code.figuremodify.py_axes_modify import PyAxesModify
-from code.figuremodify.py_curve_modify import PyCurveModify
+from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify
 from code.figuremodify.py_text_modify import PyTextModify
+
+from code.database.py_database import PyDatabase
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -89,58 +92,72 @@ class PyFigureCanvas(QWidget):
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
 
         # 如果all_mod_widget中没有curve_box，则添加一个
-        if all_mod_widget.curve_mod_window.boxs.get('curve_box') is None:
+        if all_mod_widget.cahrt_mod_window.boxs.get('curve_box') is None:
             all_mod_widget.add_chart_box('curve_box')
 
         # 添加曲线调整窗口
         curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.style, line))
 
-        curve_box: PyModBox = all_mod_widget.curve_mod_window.boxs['curve_box']
+        curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')
 
         self.redraw()
 
-
-    # 添加散点图
-    def add_scatter(self, x, y, style, color, label):
+    # 添加折线图
+    def add_plot(self, x, y, style, size, color, label, x_data_name: str, y_data_name: str):
         with mpl.style.context(self.style):
-            scatter = self.current_axes.scatter(x, y, s=20, c=color, label=label)
+            line, = self.current_axes.plot(x, y, style, markersize=size, color=color, label=label)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-
-        # 如果all_mod_widget中没有curve_box，则添加一个
-        if all_mod_widget.curve_mod_window.boxs.get('scatter_box') is None:
-            all_mod_widget.add_chart_box('scatter_box')
-
+        # 如果all_mod_widget中没有plot_box，则添加一个
+        if all_mod_widget.cahrt_mod_window.boxs.get('plot_box') is None:
+            all_mod_widget.add_chart_box('plot_box')
         # 添加曲线调整窗口
-        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.style, scatter))
+        plot_mod_widget = PyPlotModWidget(PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name),
+                                          x_data_name, y_data_name)
+        plot_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['plot_box']
+        plot_box.add_widget(plot_mod_widget, 'plot')
 
-        curve_box: PyModBox = all_mod_widget.curve_mod_window.boxs['scatter_box']
-        curve_box.add_widget(curve_mod_widget, 'scatter')
+        self.redraw()
+
+    # 添加散点图
+    def add_scatter(self, x, y, size, color, marker, label, x_data_name: str, y_data_name: str):
+        with mpl.style.context(self.style):
+            scatter = self.current_axes.scatter(x, y, s=size, c=color, marker=marker, label=label)
+
+        # 获取当前坐标系的所有修改窗口
+        all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
+        # 如果all_mod_widget中没有scatter_box，则添加一个
+        if all_mod_widget.cahrt_mod_window.boxs.get('scatter_box') is None:
+            all_mod_widget.add_chart_box('scatter_box')
+        # 添加散点调整窗口
+        scatter_mod_widget = PyScatterModWidget(
+            PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name),
+            x_data_name, y_data_name)
+        scatter_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['scatter_box']
+        scatter_box.add_widget(scatter_mod_widget, 'scatter')
 
         self.redraw()
 
     # 添加文本
     def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int):
         with mpl.style.context(self.style):
-            text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize)
+            text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize,
+                                          transform=self.current_axes.transAxes)
+            # self.current_axes.transAxes是坐标系的坐标变换
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-
         # 如果all_mod_widget中没有text_box，则添加一个
         if all_mod_widget.element_mod_window.boxs.get('text_box') is None:
             all_mod_widget.add_element_box('text_box')
-
         # 添加文本调整窗口
         text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text))
-
         text_box: PyModBox = all_mod_widget.element_mod_window.boxs['text_box']
         text_box.add_widget(text_mod_widget, 'text')
 
         self.redraw()
-
 
     def save(self, filename, dpi=None):
         if dpi is None:
