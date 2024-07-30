@@ -38,7 +38,6 @@ class PyFigureCanvas(QWidget):
         self.fig_modify_widget: Optional[PyFigModWidget] = None
 
         self.current_axes: Optional[Axes] = None
-        self.axes_modify = PyAxesModify(self.fig, style)
 
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
@@ -73,8 +72,11 @@ class PyFigureCanvas(QWidget):
         with mpl.style.context(self.style):
             for i in range(nrows * ncols):
                 axe = self.fig.add_subplot(nrows, ncols, 1 + i)
-                btn = self.fig_modify_widget.add_all_mod_widget(axe)
+                axe_mod = PyAxesModify(self.fig, axe, self.style)
+
+                btn = self.fig_modify_widget.add_all_mod_widget(axe, axe_mod)
                 btn.clicked.connect(lambda _, axe1=axe: self.update_current_axes(axe1))
+
                 if i == 0:
                     self.update_current_axes(axe)
 
@@ -96,7 +98,7 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('curve_box')
 
         # 添加曲线调整窗口
-        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.style, line))
+        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.current_axes, self.style, line))
 
         curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')

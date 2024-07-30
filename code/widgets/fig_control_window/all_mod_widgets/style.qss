@@ -1,0 +1,12 @@
+QToolBox::tab {
+    background: #EBECF0;
+    border-radius: 5px;
+    font-size: 16px;
+    color: #6d6868;
+}
+
+QToolBox::tab:selected {
+    background: #0281ff;
+    font: bold;
+    color: white;
+}

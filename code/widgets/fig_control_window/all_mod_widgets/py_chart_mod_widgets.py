@@ -1,13 +1,22 @@
 from Qt_core import *
 
+from code.widgets import qss_func
 from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify
 
 from code.database.py_database import databases, PyDatabase
+
+import os
+
+current_path = os.path.dirname(os.path.abspath(__file__))
+qss_path = os.path.join(current_path, "chart_mod_style.qss")
 
 
 class PyCurveModWidget(QFrame):
     def __init__(self, curve_modify: PyCurveModify):
         super().__init__()
+
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
 
         self.curve_modify = curve_modify
 
@@ -19,6 +28,9 @@ class PyCurveModWidget(QFrame):
 class PyPlotModWidget(QFrame):
     def __init__(self, curve_modify: PyPlotModify, x_data_name: str, y_data_name: str):
         super().__init__()
+
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
 
         self.curve_modify = curve_modify
 
@@ -74,9 +86,13 @@ class PyPlotModWidget(QFrame):
                                           id(self.curve_modify.line), 'y')
         self.curve_modify.current_y_data_name = self.y_data_input.currentText()
 
+
 class PyScatterModWidget(QFrame):
     def __init__(self, scatter_modify: PyScatterModify, x_data_name: str, y_data_name: str):
         super().__init__()
+
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
 
         self.curve_modify = scatter_modify
 

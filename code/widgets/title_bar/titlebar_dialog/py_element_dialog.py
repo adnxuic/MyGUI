@@ -66,7 +66,7 @@ class PyTextDialog(QDialog):
         # 获取所有系统字体及 Matplotlib 字体
         font_paths = font_manager.findSystemFonts()
         fonts = [font_manager.FontProperties(fname=path).get_name() for path in font_paths]
-        font_list = sorted(set(fonts))  # 去重排序后的字体列表
+        font_list = sorted(set(fonts))
 
         # 代理类，使得下拉菜单中的字体显示为对应字体
         class FontDelegate(QStyledItemDelegate):
@@ -94,7 +94,7 @@ class PyTextDialog(QDialog):
         self.font_size_input = QSpinBox(self)
         self.font_size_input.setMinimum(1)
         self.font_size_input.setMaximum(100)
-        self.font_size_input.setValue(6)
+        self.font_size_input.setValue(20)
         self.layout.addWidget(QLabel('Font Size:'))
         self.layout.addWidget(self.font_size_input)
 

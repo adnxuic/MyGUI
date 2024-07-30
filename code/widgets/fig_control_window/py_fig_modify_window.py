@@ -1,10 +1,11 @@
 from Qt_core import *
 from typing import Optional
 
+from code.widgets.qss_func import qss_loader
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import (
     PyAxesModWindow, PyChartModWindow, PyElementModWindow)
+from code.figuremodify.py_axes_modify import PyAxesModify
 
-from code.widgets.qss_func import qss_loader
 
 import os
 
@@ -18,7 +19,7 @@ class PyAllModWidget(QFrame):
     一个坐标系对应一个
     """
 
-    def __init__(self, axe):
+    def __init__(self, axe, axe_modify: PyAxesModify):
         super().__init__()
 
         self.setObjectName('all_mod_widget')
@@ -34,13 +35,11 @@ class PyAllModWidget(QFrame):
         self.element_btn_bar = QFrame()
         self.btn_bars.append(self.curve_btn_bar)
         self.btn_bars.append(self.element_btn_bar)
-        # 黑色边框
-        self.curve_btn_bar.setStyleSheet("border: 1px solid black;")
-        self.element_btn_bar.setStyleSheet("border: 1px solid black;")
+
         self.curve_btn_bar_layout = QHBoxLayout()
         self.element_btn_bar_layout = QHBoxLayout()
 
-        self.axes_mod_window = PyAxesModWindow(axe)
+        self.axes_mod_window = PyAxesModWindow(axe, axe_modify)
         self.cahrt_mod_window = PyChartModWindow(axe)
         self.element_mod_window = PyElementModWindow(axe)
 
@@ -135,12 +134,12 @@ class PyFigModWidget(QFrame):
         self.layout.addLayout(self.stacklayout)
         self.setLayout(self.layout)
 
-    def add_all_mod_widget(self, axe):
+    def add_all_mod_widget(self, axe, axe_modify: PyAxesModify):
         """
         添加坐标系中所有元素的修改窗口
         返回按钮以便切换窗口是改变画布的当前坐标系
         """
-        all_mod_widget = PyAllModWidget(axe)
+        all_mod_widget = PyAllModWidget(axe, axe_modify)
         self.stacklayout.addWidget(all_mod_widget)
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
 

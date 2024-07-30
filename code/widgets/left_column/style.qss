@@ -1,6 +1,6 @@
 QFrame#left_column
 {
-    background-color: #9b9595;
+    background-color: #F7F8FA;
     max-height: 640px;
     max-width: 50px;
     min-height: 440px;
@@ -27,7 +27,7 @@ QPushButton#table_button
 }
 QPushButton#table_button:checked
 {
-    background-color: #ffffff;
+    background-color: #0281ff;
     border-radius: 10px;
     padding: 0px;
     margin: 0px;

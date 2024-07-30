@@ -51,5 +51,20 @@ class PyLeftColumn(QFrame):
             self.table.setVisible(False)
             self.fig_control_window.setFixedWidth(sum_width)
 
+        # 改变颜色
+        if not checked:
+            color = QColor(0, 0, 0)
+        else:
+            color = QColor(255, 255, 255)
+
+        pixmap = QPixmap("pictures/icons/tables.svg")
+        painter = QPainter()
+        painter.begin(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), color)
+        painter.end()
+
+        self.table_button.setIcon(QIcon(pixmap))
+
     def show_setting_dialog(self):
         self.setting_dialog.exec()

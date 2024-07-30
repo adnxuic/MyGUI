@@ -17,7 +17,7 @@
 
 <a href="https://iconscout.com/icons/minimize" class="text-underline font-size-sm" target="_blank">minimize</a> by <a href="https://iconscout.com/contributors/google-inc" class="text-underline font-size-sm">Google Inc.</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
-<a href="https://iconscout.com/icons/tables" class="text-underline font-size-sm" target="_blank">Tables</a> by <a href="https://iconscout.com/contributors/ibm-design" class="text-underline font-size-sm">Ibm-design</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+<a href="https://iconscout.com/icons/table" class="text-underline font-size-sm" target="_blank">Table</a> by <a href="https://iconscout.com/contributors/cosmin-negoita" class="text-underline font-size-sm">Cosmin Negoita</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/tex" class="text-underline font-size-sm" target="_blank">tex</a> by <a href="https://iconscout.com/contributors/jagathish" class="text-underline font-size-sm">Jagathish Saravanan</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
@@ -44,4 +44,8 @@
 <a href="https://iconscout.com/icons/line-chart" class="text-underline font-size-sm" target="_blank">line chart</a> by <a href="https://iconscout.com/contributors/leappicon" class="text-underline font-size-sm">Leapp Icon</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/scatter" class="text-underline font-size-sm" target="_blank">Scatter</a> by <a href="https://iconscout.com/contributors/vaadin-icons" class="text-underline font-size-sm" target="_blank">Vaadin Icons</a></br>
+
+<a href="https://iconscout.com/icons/scatter-plot" class="text-underline font-size-sm" target="_blank">Scatter Plot</a> by <a href="https://iconscout.com/contributors/flowicon" class="text-underline font-size-sm" target="_blank">Flowicon</a></br>
+
+<a href="https://iconscout.com/icons/curve" class="text-underline font-size-sm" target="_blank">curve</a> by <a href="https://iconscout.com/contributors/icogenix" class="text-underline font-size-sm" target="_blank">Icogenix</a></br>
 

@@ -14,9 +14,12 @@ from matplotlib.style import use
 
 
 class PyCurveModify:
-    def __init__(self, fig, style=None, line: Line2D = None):
+    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None):
         self.style = style
         self.fig = fig
+        self.axe = axe
+
+        self.legend = axe.legend()
 
         self.line = line
 

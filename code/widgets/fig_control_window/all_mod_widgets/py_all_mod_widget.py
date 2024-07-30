@@ -1,9 +1,17 @@
 from Qt_core import *
-from code.widgets.qss_func import qss_loader
+from code.widgets import qss_func
+from code.widgets.fig_control_window.all_mod_widgets.py_axes_mod_widgets import (
+    PyBottomSpineModWidget, PyTopSpineModWidget, PyLeftSpineModWidget, PyRightSpineModWidget,
+    PyAxeLegendModWidget
+)
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget
+
+from code.figuremodify.py_axes_modify import PyAxesModify
 
 import os
 
+current_path = os.path.dirname(os.path.abspath(__file__))
+qss_path = os.path.join(current_path, "style.qss")
 
 # 调整坐标系
 class PyAxesModWindow(QFrame):
@@ -11,17 +19,29 @@ class PyAxesModWindow(QFrame):
     坐标系调整窗口
     一个坐标系对应一个
     """
-
-    def __init__(self, axe):
+    def __init__(self, axe, axe_modify: PyAxesModify):
         super().__init__()
-
         self.axe = axe
-        # 设置边框
-        self.setStyleSheet("border: 1px solid black;")
+        self.axe_modify = axe_modify
+
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
 
         self.layout = QVBoxLayout()
+        self.layout.setSpacing(0)
+        self.layout.setContentsMargins(0, 0, 0, 0)
 
+        self.toolbox = QToolBox()
+
+        self.legend_mod_widget = PyAxeLegendModWidget(axe, axe_modify)
+
+        self.toolbox.addItem(self.legend_mod_widget, "图例")
+
+        self.layout.addWidget(self.toolbox)
         self.setLayout(self.layout)
+
+    def add_legend_mod_widget(self):
+        pass
 
 
 # 调整曲线
@@ -92,6 +112,8 @@ class PyModBox(QToolBox):
 
     def __init__(self):
         super().__init__()
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
 
         self.item_num = 0
 

@@ -46,12 +46,11 @@ class SelectMenuButton(QPushButton):
     def __init__(self, button_name, IconName=None):
         super().__init__()
         self.setObjectName("select_menu_button")
-        self.setText(button_name) # 设置按钮的文字
+        self.setText(button_name)
         self.IconName = IconName
         self.setIcon(QIcon(IconName))
 
         self.setCheckable(True)
-        # 连接按钮状态改变信号到槽函数
         self.toggled.connect(self.the_button_was_toggled)
 
     def the_button_was_toggled(self, checked):

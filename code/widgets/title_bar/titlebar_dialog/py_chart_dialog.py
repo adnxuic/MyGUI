@@ -323,7 +323,149 @@ class PyScatterDialog(QDialog):
                                                      marker=self.style_input.currentText(),
                                                      label=self.label_input.text(),
                                                      x_data_name=self.x_data_input.currentText(),
-                                                        y_data_name=self.y_data_input.currentText())
+                                                     y_data_name=self.y_data_input.currentText())
+
+        super().accept()
+
+    def reject(self):
+        super().reject()
+
+
+class PyFitDialog(QDialog):
+    def __init__(self, dialog_name=None, figure_window=None):
+        super().__init__()
+        self.setObjectName("fit_dialog")
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
+
+        self.setWindowTitle(dialog_name)
+        self.setWindowIcon(QIcon("pictures/icons/chart_images/fit.svg"))
+
+        self.figure_window: PyFigureWindow = figure_window
+
+        self.layout = QVBoxLayout()
+
+        # 选择数据
+        self.x_data_input = QComboBox(self)
+        self.x_data_layout = QHBoxLayout()
+        self.y_data_input = QComboBox(self)
+        self.y_data_layout = QHBoxLayout()
+
+        for key1, value1 in databases.items():
+            for key2, value2 in value1.items():
+                for key3, value3 in value2.data.items():
+                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
+                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+
+        self.x_data_layout.addWidget(QLabel('X Data:'))
+        self.x_data_layout.addWidget(self.x_data_input)
+        self.y_data_layout.addWidget(QLabel('Y Data:'))
+        self.y_data_layout.addWidget(self.y_data_input)
+        self.layout.addLayout(self.x_data_layout)
+        self.layout.addLayout(self.y_data_layout)
+
+        # 确定和取消按钮
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        self.button_layout = QHBoxLayout()
+        self.button_layout.addStretch(1)
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addWidget(self.cancel_button)
+        self.layout.addLayout(self.button_layout)
+
+        self.setLayout(self.layout)
+
+    def accept(self):
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
+        # 如果current_axes为空，弹出警告
+        if self.figure_window.current_canva.current_axes is None:
+            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            return
+
+        x_data = PyDatabase.get_data(self.x_data_input.currentText())
+        y_data = PyDatabase.get_data(self.y_data_input.currentText())
+
+        # 如果x_data和y_data长度不一致，弹出警告
+        if len(x_data) != len(y_data):
+            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+            return
+
+        super().accept()
+
+    def reject(self):
+        super().reject()
+
+
+class PyInterpolationDialog(QDialog):
+    def __init__(self, dialog_name=None, figure_window=None):
+        super().__init__()
+        self.setObjectName("interpolation_dialog")
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
+
+        self.setWindowTitle(dialog_name)
+        self.setWindowIcon(QIcon("pictures/icons/chart_images/interpolation.svg"))
+
+        self.figure_window: PyFigureWindow = figure_window
+
+        self.layout = QVBoxLayout()
+
+        # 选择数据
+        self.x_data_input = QComboBox(self)
+        self.x_data_layout = QHBoxLayout()
+        self.y_data_input = QComboBox(self)
+        self.y_data_layout = QHBoxLayout()
+
+        for key1, value1 in databases.items():
+            for key2, value2 in value1.items():
+                for key3, value3 in value2.data.items():
+                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
+                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+
+        self.x_data_layout.addWidget(QLabel('X Data:'))
+        self.x_data_layout.addWidget(self.x_data_input)
+        self.y_data_layout.addWidget(QLabel('Y Data:'))
+        self.y_data_layout.addWidget(self.y_data_input)
+        self.layout.addLayout(self.x_data_layout)
+        self.layout.addLayout(self.y_data_layout)
+
+        # 确定和取消按钮
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        self.button_layout = QHBoxLayout()
+        self.button_layout.addStretch(1)
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addWidget(self.cancel_button)
+        self.layout.addLayout(self.button_layout)
+
+        self.setLayout(self.layout)
+
+    def accept(self):
+        # 如果current_canva为空，弹出警告
+        if self.figure_window.current_canva is None:
+            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            return
+
+        # 如果current_axes为空，弹出警告
+        if self.figure_window.current_canva.current_axes is None:
+            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            return
+
+        x_data = PyDatabase.get_data(self.x_data_input.currentText())
+        y_data = PyDatabase.get_data(self.y_data_input.currentText())
+
+        # 如果x_data和y_data长度不一致，弹出警告
+        if len(x_data) != len(y_data):
+            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+            return
 
         super().accept()
 
@@ -334,5 +476,7 @@ class PyScatterDialog(QDialog):
 chart_dialog_dict = {
     'curve': PyCurveDialog,
     'plot': PyPlotDialog,
-    'scatter': PyScatterDialog
+    'scatter': PyScatterDialog,
+    'fit': PyFitDialog,
+    'interpolation': PyInterpolationDialog
 }
