@@ -35,7 +35,7 @@ QFrame#tex_window
 /* Matlab的窗口 */
 QFrame#matlab_window
 {
-    background-color: #1800f4;
+    background-color: #EBECF0;
     max-height: 640px;
     max-width: 480px;
     min-height: 620px;
