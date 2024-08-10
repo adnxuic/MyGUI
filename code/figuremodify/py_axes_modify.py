@@ -17,9 +17,12 @@ class PyAxesModify:
 
         self.legend = None
 
-
     def redraw(self):
         self.fig.canvas.draw()
+
+    def set_visible(self, spine: str, visible: bool):
+        self.axe.spines[spine].set_visible(visible)
+        self.redraw()
 
     def set_legend_position(self, position: Union[str, tuple]):
         self.legend = self.axe.legend(loc=position)
@@ -28,3 +31,7 @@ class PyAxesModify:
     def change_axes(self, axes, **kwargs):
         axes.set(**kwargs)
         return axes
+
+    def set_bottom_spine_position(self, pos):
+        self.axe.spines["bottom"].set_position(("axes", pos))
+        self.redraw()

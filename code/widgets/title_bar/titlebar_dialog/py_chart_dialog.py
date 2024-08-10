@@ -29,8 +29,21 @@ class PyCurveDialog(QDialog):
         # 输入函数表达式
         self.expression_label = QLabel("函数表达式")
         self.expression_edit = QLineEdit()
+        self.expression_edit.setText("x")
         self.layout.addWidget(self.expression_label)
         self.layout.addWidget(self.expression_edit)
+
+        # 输入x的范围
+        self.x_range_label = QLabel("x的范围")
+        self.x_range_layout = QHBoxLayout()
+        self.x_start_input = QDoubleSpinBox(self)
+        self.x_start_input.setValue(0)
+        self.x_stop_input = QDoubleSpinBox(self)
+        self.x_stop_input.setValue(10)
+        self.x_range_layout.addWidget(self.x_start_input)
+        self.x_range_layout.addWidget(self.x_stop_input)
+        self.layout.addWidget(self.x_range_label)
+        self.layout.addLayout(self.x_range_layout)
 
         # 选择线条样式
         self.style_input = QComboBox(self)
@@ -53,6 +66,7 @@ class PyCurveDialog(QDialog):
 
         # 输入图例标签
         self.label_input = QLineEdit(self)
+        self.label_input.setText('x')
         self.layout.addWidget(QLabel('Label:'))
         self.layout.addWidget(self.label_input)
 
@@ -87,6 +101,8 @@ class PyCurveDialog(QDialog):
             return
 
         self.figure_window.current_canva.add_curve(func_text=self.expression_edit.text(),
+                                                   x_start=self.x_start_input.value(),
+                                                   x_stop=self.x_stop_input.value(),
                                                    style=self.style_input.currentText(),
                                                    color=self.selected_color,
                                                    label=self.label_input.text())

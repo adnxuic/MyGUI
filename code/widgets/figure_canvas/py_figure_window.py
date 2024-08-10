@@ -25,7 +25,7 @@ class PyFigureWindow(QFrame):
         self.setStyleSheet(qss_file)
 
         self.fig_modify_window = fig_modify_window
-        self.current_canva : Optional[PyFigureCanvas] = None
+        self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
 
         self.current_fig_modify_widget = PyFigModWidget()
@@ -51,7 +51,6 @@ class PyFigureWindow(QFrame):
             self.tabwindow.addTab(canva, 'canva' + str(len(self.canvas) + 1))
 
         self.tabwindow.setCurrentWidget(canva)
-
 
     def change_current_canvas(self):
         self.current_canva = self.tabwindow.currentWidget()

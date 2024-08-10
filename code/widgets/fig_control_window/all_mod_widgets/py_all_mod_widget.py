@@ -33,7 +33,17 @@ class PyAxesModWindow(QFrame):
 
         self.toolbox = QToolBox()
 
+        self.bottom_spine_mod_widget = PyBottomSpineModWidget(axe, axe_modify)
+        self.top_spine_mod_widget = PyTopSpineModWidget()
+        self.left_spine_mod_widget = PyLeftSpineModWidget(axe, axe_modify)
+        self.right_spine_mod_widget = PyRightSpineModWidget()
+
         self.legend_mod_widget = PyAxeLegendModWidget(axe, axe_modify)
+
+        self.toolbox.addItem(self.bottom_spine_mod_widget, "底脊")
+        self.toolbox.addItem(self.top_spine_mod_widget, "顶脊")
+        self.toolbox.addItem(self.left_spine_mod_widget, "左脊")
+        self.toolbox.addItem(self.right_spine_mod_widget, "右脊")
 
         self.toolbox.addItem(self.legend_mod_widget, "图例")
 

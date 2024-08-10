@@ -12,12 +12,20 @@ from matplotlib.lines import Line2D
 from matplotlib.collections import PathCollection
 from matplotlib.style import use
 
+from numpy import (sin, cos, tan, pi,
+                   exp, log,
+                   sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
+
 
 class PyCurveModify:
-    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None):
+    def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style, line: Line2D, expression: str):
         self.style = style
         self.fig = fig
         self.axe = axe
+
+        self.x_start, self.x_stop = x_start, x_stop
+
+        self.expression = expression
 
         self.legend = axe.legend()
 
@@ -26,9 +34,45 @@ class PyCurveModify:
     def redraw(self):
         self.fig.canvas.draw()
 
+    def update_x_start(self, x_start: float):
+        self.x_start = x_start
+        x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
+        y = eval(self.expression)
+        self.line.set_data(x, y)
+        self.axe.relim()
+        self.axe.autoscale_view()
+        self.redraw()
+
+    def update_x_stop(self, x_stop: float):
+        self.x_stop = x_stop
+        x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
+        y = eval(self.expression)
+        self.line.set_data(x, y)
+        self.axe.relim()
+        self.axe.autoscale_view()
+        self.redraw()
+
+    def update_expression(self, expression: str):
+        self.expression = expression
+        try:
+            func = eval(f"lambda x: {expression}")
+            x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
+            y = func(x)
+            self.line.set_ydata(y)
+            self.axe.relim()
+            self.axe.autoscale_view()
+            self.redraw()
+        except Exception:
+            pass
+
+    def update_style(self, style: str):
+        self.line.set_linestyle(style)
+        self.redraw()
+
 
 class PyPlotModify:
-    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None, y_data_name: str = None):
+    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
+                 y_data_name: str = None):
         self.style = style
         self.fig = fig
         self.axe = axe

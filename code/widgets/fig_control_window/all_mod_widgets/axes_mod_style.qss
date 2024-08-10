@@ -1,3 +1,28 @@
+QFrame#bottom_spine_mod_widget
+{
+    background-color:#EBECF0;
+    border-radius: 5px;
+}
+
+
+QFrame#top_spine_mod_widget
+{
+    background-color:#EBECF0;
+    border-radius: 5px;
+}
+
+QFrame#left_spine_mod_widget
+{
+    background-color:#EBECF0;
+    border-radius: 5px;
+}
+
+QFrame#right_spine_mod_widget
+{
+    background-color:#EBECF0;
+    border-radius: 5px;
+}
+
 QFrame#axe_legend_mod_widget
 {
     background-color:#EBECF0;

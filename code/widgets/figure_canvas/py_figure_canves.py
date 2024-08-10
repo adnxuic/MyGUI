@@ -24,6 +24,9 @@ from matplotlib.axes import Axes
 from matplotlib.style import use
 
 import numpy as np
+from numpy import (sin, cos, tan, pi,
+                   exp, log,
+                   sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
 
 mpl.use("QtAgg")
 
@@ -83,7 +86,7 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加自定义曲线
-    def add_curve(self, func_text: str, style, color, label: str):
+    def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str):
 
         x = np.linspace(0, 10, 1000)
         y = eval(func_text)
@@ -98,7 +101,7 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('curve_box')
 
         # 添加曲线调整窗口
-        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.current_axes, self.style, line))
+        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text))
 
         curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')
@@ -116,8 +119,9 @@ class PyFigureCanvas(QWidget):
         if all_mod_widget.cahrt_mod_window.boxs.get('plot_box') is None:
             all_mod_widget.add_chart_box('plot_box')
         # 添加曲线调整窗口
-        plot_mod_widget = PyPlotModWidget(PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name),
-                                          x_data_name, y_data_name)
+        plot_mod_widget = PyPlotModWidget(
+            PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name),
+            x_data_name, y_data_name)
         plot_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['plot_box']
         plot_box.add_widget(plot_mod_widget, 'plot')
 
