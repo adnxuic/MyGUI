@@ -65,6 +65,20 @@ class PyCurveModify:
         except Exception:
             pass
 
+    def update_all(self, x_start: float, x_stop: float, expression: str):
+        self.x_start, self.x_stop = x_start, x_stop
+        self.expression = expression
+        try:
+            func = eval(f"lambda x: {expression}")
+            x = np.linspace(self.x_start, self.x_stop, 1000)
+            y = func(x)
+            self.line.set_data(x, y)
+            self.axe.relim()
+            self.axe.autoscale_view()
+            self.redraw()
+        except Exception:
+            pass
+
     def update_style(self, style: str):
         self.line.set_linestyle(style)
         self.redraw()
@@ -157,3 +171,5 @@ class PyScatterModify:
             self.scatter.set_offsets(np.c_[x_data, y_data])
 
         self.redraw()
+
+

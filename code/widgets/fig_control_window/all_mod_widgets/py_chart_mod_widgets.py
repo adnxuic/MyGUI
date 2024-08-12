@@ -223,3 +223,101 @@ class PyScatterModWidget(QFrame):
         PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.y_data_input.currentText(),
                                           id(self.curve_modify.scatter), 'y')
         self.curve_modify.current_y_data_name = self.y_data_input.currentText()
+
+
+class PyFitMatlabModWidget(QFrame):
+    def __init__(self, curve_modify: PyCurveModify):
+        super().__init__()
+
+        qss_file = qss_func.qss_loader(qss_path)
+        self.setStyleSheet(qss_file)
+
+        self.curve_modify = curve_modify
+
+        self.layout = QVBoxLayout()
+
+        # 函数表达式
+        self.expression_box = QGroupBox('Expression', self)
+        self.expression_layout = QVBoxLayout()
+
+        self.expression_input = QPlainTextEdit(self)
+        # 设置是否可以编辑
+        self.expression_input.setReadOnly(True)
+        self.expression_input.setPlainText(curve_modify.expression)
+        self.expression_input.textChanged.connect(self.expression_change)
+        self.expression_layout.addWidget(self.expression_input)
+
+        self.expression_box.setLayout(self.expression_layout)
+
+        # 添加x轴起始点和终止点
+        self.x_start_layout = QHBoxLayout()
+        self.x_stop_layout = QHBoxLayout()
+        self.x_start_input = QDoubleSpinBox(self)
+        self.x_start_input.setFixedWidth(120)
+        self.x_start_input.setRange(float('-inf'), float('inf'))
+        self.x_start_input.setSingleStep(1)
+        self.x_start_input.setValue(curve_modify.x_start)
+        self.x_start_input.valueChanged.connect(self.x_start_change)
+        self.x_stop_input = QDoubleSpinBox(self)
+        self.x_stop_input.setFixedWidth(120)
+        self.x_stop_input.setRange(float('-inf'), float('inf'))
+        self.x_stop_input.setSingleStep(1)
+        self.x_stop_input.setValue(curve_modify.x_stop)
+        self.x_stop_input.valueChanged.connect(self.x_stop_change)
+
+        self.x_start_layout.addWidget(QLabel('X Start:'))
+        self.x_start_layout.addWidget(self.x_start_input)
+        self.x_start_layout.addStretch()
+        self.x_stop_layout.addWidget(QLabel('X Stop:'))
+        self.x_stop_layout.addWidget(self.x_stop_input)
+        self.x_stop_layout.addStretch()
+
+        # 线条的样式
+        self.style_box = QGroupBox('Style', self)
+        self.style_box.setFixedSize(180, 80)
+        self.style_layout = QVBoxLayout()
+
+        # 线条的形状
+        self.style_input = QComboBox(self)
+        self.style_input.addItem('solid')
+        self.style_input.addItem('dashed')
+        self.style_input.addItem('dashdot')
+        self.style_input.addItem('dotted')
+        self.style_input.setCurrentText(curve_modify.line.get_linestyle())
+        self.style_input.currentTextChanged.connect(self.style_change)
+
+        self.style_layout.addWidget(self.style_input)
+        self.style_box.setLayout(self.style_layout)
+
+        self.layout.addWidget(self.expression_box)
+        self.layout.addLayout(self.x_start_layout)
+        self.layout.addLayout(self.x_stop_layout)
+        self.layout.addWidget(self.style_box)
+
+        # 添加弹性空间
+        self.layout.addStretch()
+
+        self.setLayout(self.layout)
+
+    def expression_change(self):
+        current_expression = self.expression_input.toPlainText()
+        self.curve_modify.update_expression(current_expression)
+
+    def update_curve(self, expression: str, x_start: float, x_stop: float):
+        self.expression_input.setPlainText(expression)
+        self.x_start_input.setValue(x_start)
+        self.x_stop_input.setValue(x_stop)
+
+        self.curve_modify.update_all(x_start, x_stop, expression)
+
+    def x_start_change(self):
+        current_x_start = self.x_start_input.value()
+        self.curve_modify.update_x_start(current_x_start)
+
+    def x_stop_change(self):
+        current_x_stop = self.x_stop_input.value()
+        self.curve_modify.update_x_stop(current_x_stop)
+
+    def style_change(self):
+        current_style = self.style_input.currentText()
+        self.curve_modify.update_style(current_style)

@@ -19,7 +19,7 @@ class PyAllModWidget(QFrame):
     一个坐标系对应一个
     """
 
-    def __init__(self, axe, axe_modify: PyAxesModify):
+    def __init__(self, axe, axe_modify: PyAxesModify, matlab_widget):
         super().__init__()
 
         self.setObjectName('all_mod_widget')
@@ -40,7 +40,7 @@ class PyAllModWidget(QFrame):
         self.element_btn_bar_layout = QHBoxLayout()
 
         self.axes_mod_window = PyAxesModWindow(axe, axe_modify)
-        self.cahrt_mod_window = PyChartModWindow(axe)
+        self.cahrt_mod_window = PyChartModWindow(axe, matlab_widget)
         self.element_mod_window = PyElementModWindow(axe)
 
         self.stackwidget = QStackedWidget()
@@ -113,7 +113,7 @@ class PyFigModWidget(QFrame):
     一个画布关联一个
     """
 
-    def __init__(self):
+    def __init__(self, matlab_widget):
         super().__init__()
 
         self.setMouseTracking(True)
@@ -122,6 +122,8 @@ class PyFigModWidget(QFrame):
         self.layout = QVBoxLayout()
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
+
+        self.matlab_widget = matlab_widget
 
         self.axes_btn_bar = QFrame()
         self.axes_btn_bar_layout = QHBoxLayout()
@@ -139,7 +141,7 @@ class PyFigModWidget(QFrame):
         添加坐标系中所有元素的修改窗口
         返回按钮以便切换窗口是改变画布的当前坐标系
         """
-        all_mod_widget = PyAllModWidget(axe, axe_modify)
+        all_mod_widget = PyAllModWidget(axe, axe_modify, self.matlab_widget)
         self.stacklayout.addWidget(all_mod_widget)
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
 
@@ -174,7 +176,7 @@ class PyFigModWindow(QFrame):
     与matlab窗口和Tex窗口并列
     """
 
-    def __init__(self):
+    def __init__(self, matlab_widget):
         super().__init__()
 
         self.setMouseTracking(True)
@@ -182,6 +184,8 @@ class PyFigModWindow(QFrame):
 
         qss_path = os.path.join(current_path, "style.qss")
         self.setStyleSheet(qss_loader(qss_path))
+
+        self.matlab_widget = matlab_widget
 
         # 堆叠窗口
         self.stacklayout = QStackedLayout()
@@ -191,7 +195,7 @@ class PyFigModWindow(QFrame):
         self.setLayout(self.stacklayout)
 
     def add_figmod_widget(self):
-        figmod_widget = PyFigModWidget()
+        figmod_widget = PyFigModWidget(self.matlab_widget)
         self.stacklayout.addWidget(figmod_widget)
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
 

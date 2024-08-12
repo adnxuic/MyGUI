@@ -53,9 +53,14 @@ power = [
     'power2'
 ]
 
-# 有理数
+# 有理数，分子0到5次，分母1到5次
 rat = [
-    'rat1'
+    'rat01', 'rat02', 'rat03', 'rat04', 'rat05',
+    'rat11', 'rat12', 'rat13', 'rat14', 'rat15',
+    'rat21', 'rat22', 'rat23', 'rat24', 'rat25',
+    'rat31', 'rat32', 'rat33', 'rat34', 'rat35',
+    'rat41', 'rat42', 'rat43', 'rat44', 'rat45',
+    'rat51', 'rat52', 'rat53', 'rat54', 'rat55'
 ]
 
 # 正弦和1到8次

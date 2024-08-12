@@ -361,6 +361,20 @@ class PyFitDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
+        # 选择拟合的引擎：Python或Matlab
+        self.engine_layout = QHBoxLayout()
+        self.engine_label = QLabel("Engine:")
+        self.python_button = QRadioButton("Python")
+        self.matlab_button = QRadioButton("Matlab")
+        self.python_button.setChecked(True)
+
+
+        self.engine_layout.addWidget(self.python_button)
+        self.engine_layout.addWidget(self.matlab_button)
+
+        self.layout.addWidget(self.engine_label)
+        self.layout.addLayout(self.engine_layout)
+
         # 选择数据
         self.x_data_input = QComboBox(self)
         self.x_data_layout = QHBoxLayout()
@@ -393,7 +407,15 @@ class PyFitDialog(QDialog):
 
         self.setLayout(self.layout)
 
+
     def accept(self):
+        # 如果选择matlab引擎
+        if self.matlab_button.isChecked():
+            self.figure_window.current_canva.add_fit_curve('matlab', [], [], 'r', 'fit')
+            super().accept()
+            return
+
+
         # 如果current_canva为空，弹出警告
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')

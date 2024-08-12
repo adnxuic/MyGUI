@@ -5,7 +5,7 @@ from Qt_core import *
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import PyModBox
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget, PyScatterModWidget, \
-    PyPlotModWidget
+    PyPlotModWidget, PyFitMatlabModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 
 from code.figuremodify.py_axes_modify import PyAxesModify
@@ -101,7 +101,8 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('curve_box')
 
         # 添加曲线调整窗口
-        curve_mod_widget = PyCurveModWidget(PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text))
+        curve_mod_widget = PyCurveModWidget(
+            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text))
 
         curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')
@@ -143,6 +144,32 @@ class PyFigureCanvas(QWidget):
             x_data_name, y_data_name)
         scatter_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['scatter_box']
         scatter_box.add_widget(scatter_mod_widget, 'scatter')
+
+        self.redraw()
+
+    # 添加拟合曲线
+    def add_fit_curve(self, engine: str, x, y, color, label):
+        with mpl.style.context(self.style):
+            if engine == 'Python':
+                line, = self.current_axes.plot(x, y, color=color, label=label)
+            else:
+                line, = self.current_axes.plot(x, y, color=color, label=label)
+
+        # 获取当前坐标系的所有修改窗口
+        all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
+        # 如果all_mod_widget中没有fitting_box，则添加一个
+        if all_mod_widget.cahrt_mod_window.boxs.get('fitting_box') is None:
+            all_mod_widget.add_chart_box('fitting_box')
+
+        # 添加拟合曲线调整窗口
+        if engine == 'Python':
+            fitting_mod_widget = None
+        else:
+            fitting_mod_widget = PyFitMatlabModWidget(
+                PyCurveModify(self.fig, self.current_axes, 0, 0, self.style, line, ''))
+
+        fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
+        fitting_box.add_widget(fitting_mod_widget, engine + 'fitting')
 
         self.redraw()
 

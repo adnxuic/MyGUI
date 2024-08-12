@@ -28,7 +28,7 @@ class PyFigureWindow(QFrame):
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
 
-        self.current_fig_modify_widget = PyFigModWidget()
+        self.current_fig_modify_widget: Optional[PyFigModWidget] = None
 
         self.layout = QVBoxLayout()
         self.tabwindow = QTabWidget()
