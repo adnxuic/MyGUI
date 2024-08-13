@@ -23,7 +23,7 @@ QFrame#fig_modify_window
 /* Tex的窗口 */
 QFrame#tex_window
 {
-    background-color: #ff0000;
+    background-color: #EBECF0;
     max-height: 640px;
     max-width: 480px;
     min-height: 640px;

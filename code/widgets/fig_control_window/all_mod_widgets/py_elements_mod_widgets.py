@@ -77,6 +77,7 @@ class PyTextModWidget(QFrame):
         # 文本内容
         self.text_content = QPlainTextEdit()
         self.text_content.setPlaceholderText("Text content")
+        self.text_content.setPlainText(self.text_modify.text.get_text())
         self.text_content.textChanged.connect(self.set_text_content)
         self.layout.addWidget(self.text_content)
 

@@ -29,6 +29,10 @@ from numpy import (sin, cos, tan, pi,
                    sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
 
 mpl.use("QtAgg")
+#
+# mpl.rcParams['text.usetex'] = True
+# preamble = r'\usepackage{amsmath,amssymb,amsthm}'
+# mpl.rcParams['text.latex.preamble'] = preamble
 
 
 class PyFigureCanvas(QWidget):
@@ -175,9 +179,9 @@ class PyFigureCanvas(QWidget):
 
     # 添加文本
     def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int):
-        with mpl.style.context(self.style):
-            text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize,
-                                          transform=self.current_axes.transAxes)
+        # with mpl.style.context(self.style):
+        text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize,
+                                      transform=self.current_axes.transAxes)
             # self.current_axes.transAxes是坐标系的坐标变换
 
         # 获取当前坐标系的所有修改窗口
