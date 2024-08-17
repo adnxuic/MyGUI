@@ -3,7 +3,9 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.title_bar.py_title_button import ChangeButton, SelectMenuButton, StaticSelectButton
 from code.widgets.title_bar.py_title_menu import (MenuBar, SelectorMenuBar, ControlBar,
-                                                  SelectorStyleMenuBar, SelectorLayoutMenuBar, SelectorChartMenuBar, SelectorElementMenuBar)
+                                                  SelectorStyleMenuBar, SelectorLayoutMenuBar, SelectorChartMenuBar,
+                                                  SelectorElementMenuBar)
+from code.widgets.table.py_table import PyTable
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 
 import os
@@ -13,7 +15,7 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyTitleBar(QFrame):
-    def __init__(self, parent=None, figure_window=None, fig_control_window=None):
+    def __init__(self, parent=None, figure_window=None, fig_control_window=None, table: PyTable = None):
         super().__init__()
         self.parent = parent
 
@@ -37,8 +39,10 @@ class PyTitleBar(QFrame):
         # 下方堆叠布局选择按钮
         self.figure_window = figure_window
 
-        self.selector_style_bar = SelectorStyleMenuBar(figure_window=self.figure_window, fig_control_window=fig_control_window)
-        self.selector_layout_bar = SelectorLayoutMenuBar(figure_window=self.figure_window, fig_control_window=fig_control_window)
+        self.selector_style_bar = SelectorStyleMenuBar(figure_window=self.figure_window,
+                                                       fig_control_window=fig_control_window)
+        self.selector_layout_bar = SelectorLayoutMenuBar(figure_window=self.figure_window,
+                                                         fig_control_window=fig_control_window)
         self.selector_chart_bar = SelectorChartMenuBar(figure_window=self.figure_window)
         self.selector_element_bar = SelectorElementMenuBar(figure_window=self.figure_window)
 
@@ -49,7 +53,7 @@ class PyTitleBar(QFrame):
 
         # 上方堆叠布局添加菜单栏
         self.stacklayout_top.addWidget(SelectorMenuBar(self.stacklayout_bottom))
-        self.stacklayout_top.addWidget(MenuBar())
+        self.stacklayout_top.addWidget(MenuBar(table))
 
         # 添加布局元素
         # 选择更改按钮
@@ -87,13 +91,11 @@ class PyTitleBar(QFrame):
         # 设置标题栏整体布局
         self.setLayout(self.layout)
 
-
     def the_button_was_toggled(self, checked):
         if checked:
             self.stacklayout_top.setCurrentIndex(1)
         else:
             self.stacklayout_top.setCurrentIndex(0)
-
 
     # 鼠标按下事件
     def mousePressEvent(self, event):
@@ -105,11 +107,10 @@ class PyTitleBar(QFrame):
     def mouseMoveEvent(self, event):
         if self.move:
             delta = event.globalPos() - self.start_pos
-            self.parent.move(self.parent.pos()+delta)
+            self.parent.move(self.parent.pos() + delta)
             self.start_pos = event.globalPos()
 
     # 鼠标释放事件
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.move = False
-

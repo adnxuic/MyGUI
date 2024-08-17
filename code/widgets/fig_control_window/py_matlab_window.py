@@ -127,10 +127,9 @@ class PyMatlabWindow(QFrame):
         x_max = max(x_data)
         x_min = min(x_data)
 
-        exp = self.fit_type_window.fit_curve(x_data, y_data)
+        value_exp, show_exp = self.fit_type_window.fit_curve(x_data, y_data)
 
-        self.connect_widget.update_curve(exp, x_min, x_max)
-
+        self.connect_widget.update_curve(value_exp, show_exp, x_min, x_max)
 
 
 class PyFitWindow(QFrame):
@@ -262,6 +261,12 @@ class PyFitWindow(QFrame):
                 self.start_point.append(float(start))
 
     def fit_curve(self, x, y):
+        '''
+        拟合曲线
+        :param x:
+        :param y:
+        :return: exp的matlab表达式
+        '''
 
         if self.advanced_option.isChecked():
             isdefault = False
@@ -274,9 +279,9 @@ class PyFitWindow(QFrame):
 
         fit_type_order = self.order_input.currentText()
 
-        exp = matlab_fitting(x, y, fit_type_order, isdefault)
+        value_exp, show_exp = matlab_fitting(x, y, fit_type_order, isdefault)
 
-        return exp
+        return value_exp, show_exp
 
 
 

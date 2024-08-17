@@ -5,6 +5,8 @@
 import sys
 from typing import cast
 
+from PySide6.QtWidgets import QWidget
+
 from Qt_core import *
 import numpy as np
 
@@ -232,6 +234,27 @@ class TableView(QTableView):
         elif action == sortDescAction:
             self.model.sort(column, Qt.DescendingOrder)
 
+    def add_excel_data(self, col_data: list, index):
+        """
+           添加一列的数据到表格视图的指定位置。
+           :param col_data: 包含列数据的列表。
+           :param index: 指定在哪个位置插入新的列。
+           """
+        # 首先确保模型中列的数量足以添加新的数据列
+        if index >= self.model.columnCount():
+            for i in range(index - self.model.columnCount() + 1):
+                self.model.addColumn()
+
+        # 逐个元素添加数据到新列
+        for row, data in enumerate(col_data):
+            # 如果数据行数超过现有行数，添加新行
+            if row >= self.model.rowCount():
+                self.model.addRow()
+            # 获取对应的模型索引
+            model_index = self.model.index(row, index)
+            # 设置数据
+            self.model.setData(model_index, data, Qt.EditRole)
+
 
 # 自定义的QTabWidget
 class SheetTabWidget(QTabWidget):
@@ -317,6 +340,10 @@ class PySubTable(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.tabWidget)
         self.setLayout(layout)
+
+    def get_table(self, index) -> TableView:
+        tableview = cast(TableView, self.tabWidget.widget(index))
+        return tableview
 
     def updateCurrentSheet(self):
         pass

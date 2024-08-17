@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
 
         self.figure_window = PyFigureWindow(fig_modify_window=self.fig_control_window.figmod_window)
 
-        self.title_bar = PyTitleBar(self, self.figure_window, self.fig_control_window)
+        self.title_bar = PyTitleBar(self, self.figure_window, self.fig_control_window, self.table)
         self.left_layout.addWidget(self.title_bar)
 
         # 左中部分

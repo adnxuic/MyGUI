@@ -303,12 +303,12 @@ class PyFitMatlabModWidget(QFrame):
         current_expression = self.expression_input.toPlainText()
         self.curve_modify.update_expression(current_expression)
 
-    def update_curve(self, expression: str, x_start: float, x_stop: float):
-        self.expression_input.setPlainText(expression)
+    def update_curve(self, value_expression: str, show_expression: str, x_start: float, x_stop: float):
+        self.expression_input.setPlainText(show_expression)
         self.x_start_input.setValue(x_start)
         self.x_stop_input.setValue(x_stop)
 
-        self.curve_modify.update_all(x_start, x_stop, expression)
+        self.curve_modify.update_all(x_start, x_stop, value_expression)
 
     def x_start_change(self):
         current_x_start = self.x_start_input.value()

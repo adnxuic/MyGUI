@@ -69,7 +69,7 @@ class PyTable(QFrame):
         layout.addWidget(self.tabWidget)
         self.setLayout(layout)
 
-    def add_new_table(self):
+    def add_new_table(self, is_open=False):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_table_name = f"Table{index + 1}"
@@ -80,6 +80,9 @@ class PyTable(QFrame):
 
         self.tabWidget.insertTab(index, subtable, new_table_name)
         self.tabWidget.setCurrentIndex(index)
+
+        if is_open:
+            return subtable
 
 
 

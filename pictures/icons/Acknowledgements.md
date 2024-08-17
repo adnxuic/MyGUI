@@ -49,3 +49,6 @@
 
 <a href="https://iconscout.com/icons/curve" class="text-underline font-size-sm" target="_blank">curve</a> by <a href="https://iconscout.com/contributors/icogenix" class="text-underline font-size-sm" target="_blank">Icogenix</a></br>
 
+<a href="https://iconscout.com/icons/open" class="text-underline font-size-sm" target="_blank">Open</a> by <a href="https://iconscout.com/contributors/lafs" class="text-underline font-size-sm">LAFS</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/save" class="text-underline font-size-sm" target="_blank">save</a> by <a href="https://iconscout.com/contributors/eva-icons" class="text-underline font-size-sm">Akveo</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
