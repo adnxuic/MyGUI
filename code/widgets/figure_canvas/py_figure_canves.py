@@ -5,14 +5,15 @@ from Qt_core import *
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import PyModBox
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget, PyScatterModWidget, \
-    PyPlotModWidget, PyFitMatlabModWidget
+    PyPlotModWidget, PyFitMatlabModWidget, PyInterpolateWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 
 from code.figuremodify.py_axes_modify import PyAxesModify
-from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify
+from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify, PyInterpolateModify
 from code.figuremodify.py_text_modify import PyTextModify
 
 from code.database.py_database import PyDatabase
+from code.database.interpolate_func import interpolate_dict
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -174,6 +175,30 @@ class PyFigureCanvas(QWidget):
 
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
         fitting_box.add_widget(fitting_mod_widget, engine + 'fitting')
+
+        self.redraw()
+
+    # 添加插值曲线
+    def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3):
+        with mpl.style.context(self.style):
+            if method == "B样条插值":
+                x_new, y_new = interpolate_dict[method](x, y, k=k)
+            else:
+                x_new, y_new = interpolate_dict[method](x, y)
+            line, = self.current_axes.plot(x_new, y_new)
+
+        # 获取当前坐标系的所有修改窗口
+        all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
+        # 如果all_mod_widget中没有interpolate_box，则添加一个
+        if all_mod_widget.cahrt_mod_window.boxs.get('interpolate_box') is None:
+            all_mod_widget.add_chart_box('interpolate_box')
+
+        # 添加插值曲线调整窗口
+        interpolate_mod_widget = PyInterpolateWidget(
+            PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name), method, k)
+
+        interpolate_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['interpolate_box']
+        interpolate_box.add_widget(interpolate_mod_widget, 'interpolate')
 
         self.redraw()
 

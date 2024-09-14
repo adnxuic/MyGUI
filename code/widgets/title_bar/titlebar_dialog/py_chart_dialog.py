@@ -4,6 +4,7 @@ from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from code.widgets import qss_func
 
 from code.database.py_database import databases, PyDatabase
+from code.database.interpolate_func import interpolate_dict
 
 import os
 
@@ -460,6 +461,7 @@ class PyInterpolationDialog(QDialog):
         self.y_data_input = QComboBox(self)
         self.y_data_layout = QHBoxLayout()
 
+
         for key1, value1 in databases.items():
             for key2, value2 in value1.items():
                 for key3, value3 in value2.data.items():
@@ -473,18 +475,59 @@ class PyInterpolationDialog(QDialog):
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
 
+        # 选择插值方法
+        self.method_input = QComboBox(self)
+        self.method_input.addItems(interpolate_dict.keys())
+        self.layout.addWidget(QLabel('Interpolation Method:'))
+        self.layout.addWidget(self.method_input)
+
+        # 阶数选择
+        self.k_widget = QFrame()
+        self.k_input = QSpinBox()
+        self.k_input.setRange(1, 5)
+        self.k_input.setValue(3)
+
+        self.k_layout = QHBoxLayout()
+        self.k_layout.addWidget(QLabel('阶数k:'))
+        self.k_layout.addWidget(self.k_input)
+        self.k_widget.setLayout(self.k_layout)
+
+        # 如果不是选择B样条插值,则不显示阶数选择
+        self.is_k_widget_added = False
+        self.method_input.currentTextChanged.connect(self.change_method)
+
         # 确定和取消按钮
+        self.button_bar = QFrame()
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
+
         self.button_layout = QHBoxLayout()
         self.button_layout.addStretch(1)
         self.button_layout.addWidget(self.ok_button)
         self.button_layout.addWidget(self.cancel_button)
-        self.layout.addLayout(self.button_layout)
+
+        self.button_bar.setLayout(self.button_layout)
+        self.layout.addWidget(self.button_bar)
 
         self.setLayout(self.layout)
+
+    def change_method(self):
+        # 获取当前选择的插值方法
+        current_method = self.method_input.currentText()
+
+        # 如果选择的是B样条插值且阶数选择不存在，则添加阶数选择
+        # 再倒数第二行添加阶数选择
+        if current_method == "B样条插值" and self.is_k_widget_added is False:
+            self.layout.insertWidget(self.layout.count() - 1, self.k_widget)
+            self.is_k_widget_added = True
+
+        # 如果选择的不是B样条插值且阶数选择存在，则删除阶数选择
+        elif current_method != "B样条插值" and self.is_k_widget_added is True:
+            self.layout.itemAt(self.layout.count() - 2).widget().setParent(None)
+            self.is_k_widget_added = False
+
 
     def accept(self):
         # 如果current_canva为空，弹出警告
@@ -497,13 +540,24 @@ class PyInterpolationDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        x_data = PyDatabase.get_data(self.x_data_input.currentText())
-        y_data = PyDatabase.get_data(self.y_data_input.currentText())
+        x_data_name = self.x_data_input.currentText()
+        y_data_name = self.y_data_input.currentText()
+
+        x_data = PyDatabase.get_data(x_data_name)
+        y_data = PyDatabase.get_data(y_data_name)
 
         # 如果x_data和y_data长度不一致，弹出警告
         if len(x_data) != len(y_data):
             QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
             return
+
+        method = self.method_input.currentText()
+        if method == "B样条插值":
+            k = self.k_input.value()
+            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name, y_name=y_data_name, method=method, k=k)
+        else:
+            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name, y_name=y_data_name, method=method)
+
 
         super().accept()
 

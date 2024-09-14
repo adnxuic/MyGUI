@@ -1,9 +1,10 @@
 from Qt_core import *
 
 from code.widgets import qss_func
-from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify
+from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify, PyInterpolateModify
 
 from code.database.py_database import databases, PyDatabase
+from code.database.interpolate_func import interpolate_dict
 
 import os
 
@@ -321,3 +322,69 @@ class PyFitMatlabModWidget(QFrame):
     def style_change(self):
         current_style = self.style_input.currentText()
         self.curve_modify.update_style(current_style)
+
+
+class PyInterpolateWidget(QFrame):
+    def __init__(self, curve_modify: PyInterpolateModify, init_interpolat: str, init_k: int):
+        super().__init__()
+
+        self.modify = curve_modify
+
+        self.layout = QVBoxLayout()
+
+        # 插值方式
+        self.interpolat_box = QGroupBox('Interpolation')
+        self.interpolat_layout = QVBoxLayout()
+
+        self.interpolat_input = QComboBox(self)
+        self.interpolat_input.addItems(interpolate_dict.keys())
+
+        self.interpolat_layout.addWidget(self.interpolat_input)
+        # 添加弹性空间
+        self.interpolat_layout.addStretch()
+
+        # 阶数选择
+        self.k_widget = QFrame()
+        self.k_input = QSpinBox()
+        self.k_input.setRange(1, 5)
+        self.k_input.setValue(init_k)
+        self.k_input.valueChanged.connect(self.interpolat_change)
+
+        self.k_layout = QHBoxLayout()
+        self.k_layout.addWidget(QLabel('阶数k:'))
+        self.k_layout.addWidget(self.k_input)
+        self.k_widget.setLayout(self.k_layout)
+
+        # 如果不是选择B样条插值,则不显示阶数选择
+        self.is_k_widget_added = False
+        self.interpolat_input.currentTextChanged.connect(self.change_method)
+        self.interpolat_input.setCurrentText(init_interpolat)
+        self.interpolat_input.currentTextChanged.connect(self.interpolat_change)
+
+        self.interpolat_box.setLayout(self.interpolat_layout)
+
+        self.layout.addWidget(self.interpolat_box)
+
+        self.setLayout(self.layout)
+
+    def change_method(self):
+        # 获取当前选择的插值方法
+        current_method = self.interpolat_input.currentText()
+
+        # 如果选择的是B样条插值且阶数选择不存在，则添加阶数选择
+        # 再倒数第二行添加阶数选择
+        if current_method == "B样条插值" and self.is_k_widget_added is False:
+            self.interpolat_layout.insertWidget(self.interpolat_layout.count() - 1, self.k_widget)
+            self.is_k_widget_added = True
+
+        # 如果选择的不是B样条插值且阶数选择存在，则删除阶数选择
+        elif current_method != "B样条插值" and self.is_k_widget_added is True:
+            self.interpolat_layout.itemAt(self.interpolat_layout.count() - 2).widget().setParent(None)
+            self.is_k_widget_added = False
+
+    def interpolat_change(self):
+        current_interpolat = self.interpolat_input.currentText()
+        k = self.k_input.value()
+        self.modify.update_interpolate(current_interpolat, k)
+
+

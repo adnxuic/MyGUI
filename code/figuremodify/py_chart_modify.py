@@ -1,6 +1,7 @@
 from Qt_core import *
 
 from code.database.py_database import PyDatabase
+from code.database.interpolate_func import interpolate_dict
 
 import numpy as np
 from numpy import ndarray
@@ -170,6 +171,65 @@ class PyScatterModify:
             x_data = np.zeros_like(y_data)
             self.scatter.set_offsets(np.c_[x_data, y_data])
 
+        self.redraw()
+
+
+class PyInterpolateModify:
+    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
+                 y_data_name: str = None):
+        self.style = style
+        self.fig = fig
+        self.axe = axe
+
+        self.line = line
+
+        self.current_x_data_name = x_data_name
+        self.current_y_data_name = y_data_name
+
+        self.x_data = PyDatabase.get_data(x_data_name)
+        self.y_data = PyDatabase.get_data(y_data_name)
+
+        # 数据和映射连接
+        PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
+        PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
+
+    def redraw(self):
+        self.fig.canvas.draw()
+
+    def update_x_data(self, x_data: ndarray):
+        # 如果数据长度不一致，则需要重新设置数据
+        if len(x_data) == len(self.line.get_ydata()):
+            self.line.set_xdata(x_data)
+            # 重新计算坐标轴范围
+            self.axe.relim()
+            self.axe.autoscale_view()
+        else:
+            y_data = np.zeros_like(x_data)
+            self.line.set_data(x_data, y_data)
+
+        self.redraw()
+
+    def update_y_data(self, y_data: ndarray):
+        # 如果数据长度不一致，则需要重新设置数据
+        if len(y_data) == len(self.line.get_xdata()):
+            self.line.set_ydata(y_data)
+            self.axe.relim()
+            self.axe.autoscale_view()
+        else:
+            x_data = np.linspace(0, len(y_data), len(y_data))
+            self.line.set_data(x_data, y_data)
+
+        self.redraw()
+
+    def update_interpolate(self, interpolate_name: str, k=3):
+        if interpolate_name == "B样条插值":
+            x_new, y_new = interpolate_dict[interpolate_name](self.x_data, self.y_data, k=k)
+        else:
+            x_new, y_new = interpolate_dict[interpolate_name](self.x_data, self.y_data)
+
+        self.line.set_data(x_new, y_new)
+        self.axe.relim()
+        self.axe.autoscale_view()
         self.redraw()
 
 
