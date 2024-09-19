@@ -16,9 +16,11 @@ class PyDatabase:
         self.data: Dict[str, List[Union[ndarray, Dict]]] = {}
 
     def update_data(self, index: int, data: ndarray):
-        # 如果该列数据不存在，则创建
+        # 如果该列数据不存在，则创建,且更新所有数据选择框
         if self.data.get(str(index)) is None:
             self.data[str(index)] = [data, {}]  # Dict[id: int, func: Any]
+            from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
+            PyDataChoiceWidget.update_all_instances()
         else:
             self.data[str(index)][0] = data
             # 更新数据后，需要更新所有使用该数据的图像

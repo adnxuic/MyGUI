@@ -2,17 +2,17 @@ from Qt_core import *
 
 from code.widgets.qss_func import qss_loader
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitMatlabModWidget
+from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 
 from code.database.py_database import databases, PyDatabase
 from code.database.py_matlab_fit import fit_type
 from code.database.matlab_func.get_func.get_func_exp import get_func_exp
 
-from code.database.matlab_func.curve_fitting.matlab_fitting import matlab_fitting
-
 import numpy as np
 
 from typing import Optional
 import os
+import importlib
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
@@ -34,39 +34,44 @@ class PyMatlabWindow(QFrame):
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
 
-        # 导入数据按钮
-        self.import_data_btn = QPushButton("Import Data")
-        self.import_data_btn.setFixedWidth(150)
-        self.import_data_btn.setFixedHeight(30)
-        self.import_data_btn.clicked.connect(self.import_data)
-        self.layout.addWidget(self.import_data_btn)
+        # 检测是否能连接matlab
+        self.matlab_isconnect = QPushButton("isConnect Matlab")
+        self.matlab_isconnect.setFixedWidth(150)
+        self.matlab_isconnect.setFixedHeight(30)
+        self.matlab_isconnect.clicked.connect(self.matlab_isconnect_click)
+        self.layout.addWidget(self.matlab_isconnect)
+
+        # 实现matalb的连接的按钮，连接之后才有后面的界面生成
+        self.matlab_connect = QPushButton("Connect Matlab")
+        self.matlab_connect.setFixedWidth(150)
+        self.matlab_connect.setFixedHeight(30)
+        self.matlab_connect.clicked.connect(self.matlab_connect_click)
+        self.layout.addWidget(self.matlab_connect)
+
+        self.setLayout(self.layout)
+
+    def matlab_isconnect_click(self):
+        try:
+            importlib.import_module('matlab')
+            # 弹出对话框，提示能够连接matlab
+            QMessageBox.information(self, "Connect Matlab", "Matlab can be linked!")
+        except ImportError:
+            # 弹出对话框，提示不能连接matlab
+            QMessageBox.warning(self, "Connect Matlab", "Matlab can't be linked!")
+
+    def matlab_connect_click(self):
+        try :
+            from code.database.matlab_func.curve_fitting.matlab_fitting import matlab_fitting
+            self.init()
+        except ImportError:
+            # 弹出对话框，提示不能连接matlab
+            QMessageBox.warning(self, "Connect Matlab", "Matlab can't be linked!")
+
+    def init(self):
 
         # 数据选择
-        self.data_selection = QGroupBox("Data Selection")
-        self.data_selection_layout = QVBoxLayout()
-        self.data_selection.setLayout(self.data_selection_layout)
-
-        self.x_layout = QHBoxLayout()
-        self.x_data = QComboBox()
-        self.x_data.setFixedWidth(150)
-        self.x_layout.addWidget(QLabel("X Data:"))
-        self.x_layout.addWidget(self.x_data)
-
-        self.y_layout = QHBoxLayout()
-        self.y_data = QComboBox()
-        self.y_data.setFixedWidth(150)
-        self.y_layout.addWidget(QLabel("Y Data:"))
-        self.y_layout.addWidget(self.y_data)
-
-        # 默认不选择
-        self.x_data.setCurrentIndex(-1)
-        self.y_data.setCurrentIndex(-1)
-
-        self.data_selection_layout.addLayout(self.x_layout)
-        self.data_selection_layout.addLayout(self.y_layout)
-
-        self.layout.addWidget(self.data_selection)
-
+        self.data_choice_widget = PyDataChoiceWidget()
+        self.layout.addWidget(self.data_choice_widget)
 
         # 拟合类型
         self.fit_type = QGroupBox("Fit Type")
@@ -94,19 +99,6 @@ class PyMatlabWindow(QFrame):
         self.fit_button.clicked.connect(self.fit_curve)
         self.layout.addWidget(self.fit_button)
 
-        self.setLayout(self.layout)
-
-    def import_data(self):
-        # 清空数据
-        self.x_data.clear()
-        self.y_data.clear()
-
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data.addItem(f"{key1}/{key2}/{key3}")
-
     def set_connect_widget(self, connect_widget: PyFitMatlabModWidget):
         self.connect_widget = connect_widget
 
@@ -121,8 +113,8 @@ class PyMatlabWindow(QFrame):
 
     def fit_curve(self):
 
-        x_data = PyDatabase.get_data(self.x_data.currentText())
-        y_data = PyDatabase.get_data(self.y_data.currentText())
+        x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
+        y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
 
         x_max = max(x_data)
         x_min = min(x_data)
@@ -261,6 +253,7 @@ class PyFitWindow(QFrame):
                 self.start_point.append(float(start))
 
     def fit_curve(self, x, y):
+        from code.database.matlab_func.curve_fitting.matlab_fitting import matlab_fitting
         '''
         拟合曲线
         :param x:
