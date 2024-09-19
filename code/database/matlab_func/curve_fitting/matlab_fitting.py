@@ -1,6 +1,6 @@
 import code.database.matlab_func.curve_fitting as curve_fitting
 import matlab
-
+print('matlab')
 
 def matlab_fitting(x, y, fit_type, isdefault,
                    up_limit=None, low_limit=None, start_point=None):

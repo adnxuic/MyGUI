@@ -2,6 +2,7 @@ from Qt_core import *
 
 from code.widgets import qss_func
 from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify, PyInterpolateModify
+from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 
 from code.database.py_database import databases, PyDatabase
 from code.database.interpolate_func import interpolate_dict
@@ -113,55 +114,35 @@ class PyPlotModWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        self.databox = QGroupBox('Data', self)
-        self.databox.setFixedSize(200, 80)
-        self.databox_layout = QVBoxLayout()
+        self.data_choice_widget = PyDataChoiceWidget()
+        self.data_choice_widget.set_x_data(x_data_name)
+        self.data_choice_widget.set_y_data(y_data_name)
+        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
 
-        self.x_data_input = QComboBox(self)
-        self.x_data_layout = QHBoxLayout()
-        self.y_data_input = QComboBox(self)
-        self.y_data_layout = QHBoxLayout()
+        self.layout.addWidget(self.data_choice_widget)
 
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
-
-        self.x_data_input.setCurrentText(x_data_name)
-        self.y_data_input.setCurrentText(y_data_name)
-
-        self.x_data_input.currentTextChanged.connect(self.x_data_change)
-        self.y_data_input.currentTextChanged.connect(self.y_data_change)
-
-        self.x_data_layout.addWidget(QLabel('X Data:'))
-        self.x_data_layout.addWidget(self.x_data_input)
-        self.y_data_layout.addWidget(QLabel('Y Data:'))
-        self.y_data_layout.addWidget(self.y_data_input)
-        self.databox_layout.addLayout(self.x_data_layout)
-        self.databox_layout.addLayout(self.y_data_layout)
-
-        self.databox.setLayout(self.databox_layout)
+        # 添加弹性空间
+        self.layout.addStretch()
 
         self.setLayout(self.layout)
 
     def x_data_change(self):
-        current_x_data = PyDatabase.get_data(self.x_data_input.currentText())
+        current_x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
         # 更新x轴数据
         self.curve_modify.update_x_data(current_x_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, self.x_data_input.currentText(),
+        PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, self.data_choice_widget.get_x_data(),
                                           id(self.curve_modify.line), 'x')
-        self.curve_modify.current_x_data_name = self.x_data_input.currentText()
+        self.curve_modify.current_x_data_name = self.data_choice_widget.get_x_data()
 
     def y_data_change(self):
-        current_y_data = PyDatabase.get_data(self.y_data_input.currentText())
+        current_y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
         # 更新y轴数据
         self.curve_modify.update_y_data(current_y_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.y_data_input.currentText(),
+        PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.data_choice_widget.get_y_data(),
                                           id(self.curve_modify.line), 'y')
-        self.curve_modify.current_y_data_name = self.y_data_input.currentText()
+        self.curve_modify.current_y_data_name = self.data_choice_widget.get_y_data()
 
 
 class PyScatterModWidget(QFrame):
@@ -175,55 +156,35 @@ class PyScatterModWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        self.databox = QGroupBox('Data', self)
-        self.databox.setFixedSize(200, 80)
-        self.databox_layout = QVBoxLayout()
+        self.data_choice_widget = PyDataChoiceWidget()
+        self.data_choice_widget.set_x_data(x_data_name)
+        self.data_choice_widget.set_y_data(y_data_name)
+        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
 
-        self.x_data_input = QComboBox(self)
-        self.x_data_layout = QHBoxLayout()
-        self.y_data_input = QComboBox(self)
-        self.y_data_layout = QHBoxLayout()
+        self.layout.addWidget(self.data_choice_widget)
 
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
-
-        self.x_data_input.setCurrentText(x_data_name)
-        self.y_data_input.setCurrentText(y_data_name)
-
-        self.x_data_input.currentTextChanged.connect(self.x_data_change)
-        self.y_data_input.currentTextChanged.connect(self.y_data_change)
-
-        self.x_data_layout.addWidget(QLabel('X Data:'))
-        self.x_data_layout.addWidget(self.x_data_input)
-        self.y_data_layout.addWidget(QLabel('Y Data:'))
-        self.y_data_layout.addWidget(self.y_data_input)
-        self.databox_layout.addLayout(self.x_data_layout)
-        self.databox_layout.addLayout(self.y_data_layout)
-
-        self.databox.setLayout(self.databox_layout)
+        # 添加弹性空间
+        self.layout.addStretch()
 
         self.setLayout(self.layout)
 
     def x_data_change(self):
-        current_x_data = PyDatabase.get_data(self.x_data_input.currentText())
+        current_x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
         # 更新x轴数据
         self.curve_modify.update_x_data(current_x_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, self.x_data_input.currentText(),
+        PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, self.data_choice_widget.get_x_data(),
                                           id(self.curve_modify.scatter), 'x')
-        self.curve_modify.current_x_data_name = self.x_data_input.currentText()
+        self.curve_modify.current_x_data_name = self.data_choice_widget.get_x_data()
 
     def y_data_change(self):
-        current_y_data = PyDatabase.get_data(self.y_data_input.currentText())
+        current_y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
         # 更新y轴数据
         self.curve_modify.update_y_data(current_y_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.y_data_input.currentText(),
+        PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.data_choice_widget.get_y_data(),
                                           id(self.curve_modify.scatter), 'y')
-        self.curve_modify.current_y_data_name = self.y_data_input.currentText()
+        self.curve_modify.current_y_data_name = self.data_choice_widget.get_y_data()
 
 
 class PyFitMatlabModWidget(QFrame):
