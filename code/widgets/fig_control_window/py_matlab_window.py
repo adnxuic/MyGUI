@@ -6,7 +6,7 @@ from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataCho
 
 from code.database.py_database import databases, PyDatabase
 from code.database.py_matlab_fit import fit_type
-from code.database.matlab_func.get_func.get_func_exp import get_func_exp
+
 
 import numpy as np
 
@@ -35,39 +35,26 @@ class PyMatlabWindow(QFrame):
         self.layout.setContentsMargins(0, 0, 0, 0)
 
         # 检测是否能连接matlab
-        self.matlab_isconnect = QPushButton("isConnect Matlab")
+        self.matlab_isconnect = QPushButton("Connect Matlab")
         self.matlab_isconnect.setFixedWidth(150)
         self.matlab_isconnect.setFixedHeight(30)
-        self.matlab_isconnect.clicked.connect(self.matlab_isconnect_click)
+        self.matlab_isconnect.clicked.connect(self.matlab_connect_click)
         self.layout.addWidget(self.matlab_isconnect)
-
-        # 实现matalb的连接的按钮，连接之后才有后面的界面生成
-        self.matlab_connect = QPushButton("Connect Matlab")
-        self.matlab_connect.setFixedWidth(150)
-        self.matlab_connect.setFixedHeight(30)
-        self.matlab_connect.clicked.connect(self.matlab_connect_click)
-        self.layout.addWidget(self.matlab_connect)
 
         self.setLayout(self.layout)
 
-    def matlab_isconnect_click(self):
+    def matlab_connect_click(self):
         try:
             importlib.import_module('matlab')
             # 弹出对话框，提示能够连接matlab
-            QMessageBox.information(self, "Connect Matlab", "Matlab can be linked!")
-        except ImportError:
-            # 弹出对话框，提示不能连接matlab
-            QMessageBox.warning(self, "Connect Matlab", "Matlab can't be linked!")
-
-    def matlab_connect_click(self):
-        try :
-            from code.database.matlab_func.curve_fitting.matlab_fitting import matlab_fitting
             self.init()
         except ImportError:
             # 弹出对话框，提示不能连接matlab
             QMessageBox.warning(self, "Connect Matlab", "Matlab can't be linked!")
 
     def init(self):
+        # 删掉原来的按钮
+        self.layout.itemAt(self.layout.count() - 1).widget().setParent(None)
 
         # 数据选择
         self.data_choice_widget = PyDataChoiceWidget()
@@ -127,7 +114,7 @@ class PyMatlabWindow(QFrame):
 class PyFitWindow(QFrame):
     def __init__(self, parent=None, fit_type_name='poly'):
         super().__init__(parent)
-
+        from code.database.matlab_func.get_func.get_func_exp import get_func_exp
         self.setMouseTracking(True)
         # self.setObjectName("poly_fit_window")
         #
@@ -217,6 +204,7 @@ class PyFitWindow(QFrame):
 
 
     def expression_change(self, text):
+        from code.database.matlab_func.get_func.get_func_exp import get_func_exp
         self.func_exp, self.func_coefs = get_func_exp(text)
         # 设置表达式
         self.expression_input.setPlainText(self.func_exp)

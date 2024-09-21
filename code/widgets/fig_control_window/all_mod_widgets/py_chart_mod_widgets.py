@@ -3,6 +3,7 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify, PyInterpolateModify
 from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
+from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 
 from code.database.py_database import databases, PyDatabase
 from code.database.interpolate_func import interpolate_dict
@@ -61,8 +62,11 @@ class PyCurveModWidget(QFrame):
 
         # 线条的样式
         self.style_box = QGroupBox('Style', self)
-        self.style_box.setFixedSize(180, 80)
         self.style_layout = QVBoxLayout()
+
+        # 线条的颜色
+        self.color_choice = ColorChoiceWidget(self.color_change)
+        self.style_layout.addWidget(self.color_choice)
 
         # 线条的形状
         self.style_input = QComboBox(self)
@@ -101,6 +105,10 @@ class PyCurveModWidget(QFrame):
     def style_change(self):
         current_style = self.style_input.currentText()
         self.curve_modify.update_style(current_style)
+
+    def color_change(self, color: str):
+        self.curve_modify.update_color(color)
+
 
 
 class PyPlotModWidget(QFrame):

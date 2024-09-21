@@ -34,6 +34,10 @@ class PyCurveModify:
 
     def redraw(self):
         self.fig.canvas.draw()
+    
+    def update_legend(self):
+        self.axe.legend().remove()
+        self.axe.legend()
 
     def update_x_start(self, x_start: float):
         self.x_start = x_start
@@ -82,6 +86,11 @@ class PyCurveModify:
 
     def update_style(self, style: str):
         self.line.set_linestyle(style)
+        self.update_legend()
+        self.redraw()
+
+    def update_color(self, color: str):
+        self.line.set_color(color)
         self.redraw()
 
 
