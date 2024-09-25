@@ -56,3 +56,6 @@ class PyFigureWindow(QFrame):
         self.current_canva = self.tabwindow.currentWidget()
         self.fig_modify_window.stacklayout.setCurrentIndex(self.tabwindow.currentIndex())
         self.current_fig_modify_widget = self.fig_modify_window.stacklayout.currentWidget()
+
+    def get_current_canvas_axes_colorselector(self):
+        return self.current_canva.current_axes_mod.color_selector

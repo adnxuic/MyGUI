@@ -1,6 +1,7 @@
 from Qt_core import *
 
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 from code.widgets import qss_func
 
 from code.database.py_database import databases, PyDatabase
@@ -14,7 +15,7 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 # 曲线创建对话框
 class PyCurveDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -31,6 +32,8 @@ class PyCurveDialog(QDialog):
         self.expression_label = QLabel("函数表达式")
         self.expression_edit = QLineEdit()
         self.expression_edit.setText("x")
+        # 函数表达式变化时，图例标签也随之变化
+        self.expression_edit.textChanged.connect(lambda: self.label_input.setText(self.expression_edit.text()))
         self.layout.addWidget(self.expression_label)
         self.layout.addWidget(self.expression_edit)
 
@@ -40,7 +43,11 @@ class PyCurveDialog(QDialog):
         self.x_start_input = QDoubleSpinBox(self)
         self.x_start_input.setValue(0)
         self.x_stop_input = QDoubleSpinBox(self)
-        self.x_stop_input.setValue(10)
+        self.x_stop_input.setValue(100)
+        # 设置上下限为无穷大
+        self.x_start_input.setRange(float('-inf'), float('inf'))
+        self.x_stop_input.setRange(float('-inf'), float('inf'))
+
         self.x_range_layout.addWidget(self.x_start_input)
         self.x_range_layout.addWidget(self.x_stop_input)
         self.layout.addWidget(self.x_range_label)
@@ -53,17 +60,9 @@ class PyCurveDialog(QDialog):
         self.layout.addWidget(self.style_input)
 
         # 选择颜色和颜色预览
-        self.color_layout = QHBoxLayout()
-        self.color_input = QPushButton('Choose Color', self)
-        self.color_input.clicked.connect(self.choose_color)
-        self.color_display = QFrame(self)
-        self.color_display.setFixedSize(20, 20)
-        self.color_display.setStyleSheet("background-color: #000000")  # 初始颜色为黑色
+        self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
         self.layout.addWidget(QLabel('Color:'))
-        self.color_layout.addWidget(self.color_display)
-        self.color_layout.addWidget(self.color_input)
-        self.layout.addLayout(self.color_layout)
-        self.selected_color = '#000000'  # 默认黑色
+        self.layout.addWidget(self.color_input)
 
         # 输入图例标签
         self.label_input = QLineEdit(self)
@@ -84,12 +83,6 @@ class PyCurveDialog(QDialog):
 
         self.setLayout(self.layout)
 
-    def choose_color(self):
-        color = QColorDialog.getColor(self.selected_color)
-        if color.isValid():
-            self.selected_color = color.name()
-            self.color_display.setStyleSheet(f"background-color: {self.selected_color}")
-
     def accept(self):
         # 如果current_canva为空，弹出警告
         if self.figure_window.current_canva is None:
@@ -105,7 +98,7 @@ class PyCurveDialog(QDialog):
                                                    x_start=self.x_start_input.value(),
                                                    x_stop=self.x_stop_input.value(),
                                                    style=self.style_input.currentText(),
-                                                   color=self.selected_color,
+                                                   color=self.color_input.get_color(),
                                                    label=self.label_input.text())
         super().accept()
 
@@ -115,7 +108,7 @@ class PyCurveDialog(QDialog):
 
 # 折线图对话框
 class PyPlotDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -156,17 +149,9 @@ class PyPlotDialog(QDialog):
         self.layout.addWidget(self.size_input)
 
         # 选择颜色和颜色预览
-        self.color_layout = QHBoxLayout()
-        self.color_input = QPushButton('Choose Color', self)
-        self.color_input.clicked.connect(self.choose_color)
-        self.color_display = QFrame(self)
-        self.color_display.setFixedSize(20, 20)
-        self.color_display.setStyleSheet("background-color: #000000")
+        self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
         self.layout.addWidget(QLabel('Color:'))
-        self.color_layout.addWidget(self.color_display)
-        self.color_layout.addWidget(self.color_input)
-        self.layout.addLayout(self.color_layout)
-        self.selected_color = '#000000'
+        self.layout.addWidget(self.color_input)
 
         # 选择线条样式
         self.style_input = QComboBox(self)
@@ -176,6 +161,7 @@ class PyPlotDialog(QDialog):
 
         # 输入图例标签
         self.label_input = QLineEdit(self)
+        self.label_input.setText('plot')
         self.layout.addWidget(QLabel('Label:'))
         self.layout.addWidget(self.label_input)
 
@@ -191,12 +177,6 @@ class PyPlotDialog(QDialog):
         self.layout.addLayout(self.button_layout)
 
         self.setLayout(self.layout)
-
-    def choose_color(self):
-        color = QColorDialog.getColor(self.selected_color)
-        if color.isValid():
-            self.selected_color = color.name()
-            self.color_display.setStyleSheet(f"background-color: {self.selected_color}")
 
     def accept(self):
         # 如果current_canva为空，弹出警告
@@ -220,7 +200,7 @@ class PyPlotDialog(QDialog):
         self.figure_window.current_canva.add_plot(x=x_data, y=y_data,
                                                   style=self.style_input.currentText(),
                                                   size=self.size_input.value(),
-                                                  color=self.selected_color,
+                                                  color=self.color_input.get_color(),
                                                   label=self.label_input.text(),
                                                   x_data_name=self.x_data_input.currentText(),
                                                   y_data_name=self.y_data_input.currentText())
@@ -233,7 +213,7 @@ class PyPlotDialog(QDialog):
 
 # 散点图对话框
 class PyScatterDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -273,17 +253,9 @@ class PyScatterDialog(QDialog):
         self.layout.addWidget(self.size_input)
 
         # 选择颜色和颜色预览
-        self.color_layout = QHBoxLayout()
-        self.color_input = QPushButton('Choose Color', self)
-        self.color_input.clicked.connect(self.choose_color)
-        self.color_display = QFrame(self)
-        self.color_display.setFixedSize(20, 20)
-        self.color_display.setStyleSheet("background-color: #000000")
+        self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
         self.layout.addWidget(QLabel('Color:'))
-        self.color_layout.addWidget(self.color_display)
-        self.color_layout.addWidget(self.color_input)
-        self.layout.addLayout(self.color_layout)
-        self.selected_color = '#000000'
+        self.layout.addWidget(self.color_input)
 
         # 选择散点样式
         self.style_input = QComboBox(self)
@@ -293,6 +265,7 @@ class PyScatterDialog(QDialog):
 
         # 输入图例标签
         self.label_input = QLineEdit(self)
+        self.label_input.setText('scatter')
         self.layout.addWidget(QLabel('Label:'))
         self.layout.addWidget(self.label_input)
 
@@ -308,12 +281,6 @@ class PyScatterDialog(QDialog):
         self.layout.addLayout(self.button_layout)
 
         self.setLayout(self.layout)
-
-    def choose_color(self):
-        color = QColorDialog.getColor(self.selected_color)
-        if color.isValid():
-            self.selected_color = color.name()
-            self.color_display.setStyleSheet(f"background-color: {self.selected_color}")
 
     def accept(self):
         # 如果current_canva为空，弹出警告
@@ -336,7 +303,7 @@ class PyScatterDialog(QDialog):
 
         self.figure_window.current_canva.add_scatter(x=x_data, y=y_data,
                                                      size=self.size_input.value(),
-                                                     color=self.selected_color,
+                                                     color=self.color_input.get_color(),
                                                      marker=self.style_input.currentText(),
                                                      label=self.label_input.text(),
                                                      x_data_name=self.x_data_input.currentText(),
@@ -349,7 +316,7 @@ class PyScatterDialog(QDialog):
 
 
 class PyFitDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
         self.setObjectName("fit_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -368,7 +335,6 @@ class PyFitDialog(QDialog):
         self.python_button = QRadioButton("Python")
         self.matlab_button = QRadioButton("Matlab")
         self.python_button.setChecked(True)
-
 
         self.engine_layout.addWidget(self.python_button)
         self.engine_layout.addWidget(self.matlab_button)
@@ -408,14 +374,12 @@ class PyFitDialog(QDialog):
 
         self.setLayout(self.layout)
 
-
     def accept(self):
         # 如果选择matlab引擎
         if self.matlab_button.isChecked():
             self.figure_window.current_canva.add_fit_curve('matlab', [], [], 'r', 'fit')
             super().accept()
             return
-
 
         # 如果current_canva为空，弹出警告
         if self.figure_window.current_canva is None:
@@ -442,7 +406,7 @@ class PyFitDialog(QDialog):
 
 
 class PyInterpolationDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
         self.setObjectName("interpolation_dialog")
         qss_file = qss_func.qss_loader(qss_path)
@@ -460,7 +424,6 @@ class PyInterpolationDialog(QDialog):
         self.x_data_layout = QHBoxLayout()
         self.y_data_input = QComboBox(self)
         self.y_data_layout = QHBoxLayout()
-
 
         for key1, value1 in databases.items():
             for key2, value2 in value1.items():
@@ -528,7 +491,6 @@ class PyInterpolationDialog(QDialog):
             self.layout.itemAt(self.layout.count() - 2).widget().setParent(None)
             self.is_k_widget_added = False
 
-
     def accept(self):
         # 如果current_canva为空，弹出警告
         if self.figure_window.current_canva is None:
@@ -554,10 +516,11 @@ class PyInterpolationDialog(QDialog):
         method = self.method_input.currentText()
         if method == "B样条插值":
             k = self.k_input.value()
-            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name, y_name=y_data_name, method=method, k=k)
+            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name,
+                                                                   y_name=y_data_name, method=method, k=k)
         else:
-            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name, y_name=y_data_name, method=method)
-
+            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name,
+                                                                   y_name=y_data_name, method=method)
 
         super().accept()
 

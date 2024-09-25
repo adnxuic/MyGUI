@@ -1,3 +1,9 @@
+QFrame#common_mod_widget
+{
+    background-color:#EBECF0;
+    border-radius: 5px;
+}
+
 QFrame#bottom_spine_mod_widget
 {
     background-color:#EBECF0;

@@ -15,7 +15,7 @@ qss_path = os.path.join(current_path, "chart_mod_style.qss")
 
 
 class PyCurveModWidget(QFrame):
-    def __init__(self, curve_modify: PyCurveModify):
+    def __init__(self, curve_modify: PyCurveModify, color: str):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -46,6 +46,7 @@ class PyCurveModWidget(QFrame):
         self.x_start_input.setSingleStep(1)
         self.x_start_input.setValue(curve_modify.x_start)
         self.x_start_input.valueChanged.connect(self.x_start_change)
+
         self.x_stop_input = QDoubleSpinBox(self)
         self.x_stop_input.setFixedWidth(120)
         self.x_stop_input.setRange(float('-inf'), float('inf'))
@@ -65,7 +66,7 @@ class PyCurveModWidget(QFrame):
         self.style_layout = QVBoxLayout()
 
         # 线条的颜色
-        self.color_choice = ColorChoiceWidget(self.color_change)
+        self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.style_layout.addWidget(self.color_choice)
 
         # 线条的形状
@@ -90,6 +91,9 @@ class PyCurveModWidget(QFrame):
 
         self.setLayout(self.layout)
 
+    def get_colorupdate_func(self):
+        return self.color_choice.updateColor
+
     def expression_change(self):
         current_expression = self.expression_input.text()
         self.curve_modify.update_expression(current_expression)
@@ -110,9 +114,8 @@ class PyCurveModWidget(QFrame):
         self.curve_modify.update_color(color)
 
 
-
 class PyPlotModWidget(QFrame):
-    def __init__(self, curve_modify: PyPlotModify, x_data_name: str, y_data_name: str):
+    def __init__(self, curve_modify: PyPlotModify, x_data_name: str, y_data_name: str, color: str):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -129,10 +132,17 @@ class PyPlotModWidget(QFrame):
 
         self.layout.addWidget(self.data_choice_widget)
 
+        # 线条的颜色
+        self.color_choice = ColorChoiceWidget(color, self.color_change)
+        self.layout.addWidget(self.color_choice)
+
         # 添加弹性空间
         self.layout.addStretch()
 
         self.setLayout(self.layout)
+
+    def get_colorupdate_func(self):
+        return self.color_choice.updateColor
 
     def x_data_change(self):
         current_x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
@@ -152,9 +162,12 @@ class PyPlotModWidget(QFrame):
                                           id(self.curve_modify.line), 'y')
         self.curve_modify.current_y_data_name = self.data_choice_widget.get_y_data()
 
+    def color_change(self, color: str):
+        self.curve_modify.update_color(color)
+
 
 class PyScatterModWidget(QFrame):
-    def __init__(self, scatter_modify: PyScatterModify, x_data_name: str, y_data_name: str):
+    def __init__(self, scatter_modify: PyScatterModify, x_data_name: str, y_data_name: str, color: str):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -171,10 +184,17 @@ class PyScatterModWidget(QFrame):
 
         self.layout.addWidget(self.data_choice_widget)
 
+        # 线条的颜色
+        self.color_choice = ColorChoiceWidget(color, self.color_change)
+        self.layout.addWidget(self.color_choice)
+
         # 添加弹性空间
         self.layout.addStretch()
 
         self.setLayout(self.layout)
+
+    def get_colorupdate_func(self):
+        return self.color_choice.updateColor
 
     def x_data_change(self):
         current_x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
@@ -193,6 +213,9 @@ class PyScatterModWidget(QFrame):
         PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.data_choice_widget.get_y_data(),
                                           id(self.curve_modify.scatter), 'y')
         self.curve_modify.current_y_data_name = self.data_choice_widget.get_y_data()
+
+    def color_change(self, color: str):
+        self.curve_modify.update_color(color)
 
 
 class PyFitMatlabModWidget(QFrame):
@@ -334,7 +357,17 @@ class PyInterpolateWidget(QFrame):
 
         self.layout.addWidget(self.interpolat_box)
 
+        # 线条的颜色
+        self.color_choice = ColorChoiceWidget(connect_signal=self.color_change)
+        self.layout.addWidget(self.color_choice)
+
+        # 添加弹性空间
+        self.layout.addStretch()
+
         self.setLayout(self.layout)
+
+    def get_colorupdate_func(self):
+        return self.color_choice.updateColor
 
     def change_method(self):
         # 获取当前选择的插值方法
@@ -356,4 +389,5 @@ class PyInterpolateWidget(QFrame):
         k = self.k_input.value()
         self.modify.update_interpolate(current_interpolat, k)
 
-
+    def color_change(self, color: str):
+        self.modify.update_color(color)

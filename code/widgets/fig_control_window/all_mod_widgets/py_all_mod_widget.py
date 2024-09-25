@@ -1,7 +1,7 @@
 from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.fig_control_window.all_mod_widgets.py_axes_mod_widgets import (
-    PyBottomSpineModWidget, PyTopSpineModWidget, PyLeftSpineModWidget, PyRightSpineModWidget,
+    PyCommonModWidget, PyBottomSpineModWidget, PyTopSpineModWidget, PyLeftSpineModWidget, PyRightSpineModWidget,
     PyAxeLegendModWidget
 )
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitMatlabModWidget
@@ -37,6 +37,7 @@ class PyAxesModWindow(QFrame):
 
         self.toolbox = QToolBox()
 
+        self.common_mod_widget = PyCommonModWidget(axe, axe_modify)
         self.bottom_spine_mod_widget = PyBottomSpineModWidget(axe, axe_modify)
         self.top_spine_mod_widget = PyTopSpineModWidget()
         self.left_spine_mod_widget = PyLeftSpineModWidget(axe, axe_modify)
@@ -44,6 +45,7 @@ class PyAxesModWindow(QFrame):
 
         self.legend_mod_widget = PyAxeLegendModWidget(axe, axe_modify)
 
+        self.toolbox.addItem(self.common_mod_widget, "通用")
         self.toolbox.addItem(self.bottom_spine_mod_widget, "底脊")
         self.toolbox.addItem(self.top_spine_mod_widget, "顶脊")
         self.toolbox.addItem(self.left_spine_mod_widget, "左脊")

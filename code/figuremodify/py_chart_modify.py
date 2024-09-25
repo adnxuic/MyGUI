@@ -138,6 +138,11 @@ class PyPlotModify:
 
         self.redraw()
 
+    def update_color(self, color: str):
+        self.line.set_color(color)
+        self.redraw()
+
+
 
 class PyScatterModify:
     def __init__(self, fig, axe: Axes, style=None, scatter: PathCollection = None, x_data_name: str = None,
@@ -180,6 +185,10 @@ class PyScatterModify:
             x_data = np.zeros_like(y_data)
             self.scatter.set_offsets(np.c_[x_data, y_data])
 
+        self.redraw()
+
+    def update_color(self, color: str):
+        self.scatter.set_facecolor(color)
         self.redraw()
 
 
@@ -239,6 +248,10 @@ class PyInterpolateModify:
         self.line.set_data(x_new, y_new)
         self.axe.relim()
         self.axe.autoscale_view()
+        self.redraw()
+
+    def update_color(self, color: str):
+        self.line.set_color(color)
         self.redraw()
 
 

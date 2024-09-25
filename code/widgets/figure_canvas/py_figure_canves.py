@@ -46,6 +46,7 @@ class PyFigureCanvas(QWidget):
         self.fig_modify_widget: Optional[PyFigModWidget] = None
 
         self.current_axes: Optional[Axes] = None
+        self.current_axes_mod: Optional[PyAxesModify] = None
 
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
@@ -69,8 +70,9 @@ class PyFigureCanvas(QWidget):
     def setFigModifyWidget(self, fig_modify_widget):
         self.fig_modify_widget = fig_modify_widget
 
-    def update_current_axes(self, axe):
+    def update_current_axes(self, axe, axe_mod):
         self.current_axes = axe
+        self.current_axes_mod = axe_mod
 
     def redraw(self):
         self.fig.canvas.draw()
@@ -83,17 +85,18 @@ class PyFigureCanvas(QWidget):
                 axe_mod = PyAxesModify(self.fig, axe, self.style)
 
                 btn = self.fig_modify_widget.add_all_mod_widget(axe, axe_mod)
-                btn.clicked.connect(lambda _, axe1=axe: self.update_current_axes(axe1))
+                btn.clicked.connect(lambda _, axe1=axe, axe_mod1=axe_mod:
+                                    self.update_current_axes(axe1, axe_mod1))
 
                 if i == 0:
-                    self.update_current_axes(axe)
+                    self.update_current_axes(axe, axe_mod)
 
         self.redraw()
 
     # 添加自定义曲线
     def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str):
 
-        x = np.linspace(0, 10, 1000)
+        x = np.linspace(x_start, x_stop, 1000)
         y = eval(func_text)
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
@@ -107,7 +110,10 @@ class PyFigureCanvas(QWidget):
 
         # 添加曲线调整窗口
         curve_mod_widget = PyCurveModWidget(
-            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text))
+            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text), color)
+
+        # 添加可视化对象
+        self.current_axes_mod.add_vis_object(curve_mod_widget.get_colorupdate_func())
 
         curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')
@@ -127,7 +133,11 @@ class PyFigureCanvas(QWidget):
         # 添加曲线调整窗口
         plot_mod_widget = PyPlotModWidget(
             PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name),
-            x_data_name, y_data_name)
+            x_data_name, y_data_name,color)
+
+        # 添加可视化对象
+        self.current_axes_mod.add_vis_object(plot_mod_widget.get_colorupdate_func())
+
         plot_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['plot_box']
         plot_box.add_widget(plot_mod_widget, 'plot')
 
@@ -143,10 +153,15 @@ class PyFigureCanvas(QWidget):
         # 如果all_mod_widget中没有scatter_box，则添加一个
         if all_mod_widget.cahrt_mod_window.boxs.get('scatter_box') is None:
             all_mod_widget.add_chart_box('scatter_box')
+
         # 添加散点调整窗口
         scatter_mod_widget = PyScatterModWidget(
             PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name),
-            x_data_name, y_data_name)
+            x_data_name, y_data_name,color)
+
+        # 添加可视化对象
+        self.current_axes_mod.add_vis_object(scatter_mod_widget.get_colorupdate_func())
+
         scatter_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['scatter_box']
         scatter_box.add_widget(scatter_mod_widget, 'scatter')
 
@@ -185,7 +200,7 @@ class PyFigureCanvas(QWidget):
                 x_new, y_new = interpolate_dict[method](x, y, k=k)
             else:
                 x_new, y_new = interpolate_dict[method](x, y)
-            line, = self.current_axes.plot(x_new, y_new)
+            line, = self.current_axes.plot(x_new, y_new, color='black')
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -196,6 +211,9 @@ class PyFigureCanvas(QWidget):
         # 添加插值曲线调整窗口
         interpolate_mod_widget = PyInterpolateWidget(
             PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name), method, k)
+
+        # 添加可视化对象
+        self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
 
         interpolate_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['interpolate_box']
         interpolate_box.add_widget(interpolate_mod_widget, 'interpolate')

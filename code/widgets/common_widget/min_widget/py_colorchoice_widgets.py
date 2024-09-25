@@ -3,10 +3,65 @@ from Qt_core import *
 from code.figuremodify.style_base.color_base import color_combi_dict
 
 
+class ColorSelector:
+    def __init__(self):
+        self.current_color = '#000000'
+        self.color_list_num = 1
+        self.category = None
+        self.subcategory = None
+
+    def update_combination(self, category, subcategory=None, index=0):
+        self.category = category
+        self.subcategory = subcategory
+        if category is None:
+            self.current_color = '#000000'
+            self.color_list_num = 1
+        else:
+            self.color_list_num = index + 1
+            if subcategory is None:
+                if self.color_list_num < len(color_combi_dict[self.category]):
+                    self.current_color = color_combi_dict[self.category][self.color_list_num]
+                    self.color_list_num += 1
+                else:
+                    self.update_combination(None, None)
+            else:
+                if self.color_list_num < len(color_combi_dict[self.category][self.subcategory]):
+                    self.current_color = color_combi_dict[self.category][self.subcategory][self.color_list_num]
+                    self.color_list_num += 1
+                else:
+                    self.update_combination(None, None)
+
+
+    def get_color(self):
+        color = self.current_color
+
+        if self.category is not None:
+            if self.subcategory is not None:
+                if self.color_list_num < len(color_combi_dict[self.category][self.subcategory]):
+                    self.current_color = color_combi_dict[self.category][self.subcategory][self.color_list_num]
+                    self.color_list_num += 1
+                else:
+                    self.update_combination(None, None)
+            else:
+                if self.color_list_num < len(color_combi_dict[self.category]):
+                    self.current_color = color_combi_dict[self.category][self.color_list_num]
+                    self.color_list_num += 1
+                else:
+                    self.update_combination(None, None)
+
+        return color
+
+
 class ColorChoiceWidget(QFrame):
-    def __init__(self, connect_signal: callable):
+    def __init__(self, color = "#000000",connect_signal: callable = None, colorselector: ColorSelector = None):
         super().__init__()
-        self.current_color = "#000000"
+        self.colorselector = colorselector
+
+        if colorselector:
+            self.current_color = colorselector.get_color()
+        else:
+            self.current_color = color
+
         self.layout = QHBoxLayout()
         self.connect_signal = connect_signal
 
@@ -32,10 +87,12 @@ class ColorChoiceWidget(QFrame):
         self.layout.addLayout(self.sublayout)
 
         # 设置默认颜色
-        self.updateColor("#000000")
+        self.updateColorDisplay()
+        self.updateRGBLabel()
+        if self.connect_signal:
+            self.connect_signal(color)
 
         self.setLayout(self.layout)
-
 
     def createColorMenu(self):
         for category, subcategories in color_combi_dict.items():
@@ -43,28 +100,33 @@ class ColorChoiceWidget(QFrame):
             if isinstance(subcategories, dict):
                 for subcategory, colors in subcategories.items():
                     subsubmenu = submenu.addMenu(subcategory)
-                    for color in colors:
-                        self.addColorAction(subsubmenu, color)
+                    for i, color in enumerate(colors):
+                        self.addColorAction(subsubmenu, color, category, subcategory, i)
             else:
-                for color in subcategories:
-                    self.addColorAction(submenu, color)
+                for i, color in enumerate(subcategories):
+                    self.addColorAction(submenu, color, category, i)
 
-    def addColorAction(self, menu, color):
+    def addColorAction(self, menu, color, category=None, subcategory=None, index=0):
         pixmap = QPixmap(16, 16)
         pixmap.fill(QColor(color))
         icon = QIcon(pixmap)
         action = QAction(icon, color, self)
-        action.triggered.connect(lambda checked, c=color: self.updateColor(c))
+        action.triggered.connect(lambda checked, c=color,
+                                        cat=category, subcat=subcategory,
+                                        i=index: self.updateColor(c, cat, subcat, i))
         menu.addAction(action)
 
     def showColorMenu(self):
         self.color_menu.exec(self.color_button.mapToGlobal(self.color_button.rect().bottomLeft()))
 
-    def updateColor(self, color):
+    def updateColor(self, color, category=None, subcategory=None, index=0):
         self.current_color = color
         self.updateColorDisplay()
         self.updateRGBLabel()
-        self.connect_signal(self.current_color)
+        if self.connect_signal:
+            self.connect_signal(color)
+        if self.colorselector:
+            self.colorselector.update_combination(category, subcategory, index)
 
     def updateColorDisplay(self):
         self.color_display.setStyleSheet(f"background-color: {self.current_color};")
@@ -72,3 +134,6 @@ class ColorChoiceWidget(QFrame):
     def updateRGBLabel(self):
         color = QColor(self.current_color)
         self.rgb_label.setText(f"RGB: ({color.red()}, {color.green()}, {color.blue()})")
+
+    def get_color(self):
+        return self.current_color
