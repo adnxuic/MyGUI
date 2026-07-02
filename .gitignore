@@ -1,2 +1,40 @@
-*.pyc
-.idea/other.xml
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build/package outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test/coverage/cache outputs
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE/editor local files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+
+# Local logs and crash dumps
+*.log
+*.out
+*.err
+
+# Local backup/sync artifacts
+*~
+*.bak
+*.baiduyun.uploading.cfg
