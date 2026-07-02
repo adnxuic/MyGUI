@@ -2,6 +2,7 @@ from Qt_core import *
 
 from code.database.py_database import PyDatabase
 from code.database.interpolate_func import interpolate_dict
+from code.database.safe_expression import evaluate_curve_expression
 
 import numpy as np
 from numpy import ndarray
@@ -12,10 +13,6 @@ from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.collections import PathCollection
 from matplotlib.style import use
-
-from numpy import (sin, cos, tan, pi,
-                   exp, log,
-                   sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
 
 
 class PyCurveModify:
@@ -44,7 +41,10 @@ class PyCurveModify:
     def update_x_start(self, x_start: float):
         self.x_start = x_start
         x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
-        y = eval(self.expression)
+        try:
+            y = evaluate_curve_expression(self.expression, x)
+        except ValueError:
+            return
         self.line.set_data(x, y)
         self.axe.relim()
         self.axe.autoscale_view()
@@ -53,37 +53,38 @@ class PyCurveModify:
     def update_x_stop(self, x_stop: float):
         self.x_stop = x_stop
         x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
-        y = eval(self.expression)
+        try:
+            y = evaluate_curve_expression(self.expression, x)
+        except ValueError:
+            return
         self.line.set_data(x, y)
         self.axe.relim()
         self.axe.autoscale_view()
         self.redraw()
 
     def update_expression(self, expression: str):
-        self.expression = expression
         try:
-            func = eval(f"lambda x: {expression}")
             x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
-            y = func(x)
+            y = evaluate_curve_expression(expression, x)
             self.line.set_ydata(y)
+            self.expression = expression
             self.axe.relim()
             self.axe.autoscale_view()
             self.redraw()
-        except Exception:
+        except ValueError:
             pass
 
     def update_all(self, x_start: float, x_stop: float, expression: str):
-        self.x_start, self.x_stop = x_start, x_stop
-        self.expression = expression
         try:
-            func = eval(f"lambda x: {expression}")
-            x = np.linspace(self.x_start, self.x_stop, 1000)
-            y = func(x)
+            x = np.linspace(x_start, x_stop, 1000)
+            y = evaluate_curve_expression(expression, x)
+            self.x_start, self.x_stop = x_start, x_stop
+            self.expression = expression
             self.line.set_data(x, y)
             self.axe.relim()
             self.axe.autoscale_view()
             self.redraw()
-        except Exception:
+        except ValueError:
             pass
 
     def update_style(self, style: str):

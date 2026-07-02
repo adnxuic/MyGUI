@@ -3,7 +3,7 @@ from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.table.py_subtable import PySubTable
 
-from code.database.py_database import databases, PyDatabase
+from code.database.py_database import PyDatabase
 
 import os
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +34,11 @@ class TableTabWidget(QTabWidget):
                                                 "Are you sure you want to delete this Table?",
                                                 QMessageBox.Yes | QMessageBox.No)
                 if response == QMessageBox.Yes:
+                    table_name = self.tabText(tab_index)
+                    widget = self.widget(tab_index)
                     self.removeTab(tab_index)
+                    PyDatabase.unregister_table(table_name)
+                    widget.deleteLater()
 
 class PyTable(QFrame):
     def __init__(self):
@@ -46,7 +50,8 @@ class PyTable(QFrame):
 
         self.setMouseTracking(True)
 
-        databases['Table1'] = {}
+        PyDatabase.clear()
+        PyDatabase.register_table('Table1')
 
         self.tabWidget = TableTabWidget(self)
 
@@ -72,8 +77,8 @@ class PyTable(QFrame):
     def add_new_table(self, is_open=False):
         # 添加新标签页
         index = self.tabWidget.count() - 1
-        new_table_name = f"Table{index + 1}"
-        databases[new_table_name] = {}
+        new_table_name = PyDatabase.next_table_name()
+        PyDatabase.register_table(new_table_name)
 
         pydatabase = PyDatabase()
         subtable = PySubTable(new_table_name, pydatabase)

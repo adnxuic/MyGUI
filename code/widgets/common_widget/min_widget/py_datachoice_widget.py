@@ -1,14 +1,15 @@
 from Qt_core import *
+import weakref
 
 
-from code.database.py_database import databases
+from code.database.py_database import PyDatabase
 
 class PyDataChoiceWidget(QFrame):
-    instances = []
+    instances = weakref.WeakSet()
 
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls, *args, **kwargs)
-        cls.instances.append(instance)
+        cls.instances.add(instance)
         return instance
     def __init__(self):
         super().__init__()
@@ -41,27 +42,34 @@ class PyDataChoiceWidget(QFrame):
         self.x_data_input.blockSignals(True)
         self.y_data_input.blockSignals(True)
 
+        data_names = list(PyDatabase.iter_data_names())
         self.x_data_input.clear()
         self.y_data_input.clear()
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3 in value2.data.keys():
-                    item = f"{key1}/{key2}/{key3}"
-                    self.x_data_input.addItem(item)
-                    self.y_data_input.addItem(item)
+        self.x_data_input.addItems(data_names)
+        self.y_data_input.addItems(data_names)
 
         # 恢复信号
         self.x_data_input.blockSignals(False)
         self.y_data_input.blockSignals(False)
 
         # 恢复到当前数据
-        self.x_data_input.setCurrentText(current_x_data)
-        self.y_data_input.setCurrentText(current_y_data)
+        if current_x_data in data_names:
+            self.x_data_input.setCurrentText(current_x_data)
+        elif data_names:
+            self.x_data_input.setCurrentIndex(0)
+
+        if current_y_data in data_names:
+            self.y_data_input.setCurrentText(current_y_data)
+        elif data_names:
+            self.y_data_input.setCurrentIndex(0)
 
     @classmethod
     def update_all_instances(cls):
-        for instance in cls.instances:
-            instance.update_data()
+        for instance in list(cls.instances):
+            try:
+                instance.update_data()
+            except RuntimeError:
+                cls.instances.discard(instance)
 
     def get_x_data(self):
         return self.x_data_input.currentText()

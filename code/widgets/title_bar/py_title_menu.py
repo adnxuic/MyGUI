@@ -7,8 +7,8 @@ from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import element_dialog_dict
-
-import openpyxl as xl
+from code.excel_io import import_excel_into_table
+from code.project_io import export_database_snapshot, save_project_snapshot
 
 import json
 import os
@@ -67,11 +67,16 @@ class SelectorMenuBar(QFrame):
             self.stacklayout_bottom.setCurrentIndex(3)
 
 
+def load_excel_into_table(file_name: str, table: PyTable):
+    return import_excel_into_table(file_name, table)
+
+
 class MenuBar(QFrame):
-    def __init__(self, table: PyTable):
+    def __init__(self, table: PyTable, figure_window=None):
         super().__init__()
 
         self.table = table
+        self.figure_window = figure_window
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
@@ -113,39 +118,69 @@ class MenuBar(QFrame):
         menu_name.exec(button_name.mapToGlobal(button_name.rect().bottomLeft()))
 
     def initActions(self):
-        file_open_action = QAction(QIcon("pictures/icons/open.svg"), "打开", self.file_menu)
+        file_open_action = QAction(QIcon("pictures/icons/open.svg"), "打开 Excel...", self.file_menu)
         file_open_action.triggered.connect(self.open_file)
 
-        file_save_action = QAction(QIcon("pictures/icons/save.svg"), "保存", self.file_menu)
+        file_save_action = QAction(QIcon("pictures/icons/save.svg"), "保存项目...", self.file_menu)
         file_save_action.triggered.connect(self.save_file)
+
+        file_export_figure_action = QAction("导出当前图片...", self.file_menu)
+        file_export_figure_action.triggered.connect(self.export_current_figure)
+
+        file_export_data_action = QAction("导出数据...", self.file_menu)
+        file_export_data_action.triggered.connect(self.export_data)
 
         self.file_menu.addAction(file_open_action)
         self.file_menu.addAction(file_save_action)
+        self.file_menu.addSeparator()
+        self.file_menu.addAction(file_export_figure_action)
+        self.file_menu.addAction(file_export_data_action)
 
     def open_file(self):
-        # 打开Excel文件
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel File", "", "Excel Files (*.xlsx *.xls)")
-        if os.path.exists(file_name):
-            subtable = self.table.add_new_table(is_open=True)
-            wb = xl.load_workbook(file_name)
-            # 读取所有工作表
-            for i, sheet_name in enumerate(wb.sheetnames):
-                # 添加新工作表
-                if i > 0:
-                    subtable.add_new_sheet()
+        if not file_name or not os.path.exists(file_name):
+            return
 
-                tableview = subtable.get_table(i)
-                sheet = wb[sheet_name]
-                # 读取所有列
-                for j, col in enumerate(sheet.iter_cols()):
-                    data_list = [cell.value for cell in col]
-                    tableview.add_excel_data(data_list, j)
-                # 保存
-                tableview.model.save_data_to_database()
-            wb.close()
+        try:
+            load_excel_into_table(file_name, self.table)
+        except Exception as exc:
+            QMessageBox.warning(self, "Open Excel File", str(exc))
 
     def save_file(self):
-        print('save file')
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Save Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+        if not file_name:
+            return
+
+        try:
+            save_project_snapshot(file_name, self.figure_window)
+        except Exception as exc:
+            QMessageBox.warning(self, "Save Project", str(exc))
+
+    def export_current_figure(self):
+        if self.figure_window is None or self.figure_window.current_canva is None:
+            QMessageBox.warning(self, "Export Figure", "Please select a figure canvas first.")
+            return
+
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Export Current Figure", "", "PNG Image (*.png);;PDF File (*.pdf);;SVG File (*.svg)")
+        if not file_name:
+            return
+
+        try:
+            self.figure_window.current_canva.save(file_name)
+        except Exception as exc:
+            QMessageBox.warning(self, "Export Figure", str(exc))
+
+    def export_data(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export Data", "", "JSON Files (*.json)")
+        if not file_name:
+            return
+
+        try:
+            export_database_snapshot(file_name)
+        except Exception as exc:
+            QMessageBox.warning(self, "Export Data", str(exc))
 
 
 class ControlBar(QFrame):

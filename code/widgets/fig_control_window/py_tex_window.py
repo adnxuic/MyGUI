@@ -4,6 +4,7 @@ from code.widgets.qss_func import qss_loader
 import matplotlib as mpl
 
 import os
+import shutil
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
@@ -50,12 +51,26 @@ class PyTexWindow(QFrame):
         self.setLayout(self.layout)
 
     def use_latex_engine(self, state):
-        if state == Qt.Checked:
+        checked = state == Qt.Checked or state == Qt.CheckState.Checked
+        if checked and not self._has_tex_engine():
+            self.latex_engine.blockSignals(True)
+            self.latex_engine.setChecked(False)
+            self.latex_engine.blockSignals(False)
+            self.is_latex = False
+            mpl.rcParams['text.usetex'] = False
+            QMessageBox.warning(self, "TeX Engine", "No TeX executable was found on PATH.")
+            return
+
+        if checked:
             self.is_latex = True
         else:
             self.is_latex = False
 
         mpl.rcParams['text.usetex'] = self.is_latex
+
+    @staticmethod
+    def _has_tex_engine() -> bool:
+        return any(shutil.which(command) for command in ("latex", "pdflatex", "xelatex", "tectonic"))
 
     def update_preamble(self):
         # 清空导言区

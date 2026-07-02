@@ -5,7 +5,7 @@ from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, Py
 from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 
-from code.database.py_database import databases, PyDatabase
+from code.database.py_database import PyDatabase
 from code.database.interpolate_func import interpolate_dict
 
 import os
@@ -170,22 +170,32 @@ class PyPlotModWidget(QFrame):
         return self.color_choice.updateColor
 
     def x_data_change(self):
-        current_x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
+        data_name = self.data_choice_widget.get_x_data()
+        if not PyDatabase.has_data(data_name):
+            return
+        current_x_data = PyDatabase.get_data(data_name)
         # 更新x轴数据
         self.curve_modify.update_x_data(current_x_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, self.data_choice_widget.get_x_data(),
-                                          id(self.curve_modify.line), 'x')
-        self.curve_modify.current_x_data_name = self.data_choice_widget.get_x_data()
+        changed = PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, data_name,
+                                                    id(self.curve_modify.line), 'x')
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.curve_modify.line), 'x', self.curve_modify.update_x_data)
+        self.curve_modify.current_x_data_name = data_name
 
     def y_data_change(self):
-        current_y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
+        data_name = self.data_choice_widget.get_y_data()
+        if not PyDatabase.has_data(data_name):
+            return
+        current_y_data = PyDatabase.get_data(data_name)
         # 更新y轴数据
         self.curve_modify.update_y_data(current_y_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.data_choice_widget.get_y_data(),
-                                          id(self.curve_modify.line), 'y')
-        self.curve_modify.current_y_data_name = self.data_choice_widget.get_y_data()
+        changed = PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, data_name,
+                                                    id(self.curve_modify.line), 'y')
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.curve_modify.line), 'y', self.curve_modify.update_y_data)
+        self.curve_modify.current_y_data_name = data_name
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
@@ -236,22 +246,32 @@ class PyScatterModWidget(QFrame):
         return self.color_choice.updateColor
 
     def x_data_change(self):
-        current_x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
+        data_name = self.data_choice_widget.get_x_data()
+        if not PyDatabase.has_data(data_name):
+            return
+        current_x_data = PyDatabase.get_data(data_name)
         # 更新x轴数据
         self.curve_modify.update_x_data(current_x_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, self.data_choice_widget.get_x_data(),
-                                          id(self.curve_modify.scatter), 'x')
-        self.curve_modify.current_x_data_name = self.data_choice_widget.get_x_data()
+        changed = PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, data_name,
+                                                    id(self.curve_modify.scatter), 'x')
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.curve_modify.scatter), 'x', self.curve_modify.update_x_data)
+        self.curve_modify.current_x_data_name = data_name
 
     def y_data_change(self):
-        current_y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
+        data_name = self.data_choice_widget.get_y_data()
+        if not PyDatabase.has_data(data_name):
+            return
+        current_y_data = PyDatabase.get_data(data_name)
         # 更新y轴数据
         self.curve_modify.update_y_data(current_y_data)
         # 更新映射连接
-        PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, self.data_choice_widget.get_y_data(),
-                                          id(self.curve_modify.scatter), 'y')
-        self.curve_modify.current_y_data_name = self.data_choice_widget.get_y_data()
+        changed = PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, data_name,
+                                                    id(self.curve_modify.scatter), 'y')
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.curve_modify.scatter), 'y', self.curve_modify.update_y_data)
+        self.curve_modify.current_y_data_name = data_name
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)

@@ -14,6 +14,7 @@ from code.figuremodify.py_text_modify import PyTextModify
 
 from code.database.py_database import PyDatabase
 from code.database.interpolate_func import interpolate_dict
+from code.database.safe_expression import evaluate_curve_expression
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -25,10 +26,6 @@ from matplotlib.axes import Axes
 from matplotlib.style import use
 
 import numpy as np
-from numpy import (sin, cos, tan, pi,
-                   exp, log,
-                   sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
-
 mpl.use("QtAgg")
 
 
@@ -99,7 +96,7 @@ class PyFigureCanvas(QWidget):
     def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str):
 
         x = np.linspace(x_start, x_stop, 1000)
-        y = eval(func_text)
+        y = evaluate_curve_expression(func_text, x)
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
 

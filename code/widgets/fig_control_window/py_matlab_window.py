@@ -4,7 +4,7 @@ from code.widgets.qss_func import qss_loader
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitMatlabModWidget
 from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 
-from code.database.py_database import databases, PyDatabase
+from code.database.py_database import PyDatabase
 from code.database.py_matlab_fit import fit_type
 
 
@@ -48,9 +48,25 @@ class PyMatlabWindow(QFrame):
             importlib.import_module('matlab')
             # 弹出对话框，提示能够连接matlab
             self.init()
-        except ImportError:
+        except Exception as exc:
+            self.reset_to_connect_button()
             # 弹出对话框，提示不能连接matlab
-            QMessageBox.warning(self, "Connect Matlab", "Matlab can't be linked!")
+            QMessageBox.warning(self, "Connect Matlab", f"Matlab can't be linked:\n{exc}")
+
+    def reset_to_connect_button(self):
+        while self.layout.count():
+            item = self.layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        self.connect_widget = None
+        self.matlab_isconnect = QPushButton("Connect Matlab")
+        self.matlab_isconnect.setFixedWidth(150)
+        self.matlab_isconnect.setFixedHeight(30)
+        self.matlab_isconnect.clicked.connect(self.matlab_connect_click)
+        self.layout.addWidget(self.matlab_isconnect)
 
     def init(self):
         # 删掉原来的按钮
@@ -99,14 +115,25 @@ class PyMatlabWindow(QFrame):
         self.layout.insertWidget(self.layout.count() - 1, self.fit_type_window)  # 插入到倒数第二个位置
 
     def fit_curve(self):
+        if self.connect_widget is None:
+            QMessageBox.warning(self, "Matlab Fit", "Please select a Matlab fit curve first.")
+            return
 
-        x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
-        y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
+        try:
+            x_data = PyDatabase.get_data(self.data_choice_widget.get_x_data())
+            y_data = PyDatabase.get_data(self.data_choice_widget.get_y_data())
+        except KeyError as exc:
+            QMessageBox.warning(self, "Matlab Fit", str(exc))
+            return
 
         x_max = max(x_data)
         x_min = min(x_data)
 
-        value_exp, show_exp = self.fit_type_window.fit_curve(x_data, y_data)
+        try:
+            value_exp, show_exp = self.fit_type_window.fit_curve(x_data, y_data)
+        except Exception as exc:
+            QMessageBox.warning(self, "Matlab Fit", f"Matlab fit failed:\n{exc}")
+            return
 
         self.connect_widget.update_curve(value_exp, show_exp, x_min, x_max)
 

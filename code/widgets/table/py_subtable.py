@@ -113,7 +113,6 @@ class TableModel(QAbstractTableModel):
 
     # 有关database的操作
     def save_data_to_database(self):
-        print(self._data)
         # 提取每一列的数据
         for i in range(self.columnCount()):
             col_data = self._data[:, i]
@@ -258,8 +257,9 @@ class TableView(QTableView):
 
 # 自定义的QTabWidget
 class SheetTabWidget(QTabWidget):
-    def __init__(self, parent=None):
+    def __init__(self, table_name: str, parent=None):
         super().__init__(parent)
+        self.table_name = table_name
 
         self.setMouseTracking(True)
 
@@ -285,7 +285,11 @@ class SheetTabWidget(QTabWidget):
                                                 "Are you sure you want to delete this sheet?",
                                                 QMessageBox.Yes | QMessageBox.No)
                 if response == QMessageBox.Yes:
+                    sheet_name = self.tabText(tab_index)
+                    widget = self.widget(tab_index)
                     self.removeTab(tab_index)
+                    PyDatabase.unregister_sheet(self.table_name, sheet_name)
+                    widget.deleteLater()
 
         elif action == save_to_database_action:
             # 提取前如果当前单元格有未保存的数据，先保存
@@ -317,10 +321,10 @@ class PySubTable(QFrame):
 
         self.setMouseTracking(True)
 
-        databases[self.table_name]['Sheet1'] = pydatabase
+        PyDatabase.register_sheet(self.table_name, 'Sheet1', pydatabase)
 
         # 使用自定义的QTabWidget
-        self.tabWidget = SheetTabWidget()
+        self.tabWidget = SheetTabWidget(self.table_name)
         self.tabWidget.setTabPosition(QTabWidget.South)
         self.tabWidget.addTab(TableView(databases[table_name]['Sheet1']), "Sheet1")
 
@@ -351,7 +355,7 @@ class PySubTable(QFrame):
     def add_new_sheet(self):
         # 添加新标签页
         index = self.tabWidget.count() - 1
-        new_sheet_name = f"Sheet{index + 1}"
-        databases[self.table_name][new_sheet_name] = PyDatabase()
+        new_sheet_name = PyDatabase.next_sheet_name(self.table_name)
+        PyDatabase.register_sheet(self.table_name, new_sheet_name, PyDatabase())
         self.tabWidget.insertTab(index, TableView(databases[self.table_name][new_sheet_name]), new_sheet_name)
         self.tabWidget.setCurrentIndex(index)

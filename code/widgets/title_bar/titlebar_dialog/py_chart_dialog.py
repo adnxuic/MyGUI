@@ -94,12 +94,16 @@ class PyCurveDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        self.figure_window.current_canva.add_curve(func_text=self.expression_edit.text(),
-                                                   x_start=self.x_start_input.value(),
-                                                   x_stop=self.x_stop_input.value(),
-                                                   style=self.style_input.currentText(),
-                                                   color=self.color_input.get_color(),
-                                                   label=self.label_input.text())
+        try:
+            self.figure_window.current_canva.add_curve(func_text=self.expression_edit.text(),
+                                                       x_start=self.x_start_input.value(),
+                                                       x_stop=self.x_stop_input.value(),
+                                                       style=self.style_input.currentText(),
+                                                       color=self.color_input.get_color(),
+                                                       label=self.label_input.text())
+        except ValueError as exc:
+            QMessageBox.warning(self, 'Invalid Expression', str(exc))
+            return
         super().accept()
 
     def reject(self):
@@ -293,6 +297,11 @@ class PyScatterDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
+        if self.matlab_button.isChecked():
+            self.figure_window.current_canva.add_fit_curve('matlab', [], [], 'r', 'fit')
+            super().accept()
+            return
+
         x_data = PyDatabase.get_data(self.x_data_input.currentText())
         y_data = PyDatabase.get_data(self.y_data_input.currentText())
 
@@ -376,11 +385,6 @@ class PyFitDialog(QDialog):
 
     def accept(self):
         # 如果选择matlab引擎
-        if self.matlab_button.isChecked():
-            self.figure_window.current_canva.add_fit_curve('matlab', [], [], 'r', 'fit')
-            super().accept()
-            return
-
         # 如果current_canva为空，弹出警告
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
