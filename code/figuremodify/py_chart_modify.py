@@ -19,7 +19,9 @@ from numpy import (sin, cos, tan, pi,
 
 
 class PyCurveModify:
-    def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style, line: Line2D, expression: str):
+    def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style,
+                line: Line2D, expression: str, label: str):
+
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -28,7 +30,7 @@ class PyCurveModify:
 
         self.expression = expression
 
-        self.legend = axe.legend()
+        self.label = label
 
         self.line = line
 
@@ -91,17 +93,27 @@ class PyCurveModify:
 
     def update_color(self, color: str):
         self.line.set_color(color)
+        self.update_legend()
         self.redraw()
 
+    def change_legend(self, label: str):
+        try:
+            self.line.set_label(label)
+            self.update_legend()
+            self.redraw()
+        except Exception:
+            pass
 
 class PyPlotModify:
     def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
-                 y_data_name: str = None):
+                 y_data_name: str = None, label: str = None):
         self.style = style
         self.fig = fig
         self.axe = axe
 
         self.line = line
+
+        self.label = label
 
         self.current_x_data_name = x_data_name
         self.current_y_data_name = y_data_name
@@ -142,11 +154,20 @@ class PyPlotModify:
         self.line.set_color(color)
         self.redraw()
 
+    def change_legend(self, label: str):
+        try:
+            self.line.set_label(label)
+            self.axe.legend().remove()
+            self.axe.legend()
+            self.redraw()
+        except Exception:
+            pass
+
 
 
 class PyScatterModify:
     def __init__(self, fig, axe: Axes, style=None, scatter: PathCollection = None, x_data_name: str = None,
-                 y_data_name: str = None):
+                 y_data_name: str = None, label: str = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -155,6 +176,8 @@ class PyScatterModify:
 
         self.current_x_data_name = x_data_name
         self.current_y_data_name = y_data_name
+
+        self.label = label
 
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(scatter), xy='x', connection_func=self.update_x_data)
@@ -191,10 +214,19 @@ class PyScatterModify:
         self.scatter.set_facecolor(color)
         self.redraw()
 
+    def change_legend(self, label: str):
+        try:
+            self.scatter.set_label(label)
+            self.axe.legend().remove()
+            self.axe.legend()
+            self.redraw()
+        except Exception:
+            pass
+
 
 class PyInterpolateModify:
     def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
-                 y_data_name: str = None):
+                 y_data_name: str = None, label: str = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -206,6 +238,8 @@ class PyInterpolateModify:
 
         self.x_data = PyDatabase.get_data(x_data_name)
         self.y_data = PyDatabase.get_data(y_data_name)
+
+        self.label = label
 
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
@@ -253,5 +287,14 @@ class PyInterpolateModify:
     def update_color(self, color: str):
         self.line.set_color(color)
         self.redraw()
+
+    def change_legend(self, label: str):
+        try:
+            self.line.set_label(label)
+            self.axe.legend().remove()
+            self.axe.legend()
+            self.redraw()
+        except Exception:
+            pass
 
 

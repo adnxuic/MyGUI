@@ -30,16 +30,16 @@ class PyCommonModWidget(QFrame):
         self.color_layout.addWidget(QLabel("颜色组合:"))
 
         self.color_combi_button = QPushButton("选择颜色组合")
-        self.color_combi_button.clicked.connect(self.showColorMenu)
+        self.color_combi_button.clicked.connect(self.show_color_menu)
 
         self.color_combi_menu = QMenu()
         for category, subcategories in color_combi_dict.items():
             if isinstance(subcategories, dict):
                 submenu = self.color_combi_menu.addMenu(category)
                 for subcategory in subcategories.keys():
-                    self.addColorAction(submenu, category, subcategory)
+                    self.add_color_action(submenu, category, subcategory)
             else:
-                self.addColorAction(self.color_combi_menu, category)
+                self.add_color_action(self.color_combi_menu, category)
 
         self.color_layout.addWidget(self.color_combi_button)
 
@@ -86,19 +86,93 @@ class PyCommonModWidget(QFrame):
         self.xy_range_layout.addLayout(self.y_range_layout)
 
         self.layout.addLayout(self.xy_range_layout)
-        
+
+        # 设置xy轴标题
+        # xy轴标题框
+        self.xy_title_box = QGroupBox("标题设置")
+        self.xy_title_box.setCheckable(False)
+        self.xy_title_layout = QVBoxLayout()
+
+        #设置xy轴标题字体
+        # 下拉框选择字体
+        self.font_combobox = QComboBox()
+        self.font_combobox.setFont(QFont("Times New Roman", 16))
+        self.font_combobox.addItems([
+            "Times New Roman",
+            "SimSun",])
+        self.font_combobox.setCurrentText("Times New Roman")
+        self.font_combobox.currentTextChanged.connect(self.set_xy_font)
+        self.xy_title_layout.addWidget(self.font_combobox)
+
+        # 设置xy轴标题字体大小
+        self.xy_font_size_input = QSpinBox()
+        self.xy_font_size_input.setRange(1, 100)
+        self.xy_font_size_input.setValue(12)
+        self.xy_font_size_input.setSingleStep(1)
+        self.xy_font_size_input.valueChanged.connect(self.set_xy_font_size)
+        self.xy_title_layout.addWidget(self.xy_font_size_input)
+
+        # 添加xy轴的名称
+        self.xy_name_layout = QHBoxLayout()
+
+        self.x_name_input = QLineEdit()
+        self.x_name_input.setPlaceholderText("X轴名称")
+        self.x_name_input.textChanged.connect(self.set_x_name)
+        self.y_name_input = QLineEdit()
+        self.y_name_input.setPlaceholderText("Y轴名称")
+        self.y_name_input.textChanged.connect(self.set_y_name)
+
+        self.xy_name_layout.addWidget(self.x_name_input)
+        self.xy_name_layout.addWidget(self.y_name_input)
+        self.xy_title_layout.addLayout(self.xy_name_layout)
+
+        # xy轴标题位置
+        self.xy_title_position_layout = QVBoxLayout()
+
+        self.x_title_position_layout = QHBoxLayout()
+        self.y_title_position_layout = QHBoxLayout()
+
+        self.xy_title_position_layout.addWidget(QLabel("X轴标题位置:"))
+        self.x_title_xposition_input = QDoubleSpinBox()
+        self.x_title_xposition_input.setSingleStep(0.01)
+        self.x_title_xposition_input.valueChanged.connect(self.set_xy_title_xposition)
+        self.x_title_position_layout.addWidget(self.x_title_xposition_input)
+
+        self.x_title_yposition_input = QDoubleSpinBox()
+        self.x_title_yposition_input.setSingleStep(0.01)
+        self.x_title_yposition_input.valueChanged.connect(self.set_xy_title_xposition)
+        self.x_title_position_layout.addWidget(self.x_title_yposition_input)
+        self.xy_title_position_layout.addLayout(self.x_title_position_layout)
+
+        self.xy_title_position_layout.addWidget(QLabel("Y轴标题位置:"))
+        self.y_title_xposition_input = QDoubleSpinBox()
+        self.y_title_xposition_input.setSingleStep(0.01)
+        self.y_title_xposition_input.valueChanged.connect(self.set_xy_title_xposition)
+        self.y_title_position_layout.addWidget(self.y_title_xposition_input)
+
+        self.y_title_yposition_input = QDoubleSpinBox()
+        self.y_title_yposition_input.setSingleStep(0.01)
+        self.y_title_yposition_input.valueChanged.connect(self.set_xy_title_xposition)
+        self.y_title_position_layout.addWidget(self.y_title_yposition_input)
+        self.xy_title_position_layout.addLayout(self.y_title_position_layout)
+
+        self.xy_title_layout.addLayout(self.xy_title_position_layout)
+
+        self.xy_title_box.setLayout(self.xy_title_layout)
+        self.layout.addWidget(self.xy_title_box)
         
         # 添加弹性空间
         self.layout.addStretch()
         self.setLayout(self.layout)
 
-        self.set_x_range()
-        self.set_y_range()
+        # self.set_x_range()
+        # self.set_y_range()
 
-    def showColorMenu(self):
+
+    def show_color_menu(self):
         self.color_combi_menu.exec(self.color_combi_button.mapToGlobal(self.color_combi_button.rect().bottomLeft()))
 
-    def addColorAction(self, menu, category, subcategory=None):
+    def add_color_action(self, menu, category, subcategory=None):
         if category == '单色':
             action = QAction(category, self)
             action.triggered.connect(lambda checked, c=category: self.update_combi_color(c))
@@ -133,6 +207,41 @@ class PyCommonModWidget(QFrame):
         y_min = self.y_min_input.value()
         y_max = self.y_max_input.value()
         self.axe_modify.set_y_range(y_min, y_max)
+
+    def set_xy_font(self):
+        font = self.font_combobox.currentText()
+        self.axe_modify.set_xylabel_font(font)
+
+    def set_x_name(self):
+        name = self.x_name_input.text()
+        self.axe_modify.set_x_label(name)
+
+    def set_y_name(self):
+        name = self.y_name_input.text()
+        self.axe_modify.set_y_label(name)
+        self.update_xy_title_position()
+
+    def set_xy_font_size(self):
+        size = self.xy_font_size_input.value()
+        self.axe_modify.set_xylabel_fontsize(size)
+        self.update_xy_title_position()
+
+    def set_xy_title_xposition(self):
+        x_xpos = self.x_title_xposition_input.value()
+        x_ypos = self.x_title_yposition_input.value()
+        y_xpos = self.y_title_xposition_input.value()
+        y_ypos = self.y_title_yposition_input.value()
+        self.axe_modify.set_xy_title_position(x_xpos, x_ypos, y_xpos, y_ypos)
+
+    def update_xy_title_position(self):
+        x_pos = self.axe.xaxis.get_label().get_position()
+        y_pos = self.axe.yaxis.get_label().get_position()
+
+        # self.x_title_xposition_input.setValue(x_pos[0])
+        # self.x_title_yposition_input.setValue(x_pos[1])
+        # self.y_title_xposition_input.setValue(y_pos[0])
+        # self.y_title_yposition_input.setValue(y_pos[1])
+        print(x_pos, y_pos)
 
 
 class PyBottomSpineModWidget(QFrame):

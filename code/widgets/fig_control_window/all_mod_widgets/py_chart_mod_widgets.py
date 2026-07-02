@@ -86,6 +86,17 @@ class PyCurveModWidget(QFrame):
         self.layout.addLayout(self.x_stop_layout)
         self.layout.addWidget(self.style_box)
 
+        # 图例
+        self.legend_layout = QHBoxLayout()
+        self.legend_input = QLineEdit(self)
+        self.legend_input.setPlaceholderText('Legend')
+        self.legend_input.textChanged.connect(self.legend_change)
+        self.legend_input.setText(curve_modify.label)
+        self.legend_layout.addWidget(QLabel('Legend:'))
+        self.legend_layout.addWidget(self.legend_input)
+        self.layout.addLayout(self.legend_layout)
+
+
         # 添加弹性空间
         self.layout.addStretch()
 
@@ -113,6 +124,10 @@ class PyCurveModWidget(QFrame):
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
 
+    def legend_change(self):
+        current_legend = self.legend_input.text()
+        self.curve_modify.change_legend(current_legend)
+
 
 class PyPlotModWidget(QFrame):
     def __init__(self, curve_modify: PyPlotModify, x_data_name: str, y_data_name: str, color: str):
@@ -135,6 +150,16 @@ class PyPlotModWidget(QFrame):
         # 线条的颜色
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
+
+        # 图例
+        self.legend_layout = QHBoxLayout()
+        self.legend_input = QLineEdit(self)
+        self.legend_input.setPlaceholderText('Legend')
+        self.legend_input.textChanged.connect(self.legend_change)
+        self.legend_input.setText(curve_modify.label)
+        self.legend_layout.addWidget(QLabel('Legend:'))
+        self.legend_layout.addWidget(self.legend_input)
+        self.layout.addLayout(self.legend_layout)
 
         # 添加弹性空间
         self.layout.addStretch()
@@ -165,6 +190,10 @@ class PyPlotModWidget(QFrame):
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
 
+    def legend_change(self):
+        current_legend = self.legend_input.text()
+        self.curve_modify.change_legend(current_legend)
+
 
 class PyScatterModWidget(QFrame):
     def __init__(self, scatter_modify: PyScatterModify, x_data_name: str, y_data_name: str, color: str):
@@ -187,6 +216,16 @@ class PyScatterModWidget(QFrame):
         # 线条的颜色
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
+
+        # 图例
+        self.legend_layout = QHBoxLayout()
+        self.legend_input = QLineEdit(self)
+        self.legend_input.setPlaceholderText('Legend')
+        self.legend_input.textChanged.connect(self.legend_change)
+        self.legend_input.setText(scatter_modify.label)
+        self.legend_layout.addWidget(QLabel('Legend:'))
+        self.legend_layout.addWidget(self.legend_input)
+        self.layout.addLayout(self.legend_layout)
 
         # 添加弹性空间
         self.layout.addStretch()
@@ -217,6 +256,10 @@ class PyScatterModWidget(QFrame):
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
 
+    def legend_change(self):
+        current_legend = self.legend_input.text()
+        self.curve_modify.change_legend(current_legend)
+
 
 class PyFitMatlabModWidget(QFrame):
     def __init__(self, curve_modify: PyCurveModify):
@@ -225,7 +268,7 @@ class PyFitMatlabModWidget(QFrame):
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
-        self.curve_modify = curve_modify
+        self.   curve_modify = curve_modify
 
         self.layout = QVBoxLayout()
 
@@ -287,6 +330,20 @@ class PyFitMatlabModWidget(QFrame):
         self.layout.addLayout(self.x_stop_layout)
         self.layout.addWidget(self.style_box)
 
+        # 线条的颜色
+        self.color_choice = ColorChoiceWidget(connect_signal=self.color_change)
+        self.layout.addWidget(self.color_choice)
+
+        # 图例
+        self.legend_layout = QHBoxLayout()
+        self.legend_input = QLineEdit(self)
+        self.legend_input.setPlaceholderText('Legend')
+        self.legend_input.textChanged.connect(self.legend_change)
+        self.legend_input.setText(curve_modify.label)
+        self.legend_layout.addWidget(QLabel('Legend:'))
+        self.legend_layout.addWidget(self.legend_input)
+        self.layout.addLayout(self.legend_layout)
+
         # 添加弹性空间
         self.layout.addStretch()
 
@@ -314,6 +371,13 @@ class PyFitMatlabModWidget(QFrame):
     def style_change(self):
         current_style = self.style_input.currentText()
         self.curve_modify.update_style(current_style)
+
+    def color_change(self, color: str):
+        self.curve_modify.update_color(color)
+
+    def legend_change(self):
+        current_legend = self.legend_input.text()
+        self.curve_modify.change_legend(current_legend)
 
 
 class PyInterpolateWidget(QFrame):
@@ -361,6 +425,16 @@ class PyInterpolateWidget(QFrame):
         self.color_choice = ColorChoiceWidget(connect_signal=self.color_change)
         self.layout.addWidget(self.color_choice)
 
+        # 图例
+        self.legend_layout = QHBoxLayout()
+        self.legend_input = QLineEdit(self)
+        self.legend_input.setPlaceholderText('Legend')
+        self.legend_input.textChanged.connect(self.legend_change)
+        self.legend_input.setText(curve_modify.label)
+        self.legend_layout.addWidget(QLabel('Legend:'))
+        self.legend_layout.addWidget(self.legend_input)
+        self.layout.addLayout(self.legend_layout)
+
         # 添加弹性空间
         self.layout.addStretch()
 
@@ -391,3 +465,7 @@ class PyInterpolateWidget(QFrame):
 
     def color_change(self, color: str):
         self.modify.update_color(color)
+
+    def legend_change(self):
+        current_legend = self.legend_input.text()
+        self.modify.change_legend(current_legend)

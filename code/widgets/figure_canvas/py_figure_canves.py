@@ -30,6 +30,8 @@ from numpy import (sin, cos, tan, pi,
                    sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh)
 
 mpl.use("QtAgg")
+
+
 #
 # mpl.rcParams['text.usetex'] = True
 # preamble = r'\usepackage{amsmath,amssymb,amsthm}'
@@ -110,7 +112,7 @@ class PyFigureCanvas(QWidget):
 
         # 添加曲线调整窗口
         curve_mod_widget = PyCurveModWidget(
-            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text), color)
+            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text, label), color)
 
         # 添加可视化对象
         self.current_axes_mod.add_vis_object(curve_mod_widget.get_colorupdate_func())
@@ -132,8 +134,8 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('plot_box')
         # 添加曲线调整窗口
         plot_mod_widget = PyPlotModWidget(
-            PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name),
-            x_data_name, y_data_name,color)
+            PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name, label),
+            x_data_name, y_data_name, color)
 
         # 添加可视化对象
         self.current_axes_mod.add_vis_object(plot_mod_widget.get_colorupdate_func())
@@ -156,8 +158,8 @@ class PyFigureCanvas(QWidget):
 
         # 添加散点调整窗口
         scatter_mod_widget = PyScatterModWidget(
-            PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name),
-            x_data_name, y_data_name,color)
+            PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name, label),
+            x_data_name, y_data_name, color)
 
         # 添加可视化对象
         self.current_axes_mod.add_vis_object(scatter_mod_widget.get_colorupdate_func())
@@ -186,7 +188,7 @@ class PyFigureCanvas(QWidget):
             fitting_mod_widget = None
         else:
             fitting_mod_widget = PyFitMatlabModWidget(
-                PyCurveModify(self.fig, self.current_axes, 0, 0, self.style, line, ''))
+                PyCurveModify(self.fig, self.current_axes, 0, 0, self.style, line, '', label))
 
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
         fitting_box.add_widget(fitting_mod_widget, engine + 'fitting')
@@ -194,13 +196,13 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加插值曲线
-    def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3):
+    def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate'):
         with mpl.style.context(self.style):
             if method == "B样条插值":
                 x_new, y_new = interpolate_dict[method](x, y, k=k)
             else:
                 x_new, y_new = interpolate_dict[method](x, y)
-            line, = self.current_axes.plot(x_new, y_new, color='black')
+            line, = self.current_axes.plot(x_new, y_new, color='black', label=label)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -225,7 +227,7 @@ class PyFigureCanvas(QWidget):
         # with mpl.style.context(self.style):
         text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize,
                                       transform=self.current_axes.transAxes)
-            # self.current_axes.transAxes是坐标系的坐标变换
+        # self.current_axes.transAxes是坐标系的坐标变换
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)

@@ -20,7 +20,7 @@ class PyAxesModify:
         self.style = style
         self.fig = fig
 
-        self.axe = axe
+        self.axe:Axes = axe
 
         self.vis_objects = []
 
@@ -97,4 +97,27 @@ class PyAxesModify:
 
     def set_y_range(self, y_min, y_max):
         self.axe.set_ylim(y_min, y_max)
+        self.redraw()
+
+    def set_xylabel_font(self, font):
+        self.axe.xaxis.label.set_font(font)
+        self.axe.yaxis.label.set_font(font)
+        self.redraw()
+
+    def set_x_label(self, label):
+        self.axe.set_xlabel(label)
+        self.redraw()
+
+    def set_y_label(self, label):
+        self.axe.set_ylabel(label)
+        self.redraw()
+
+    def set_xylabel_fontsize(self, size):
+        self.axe.xaxis.label.set_fontsize(size)
+        self.axe.yaxis.label.set_fontsize(size)
+        self.redraw()
+
+    def set_xy_title_position(self,x_xpos, x_ypos, y_xpos, y_ypos):
+        self.axe.xaxis.set_label_coords(x_xpos, x_ypos)
+        self.axe.yaxis.set_label_coords(y_xpos, y_ypos)
         self.redraw()

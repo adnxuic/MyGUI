@@ -46,16 +46,20 @@ def matlab_fitting(x, y, fit_type, isdefault,
 
         value_exp = exp
         show_exp = exp
+        print(exp)
+        print(coeff_name)
+        print(coeff_value[0])
+        print(gof)
 
         # 将公式中的变量名替换为实际的数值
         for name, value in zip(coeff_name, coeff_value[0]):
             value_exp = value_exp.replace(name, str(value))
 
-        # 将coeff_value[0]的值保留两位小数
-        for i in range(len(coeff_value[0])):
-            coeff_value[0][i] = round(coeff_value[0][i], 2)
-
-        # 展示用的公式只保留前2位小数
+        # # 将coeff_value[0]的值保留两位小数
+        # for i in range(len(coeff_value[0])):
+        #     coeff_value[0][i] = round(coeff_value[0][i], 2)
+        #
+        # # 展示用的公式只保留前2位小数
         for name, value in zip(coeff_name, coeff_value[0]):
             show_exp = show_exp.replace(name, str(value))
 
