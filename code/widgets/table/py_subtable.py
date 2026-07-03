@@ -128,6 +128,29 @@ class TableModel(QAbstractTableModel):
                 # 保存到数据库
                 self.database.update_data(i + 1, non_null_data)
 
+    def load_columns(self, columns: dict):
+        numeric_columns = {}
+        for column_name, values in columns.items():
+            try:
+                column_index = int(column_name)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid column name in project: {column_name}") from exc
+            if column_index < 1:
+                raise ValueError(f"Invalid column index in project: {column_name}")
+            numeric_columns[column_index] = list(values)
+
+        row_count = max([20] + [len(values) for values in numeric_columns.values()])
+        column_count = max([5] + list(numeric_columns.keys()))
+        loaded = np.array([["" for _ in range(column_count)] for _ in range(row_count)], dtype=object)
+
+        for column_index, values in numeric_columns.items():
+            for row_index, value in enumerate(values):
+                loaded[row_index, column_index - 1] = "" if value is None else value
+
+        self.beginResetModel()
+        self._data = loaded
+        self.endResetModel()
+
 
 class TableView(QTableView):
     def __init__(self, database: PyDatabase):
@@ -254,6 +277,9 @@ class TableView(QTableView):
             # 设置数据
             self.model.setData(model_index, data, Qt.EditRole)
 
+    def load_columns(self, columns: dict):
+        self.model.load_columns(columns)
+
 
 # 自定义的QTabWidget
 class SheetTabWidget(QTabWidget):
@@ -314,19 +340,19 @@ class SheetTabWidget(QTabWidget):
 
 
 class PySubTable(QFrame):
-    def __init__(self, table_name: str, pydatabase: PyDatabase):
+    def __init__(self, table_name: str, pydatabase: PyDatabase, first_sheet_name: str = "Sheet1"):
         super().__init__()
 
         self.table_name = table_name
 
         self.setMouseTracking(True)
 
-        PyDatabase.register_sheet(self.table_name, 'Sheet1', pydatabase)
+        PyDatabase.register_sheet(self.table_name, first_sheet_name, pydatabase)
 
         # 使用自定义的QTabWidget
         self.tabWidget = SheetTabWidget(self.table_name)
         self.tabWidget.setTabPosition(QTabWidget.South)
-        self.tabWidget.addTab(TableView(databases[table_name]['Sheet1']), "Sheet1")
+        self.tabWidget.addTab(TableView(databases[table_name][first_sheet_name]), first_sheet_name)
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
         self.plusButton = QPushButton("+")
@@ -352,10 +378,12 @@ class PySubTable(QFrame):
     def updateCurrentSheet(self):
         pass
 
-    def add_new_sheet(self):
+    def add_new_sheet(self, sheet_name: str | None = None):
         # 添加新标签页
         index = self.tabWidget.count() - 1
-        new_sheet_name = PyDatabase.next_sheet_name(self.table_name)
+        new_sheet_name = sheet_name or PyDatabase.next_sheet_name(self.table_name)
         PyDatabase.register_sheet(self.table_name, new_sheet_name, PyDatabase())
-        self.tabWidget.insertTab(index, TableView(databases[self.table_name][new_sheet_name]), new_sheet_name)
+        table_view = TableView(databases[self.table_name][new_sheet_name])
+        self.tabWidget.insertTab(index, table_view, new_sheet_name)
         self.tabWidget.setCurrentIndex(index)
+        return table_view

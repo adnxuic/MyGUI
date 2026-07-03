@@ -200,3 +200,9 @@ class PyFigModWindow(QFrame):
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
 
         return figmod_widget
+
+    def clear_figmod_widgets(self):
+        while self.stacklayout.count():
+            widget = self.stacklayout.widget(0)
+            self.stacklayout.removeWidget(widget)
+            widget.deleteLater()

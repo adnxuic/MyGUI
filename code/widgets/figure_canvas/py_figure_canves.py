@@ -1,5 +1,5 @@
 import sys
-from typing import Optional
+from typing import Any, Optional
 from Qt_core import *
 
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
@@ -46,6 +46,9 @@ class PyFigureCanvas(QWidget):
 
         self.current_axes: Optional[Axes] = None
         self.current_axes_mod: Optional[PyAxesModify] = None
+        self.axes_mods: list[PyAxesModify] = []
+        self.project_axes_layouts: list[dict[str, int]] = []
+        self.project_curves: list[dict[str, Any]] = []
 
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
@@ -73,15 +76,22 @@ class PyFigureCanvas(QWidget):
         self.current_axes = axe
         self.current_axes_mod = axe_mod
 
+    def set_current_axes_by_index(self, axes_index: int):
+        if axes_index < 0 or axes_index >= len(self.fig.axes):
+            raise IndexError(f"Invalid axes index: {axes_index}")
+        self.update_current_axes(self.fig.axes[axes_index], self.axes_mods[axes_index])
+
     def redraw(self):
         self.fig.canvas.draw()
 
     # 添加坐标系
-    def add_axes(self, nrows=1, ncols=1):
+    def add_axes(self, nrows=1, ncols=1, record_project=True):
+        start_index = len(self.fig.axes)
         with mpl.style.context(self.style):
             for i in range(nrows * ncols):
                 axe = self.fig.add_subplot(nrows, ncols, 1 + i)
                 axe_mod = PyAxesModify(self.fig, axe, self.style)
+                self.axes_mods.append(axe_mod)
 
                 btn = self.fig_modify_widget.add_all_mod_widget(axe, axe_mod)
                 btn.clicked.connect(lambda _, axe1=axe, axe_mod1=axe_mod:
@@ -90,15 +100,37 @@ class PyFigureCanvas(QWidget):
                 if i == 0:
                     self.update_current_axes(axe, axe_mod)
 
+        if record_project:
+            self.project_axes_layouts.append({
+                "nrows": int(nrows),
+                "ncols": int(ncols),
+                "start_index": int(start_index),
+                "count": int(nrows * ncols),
+            })
+
         self.redraw()
 
     # 添加自定义曲线
-    def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str):
+    def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str,
+                  record_project=True):
 
         x = np.linspace(x_start, x_stop, 1000)
         y = evaluate_curve_expression(func_text, x)
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
+
+        project_record = None
+        if record_project:
+            project_record = {
+                "axes_index": int(self.fig.axes.index(self.current_axes)),
+                "expression": func_text,
+                "x_start": float(x_start),
+                "x_stop": float(x_stop),
+                "style": line.get_linestyle(),
+                "color": line.get_color(),
+                "label": label,
+            }
+            self.project_curves.append(project_record)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -109,7 +141,8 @@ class PyFigureCanvas(QWidget):
 
         # 添加曲线调整窗口
         curve_mod_widget = PyCurveModWidget(
-            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text, label), color)
+            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text, label,
+                          project_record=project_record), color)
 
         # 添加可视化对象
         self.current_axes_mod.add_vis_object(curve_mod_widget.get_colorupdate_func())
@@ -245,3 +278,13 @@ class PyFigureCanvas(QWidget):
             save_dpi = dpi
         with mpl.style.context(self.style):
             self.fig.savefig(filename, dpi=save_dpi)
+
+    def project_snapshot(self) -> dict[str, Any]:
+        return {
+            "style": self.style,
+            "dpi": float(self.fig.dpi),
+            "size_inches": [float(value) for value in self.fig.get_size_inches()],
+            "axes_count": len(self.fig.axes),
+            "axes_layouts": [dict(layout) for layout in self.project_axes_layouts],
+            "curves": [dict(curve) for curve in self.project_curves],
+        }

@@ -30,6 +30,21 @@ class SafeExpressionTests(unittest.TestCase):
         with self.assertRaises(UnsafeExpressionError):
             evaluate_curve_expression("x.__class__", x)
 
+    def test_rejects_unsupported_expression_shapes(self):
+        x = np.array([1.0])
+
+        blocked = [
+            "x[0]",
+            "lambda value: value",
+            "np.array([1])",
+            "sum(x)",
+            "np.sin.__call__(x)",
+        ]
+        for expression in blocked:
+            with self.subTest(expression=expression):
+                with self.assertRaises(UnsafeExpressionError):
+                    evaluate_curve_expression(expression, x)
+
 
 if __name__ == "__main__":
     unittest.main()

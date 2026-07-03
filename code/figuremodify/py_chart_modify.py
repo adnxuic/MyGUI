@@ -6,6 +6,7 @@ from code.database.safe_expression import evaluate_curve_expression
 
 import numpy as np
 from numpy import ndarray
+from typing import Any
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
@@ -17,7 +18,8 @@ from matplotlib.style import use
 
 class PyCurveModify:
     def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style,
-                line: Line2D, expression: str, label: str):
+                line: Line2D, expression: str, label: str,
+                project_record: dict[str, Any] | None = None):
 
         self.style = style
         self.fig = fig
@@ -30,6 +32,11 @@ class PyCurveModify:
         self.label = label
 
         self.line = line
+        self.project_record = project_record
+
+    def update_project_record(self, **values):
+        if self.project_record is not None:
+            self.project_record.update(values)
 
     def redraw(self):
         self.fig.canvas.draw()
@@ -45,6 +52,7 @@ class PyCurveModify:
             y = evaluate_curve_expression(self.expression, x)
         except ValueError:
             return
+        self.update_project_record(x_start=float(x_start))
         self.line.set_data(x, y)
         self.axe.relim()
         self.axe.autoscale_view()
@@ -57,6 +65,7 @@ class PyCurveModify:
             y = evaluate_curve_expression(self.expression, x)
         except ValueError:
             return
+        self.update_project_record(x_stop=float(x_stop))
         self.line.set_data(x, y)
         self.axe.relim()
         self.axe.autoscale_view()
@@ -68,6 +77,7 @@ class PyCurveModify:
             y = evaluate_curve_expression(expression, x)
             self.line.set_ydata(y)
             self.expression = expression
+            self.update_project_record(expression=expression)
             self.axe.relim()
             self.axe.autoscale_view()
             self.redraw()
@@ -80,6 +90,11 @@ class PyCurveModify:
             y = evaluate_curve_expression(expression, x)
             self.x_start, self.x_stop = x_start, x_stop
             self.expression = expression
+            self.update_project_record(
+                x_start=float(x_start),
+                x_stop=float(x_stop),
+                expression=expression,
+            )
             self.line.set_data(x, y)
             self.axe.relim()
             self.axe.autoscale_view()
@@ -89,17 +104,21 @@ class PyCurveModify:
 
     def update_style(self, style: str):
         self.line.set_linestyle(style)
+        self.update_project_record(style=self.line.get_linestyle())
         self.update_legend()
         self.redraw()
 
     def update_color(self, color: str):
         self.line.set_color(color)
+        self.update_project_record(color=self.line.get_color())
         self.update_legend()
         self.redraw()
 
     def change_legend(self, label: str):
         try:
             self.line.set_label(label)
+            self.label = label
+            self.update_project_record(label=label)
             self.update_legend()
             self.redraw()
         except Exception:

@@ -74,20 +74,53 @@ class PyTable(QFrame):
         layout.addWidget(self.tabWidget)
         self.setLayout(layout)
 
-    def add_new_table(self, is_open=False):
+    def add_new_table(self, is_open=False, table_name: str | None = None, first_sheet_name: str = "Sheet1"):
         # 添加新标签页
         index = self.tabWidget.count() - 1
-        new_table_name = PyDatabase.next_table_name()
+        new_table_name = table_name or PyDatabase.next_table_name()
         PyDatabase.register_table(new_table_name)
 
         pydatabase = PyDatabase()
-        subtable = PySubTable(new_table_name, pydatabase)
+        subtable = PySubTable(new_table_name, pydatabase, first_sheet_name=first_sheet_name)
 
         self.tabWidget.insertTab(index, subtable, new_table_name)
         self.tabWidget.setCurrentIndex(index)
 
         if is_open:
             return subtable
+
+    def clear_tables(self):
+        for index in reversed(range(self.tabWidget.count() - 1)):
+            widget = self.tabWidget.widget(index)
+            self.tabWidget.removeTab(index)
+            if widget is not None:
+                widget.deleteLater()
+        PyDatabase.clear()
+
+    def load_database_snapshot(self, tables: dict):
+        self.clear_tables()
+
+        if not tables:
+            self.add_new_table(table_name="Table1")
+            return
+
+        for table_name, sheets in tables.items():
+            sheet_items = list(sheets.items()) or [("Sheet1", {})]
+            first_sheet_name, first_columns = sheet_items[0]
+            subtable = self.add_new_table(
+                is_open=True,
+                table_name=table_name,
+                first_sheet_name=first_sheet_name,
+            )
+
+            first_table_view = subtable.get_table(0)
+            first_table_view.load_columns(first_columns)
+            first_table_view.model.save_data_to_database()
+
+            for sheet_name, columns in sheet_items[1:]:
+                table_view = subtable.add_new_sheet(sheet_name=sheet_name)
+                table_view.load_columns(columns)
+                table_view.model.save_data_to_database()
 
 
 

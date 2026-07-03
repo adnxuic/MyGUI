@@ -8,7 +8,7 @@ from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDi
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import element_dialog_dict
 from code.excel_io import import_excel_into_table
-from code.project_io import export_database_snapshot, save_project_snapshot
+from code.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
 
 import json
 import os
@@ -17,7 +17,7 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class SelectorMenuBar(QFrame):
-    def __init__(self, stacklayout_bottom=None):
+    def __init__(self, stacklayout_bottom=None, figure_window=None):
         super().__init__()
 
         self.setObjectName("selector_menu_bar")
@@ -26,6 +26,7 @@ class SelectorMenuBar(QFrame):
         self.layout.setContentsMargins(0, 0, 0, 0)
 
         self.stacklayout_bottom = stacklayout_bottom
+        self.figure_window = figure_window
 
         # 设置按钮组
         self.buttonGroup = QButtonGroup(self)
@@ -55,6 +56,22 @@ class SelectorMenuBar(QFrame):
 
     def the_button_was_toggled(self, checked):
         if not checked:
+            return
+
+        if not self.style_button.isChecked() and (
+            self.figure_window is None or self.figure_window.current_canva is None
+        ):
+            QMessageBox.warning(self, "Figure Required", "Please create a figure from Style first.")
+            self.style_button.setChecked(True)
+            self.stacklayout_bottom.setCurrentIndex(0)
+            return
+
+        if (self.chart_button.isChecked() or self.element_button.isChecked()) and (
+            self.figure_window.current_canva.current_axes is None
+        ):
+            QMessageBox.warning(self, "Axes Required", "Please add a layout before using chart or element tools.")
+            self.layout_button.setChecked(True)
+            self.stacklayout_bottom.setCurrentIndex(1)
             return
 
         if self.style_button.isChecked():
@@ -121,6 +138,9 @@ class MenuBar(QFrame):
         file_open_action = QAction(QIcon("pictures/icons/open.svg"), "打开 Excel...", self.file_menu)
         file_open_action.triggered.connect(self.open_file)
 
+        file_open_project_action = QAction(QIcon("pictures/icons/open.svg"), "Open Project...", self.file_menu)
+        file_open_project_action.triggered.connect(self.open_project)
+
         file_save_action = QAction(QIcon("pictures/icons/save.svg"), "保存项目...", self.file_menu)
         file_save_action.triggered.connect(self.save_file)
 
@@ -131,6 +151,7 @@ class MenuBar(QFrame):
         file_export_data_action.triggered.connect(self.export_data)
 
         self.file_menu.addAction(file_open_action)
+        self.file_menu.addAction(file_open_project_action)
         self.file_menu.addAction(file_save_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(file_export_figure_action)
@@ -145,6 +166,17 @@ class MenuBar(QFrame):
             load_excel_into_table(file_name, self.table)
         except Exception as exc:
             QMessageBox.warning(self, "Open Excel File", str(exc))
+
+    def open_project(self):
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Open Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+        if not file_name or not os.path.exists(file_name):
+            return
+
+        try:
+            restore_project_snapshot(file_name, table=self.table, figure_window=self.figure_window)
+        except Exception as exc:
+            QMessageBox.warning(self, "Open Project", str(exc))
 
     def save_file(self):
         file_name, _ = QFileDialog.getSaveFileName(

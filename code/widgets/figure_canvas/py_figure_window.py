@@ -1,5 +1,5 @@
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 from Qt_core import *
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
@@ -59,3 +59,66 @@ class PyFigureWindow(QFrame):
 
     def get_current_canvas_axes_colorselector(self):
         return self.current_canva.current_axes_mod.color_selector
+
+    def clear_figures(self):
+        while self.tabwindow.count():
+            widget = self.tabwindow.widget(0)
+            self.tabwindow.removeTab(0)
+            widget.deleteLater()
+        self.canvas.clear()
+        self.current_canva = None
+        self.current_fig_modify_widget = None
+        if hasattr(self.fig_modify_window, "clear_figmod_widgets"):
+            self.fig_modify_window.clear_figmod_widgets()
+
+    def project_snapshot(self) -> list[dict[str, Any]]:
+        canvases: list[dict[str, Any]] = []
+        for index in range(self.tabwindow.count()):
+            canvas = self.tabwindow.widget(index)
+            if not hasattr(canvas, "project_snapshot"):
+                continue
+            snapshot = canvas.project_snapshot()
+            snapshot["name"] = self.tabwindow.tabText(index)
+            canvases.append(snapshot)
+        return canvases
+
+    def load_figure_snapshot(self, figures: list[dict[str, Any]]):
+        self.clear_figures()
+        for figure in figures:
+            size_inches = figure.get("size_inches") or [6.4, 4.8]
+            width = float(size_inches[0])
+            height = float(size_inches[1])
+            dpi = int(float(figure.get("dpi", 100)))
+            style = figure.get("style") or "default"
+            name = figure.get("name") or style
+
+            self.add_figure(width=width, height=height, dpi=dpi, style=style, canva_name=name)
+            canvas = self.current_canva
+            if canvas is None:
+                continue
+
+            axes_layouts = figure.get("axes_layouts") or []
+            if not axes_layouts and figure.get("axes_count"):
+                axes_layouts = [{"nrows": int(figure["axes_count"]), "ncols": 1}]
+
+            for layout in axes_layouts:
+                nrows = int(layout.get("nrows", 1))
+                ncols = int(layout.get("ncols", 1))
+                canvas.add_axes(nrows=nrows, ncols=ncols, record_project=True)
+
+            for curve in figure.get("curves", []):
+                if not canvas.fig.axes:
+                    continue
+                axes_index = int(curve.get("axes_index", 0))
+                if axes_index >= len(canvas.fig.axes):
+                    continue
+                canvas.set_current_axes_by_index(axes_index)
+                canvas.add_curve(
+                    func_text=curve.get("expression", "x"),
+                    x_start=float(curve.get("x_start", 0.0)),
+                    x_stop=float(curve.get("x_stop", 100.0)),
+                    style=curve.get("style", "-"),
+                    color=curve.get("color", "black"),
+                    label=curve.get("label", ""),
+                    record_project=True,
+                )

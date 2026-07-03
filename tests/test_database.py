@@ -58,6 +58,30 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(databases["Table1"], {})
         self.assertFalse(PyDatabase.has_data("Table1/Sheet1/1"))
 
+    def test_remove_data_connection_stops_future_callbacks(self):
+        db = PyDatabase()
+        PyDatabase.register_sheet("Table1", "Sheet1", db)
+        db.update_data(1, np.array([1.0]))
+        observed = []
+
+        PyDatabase.data_connect("Table1/Sheet1/1", 30, "y", lambda data: observed.append(data.copy()))
+        PyDatabase.remove_data_connection("Table1/Sheet1/1", 30, "y")
+        db.update_data(1, np.array([5.0]))
+
+        self.assertEqual(observed, [])
+
+    def test_change_data_connection_keeps_callback_when_target_missing(self):
+        db = PyDatabase()
+        PyDatabase.register_sheet("Table1", "Sheet1", db)
+        db.update_data(1, np.array([1.0]))
+        callback = lambda data: None
+
+        PyDatabase.data_connect("Table1/Sheet1/1", 40, "x", callback)
+        changed = PyDatabase.change_data_connection("Table1/Sheet1/1", "Table1/Sheet1/2", 40, "x")
+
+        self.assertFalse(changed)
+        self.assertIs(db.data["1"][1][40]["x"], callback)
+
 
 if __name__ == "__main__":
     unittest.main()

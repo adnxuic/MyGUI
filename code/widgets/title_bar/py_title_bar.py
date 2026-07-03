@@ -52,7 +52,7 @@ class PyTitleBar(QFrame):
         self.stacklayout_bottom.addWidget(self.selector_element_bar)
 
         # 上方堆叠布局添加菜单栏
-        self.stacklayout_top.addWidget(SelectorMenuBar(self.stacklayout_bottom))
+        self.stacklayout_top.addWidget(SelectorMenuBar(self.stacklayout_bottom, figure_window=self.figure_window))
         self.stacklayout_top.addWidget(MenuBar(table, self.figure_window))
 
         # 添加布局元素
