@@ -118,15 +118,21 @@ class PyTextDialog(QDialog):
             return
 
         # 如果current_axes为空，弹出警告
-        if self.figure_window.current_canva.current_axes is None:
-            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
-            return
         if self.local_button.isChecked():
+            if self.figure_window.current_canva.current_axes is None:
+                QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+                return
             self.figure_window.current_canva.add_text(text=self.text_edit.text(),
                                                       x=self.x_input.value(),
                                                       y=self.y_input.value(),
                                                       fontfamily=self.font_input.currentText(),
                                                       fontsize=self.font_size_input.value())
+        else:
+            self.figure_window.current_canva.add_global_text(text=self.text_edit.text(),
+                                                             x=self.x_input.value(),
+                                                             y=self.y_input.value(),
+                                                             fontfamily=self.font_input.currentText(),
+                                                             fontsize=self.font_size_input.value())
         super().accept()
 
     def reject(self):

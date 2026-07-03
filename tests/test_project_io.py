@@ -121,6 +121,18 @@ class ProjectIoTests(unittest.TestCase):
             if project_file.exists():
                 os.remove(project_file)
 
+    def test_load_project_file_accepts_utf8_bom_before_schema_migration(self):
+        project_file = Path(__file__).with_name("fixtures") / "utf8_bom_project_v1.mygui.json"
+        snapshot = load_project_file(project_file)
+
+        self.assertEqual(snapshot["schema_version"], PROJECT_SCHEMA_VERSION)
+        figure = snapshot["figures"][0]
+        self.assertEqual(figure["name"], "bom-legacy")
+        self.assertEqual(figure["plots"], [])
+        self.assertEqual(figure["scatters"], [])
+        self.assertEqual(figure["interpolates"], [])
+        self.assertEqual(figure["texts"], [])
+
     def test_load_project_file_rejects_missing_plot_data_source(self):
         project_file = self.write_project({
             "schema": "mygui-project",
@@ -222,6 +234,14 @@ class ProjectIoTests(unittest.TestCase):
         finally:
             if project_file.exists():
                 os.remove(project_file)
+
+    def test_load_project_file_accepts_figure_text_without_axes_index(self):
+        project_file = Path(__file__).with_name("fixtures") / "figure_text_without_axes.mygui.json"
+        snapshot = load_project_file(project_file)
+
+        text_record = snapshot["figures"][0]["texts"][0]
+        self.assertEqual(text_record["scope"], "figure")
+        self.assertNotIn("axes_index", text_record)
 
 
 if __name__ == "__main__":

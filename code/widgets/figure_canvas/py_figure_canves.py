@@ -318,6 +318,7 @@ class PyFigureCanvas(QWidget):
         project_record = None
         if record_project:
             project_record = {
+                "scope": "axes",
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
                 "x": float(x),
                 "y": float(y),
@@ -339,6 +340,35 @@ class PyFigureCanvas(QWidget):
                                                        project_collection=self.project_texts))
         text_box: PyModBox = all_mod_widget.element_mod_window.boxs['text_box']
         text_box.add_widget(text_mod_widget, 'text')
+
+        self.redraw()
+
+    def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
+                        record_project=True):
+        text = self.fig.text(x, y, text, family=fontfamily, fontsize=fontsize)
+        project_record = None
+        if record_project:
+            project_record = {
+                "scope": "figure",
+                "x": float(x),
+                "y": float(y),
+                "text": text.get_text(),
+                "fontfamily": fontfamily,
+                "fontsize": float(text.get_fontsize()),
+            }
+            self.project_texts.append(project_record)
+
+        if self.fig_modify_widget is not None:
+            figure_mod_widget = getattr(self.fig_modify_widget, "figure_element_mod_widget", None)
+            if figure_mod_widget is not None:
+                if figure_mod_widget.element_mod_window.boxs.get('text_box') is None:
+                    figure_mod_widget.add_element_box('text_box')
+                text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text,
+                                                               project_record=project_record,
+                                                               project_collection=self.project_texts))
+                text_box: PyModBox = figure_mod_widget.element_mod_window.boxs['text_box']
+                text_box.add_widget(text_mod_widget, 'text')
+                self.fig_modify_widget.stacklayout.setCurrentWidget(figure_mod_widget)
 
         self.redraw()
 

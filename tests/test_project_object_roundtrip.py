@@ -10,6 +10,7 @@ from Qt_core import QApplication
 from code.database.interpolate_func import interpolate_dict
 from code.database.py_database import PyDatabase
 from code.project_io import restore_project_snapshot, save_project_snapshot
+from code.widgets.title_bar.titlebar_dialog.py_element_dialog import PyTextDialog
 from main import MainWindow
 
 
@@ -123,7 +124,86 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
             if loaded_window is not None:
                 loaded_window.close()
             if project_file.exists():
-                os.remove(project_file)
+                try:
+                    os.remove(project_file)
+                except PermissionError:
+                    pass
+
+    def test_global_text_dialog_save_load_edit_and_delete(self):
+        self.window.figure_window.add_figure(width=6.4, height=4.8, dpi=100, style="default", canva_name="global")
+        canvas = self.window.figure_window.current_canva
+
+        dialog = PyTextDialog(dialog_name="Text", figure_window=self.window.figure_window)
+        dialog.global_button.setChecked(True)
+        dialog.text_edit.setText("global text")
+        dialog.x_input.setValue(0.35)
+        dialog.y_input.setValue(0.82)
+        dialog.font_input.setCurrentText("DejaVu Sans")
+        dialog.font_size_input.setValue(18)
+        dialog.accept()
+        self.app.processEvents()
+
+        self.assertEqual(len(canvas.fig.texts), 1)
+        self.assertEqual(len(canvas.fig.axes), 0)
+        self.assertEqual(canvas.project_texts[0]["scope"], "figure")
+        self.assertNotIn("axes_index", canvas.project_texts[0])
+
+        project_file = self.make_project_file()
+        loaded_window = None
+        try:
+            save_project_snapshot(project_file, self.window.figure_window)
+            loaded_window = MainWindow()
+            restore_project_snapshot(project_file, figure_window=loaded_window.figure_window)
+            self.app.processEvents()
+
+            loaded_canvas = loaded_window.figure_window.tabwindow.widget(0)
+            loaded_text = loaded_canvas.fig.texts[0]
+
+            self.assertEqual(len(loaded_canvas.fig.texts), 1)
+            self.assertEqual(len(loaded_canvas.fig.axes), 0)
+            self.assertEqual(loaded_text.get_text(), "global text")
+            self.assertEqual(loaded_text.get_position(), (0.35, 0.82))
+            self.assertEqual(loaded_canvas.project_texts[0]["scope"], "figure")
+            self.assertNotIn("axes_index", loaded_canvas.project_texts[0])
+
+            figure_mod_widget = loaded_canvas.fig_modify_widget.figure_element_mod_widget
+            text_box = figure_mod_widget.element_mod_window.boxs["text_box"]
+            text_widget = text_box.widget(0)
+            self.assertIs(figure_mod_widget.layout.itemAt(0).widget(), figure_mod_widget.element_btn_bar)
+            self.assertIs(figure_mod_widget.layout.itemAt(1).widget(), figure_mod_widget.element_mod_window)
+
+            text_widget.text_content.setPlainText("edited global")
+            text_widget.font_input.setCurrentText("DejaVu Serif")
+            text_widget.font_size_input.setValue(22)
+            text_widget.text_x_pos.setValue(0.4)
+            text_widget.text_y_pos.setValue(0.6)
+            text_widget.set_text_content()
+            text_widget.set_xy_position()
+            self.app.processEvents()
+
+            self.assertEqual(loaded_text.get_text(), "edited global")
+            self.assertEqual(loaded_text.get_position(), (0.4, 0.6))
+            self.assertIn("DejaVu Serif", loaded_text.get_fontfamily())
+            self.assertEqual(loaded_text.get_fontsize(), 22.0)
+            self.assertEqual(loaded_canvas.project_texts[0]["text"], "edited global")
+            self.assertEqual(loaded_canvas.project_texts[0]["fontfamily"], "DejaVu Serif")
+            self.assertEqual(loaded_canvas.project_texts[0]["x"], 0.4)
+            self.assertEqual(loaded_canvas.project_texts[0]["y"], 0.6)
+            self.assertEqual(loaded_canvas.project_texts[0]["fontsize"], 22.0)
+
+            text_box.delete_widget(0)
+            self.app.processEvents()
+
+            self.assertNotIn(loaded_text, loaded_canvas.fig.texts)
+            self.assertEqual(loaded_canvas.project_texts, [])
+        finally:
+            if loaded_window is not None:
+                loaded_window.close()
+            if project_file.exists():
+                try:
+                    os.remove(project_file)
+                except PermissionError:
+                    pass
 
 
 if __name__ == "__main__":

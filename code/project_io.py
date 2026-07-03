@@ -86,7 +86,7 @@ def export_database_snapshot(filename: str | Path) -> None:
 
 def load_project_file(filename: str | Path) -> dict[str, Any]:
     path = Path(filename)
-    with path.open("r", encoding="utf-8") as handle:
+    with path.open("r", encoding="utf-8-sig") as handle:
         snapshot = json.load(handle)
 
     return migrate_project_snapshot(snapshot)
@@ -121,6 +121,9 @@ def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         figure.setdefault("axes_layouts", [])
         for collection in PROJECT_OBJECT_COLLECTIONS:
             figure.setdefault(collection, [])
+        for text_record in figure.get("texts", []):
+            if isinstance(text_record, dict):
+                text_record.setdefault("scope", "axes")
 
     validate_project_snapshot(migrated)
     return migrated
@@ -227,6 +230,10 @@ def _validate_data_source(data_name: Any, path: str, data_names: set[str]) -> No
 def _validate_project_object(collection: str, record: Any, path: str,
                              axes_count: int, data_names: set[str]) -> None:
     record = _expect_dict(record, path)
+    if collection == "texts":
+        _validate_text_record(record, path, axes_count)
+        return
+
     _validate_axes_index(record, path, axes_count)
 
     if collection == "curves":
@@ -245,10 +252,16 @@ def _validate_project_object(collection: str, record: Any, path: str,
         if "k" in record:
             _coerce_int(record["k"], f"{path}.k")
 
-    if collection == "texts":
-        _require_field(record, "text", path)
-        _coerce_float(_require_field(record, "x", path), f"{path}.x")
-        _coerce_float(_require_field(record, "y", path), f"{path}.y")
+def _validate_text_record(record: dict[str, Any], path: str, axes_count: int) -> None:
+    scope = record.get("scope", "axes")
+    if scope not in {"axes", "figure"}:
+        raise ValueError(f"Invalid project field {path}.scope: {scope!r}")
+    if scope == "axes":
+        _validate_axes_index(record, path, axes_count)
+
+    _require_field(record, "text", path)
+    _coerce_float(_require_field(record, "x", path), f"{path}.x")
+    _coerce_float(_require_field(record, "y", path), f"{path}.y")
 
 
 def restore_databases(tables: dict[str, dict[str, dict[str, list[Any]]]]) -> None:

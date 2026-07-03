@@ -107,6 +107,26 @@ class PyAllModWidget(QFrame):
 
 
 
+class PyFigureElementModWidget(QFrame):
+    def __init__(self):
+        super().__init__()
+
+        self.layout = QVBoxLayout()
+        self.element_btn_bar = QFrame()
+        self.element_btn_bar_layout = QHBoxLayout()
+        self.element_mod_window = PyElementModWindow(None)
+
+        self.element_btn_bar.setLayout(self.element_btn_bar_layout)
+        self.layout.addWidget(self.element_btn_bar)
+        self.layout.addWidget(self.element_mod_window)
+        self.setLayout(self.layout)
+
+    def add_element_box(self, btn_name: str):
+        btn = QPushButton(btn_name)
+        self.element_mod_window.add_box(btn_name, btn)
+        self.element_btn_bar_layout.addWidget(btn)
+
+
 class PyFigModWidget(QFrame):
     """
     画布修改窗口
@@ -136,6 +156,14 @@ class PyFigModWidget(QFrame):
         self.layout.addLayout(self.stacklayout)
         self.setLayout(self.layout)
 
+        self.axes_count = 0
+        self.figure_element_mod_widget = PyFigureElementModWidget()
+        self.stacklayout.addWidget(self.figure_element_mod_widget)
+
+        figure_btn = QPushButton('figure')
+        figure_btn.clicked.connect(lambda: self.stacklayout.setCurrentWidget(self.figure_element_mod_widget))
+        self.axes_btn_bar_layout.addWidget(figure_btn)
+
     def add_all_mod_widget(self, axe, axe_modify: PyAxesModify):
         """
         添加坐标系中所有元素的修改窗口
@@ -145,7 +173,8 @@ class PyFigModWidget(QFrame):
         self.stacklayout.addWidget(all_mod_widget)
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
 
-        btn_name = 'axe' + str(self.stacklayout.count())
+        self.axes_count += 1
+        btn_name = 'axe' + str(self.axes_count)
         btn = QPushButton(btn_name)
         btn.clicked.connect(lambda: self.change_all_mod_widget(all_mod_widget))
         btn.clicked.connect(lambda: all_mod_widget.change_stackwidget(0))

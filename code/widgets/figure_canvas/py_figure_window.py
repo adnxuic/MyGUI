@@ -212,6 +212,16 @@ class PyFigureWindow(QFrame):
                 )
 
             for text in figure.get("texts", []):
+                if text.get("scope", "axes") == "figure":
+                    canvas.add_global_text(
+                        x=float(text.get("x", 0.5)),
+                        y=float(text.get("y", 0.5)),
+                        text=text.get("text", ""),
+                        fontfamily=text.get("fontfamily", "Times New Roman"),
+                        fontsize=int(float(text.get("fontsize", 20))),
+                        record_project=True,
+                    )
+                    continue
                 if not self._select_project_axes(canvas, text):
                     continue
                 canvas.add_text(

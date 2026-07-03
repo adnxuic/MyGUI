@@ -39,3 +39,5 @@ htmlcov/
 *.bak
 *.baiduyun.uploading.cfg
 codex_handoff/
+tests/_tmp/
+tests/fixtures/
