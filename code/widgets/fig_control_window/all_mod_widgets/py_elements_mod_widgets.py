@@ -55,7 +55,10 @@ class PyTextModWidget(QFrame):
         for font in font_list:
             self.font_input.addItem(font)
 
-        self.font_input.setCurrentText('Times New Roman')
+        current_font_family = self.text_modify.text.get_fontfamily()
+        if isinstance(current_font_family, (list, tuple)):
+            current_font_family = current_font_family[0] if current_font_family else 'Times New Roman'
+        self.font_input.setCurrentText(current_font_family or 'Times New Roman')
         self.font_input.currentTextChanged.connect(self.text_modify.set_text_font)
         self.font_layout.addWidget(self.font_input)
         self.layout.addLayout(self.font_layout)
@@ -65,10 +68,10 @@ class PyTextModWidget(QFrame):
         self.font_size_layout.setSpacing(0)
         self.font_size_input = QSpinBox(self)
         self.font_size_input.setFixedWidth(80)
-        self.font_size_input.textChanged.connect(self.text_modify.set_text_fontsize)
         self.font_size_input.setMinimum(1)
         self.font_size_input.setMaximum(100)
-        self.font_size_input.setValue(20)
+        self.font_size_input.setValue(int(round(self.text_modify.text.get_fontsize())))
+        self.font_size_input.valueChanged.connect(self.text_modify.set_text_fontsize)
         font_size_label = QLabel("Size:")
         self.font_size_layout.addWidget(font_size_label)
         self.font_size_layout.addWidget(self.font_size_input)

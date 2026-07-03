@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,10 @@ from code.database.py_database import databases
 from code.database.py_database import PyDatabase
 
 
-PROJECT_SCHEMA_VERSION = 1
+PROJECT_SCHEMA_NAME = "mygui-project"
+PROJECT_SCHEMA_VERSION = 2
+SUPPORTED_PROJECT_SCHEMA_VERSIONS = {1, PROJECT_SCHEMA_VERSION}
+PROJECT_OBJECT_COLLECTIONS = ("curves", "plots", "scatters", "interpolates", "texts")
 
 
 def serialize_databases() -> dict[str, dict[str, dict[str, list[Any]]]]:
@@ -49,13 +53,17 @@ def serialize_figure_window(figure_window) -> list[dict[str, Any]]:
             "axes_count": len(fig.axes),
             "axes_layouts": [],
             "curves": [],
+            "plots": [],
+            "scatters": [],
+            "interpolates": [],
+            "texts": [],
         })
     return canvases
 
 
 def project_snapshot(figure_window=None) -> dict[str, Any]:
     return {
-        "schema": "mygui-project",
+        "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
         "tables": serialize_databases(),
         "figures": serialize_figure_window(figure_window),
@@ -79,11 +87,40 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         snapshot = json.load(handle)
 
-    if snapshot.get("schema") != "mygui-project":
+    return migrate_project_snapshot(snapshot)
+
+
+def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
         raise ValueError("Unsupported project file")
-    if snapshot.get("schema_version") != PROJECT_SCHEMA_VERSION:
-        raise ValueError(f"Unsupported project schema version: {snapshot.get('schema_version')}")
-    return snapshot
+
+    if snapshot.get("schema") != PROJECT_SCHEMA_NAME:
+        raise ValueError("Unsupported project file")
+
+    raw_version = snapshot.get("schema_version")
+    try:
+        schema_version = int(raw_version)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Unsupported project schema version: {raw_version}") from exc
+
+    if schema_version not in SUPPORTED_PROJECT_SCHEMA_VERSIONS:
+        raise ValueError(f"Unsupported project schema version: {raw_version}")
+
+    migrated = deepcopy(snapshot)
+    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
+    migrated.setdefault("tables", {})
+    figures = migrated.setdefault("figures", [])
+    if not isinstance(figures, list):
+        raise ValueError("Invalid project figures")
+
+    for figure in figures:
+        if not isinstance(figure, dict):
+            raise ValueError("Invalid project figure")
+        figure.setdefault("axes_layouts", [])
+        for collection in PROJECT_OBJECT_COLLECTIONS:
+            figure.setdefault(collection, [])
+
+    return migrated
 
 
 def restore_databases(tables: dict[str, dict[str, dict[str, list[Any]]]]) -> None:

@@ -182,6 +182,7 @@ class PyPlotModWidget(QFrame):
         if not changed:
             PyDatabase.data_connect(data_name, id(self.curve_modify.line), 'x', self.curve_modify.update_x_data)
         self.curve_modify.current_x_data_name = data_name
+        self.curve_modify.update_project_record(x_data_name=data_name)
 
     def y_data_change(self):
         data_name = self.data_choice_widget.get_y_data()
@@ -196,6 +197,7 @@ class PyPlotModWidget(QFrame):
         if not changed:
             PyDatabase.data_connect(data_name, id(self.curve_modify.line), 'y', self.curve_modify.update_y_data)
         self.curve_modify.current_y_data_name = data_name
+        self.curve_modify.update_project_record(y_data_name=data_name)
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
@@ -258,6 +260,7 @@ class PyScatterModWidget(QFrame):
         if not changed:
             PyDatabase.data_connect(data_name, id(self.curve_modify.scatter), 'x', self.curve_modify.update_x_data)
         self.curve_modify.current_x_data_name = data_name
+        self.curve_modify.update_project_record(x_data_name=data_name)
 
     def y_data_change(self):
         data_name = self.data_choice_widget.get_y_data()
@@ -272,6 +275,7 @@ class PyScatterModWidget(QFrame):
         if not changed:
             PyDatabase.data_connect(data_name, id(self.curve_modify.scatter), 'y', self.curve_modify.update_y_data)
         self.curve_modify.current_y_data_name = data_name
+        self.curve_modify.update_project_record(y_data_name=data_name)
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
@@ -401,7 +405,8 @@ class PyFitMatlabModWidget(QFrame):
 
 
 class PyInterpolateWidget(QFrame):
-    def __init__(self, curve_modify: PyInterpolateModify, init_interpolat: str, init_k: int):
+    def __init__(self, curve_modify: PyInterpolateModify, init_interpolat: str, init_k: int,
+                 color: str = "#000000"):
         super().__init__()
 
         self.modify = curve_modify
@@ -442,7 +447,7 @@ class PyInterpolateWidget(QFrame):
         self.layout.addWidget(self.interpolat_box)
 
         # 线条的颜色
-        self.color_choice = ColorChoiceWidget(connect_signal=self.color_change)
+        self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
 
         # 图例

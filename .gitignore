@@ -38,3 +38,4 @@ htmlcov/
 *~
 *.bak
 *.baiduyun.uploading.cfg
+codex_handoff/maintenance_summary.md

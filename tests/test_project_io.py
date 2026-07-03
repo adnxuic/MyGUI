@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from code.database.py_database import PyDatabase
-from code.project_io import restore_project_snapshot, save_project_snapshot
+from code.project_io import PROJECT_SCHEMA_VERSION, load_project_file, restore_project_snapshot, save_project_snapshot
 
 
 class FakeFigureWindow:
@@ -54,6 +54,10 @@ class ProjectIoTests(unittest.TestCase):
                 "color": "black",
                 "label": "sin",
             }],
+            "plots": [],
+            "scatters": [],
+            "interpolates": [],
+            "texts": [],
         }]
         project_file = self.make_project_file()
 
@@ -68,6 +72,39 @@ class ProjectIoTests(unittest.TestCase):
             np.testing.assert_allclose(PyDatabase.get_data("Data/SheetA/2"), np.array([3.0, 4.0]))
             self.assertEqual(snapshot["figures"], figure_snapshot)
             self.assertEqual(loaded_figure.loaded, figure_snapshot)
+        finally:
+            if project_file.exists():
+                os.remove(project_file)
+
+    def test_load_project_file_migrates_v1_figure_object_collections(self):
+        project_file = self.make_project_file()
+        project_file.write_text(
+            """{
+  "schema": "mygui-project",
+  "schema_version": 1,
+  "tables": {},
+  "figures": [{
+    "name": "legacy",
+    "style": "default",
+    "dpi": 100.0,
+    "size_inches": [6.4, 4.8],
+    "axes_count": 1,
+    "axes_layouts": [],
+    "curves": []
+  }]
+}""",
+            encoding="utf-8",
+        )
+
+        try:
+            snapshot = load_project_file(project_file)
+
+            self.assertEqual(snapshot["schema_version"], PROJECT_SCHEMA_VERSION)
+            figure = snapshot["figures"][0]
+            self.assertEqual(figure["plots"], [])
+            self.assertEqual(figure["scatters"], [])
+            self.assertEqual(figure["interpolates"], [])
+            self.assertEqual(figure["texts"], [])
         finally:
             if project_file.exists():
                 os.remove(project_file)

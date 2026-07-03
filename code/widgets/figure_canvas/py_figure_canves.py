@@ -49,6 +49,10 @@ class PyFigureCanvas(QWidget):
         self.axes_mods: list[PyAxesModify] = []
         self.project_axes_layouts: list[dict[str, int]] = []
         self.project_curves: list[dict[str, Any]] = []
+        self.project_plots: list[dict[str, Any]] = []
+        self.project_scatters: list[dict[str, Any]] = []
+        self.project_interpolates: list[dict[str, Any]] = []
+        self.project_texts: list[dict[str, Any]] = []
 
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
@@ -153,9 +157,23 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加折线图
-    def add_plot(self, x, y, style, size, color, label, x_data_name: str, y_data_name: str):
+    def add_plot(self, x, y, style, size, color, label, x_data_name: str, y_data_name: str,
+                 record_project=True):
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, style, markersize=size, color=color, label=label)
+
+        project_record = None
+        if record_project:
+            project_record = {
+                "axes_index": int(self.fig.axes.index(self.current_axes)),
+                "x_data_name": x_data_name,
+                "y_data_name": y_data_name,
+                "style": style,
+                "size": float(line.get_markersize()),
+                "color": line.get_color(),
+                "label": label,
+            }
+            self.project_plots.append(project_record)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -164,7 +182,8 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('plot_box')
         # 添加曲线调整窗口
         plot_mod_widget = PyPlotModWidget(
-            PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name, label),
+            PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name, label,
+                         project_record=project_record),
             x_data_name, y_data_name, color)
 
         # 添加可视化对象
@@ -176,9 +195,23 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加散点图
-    def add_scatter(self, x, y, size, color, marker, label, x_data_name: str, y_data_name: str):
+    def add_scatter(self, x, y, size, color, marker, label, x_data_name: str, y_data_name: str,
+                    record_project=True):
         with mpl.style.context(self.style):
             scatter = self.current_axes.scatter(x, y, s=size, c=color, marker=marker, label=label)
+
+        project_record = None
+        if record_project:
+            project_record = {
+                "axes_index": int(self.fig.axes.index(self.current_axes)),
+                "x_data_name": x_data_name,
+                "y_data_name": y_data_name,
+                "size": float(size),
+                "color": color,
+                "marker": marker,
+                "label": label,
+            }
+            self.project_scatters.append(project_record)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -188,7 +221,8 @@ class PyFigureCanvas(QWidget):
 
         # 添加散点调整窗口
         scatter_mod_widget = PyScatterModWidget(
-            PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name, label),
+            PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name, label,
+                            project_record=project_record),
             x_data_name, y_data_name, color)
 
         # 添加可视化对象
@@ -226,13 +260,27 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加插值曲线
-    def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate'):
+    def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate',
+                              color='black', record_project=True):
         with mpl.style.context(self.style):
             if method == "B样条插值":
                 x_new, y_new = interpolate_dict[method](x, y, k=k)
             else:
                 x_new, y_new = interpolate_dict[method](x, y)
-            line, = self.current_axes.plot(x_new, y_new, color='black', label=label)
+            line, = self.current_axes.plot(x_new, y_new, color=color, label=label)
+
+        project_record = None
+        if record_project:
+            project_record = {
+                "axes_index": int(self.fig.axes.index(self.current_axes)),
+                "x_data_name": x_name,
+                "y_data_name": y_name,
+                "method": method,
+                "k": int(k),
+                "color": line.get_color(),
+                "label": label,
+            }
+            self.project_interpolates.append(project_record)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -242,7 +290,8 @@ class PyFigureCanvas(QWidget):
 
         # 添加插值曲线调整窗口
         interpolate_mod_widget = PyInterpolateWidget(
-            PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name), method, k)
+            PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name, label,
+                                method=method, k=k, project_record=project_record), method, k, color)
 
         # 添加可视化对象
         self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
@@ -253,10 +302,21 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加文本
-    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int):
+    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int, record_project=True):
         # with mpl.style.context(self.style):
         text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize,
                                       transform=self.current_axes.transAxes)
+        project_record = None
+        if record_project:
+            project_record = {
+                "axes_index": int(self.fig.axes.index(self.current_axes)),
+                "x": float(x),
+                "y": float(y),
+                "text": text.get_text(),
+                "fontfamily": fontfamily,
+                "fontsize": float(text.get_fontsize()),
+            }
+            self.project_texts.append(project_record)
         # self.current_axes.transAxes是坐标系的坐标变换
 
         # 获取当前坐标系的所有修改窗口
@@ -265,7 +325,8 @@ class PyFigureCanvas(QWidget):
         if all_mod_widget.element_mod_window.boxs.get('text_box') is None:
             all_mod_widget.add_element_box('text_box')
         # 添加文本调整窗口
-        text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text))
+        text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text,
+                                                       project_record=project_record))
         text_box: PyModBox = all_mod_widget.element_mod_window.boxs['text_box']
         text_box.add_widget(text_mod_widget, 'text')
 
@@ -287,4 +348,8 @@ class PyFigureCanvas(QWidget):
             "axes_count": len(self.fig.axes),
             "axes_layouts": [dict(layout) for layout in self.project_axes_layouts],
             "curves": [dict(curve) for curve in self.project_curves],
+            "plots": [dict(plot) for plot in self.project_plots],
+            "scatters": [dict(scatter) for scatter in self.project_scatters],
+            "interpolates": [dict(interpolate) for interpolate in self.project_interpolates],
+            "texts": [dict(text) for text in self.project_texts],
         }

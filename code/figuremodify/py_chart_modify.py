@@ -126,7 +126,8 @@ class PyCurveModify:
 
 class PyPlotModify:
     def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
-                 y_data_name: str = None, label: str = None):
+                 y_data_name: str = None, label: str = None,
+                 project_record: dict[str, Any] | None = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -134,6 +135,7 @@ class PyPlotModify:
         self.line = line
 
         self.label = label
+        self.project_record = project_record
 
         self.current_x_data_name = x_data_name
         self.current_y_data_name = y_data_name
@@ -141,6 +143,10 @@ class PyPlotModify:
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
         PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
+
+    def update_project_record(self, **values):
+        if self.project_record is not None:
+            self.project_record.update(values)
 
     def redraw(self):
         self.fig.canvas.draw()
@@ -172,11 +178,14 @@ class PyPlotModify:
 
     def update_color(self, color: str):
         self.line.set_color(color)
+        self.update_project_record(color=self.line.get_color())
         self.redraw()
 
     def change_legend(self, label: str):
         try:
             self.line.set_label(label)
+            self.label = label
+            self.update_project_record(label=label)
             self.axe.legend().remove()
             self.axe.legend()
             self.redraw()
@@ -187,7 +196,8 @@ class PyPlotModify:
 
 class PyScatterModify:
     def __init__(self, fig, axe: Axes, style=None, scatter: PathCollection = None, x_data_name: str = None,
-                 y_data_name: str = None, label: str = None):
+                 y_data_name: str = None, label: str = None,
+                 project_record: dict[str, Any] | None = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -198,10 +208,15 @@ class PyScatterModify:
         self.current_y_data_name = y_data_name
 
         self.label = label
+        self.project_record = project_record
 
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(scatter), xy='x', connection_func=self.update_x_data)
         PyDatabase.data_connect(y_data_name, id_num=id(scatter), xy='y', connection_func=self.update_y_data)
+
+    def update_project_record(self, **values):
+        if self.project_record is not None:
+            self.project_record.update(values)
 
     def redraw(self):
         self.fig.canvas.draw()
@@ -232,11 +247,14 @@ class PyScatterModify:
 
     def update_color(self, color: str):
         self.scatter.set_facecolor(color)
+        self.update_project_record(color=color)
         self.redraw()
 
     def change_legend(self, label: str):
         try:
             self.scatter.set_label(label)
+            self.label = label
+            self.update_project_record(label=label)
             self.axe.legend().remove()
             self.axe.legend()
             self.redraw()
@@ -246,7 +264,8 @@ class PyScatterModify:
 
 class PyInterpolateModify:
     def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
-                 y_data_name: str = None, label: str = None):
+                 y_data_name: str = None, label: str = None, method: str | None = None, k: int = 3,
+                 project_record: dict[str, Any] | None = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -260,15 +279,23 @@ class PyInterpolateModify:
         self.y_data = PyDatabase.get_data(y_data_name)
 
         self.label = label
+        self.method = method
+        self.k = k
+        self.project_record = project_record
 
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
         PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
 
+    def update_project_record(self, **values):
+        if self.project_record is not None:
+            self.project_record.update(values)
+
     def redraw(self):
         self.fig.canvas.draw()
 
     def update_x_data(self, x_data: ndarray):
+        self.x_data = x_data
         # 如果数据长度不一致，则需要重新设置数据
         if len(x_data) == len(self.line.get_ydata()):
             self.line.set_xdata(x_data)
@@ -282,6 +309,7 @@ class PyInterpolateModify:
         self.redraw()
 
     def update_y_data(self, y_data: ndarray):
+        self.y_data = y_data
         # 如果数据长度不一致，则需要重新设置数据
         if len(y_data) == len(self.line.get_xdata()):
             self.line.set_ydata(y_data)
@@ -300,17 +328,23 @@ class PyInterpolateModify:
             x_new, y_new = interpolate_dict[interpolate_name](self.x_data, self.y_data)
 
         self.line.set_data(x_new, y_new)
+        self.method = interpolate_name
+        self.k = k
+        self.update_project_record(method=interpolate_name, k=int(k))
         self.axe.relim()
         self.axe.autoscale_view()
         self.redraw()
 
     def update_color(self, color: str):
         self.line.set_color(color)
+        self.update_project_record(color=self.line.get_color())
         self.redraw()
 
     def change_legend(self, label: str):
         try:
             self.line.set_label(label)
+            self.label = label
+            self.update_project_record(label=label)
             self.axe.legend().remove()
             self.axe.legend()
             self.redraw()
