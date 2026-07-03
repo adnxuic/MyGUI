@@ -297,11 +297,6 @@ class PyScatterDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        if self.matlab_button.isChecked():
-            self.figure_window.current_canva.add_fit_curve('matlab', [], [], 'r', 'fit')
-            super().accept()
-            return
-
         x_data = PyDatabase.get_data(self.x_data_input.currentText())
         y_data = PyDatabase.get_data(self.y_data_input.currentText())
 

@@ -138,7 +138,7 @@ class MenuBar(QFrame):
         file_open_action = QAction(QIcon("pictures/icons/open.svg"), "打开 Excel...", self.file_menu)
         file_open_action.triggered.connect(self.open_file)
 
-        file_open_project_action = QAction(QIcon("pictures/icons/open.svg"), "Open Project...", self.file_menu)
+        file_open_project_action = QAction(QIcon("pictures/icons/open.svg"), "打开项目...", self.file_menu)
         file_open_project_action.triggered.connect(self.open_project)
 
         file_save_action = QAction(QIcon("pictures/icons/save.svg"), "保存项目...", self.file_menu)
@@ -158,61 +158,61 @@ class MenuBar(QFrame):
         self.file_menu.addAction(file_export_data_action)
 
     def open_file(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel File", "", "Excel Files (*.xlsx *.xls)")
+        file_name, _ = QFileDialog.getOpenFileName(self, "打开 Excel", "", "Excel Files (*.xlsx *.xls)")
         if not file_name or not os.path.exists(file_name):
             return
 
         try:
             load_excel_into_table(file_name, self.table)
         except Exception as exc:
-            QMessageBox.warning(self, "Open Excel File", str(exc))
+            QMessageBox.warning(self, "打开 Excel", str(exc))
 
     def open_project(self):
         file_name, _ = QFileDialog.getOpenFileName(
-            self, "Open Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+            self, "打开项目", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
         if not file_name or not os.path.exists(file_name):
             return
 
         try:
             restore_project_snapshot(file_name, table=self.table, figure_window=self.figure_window)
         except Exception as exc:
-            QMessageBox.warning(self, "Open Project", str(exc))
+            QMessageBox.warning(self, "打开项目", str(exc))
 
     def save_file(self):
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "Save Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+            self, "保存项目", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
         if not file_name:
             return
 
         try:
             save_project_snapshot(file_name, self.figure_window)
         except Exception as exc:
-            QMessageBox.warning(self, "Save Project", str(exc))
+            QMessageBox.warning(self, "保存项目", str(exc))
 
     def export_current_figure(self):
         if self.figure_window is None or self.figure_window.current_canva is None:
-            QMessageBox.warning(self, "Export Figure", "Please select a figure canvas first.")
+            QMessageBox.warning(self, "导出当前图片", "Please select a figure canvas first.")
             return
 
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "Export Current Figure", "", "PNG Image (*.png);;PDF File (*.pdf);;SVG File (*.svg)")
+            self, "导出当前图片", "", "PNG Image (*.png);;PDF File (*.pdf);;SVG File (*.svg)")
         if not file_name:
             return
 
         try:
             self.figure_window.current_canva.save(file_name)
         except Exception as exc:
-            QMessageBox.warning(self, "Export Figure", str(exc))
+            QMessageBox.warning(self, "导出当前图片", str(exc))
 
     def export_data(self):
-        file_name, _ = QFileDialog.getSaveFileName(self, "Export Data", "", "JSON Files (*.json)")
+        file_name, _ = QFileDialog.getSaveFileName(self, "导出数据", "", "JSON Files (*.json)")
         if not file_name:
             return
 
         try:
             export_database_snapshot(file_name)
         except Exception as exc:
-            QMessageBox.warning(self, "Export Data", str(exc))
+            QMessageBox.warning(self, "导出数据", str(exc))
 
 
 class ControlBar(QFrame):
