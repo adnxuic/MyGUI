@@ -1,6 +1,4 @@
-import code.database.matlab_func.curve_fitting as curve_fitting
-import matlab
-print('matlab')
+import importlib
 
 def matlab_fitting(x, y, fit_type, isdefault,
                    up_limit=None, low_limit=None, start_point=None):
@@ -26,19 +24,18 @@ def matlab_fitting(x, y, fit_type, isdefault,
     - show_exp (str): A formatted version of the fitted equation with coefficients rounded to two decimal places, suitable for display purposes.
 
     Raises:
-    - SystemExit: If there's an error initializing the fitting package or during the execution of the fitting process.
+    - RuntimeError: If MATLAB or the packaged fitting runtime cannot be initialized or executed.
 
     Note:
     Ensure that the MATLAB engine is properly set up and accessible in the system environment where this function is used.
     """
-    exp = ''
-    value_exp = ''
-    show_exp = ''
+    fitting = None
     try:
+        matlab = importlib.import_module('matlab')
+        curve_fitting = importlib.import_module('code.database.matlab_func.curve_fitting')
         fitting = curve_fitting.initialize()
     except Exception as e:
-        print('Error initializing fittest package\n:{}'.format(e))
-        exit(1)
+        raise RuntimeError(f"Error initializing fittest package: {e}") from e
     try:
         x_data = matlab.double(x, size=(len(x), 1))
         y_data = matlab.double(y, size=(len(y), 1))
@@ -46,10 +43,6 @@ def matlab_fitting(x, y, fit_type, isdefault,
 
         value_exp = exp
         show_exp = exp
-        print(exp)
-        print(coeff_name)
-        print(coeff_value[0])
-        print(gof)
 
         # 将公式中的变量名替换为实际的数值
         for name, value in zip(coeff_name, coeff_value[0]):
@@ -68,7 +61,9 @@ def matlab_fitting(x, y, fit_type, isdefault,
         show_exp = show_exp.replace('^', '**')
 
     except Exception as e:
-        print('Error occurred during program execution\n:{}'.format(e))
+        raise RuntimeError(f"Error occurred during program execution: {e}") from e
+    finally:
+        if fitting is not None:
+            fitting.terminate()
 
-    fitting.terminate()
     return value_exp, show_exp

@@ -105,6 +105,37 @@ class GuiDataFlowTests(unittest.TestCase):
         self.assertIn(id(axes.lines[0]), callbacks["1"][1])
         self.assertIn(id(axes.collections[0]), callbacks["1"][1])
 
+    def test_switching_multiple_canvases_and_axes_updates_current_references(self):
+        self.window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name="first")
+        first_canvas = self.window.figure_window.current_canva
+        first_canvas.add_axes(nrows=1, ncols=1)
+        first_axes = first_canvas.current_axes
+
+        self.window.figure_window.add_figure(width=5, height=4, dpi=80, style="default", canva_name="second")
+        second_canvas = self.window.figure_window.current_canva
+        second_canvas.add_axes(nrows=1, ncols=2)
+
+        second_axes_button = second_canvas.fig_modify_widget.axes_btn_bar_layout.itemAt(1).widget()
+        second_axes_button.click()
+        self.app.processEvents()
+
+        self.assertIs(second_canvas.current_axes, second_canvas.fig.axes[1])
+        self.assertIs(second_canvas.current_axes_mod, second_canvas.axes_mods[1])
+
+        self.window.figure_window.tabwindow.setCurrentIndex(0)
+        self.app.processEvents()
+
+        self.assertIs(self.window.figure_window.current_canva, first_canvas)
+        self.assertIs(self.window.figure_window.current_fig_modify_widget, first_canvas.fig_modify_widget)
+        self.assertIs(first_canvas.current_axes, first_axes)
+
+        self.window.figure_window.tabwindow.setCurrentIndex(1)
+        self.app.processEvents()
+
+        self.assertIs(self.window.figure_window.current_canva, second_canvas)
+        self.assertIs(self.window.figure_window.current_fig_modify_widget, second_canvas.fig_modify_widget)
+        self.assertIs(second_canvas.current_axes, second_canvas.fig.axes[1])
+
 
 if __name__ == "__main__":
     unittest.main()

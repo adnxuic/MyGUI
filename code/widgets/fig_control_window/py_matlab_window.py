@@ -106,12 +106,17 @@ class PyMatlabWindow(QFrame):
         self.connect_widget = connect_widget
 
     def fit_type_change(self, text):
+        try:
+            new_fit_type_window = PyFitWindow(fit_type_name=text)
+        except Exception as exc:
+            QMessageBox.warning(self, "Matlab Fit", f"Fit option initialization failed:\n{exc}")
+            return
         # 删除旧的 fit_type_window
         self.layout.removeWidget(self.fit_type_window)
         self.fit_type_window.deleteLater()  # 确保旧的窗口被正确删除
 
         # 更新为新的 fit_type_window
-        self.fit_type_window = PyFitWindow(fit_type_name=text)
+        self.fit_type_window = new_fit_type_window
         self.layout.insertWidget(self.layout.count() - 1, self.fit_type_window)  # 插入到倒数第二个位置
 
     def fit_curve(self):
@@ -232,7 +237,11 @@ class PyFitWindow(QFrame):
 
     def expression_change(self, text):
         from code.database.matlab_func.get_func.get_func_exp import get_func_exp
-        self.func_exp, self.func_coefs = get_func_exp(text)
+        try:
+            self.func_exp, self.func_coefs = get_func_exp(text)
+        except Exception as exc:
+            QMessageBox.warning(self, "Matlab Fit", f"Fit expression update failed:\n{exc}")
+            return
         # 设置表达式
         self.expression_input.setPlainText(self.func_exp)
         # 设置系数
