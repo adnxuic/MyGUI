@@ -66,12 +66,20 @@ class PyFigureWindow(QFrame):
         while self.tabwindow.count():
             widget = self.tabwindow.widget(0)
             self.tabwindow.removeTab(0)
+            if hasattr(widget, "cancel_pending_draw"):
+                widget.cancel_pending_draw()
             widget.deleteLater()
         self.canvas.clear()
         self.current_canva = None
         self.current_fig_modify_widget = None
         if hasattr(self.fig_modify_window, "clear_figmod_widgets"):
             self.fig_modify_window.clear_figmod_widgets()
+
+    def cancel_pending_draws(self):
+        for index in range(self.tabwindow.count()):
+            widget = self.tabwindow.widget(index)
+            if hasattr(widget, "cancel_pending_draw"):
+                widget.cancel_pending_draw()
 
     def project_snapshot(self) -> list[dict[str, Any]]:
         canvases: list[dict[str, Any]] = []

@@ -1,4 +1,5 @@
 import os
+import json
 import unittest
 from pathlib import Path
 
@@ -31,6 +32,11 @@ class ProjectIoTests(unittest.TestCase):
         temp_dir = Path(__file__).with_name("_tmp")
         temp_dir.mkdir(exist_ok=True)
         return temp_dir / "project_roundtrip.mygui.json"
+
+    def write_project(self, snapshot: dict):
+        project_file = self.make_project_file()
+        project_file.write_text(json.dumps(snapshot), encoding="utf-8")
+        return project_file
 
     def test_save_and_restore_project_round_trip(self):
         database = PyDatabase()
@@ -90,7 +96,12 @@ class ProjectIoTests(unittest.TestCase):
     "size_inches": [6.4, 4.8],
     "axes_count": 1,
     "axes_layouts": [],
-    "curves": []
+    "curves": [{
+      "axes_index": 0,
+      "expression": "x",
+      "x_start": 0.0,
+      "x_stop": 1.0
+    }]
   }]
 }""",
             encoding="utf-8",
@@ -101,10 +112,113 @@ class ProjectIoTests(unittest.TestCase):
 
             self.assertEqual(snapshot["schema_version"], PROJECT_SCHEMA_VERSION)
             figure = snapshot["figures"][0]
+            self.assertEqual(figure["curves"][0]["expression"], "x")
             self.assertEqual(figure["plots"], [])
             self.assertEqual(figure["scatters"], [])
             self.assertEqual(figure["interpolates"], [])
             self.assertEqual(figure["texts"], [])
+        finally:
+            if project_file.exists():
+                os.remove(project_file)
+
+    def test_load_project_file_rejects_missing_plot_data_source(self):
+        project_file = self.write_project({
+            "schema": "mygui-project",
+            "schema_version": PROJECT_SCHEMA_VERSION,
+            "tables": {},
+            "figures": [{
+                "name": "bad-data",
+                "style": "default",
+                "dpi": 100.0,
+                "size_inches": [6.4, 4.8],
+                "axes_count": 1,
+                "axes_layouts": [{"nrows": 1, "ncols": 1, "start_index": 0, "count": 1}],
+                "curves": [],
+                "plots": [{
+                    "axes_index": 0,
+                    "x_data_name": "Data/Sheet1/1",
+                    "y_data_name": "Data/Sheet1/2",
+                }],
+                "scatters": [],
+                "interpolates": [],
+                "texts": [],
+            }],
+        })
+
+        try:
+            with self.assertRaisesRegex(ValueError, "Missing data source.*Data/Sheet1/1"):
+                load_project_file(project_file)
+        finally:
+            if project_file.exists():
+                os.remove(project_file)
+
+    def test_load_project_file_rejects_unknown_interpolate_method(self):
+        project_file = self.write_project({
+            "schema": "mygui-project",
+            "schema_version": PROJECT_SCHEMA_VERSION,
+            "tables": {
+                "Data": {
+                    "Sheet1": {
+                        "1": [0.0, 1.0, 2.0],
+                        "2": [1.0, 2.0, 3.0],
+                    }
+                }
+            },
+            "figures": [{
+                "name": "bad-interpolate",
+                "style": "default",
+                "dpi": 100.0,
+                "size_inches": [6.4, 4.8],
+                "axes_count": 1,
+                "axes_layouts": [{"nrows": 1, "ncols": 1, "start_index": 0, "count": 1}],
+                "curves": [],
+                "plots": [],
+                "scatters": [],
+                "interpolates": [{
+                    "axes_index": 0,
+                    "x_data_name": "Data/Sheet1/1",
+                    "y_data_name": "Data/Sheet1/2",
+                    "method": "unknown-method",
+                }],
+                "texts": [],
+            }],
+        })
+
+        try:
+            with self.assertRaisesRegex(ValueError, "Unknown interpolation method.*unknown-method"):
+                load_project_file(project_file)
+        finally:
+            if project_file.exists():
+                os.remove(project_file)
+
+    def test_load_project_file_rejects_invalid_axes_index(self):
+        project_file = self.write_project({
+            "schema": "mygui-project",
+            "schema_version": PROJECT_SCHEMA_VERSION,
+            "tables": {},
+            "figures": [{
+                "name": "bad-axes",
+                "style": "default",
+                "dpi": 100.0,
+                "size_inches": [6.4, 4.8],
+                "axes_count": 1,
+                "axes_layouts": [{"nrows": 1, "ncols": 1, "start_index": 0, "count": 1}],
+                "curves": [],
+                "plots": [],
+                "scatters": [],
+                "interpolates": [],
+                "texts": [{
+                    "axes_index": 2,
+                    "x": 0.5,
+                    "y": 0.5,
+                    "text": "outside",
+                }],
+            }],
+        })
+
+        try:
+            with self.assertRaisesRegex(ValueError, r"axes_index.*outside axes_count 1"):
+                load_project_file(project_file)
         finally:
             if project_file.exists():
                 os.remove(project_file)

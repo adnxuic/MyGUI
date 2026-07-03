@@ -147,6 +147,11 @@ class MainWindow(QMainWindow):
         right_boundary = self.fig_control_window.geometry().left() + boundary_width
         return left_boundary <= x <= right_boundary
 
+    def closeEvent(self, event):
+        if hasattr(self.figure_window, "cancel_pending_draws"):
+            self.figure_window.cancel_pending_draws()
+        super().closeEvent(event)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

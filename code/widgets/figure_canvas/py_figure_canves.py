@@ -88,6 +88,14 @@ class PyFigureCanvas(QWidget):
     def redraw(self):
         self.fig.canvas.draw()
 
+    def cancel_pending_draw(self):
+        if hasattr(self.canva, "_draw_pending"):
+            self.canva._draw_pending = False
+
+    def closeEvent(self, event):
+        self.cancel_pending_draw()
+        super().closeEvent(event)
+
     # 添加坐标系
     def add_axes(self, nrows=1, ncols=1, record_project=True):
         start_index = len(self.fig.axes)
@@ -183,7 +191,7 @@ class PyFigureCanvas(QWidget):
         # 添加曲线调整窗口
         plot_mod_widget = PyPlotModWidget(
             PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name, label,
-                         project_record=project_record),
+                         project_record=project_record, project_collection=self.project_plots),
             x_data_name, y_data_name, color)
 
         # 添加可视化对象
@@ -222,7 +230,7 @@ class PyFigureCanvas(QWidget):
         # 添加散点调整窗口
         scatter_mod_widget = PyScatterModWidget(
             PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name, label,
-                            project_record=project_record),
+                            project_record=project_record, project_collection=self.project_scatters),
             x_data_name, y_data_name, color)
 
         # 添加可视化对象
@@ -291,7 +299,8 @@ class PyFigureCanvas(QWidget):
         # 添加插值曲线调整窗口
         interpolate_mod_widget = PyInterpolateWidget(
             PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name, label,
-                                method=method, k=k, project_record=project_record), method, k, color)
+                                method=method, k=k, project_record=project_record,
+                                project_collection=self.project_interpolates), method, k, color)
 
         # 添加可视化对象
         self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
@@ -326,7 +335,8 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_element_box('text_box')
         # 添加文本调整窗口
         text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text,
-                                                       project_record=project_record))
+                                                       project_record=project_record,
+                                                       project_collection=self.project_texts))
         text_box: PyModBox = all_mod_widget.element_mod_window.boxs['text_box']
         text_box.add_widget(text_mod_widget, 'text')
 

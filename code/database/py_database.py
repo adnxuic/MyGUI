@@ -35,7 +35,10 @@ class PyDatabase:
 
     @staticmethod
     def unregister_table(table_name: str):
-        databases.pop(table_name, None)
+        sheets = databases.pop(table_name, None)
+        if sheets is not None:
+            for database in sheets.values():
+                database.clear_connections()
         PyDatabase.notify_data_choices()
 
     @staticmethod
@@ -49,7 +52,9 @@ class PyDatabase:
         sheets = databases.get(table_name)
         if sheets is None:
             return
-        sheets.pop(sheet_name, None)
+        database = sheets.pop(sheet_name, None)
+        if database is not None:
+            database.clear_connections()
         PyDatabase.notify_data_choices()
 
     @staticmethod
@@ -103,6 +108,10 @@ class PyDatabase:
                     func(data)
 
         # print(self.data[index][0])
+
+    def clear_connections(self):
+        for column_data in self.data.values():
+            column_data[1].clear()
 
     # 提取数据
     @staticmethod

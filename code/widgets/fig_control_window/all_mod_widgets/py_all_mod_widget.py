@@ -136,6 +136,7 @@ class PyModBox(QToolBox):
             self.matlab_widget: Optional[PyMatlabWindow] = matlab_widget
 
         self.item_num = 0
+        self.setContextMenuPolicy(Qt.DefaultContextMenu)
 
         # 标签改变时，如果是matlab窗口，调用change_matlab_widget
         self.currentChanged.connect(self.change_widget)
@@ -143,6 +144,30 @@ class PyModBox(QToolBox):
     def add_widget(self, widget, widget_name: str):
         self.addItem(widget, widget_name + str(self.item_num))
         self.item_num += 1
+
+    def contextMenuEvent(self, event):
+        widget = self.currentWidget()
+        if widget is None or not callable(getattr(widget, "delete_object", None)):
+            return
+        menu = QMenu(self)
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(event.globalPos())
+        if action == delete_action:
+            self.delete_widget(self.currentIndex())
+
+    def delete_widget(self, index: int | None = None):
+        if index is None:
+            index = self.currentIndex()
+        if index is None or index < 0 or index >= self.count():
+            return
+        widget = self.widget(index)
+        delete_object = getattr(widget, "delete_object", None)
+        if not callable(delete_object):
+            return
+        delete_object()
+        self.removeItem(index)
+        widget.setParent(None)
+        widget.deleteLater()
 
     def change_widget(self):
         widget = self.currentWidget()

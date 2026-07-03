@@ -169,6 +169,9 @@ class PyPlotModWidget(QFrame):
     def get_colorupdate_func(self):
         return self.color_choice.updateColor
 
+    def delete_object(self):
+        self.curve_modify.delete_object()
+
     def x_data_change(self):
         data_name = self.data_choice_widget.get_x_data()
         if not PyDatabase.has_data(data_name):
@@ -246,6 +249,9 @@ class PyScatterModWidget(QFrame):
 
     def get_colorupdate_func(self):
         return self.color_choice.updateColor
+
+    def delete_object(self):
+        self.curve_modify.delete_object()
 
     def x_data_change(self):
         data_name = self.data_choice_widget.get_x_data()
@@ -467,6 +473,9 @@ class PyInterpolateWidget(QFrame):
 
     def get_colorupdate_func(self):
         return self.color_choice.updateColor
+
+    def delete_object(self):
+        self.modify.delete_object()
 
     def change_method(self):
         # 获取当前选择的插值方法

@@ -116,6 +116,9 @@ class PyTextModWidget(QFrame):
 
         self.setLayout(self.layout)
 
+    def delete_object(self):
+        self.text_modify.delete_object()
+
     def set_text_content(self):
         content = self.text_content.toPlainText()
         self.text_modify.set_text_content(content)

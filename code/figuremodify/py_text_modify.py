@@ -9,12 +9,15 @@ from typing import Any
 
 
 class PyTextModify:
-    def __init__(self, fig, style=None, text: Text=None, project_record: dict[str, Any] | None = None):
+    def __init__(self, fig, style=None, text: Text=None, project_record: dict[str, Any] | None = None,
+                 project_collection: list[dict[str, Any]] | None = None):
         self.style = style
         self.fig = fig
 
         self.text = text
         self.project_record = project_record
+        self.project_collection = project_collection
+        self._deleted = False
 
     def update_project_record(self, **values):
         if self.project_record is not None:
@@ -22,6 +25,21 @@ class PyTextModify:
 
     def redraw(self):
         self.fig.canvas.draw()
+
+    def delete_object(self):
+        if self._deleted:
+            return
+        self._deleted = True
+        if self.project_collection is not None and self.project_record is not None:
+            try:
+                self.project_collection.remove(self.project_record)
+            except ValueError:
+                pass
+        try:
+            self.text.remove()
+        except ValueError:
+            pass
+        self.redraw()
 
     def set_text_font(self, font):
         size = self.text.get_fontsize()

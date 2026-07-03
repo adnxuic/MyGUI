@@ -16,6 +16,25 @@ from matplotlib.collections import PathCollection
 from matplotlib.style import use
 
 
+def _remove_project_record(project_collection: list[dict[str, Any]] | None,
+                           project_record: dict[str, Any] | None):
+    if project_collection is None or project_record is None:
+        return
+    try:
+        project_collection.remove(project_record)
+    except ValueError:
+        pass
+
+
+def _remove_artist(artist):
+    if artist is None:
+        return
+    try:
+        artist.remove()
+    except ValueError:
+        pass
+
+
 class PyCurveModify:
     def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style,
                 line: Line2D, expression: str, label: str,
@@ -127,7 +146,8 @@ class PyCurveModify:
 class PyPlotModify:
     def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
                  y_data_name: str = None, label: str = None,
-                 project_record: dict[str, Any] | None = None):
+                 project_record: dict[str, Any] | None = None,
+                 project_collection: list[dict[str, Any]] | None = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -136,6 +156,8 @@ class PyPlotModify:
 
         self.label = label
         self.project_record = project_record
+        self.project_collection = project_collection
+        self._deleted = False
 
         self.current_x_data_name = x_data_name
         self.current_y_data_name = y_data_name
@@ -150,6 +172,16 @@ class PyPlotModify:
 
     def redraw(self):
         self.fig.canvas.draw()
+
+    def delete_object(self):
+        if self._deleted:
+            return
+        self._deleted = True
+        PyDatabase.remove_data_connection(self.current_x_data_name, id(self.line), 'x')
+        PyDatabase.remove_data_connection(self.current_y_data_name, id(self.line), 'y')
+        _remove_project_record(self.project_collection, self.project_record)
+        _remove_artist(self.line)
+        self.redraw()
 
     def update_x_data(self, x_data: ndarray):
         # 如果数据长度不一致，则需要重新设置数据
@@ -197,7 +229,8 @@ class PyPlotModify:
 class PyScatterModify:
     def __init__(self, fig, axe: Axes, style=None, scatter: PathCollection = None, x_data_name: str = None,
                  y_data_name: str = None, label: str = None,
-                 project_record: dict[str, Any] | None = None):
+                 project_record: dict[str, Any] | None = None,
+                 project_collection: list[dict[str, Any]] | None = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -209,6 +242,8 @@ class PyScatterModify:
 
         self.label = label
         self.project_record = project_record
+        self.project_collection = project_collection
+        self._deleted = False
 
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(scatter), xy='x', connection_func=self.update_x_data)
@@ -220,6 +255,16 @@ class PyScatterModify:
 
     def redraw(self):
         self.fig.canvas.draw()
+
+    def delete_object(self):
+        if self._deleted:
+            return
+        self._deleted = True
+        PyDatabase.remove_data_connection(self.current_x_data_name, id(self.scatter), 'x')
+        PyDatabase.remove_data_connection(self.current_y_data_name, id(self.scatter), 'y')
+        _remove_project_record(self.project_collection, self.project_record)
+        _remove_artist(self.scatter)
+        self.redraw()
 
     def update_x_data(self, x_data: ndarray):
         # 如果数据长度不一致，则需要重新设置数据
@@ -265,7 +310,8 @@ class PyScatterModify:
 class PyInterpolateModify:
     def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
                  y_data_name: str = None, label: str = None, method: str | None = None, k: int = 3,
-                 project_record: dict[str, Any] | None = None):
+                 project_record: dict[str, Any] | None = None,
+                 project_collection: list[dict[str, Any]] | None = None):
         self.style = style
         self.fig = fig
         self.axe = axe
@@ -282,6 +328,8 @@ class PyInterpolateModify:
         self.method = method
         self.k = k
         self.project_record = project_record
+        self.project_collection = project_collection
+        self._deleted = False
 
         # 数据和映射连接
         PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
@@ -293,6 +341,16 @@ class PyInterpolateModify:
 
     def redraw(self):
         self.fig.canvas.draw()
+
+    def delete_object(self):
+        if self._deleted:
+            return
+        self._deleted = True
+        PyDatabase.remove_data_connection(self.current_x_data_name, id(self.line), 'x')
+        PyDatabase.remove_data_connection(self.current_y_data_name, id(self.line), 'y')
+        _remove_project_record(self.project_collection, self.project_record)
+        _remove_artist(self.line)
+        self.redraw()
 
     def update_x_data(self, x_data: ndarray):
         self.x_data = x_data
