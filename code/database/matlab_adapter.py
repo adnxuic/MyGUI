@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
@@ -62,6 +63,47 @@ CONNECT_INITIALIZE_PACKAGES = _bool_from_env("MYGUI_MATLAB_CONNECT_INITIALIZE_PA
 class MatlabStatus:
     available: bool
     message: str = ""
+
+
+MatlabStateListener = Callable[[bool], None]
+_MATLAB_ENABLED = False
+_MATLAB_STATE_LISTENERS: list[MatlabStateListener] = []
+
+
+def is_matlab_enabled() -> bool:
+    return _MATLAB_ENABLED
+
+
+def register_matlab_state_listener(listener: MatlabStateListener) -> None:
+    if listener not in _MATLAB_STATE_LISTENERS:
+        _MATLAB_STATE_LISTENERS.append(listener)
+
+
+def unregister_matlab_state_listener(listener: MatlabStateListener) -> None:
+    try:
+        _MATLAB_STATE_LISTENERS.remove(listener)
+    except ValueError:
+        pass
+
+
+def clear_matlab_state_listeners() -> None:
+    _MATLAB_STATE_LISTENERS.clear()
+
+
+def _notify_matlab_state_listeners(enabled: bool) -> None:
+    for listener in list(_MATLAB_STATE_LISTENERS):
+        try:
+            listener(enabled)
+        except RuntimeError:
+            unregister_matlab_state_listener(listener)
+
+
+def set_matlab_enabled(enabled: bool, notify: bool = True) -> None:
+    global _MATLAB_ENABLED
+    previous = _MATLAB_ENABLED
+    _MATLAB_ENABLED = bool(enabled)
+    if notify and previous != _MATLAB_ENABLED:
+        _notify_matlab_state_listeners(_MATLAB_ENABLED)
 
 
 def _configured_log_level() -> int:

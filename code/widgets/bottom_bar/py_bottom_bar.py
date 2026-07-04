@@ -1,9 +1,39 @@
 from Qt_core import *
 from code.widgets import qss_func
+from code.widgets.bottom_bar.py_message_bar import PyMessageBar
+from code.widgets.bottom_bar.py_state_bar import FeatureIndicator, PyStateBar
+
+from code import tex_config
+from code.database import matlab_adapter
 
 import os
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
+
+
+def _feature_indicators():
+    """Central, extensible registry of State Bar features.
+
+    Add a new FeatureIndicator here to surface another optional feature's
+    enabled state; no other change is required.
+    """
+    return (
+        FeatureIndicator(
+            name="matlab",
+            label="MATLAB",
+            is_enabled=matlab_adapter.is_matlab_enabled,
+            register_listener=matlab_adapter.register_matlab_state_listener,
+            unregister_listener=matlab_adapter.unregister_matlab_state_listener,
+        ),
+        FeatureIndicator(
+            name="tex",
+            label="TeX",
+            is_enabled=tex_config.is_tex_enabled,
+            register_listener=tex_config.register_tex_state_listener,
+            unregister_listener=tex_config.unregister_tex_state_listener,
+        ),
+    )
+
 
 class PyBottomBar(QFrame):
     def __init__(self):
@@ -15,31 +45,24 @@ class PyBottomBar(QFrame):
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(10, 0, 10, 0)
-        self.layout.setSpacing(0)
+        self.layout.setSpacing(10)
 
-        self.message_label = QLabel("")
-        self.message_label.setObjectName("bottom_bar_message")
-        self.message_label.setTextFormat(Qt.PlainText)
-        self.message_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        self.message_label.setWordWrap(False)
-        self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.layout.addWidget(self.message_label)
+        self.message_bar = PyMessageBar()
+        self.layout.addWidget(self.message_bar, stretch=1)
+
+        self.state_bar = PyStateBar(_feature_indicators())
+        self.layout.addWidget(self.state_bar, stretch=0)
+
+        self.destroyed.connect(self.state_bar.cleanup)
 
     def show_message(self, message, level="info"):
-        self.message_label.setText(message)
-        self.message_label.setToolTip(message)
-        if level == "error":
-            self.message_label.setStyleSheet("color: #ff4d4f;")
-        elif level == "success":
-            self.message_label.setStyleSheet("color: #22c55e;")
-        else:
-            self.message_label.setStyleSheet("color: #f2f2f2;")
+        self.message_bar.show_message(message, level)
 
     def show_error(self, message):
-        self.show_message(message, "error")
+        self.message_bar.show_error(message)
 
     def show_success(self, message):
-        self.show_message(message, "success")
+        self.message_bar.show_success(message)
 
     def clear_message(self):
-        self.show_message("", "info")
+        self.message_bar.clear_message()

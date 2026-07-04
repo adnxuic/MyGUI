@@ -198,6 +198,7 @@ class PyMatlabWindow(QFrame):
             request_id,
             elapsed,
         )
+        matlab_adapter.set_matlab_enabled(True)
         self.init()
 
     def _matlab_connect_failed(self, request_id, started_at, message):
@@ -219,6 +220,7 @@ class PyMatlabWindow(QFrame):
         QMessageBox.warning(self, "Connect Matlab", message)
 
     def reset_to_connect_button(self):
+        matlab_adapter.set_matlab_enabled(False)
         while self.layout.count():
             item = self.layout.takeAt(0)
             widget = item.widget()
