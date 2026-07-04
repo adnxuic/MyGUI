@@ -185,6 +185,13 @@ class PyMatlabWindow(QFrame):
         )
 
     def _matlab_connect_succeeded(self, request_id, started_at, _status):
+        if request_id != self._connect_request_id:
+            matlab_adapter.matlab_logger().debug(
+                "MATLAB stale connect success ignored request_id=%s current_request_id=%s",
+                request_id,
+                self._connect_request_id,
+            )
+            return
         elapsed = time.monotonic() - started_at
         matlab_adapter.matlab_logger().info(
             "MATLAB connect request succeeded request_id=%s elapsed=%.3fs",
@@ -194,6 +201,13 @@ class PyMatlabWindow(QFrame):
         self.init()
 
     def _matlab_connect_failed(self, request_id, started_at, message):
+        if request_id != self._connect_request_id:
+            matlab_adapter.matlab_logger().debug(
+                "MATLAB stale connect failure ignored request_id=%s current_request_id=%s",
+                request_id,
+                self._connect_request_id,
+            )
+            return
         elapsed = time.monotonic() - started_at
         matlab_adapter.matlab_logger().warning(
             "MATLAB connect request failed request_id=%s elapsed=%.3fs message=%s",

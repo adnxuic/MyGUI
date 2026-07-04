@@ -192,6 +192,23 @@ class OptionalDependencyTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_matlab_stale_connect_callbacks_do_not_update_ui(self):
+        window = PyMatlabWindow()
+        try:
+            window._connect_request_id = 2
+            window.init = Mock()
+            window.reset_to_connect_button = Mock()
+
+            with patch.object(matlab_window_module.QMessageBox, "warning") as warning:
+                window._matlab_connect_succeeded(1, time.monotonic(), matlab_adapter.MatlabStatus(True))
+                window._matlab_connect_failed(1, time.monotonic(), "MATLAB runtime unavailable")
+
+            window.init.assert_not_called()
+            window.reset_to_connect_button.assert_not_called()
+            warning.assert_not_called()
+        finally:
+            window.close()
+
     def test_matlab_expression_extraction_failure_only_warns(self):
         fit_window = None
         with patch.object(
@@ -251,10 +268,43 @@ class OptionalDependencyTests(unittest.TestCase):
 
             warning.assert_called_once()
             window.connect_widget.update_curve.assert_not_called()
+            window.fit_button.setEnabled.assert_any_call(False)
+            window.fit_button.setEnabled.assert_any_call(True)
+            window.fit_button.setText.assert_any_call("Fitting...")
+            window.fit_button.setText.assert_any_call("Fit")
 
             log_text = "\n".join(logs.output)
             self.assertIn("MATLAB fit request started request_id=1", log_text)
             self.assertIn("MATLAB fit request failed request_id=1", log_text)
+        finally:
+            window.close()
+
+    def test_matlab_invalid_fit_parameters_warns_without_calling_matlab(self):
+        database = PyDatabase()
+        PyDatabase.register_sheet("Data", "Sheet1", database)
+        database.update_data(1, np.array([1.0, 2.0, 3.0]))
+        database.update_data(2, np.array([2.0, 4.0, 6.0]))
+
+        window = PyMatlabWindow()
+        try:
+            window.data_choice_widget = Mock()
+            window.data_choice_widget.get_x_data.return_value = "Data/Sheet1/1"
+            window.data_choice_widget.get_y_data.return_value = "Data/Sheet1/2"
+            window.fit_type_window = Mock()
+            window.fit_type_window.fit_parameters.side_effect = ValueError("bad fit parameter")
+            window.connect_widget = Mock()
+            window.fit_button = Mock()
+
+            with patch.object(
+                matlab_window_module.matlab_adapter,
+                "fit_curve_isolated",
+            ) as fit_curve_isolated, patch.object(matlab_window_module.QMessageBox, "warning") as warning:
+                window.fit_curve()
+
+            warning.assert_called_once()
+            fit_curve_isolated.assert_not_called()
+            window.fit_button.setEnabled.assert_not_called()
+            window.fit_button.setText.assert_not_called()
         finally:
             window.close()
 
