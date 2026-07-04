@@ -29,12 +29,6 @@ import numpy as np
 mpl.use("QtAgg")
 
 
-#
-# mpl.rcParams['text.usetex'] = True
-# preamble = r'\usepackage{amsmath,amssymb,amsthm}'
-# mpl.rcParams['text.latex.preamble'] = preamble
-
-
 class PyFigureCanvas(QWidget):
     def __init__(self, parent=None, width=4, height=3, dpi=200, style=None):
         super().__init__()

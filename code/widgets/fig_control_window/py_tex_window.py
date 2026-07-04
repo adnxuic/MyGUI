@@ -1,10 +1,11 @@
 from Qt_core import *
 from code.widgets.qss_func import qss_loader
+from code import tex_config
 
 import matplotlib as mpl
 
 import os
-import shutil
+import time
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
@@ -35,10 +36,9 @@ class PyTexWindow(QFrame):
         self.preamble_box.setLayout(self.preamble_layout)
 
         # 设置默认导入的包
-        self.preamble_text = ''
+        self.preamble_text = tex_config.default_preamble_text()
         self.preamble_input = QPlainTextEdit()
-        self.preamble_input.setPlainText(r"\usepackage{amsmath}")
-        self.preamble_input.appendPlainText(r'\usepackage{newtxtext,newtxmath}')
+        self.preamble_input.setPlainText(self.preamble_text)
 
         self.preamble_layout.addWidget(self.preamble_input)
 
@@ -52,33 +52,81 @@ class PyTexWindow(QFrame):
 
     def use_latex_engine(self, state):
         checked = state == Qt.Checked or state == Qt.CheckState.Checked
-        if checked and not self._has_tex_engine():
-            self.latex_engine.blockSignals(True)
-            self.latex_engine.setChecked(False)
-            self.latex_engine.blockSignals(False)
+        logger = tex_config.tex_logger()
+        if not checked:
             self.is_latex = False
             mpl.rcParams['text.usetex'] = False
-            QMessageBox.warning(self, "TeX Engine", "No TeX executable was found on PATH.")
+            logger.info("TeX disable request succeeded")
             return
 
-        if checked:
-            self.is_latex = True
-        else:
-            self.is_latex = False
+        preamble = tex_config.normalize_preamble(self.preamble_input.toPlainText())
+        preamble_line_count = len(preamble.splitlines()) if preamble else 0
+        started_at = time.monotonic()
+        logger.info("TeX enable request started preamble_line_count=%s", preamble_line_count)
+        error = self._validate_preamble(preamble)
+        if error is not None:
+            elapsed = time.monotonic() - started_at
+            logger.warning("TeX enable request failed elapsed=%.3fs message=%s", elapsed, error)
+            self._reject_latex(error)
+            return
 
-        mpl.rcParams['text.usetex'] = self.is_latex
+        self.preamble_text = preamble
+        mpl.rcParams['text.latex.preamble'] = preamble
+        self.is_latex = True
+        mpl.rcParams['text.usetex'] = True
+        elapsed = time.monotonic() - started_at
+        logger.info(
+            "TeX enable request succeeded elapsed=%.3fs preamble_line_count=%s",
+            elapsed,
+            preamble_line_count,
+        )
 
     @staticmethod
     def _has_tex_engine() -> bool:
-        return any(shutil.which(command) for command in ("latex", "pdflatex", "xelatex", "tectonic"))
+        return tex_config.has_tex_engine()
+
+    def _validate_preamble(self, preamble: str) -> str | None:
+        if not self._has_tex_engine():
+            return "No TeX executable was found on PATH."
+        return tex_config.validate_tex_runtime(preamble)
+
+    def _reject_latex(self, message: str):
+        self.latex_engine.blockSignals(True)
+        self.latex_engine.setChecked(False)
+        self.latex_engine.blockSignals(False)
+        self.is_latex = False
+        mpl.rcParams['text.usetex'] = False
+        QMessageBox.warning(self, "TeX Engine", message)
 
     def update_preamble(self):
-        # 清空导言区
-        mpl.rcParams['text.latex.preamble'] = ''
-        self.preamble_text = ''
-        # 更新导言区,搜集每一行的内容
-        for i in range(self.preamble_input.document().lineCount()):
-            if not self.preamble_input.document().findBlockByLineNumber(i).text() == "":
-                self.preamble_text += self.preamble_input.document().findBlockByLineNumber(i).text()
+        preamble = tex_config.normalize_preamble(self.preamble_input.toPlainText())
+        preamble_line_count = len(preamble.splitlines()) if preamble else 0
+        started_at = time.monotonic()
+        logger = tex_config.tex_logger()
+        logger.info(
+            "TeX preamble update request started enabled=%s preamble_line_count=%s",
+            self.is_latex,
+            preamble_line_count,
+        )
 
-        mpl.rcParams['text.latex.preamble'] = self.preamble_text
+        if self.is_latex:
+            error = self._validate_preamble(preamble)
+            if error is not None:
+                elapsed = time.monotonic() - started_at
+                logger.warning(
+                    "TeX preamble update request failed elapsed=%.3fs message=%s",
+                    elapsed,
+                    error,
+                )
+                QMessageBox.warning(self, "TeX Preamble", error)
+                return
+
+        self.preamble_text = preamble
+        mpl.rcParams['text.latex.preamble'] = preamble
+        elapsed = time.monotonic() - started_at
+        logger.info(
+            "TeX preamble update request succeeded elapsed=%.3fs enabled=%s preamble_line_count=%s",
+            elapsed,
+            self.is_latex,
+            preamble_line_count,
+        )

@@ -47,3 +47,4 @@ tests/fixtures/
 .matlab_runtime_cache/
 matlab_sources/r2025a_build_*/
 test.mygui.json
+test_tex.mygui.json

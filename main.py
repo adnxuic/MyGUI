@@ -9,6 +9,7 @@ from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWi
 from code.widgets.right_column.py_right_column import PyRightColumn
 from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from code import status_messages
 
 from Qt_core import *
 
@@ -85,6 +86,7 @@ class MainWindow(QMainWindow):
 
         # 左下状态栏
         self.bottom_bar = PyBottomBar()
+        status_messages.set_status_handler(self.bottom_bar.show_message)
         self.left_layout.addWidget(self.bottom_bar)
 
         # 添加左侧窗口
@@ -148,6 +150,8 @@ class MainWindow(QMainWindow):
         return left_boundary <= x <= right_boundary
 
     def closeEvent(self, event):
+        if hasattr(self, "bottom_bar"):
+            status_messages.clear_status_handler(self.bottom_bar.show_message)
         if hasattr(self.figure_window, "cancel_pending_draws"):
             self.figure_window.cancel_pending_draws()
         super().closeEvent(event)

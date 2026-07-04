@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -14,12 +15,18 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import matplotlib as mpl
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 import numpy as np
 
 from Qt_core import QApplication, Qt
+from code import tex_config
+from code import status_messages
 from code.database import matlab_adapter
 from code.database.py_database import PyDatabase
+from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 from code.widgets.fig_control_window import py_matlab_window as matlab_window_module
+from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 from code.widgets.fig_control_window.py_matlab_window import PyFitWindow, PyMatlabWindow
 from code.widgets.fig_control_window.py_tex_window import PyTexWindow
 
@@ -39,7 +46,11 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def tearDown(self):
         PyDatabase.clear()
+        mpl.rcParams['text.usetex'] = False
+        mpl.rcParams['text.latex.preamble'] = mpl.rcParamsDefault['text.latex.preamble']
+        status_messages.clear_status_handler()
         self.close_matlab_log_handlers()
+        self.close_tex_log_handlers()
 
     def close_matlab_log_handlers(self):
         logger = matlab_adapter.logging.getLogger(matlab_adapter.LOGGER_NAME)
@@ -47,8 +58,19 @@ class OptionalDependencyTests(unittest.TestCase):
             logger.removeHandler(handler)
             handler.close()
 
+    def close_tex_log_handlers(self):
+        logger = tex_config.logging.getLogger(tex_config.LOGGER_NAME)
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+
     def flush_matlab_log_handlers(self):
         logger = matlab_adapter.matlab_logger()
+        for handler in logger.handlers:
+            handler.flush()
+
+    def flush_tex_log_handlers(self):
+        logger = tex_config.tex_logger()
         for handler in logger.handlers:
             handler.flush()
 
@@ -82,6 +104,316 @@ class OptionalDependencyTests(unittest.TestCase):
         finally:
             window.close()
             mpl.rcParams['text.usetex'] = False
+
+    def test_tex_preamble_normalize_preserves_lines_and_skips_blanks(self):
+        self.assertEqual(
+            tex_config.normalize_preamble(
+                "  \\usepackage{amsmath}\n\n\\usepackage{xcolor}  \r\n   "
+            ),
+            "\\usepackage{amsmath}\n\\usepackage{xcolor}",
+        )
+
+    def test_tex_render_probe_failure_warns_and_keeps_usetex_disabled(self):
+        window = PyTexWindow()
+        try:
+            mpl.rcParams['text.usetex'] = False
+            with patch.object(tex_config, "_LOG_TO_FILE", False), \
+                    patch.object(tex_config, "_LOG_TO_STDERR", False), \
+                    self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
+                with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
+                        patch(
+                            "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                            return_value="render probe failed",
+                        ) as validate_tex_runtime, \
+                        patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                    window.latex_engine.setChecked(True)
+
+            validate_tex_runtime.assert_called_once_with(tex_config.default_preamble_text())
+            self.assertFalse(window.is_latex)
+            self.assertFalse(window.latex_engine.isChecked())
+            self.assertFalse(mpl.rcParams['text.usetex'])
+            warning.assert_called_once()
+            log_text = "\n".join(logs.output)
+            self.assertIn("TeX enable request started", log_text)
+            self.assertIn("TeX enable request failed", log_text)
+        finally:
+            window.close()
+
+    def test_tex_enable_success_commits_usetex_and_normalized_preamble(self):
+        window = PyTexWindow()
+        try:
+            window.preamble_input.setPlainText("\\usepackage{amsmath}\n\n\\usepackage{xcolor}")
+            with patch.object(tex_config, "_LOG_TO_FILE", False), \
+                    patch.object(tex_config, "_LOG_TO_STDERR", False), \
+                    self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
+                with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
+                        patch(
+                            "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                            return_value=None,
+                        ) as validate_tex_runtime, \
+                        patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                    window.latex_engine.setChecked(True)
+
+            expected_preamble = "\\usepackage{amsmath}\n\\usepackage{xcolor}"
+            validate_tex_runtime.assert_called_once_with(expected_preamble)
+            self.assertTrue(window.is_latex)
+            self.assertTrue(window.latex_engine.isChecked())
+            self.assertTrue(mpl.rcParams['text.usetex'])
+            self.assertEqual(mpl.rcParams['text.latex.preamble'], expected_preamble)
+            self.assertEqual(window.preamble_text, expected_preamble)
+            warning.assert_not_called()
+            log_text = "\n".join(logs.output)
+            self.assertIn("TeX enable request started", log_text)
+            self.assertIn("TeX enable request succeeded", log_text)
+        finally:
+            window.close()
+
+    def test_tex_preamble_update_failure_preserves_old_rcparams(self):
+        window = PyTexWindow()
+        try:
+            old_preamble = "\\usepackage{old}"
+            mpl.rcParams['text.usetex'] = True
+            mpl.rcParams['text.latex.preamble'] = old_preamble
+            window.is_latex = True
+            window.preamble_text = old_preamble
+            window.preamble_input.setPlainText("\\usepackage{broken}")
+
+            with patch.object(tex_config, "_LOG_TO_FILE", False), \
+                    patch.object(tex_config, "_LOG_TO_STDERR", False), \
+                    self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
+                with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
+                        patch(
+                            "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                            return_value="bad preamble",
+                        ) as validate_tex_runtime, \
+                        patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                    window.update_preamble()
+
+            validate_tex_runtime.assert_called_once_with("\\usepackage{broken}")
+            self.assertTrue(window.is_latex)
+            self.assertTrue(mpl.rcParams['text.usetex'])
+            self.assertEqual(mpl.rcParams['text.latex.preamble'], old_preamble)
+            self.assertEqual(window.preamble_text, old_preamble)
+            warning.assert_called_once()
+            log_text = "\n".join(logs.output)
+            self.assertIn("TeX preamble update request started", log_text)
+            self.assertIn("TeX preamble update request failed", log_text)
+        finally:
+            window.close()
+
+    def test_tex_preamble_update_while_disabled_skips_runtime_probe(self):
+        window = PyTexWindow()
+        try:
+            window.is_latex = False
+            window.preamble_input.setPlainText("\\usepackage{amsmath}\n\n\\usepackage{xcolor}")
+
+            with patch(
+                "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+            ) as validate_tex_runtime:
+                window.update_preamble()
+
+            expected_preamble = "\\usepackage{amsmath}\n\\usepackage{xcolor}"
+            validate_tex_runtime.assert_not_called()
+            self.assertFalse(mpl.rcParams['text.usetex'])
+            self.assertEqual(mpl.rcParams['text.latex.preamble'], expected_preamble)
+            self.assertEqual(window.preamble_text, expected_preamble)
+        finally:
+            window.close()
+
+    def test_tex_logging_writes_rotating_log_file(self):
+        with self.temp_dir() as log_dir:
+            with patch.dict(
+                tex_config.os.environ,
+                {
+                    "MYGUI_TEX_LOG_DIR": log_dir,
+                    "MYGUI_TEX_LOG_LEVEL": "DEBUG",
+                },
+            ):
+                logger = tex_config.configure_tex_logging()
+                logger.info("tex log smoke")
+                for handler in logger.handlers:
+                    handler.flush()
+
+            log_path = Path(log_dir) / "tex.log"
+            self.assertIn("tex log smoke", log_path.read_text(encoding="utf-8"))
+            self.close_tex_log_handlers()
+
+    def test_tex_panel_failure_path_does_not_block_main_window_startup(self):
+        from main import MainWindow
+
+        window = MainWindow()
+        try:
+            tex_window = window.fig_control_window.tex_window
+            with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
+                    patch(
+                        "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                        return_value="render probe failed",
+                    ), patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                tex_window.latex_engine.setChecked(True)
+
+            self.assertIsNotNone(window.fig_control_window.tex_window)
+            self.assertFalse(tex_window.is_latex)
+            self.assertFalse(tex_window.latex_engine.isChecked())
+            self.assertFalse(mpl.rcParams['text.usetex'])
+            warning.assert_called_once()
+        finally:
+            window.close()
+
+    def test_tex_text_render_failure_restores_previous_text_and_project_record(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "safe")
+        project_record = {"text": "safe"}
+        modifier = PyTextModify(figure, text=text, project_record=project_record)
+
+        with patch.object(tex_config, "_LOG_TO_FILE", False), \
+                patch.object(tex_config, "_LOG_TO_STDERR", False), \
+                self.assertLogs(tex_config.LOGGER_NAME, level="WARNING") as logs:
+            with patch.object(
+                modifier,
+                "redraw",
+                side_effect=[RuntimeError("latex failed"), None],
+            ):
+                with self.assertRaisesRegex(TextRenderError, "keeping last valid text"):
+                    modifier.set_text_content("$\\int$" + chr(0xFFE5))
+
+        self.assertEqual(text.get_text(), "safe")
+        self.assertEqual(project_record["text"], "safe")
+        self.assertIn("TeX text render failed", "\n".join(logs.output))
+
+    def test_text_redraw_reports_missing_glyph_warning_to_status_bar(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "safe")
+        modifier = PyTextModify(figure, text=text)
+        status_events = []
+
+        def draw_warning():
+            warnings.warn(
+                "Glyph 65509 (\\N{FULLWIDTH YEN SIGN}) missing from font(s) Times New Roman.",
+                UserWarning,
+            )
+
+        status_messages.set_status_handler(
+            lambda message, level: status_events.append((message, level))
+        )
+
+        with patch.object(tex_config, "_LOG_TO_FILE", False), \
+                patch.object(tex_config, "_LOG_TO_STDERR", False), \
+                self.assertLogs(tex_config.LOGGER_NAME, level="WARNING") as logs:
+            with patch.object(figure.canvas, "draw", side_effect=draw_warning):
+                modifier.redraw()
+
+        self.assertEqual(status_events[-1][1], "error")
+        self.assertIn("U+FFE5", status_events[-1][0])
+        self.assertIn("Matplotlib text glyph warning", "\n".join(logs.output))
+
+    def test_text_widget_reports_status_and_keeps_editor_when_tex_render_fails(self):
+        class FakeText:
+            def __init__(self):
+                self.value = "safe"
+
+            def get_fontfamily(self):
+                return ["DejaVu Sans"]
+
+            def get_fontsize(self):
+                return 12
+
+            def get_text(self):
+                return self.value
+
+            def get_position(self):
+                return (0.5, 0.5)
+
+        class FakeTextModify:
+            def __init__(self):
+                self.text = FakeText()
+
+            def set_text_font(self, _font):
+                pass
+
+            def set_text_fontsize(self, _size):
+                pass
+
+            def set_text_content(self, _content):
+                raise TextRenderError("Text render failed; keeping last valid text.")
+
+            def set_xy_position(self, _x, _y):
+                pass
+
+        widget = PyTextModWidget(FakeTextModify())
+        status_events = []
+        bad_text = "$\\int$" + chr(0xFFE5)
+        try:
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
+            widget.text_content.blockSignals(True)
+            widget.text_content.setPlainText(bad_text)
+            widget.text_content.blockSignals(False)
+
+            with patch(
+                "code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets.QMessageBox.warning"
+            ) as warning:
+                widget.set_text_content()
+
+            warning.assert_not_called()
+            self.assertEqual(widget.text_content.toPlainText(), bad_text)
+            self.assertEqual(status_events[-1], ("Text render failed; keeping last valid text.", "error"))
+        finally:
+            widget.close()
+
+    def test_text_widget_keeps_glyph_status_when_successful_render_warns(self):
+        class FakeText:
+            def __init__(self):
+                self.value = "safe"
+
+            def get_fontfamily(self):
+                return ["DejaVu Sans"]
+
+            def get_fontsize(self):
+                return 12
+
+            def get_text(self):
+                return self.value
+
+            def get_position(self):
+                return (0.5, 0.5)
+
+        class FakeTextModify:
+            def __init__(self):
+                self.text = FakeText()
+                self.last_render_warning = None
+
+            def set_text_font(self, _font):
+                pass
+
+            def set_text_fontsize(self, _size):
+                pass
+
+            def set_text_content(self, content):
+                self.text.value = content
+                self.last_render_warning = "Current font is missing glyph U+FFE5."
+                status_messages.show_error(self.last_render_warning)
+
+            def set_xy_position(self, _x, _y):
+                pass
+
+        widget = PyTextModWidget(FakeTextModify())
+        status_events = []
+        try:
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
+            widget.text_content.blockSignals(True)
+            widget.text_content.setPlainText("plain")
+            widget.text_content.blockSignals(False)
+
+            widget.set_text_content()
+
+            self.assertEqual(status_events[-1], ("Current font is missing glyph U+FFE5.", "error"))
+        finally:
+            widget.close()
 
     def test_matlab_import_failure_does_not_block_main_window_startup(self):
         from main import MainWindow

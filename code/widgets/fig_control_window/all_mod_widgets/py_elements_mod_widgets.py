@@ -1,7 +1,8 @@
 from Qt_core import *
 
 from code.widgets import qss_func
-from code.figuremodify.py_text_modify import PyTextModify
+from code import status_messages
+from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 
 from matplotlib import font_manager
 
@@ -121,7 +122,13 @@ class PyTextModWidget(QFrame):
 
     def set_text_content(self):
         content = self.text_content.toPlainText()
-        self.text_modify.set_text_content(content)
+        try:
+            self.text_modify.set_text_content(content)
+        except TextRenderError as exc:
+            status_messages.show_error(str(exc))
+        else:
+            if getattr(self.text_modify, "last_render_warning", None) is None:
+                status_messages.clear_message()
 
     def set_xy_position(self):
         x = self.text_x_pos.value()

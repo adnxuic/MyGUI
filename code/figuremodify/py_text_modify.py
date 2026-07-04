@@ -1,4 +1,6 @@
 from Qt_core import *
+from code import tex_config
+from code import status_messages
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
@@ -6,6 +8,22 @@ from matplotlib.figure import Figure
 from matplotlib.text import Text
 from matplotlib.style import use
 from typing import Any
+import re
+import warnings
+
+
+class TextRenderError(ValueError):
+    pass
+
+
+def _missing_glyph_message(message: str) -> str | None:
+    if "Glyph" not in message or "missing from font" not in message:
+        return None
+    match = re.search(r"Glyph\s+(\d+)", message)
+    if not match:
+        return "Current font is missing a glyph; text may render incorrectly."
+    codepoint = int(match.group(1))
+    return f"Current font is missing glyph U+{codepoint:04X}; text may render incorrectly."
 
 
 class PyTextModify:
@@ -18,13 +36,30 @@ class PyTextModify:
         self.project_record = project_record
         self.project_collection = project_collection
         self._deleted = False
+        self.last_render_warning = None
 
     def update_project_record(self, **values):
         if self.project_record is not None:
             self.project_record.update(values)
 
     def redraw(self):
-        self.fig.canvas.draw()
+        self.last_render_warning = None
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always", UserWarning)
+            self.fig.canvas.draw()
+
+        for warning in caught_warnings:
+            message = str(warning.message)
+            glyph_message = _missing_glyph_message(message)
+            if glyph_message is not None:
+                tex_config.tex_logger().warning(
+                    "Matplotlib text glyph warning action=redraw message=%s",
+                    message,
+                )
+                self.last_render_warning = glyph_message
+                status_messages.show_error(glyph_message)
+                continue
+            warnings.warn(warning.message, warning.category, stacklevel=2)
 
     def delete_object(self):
         if self._deleted:
@@ -55,13 +90,32 @@ class PyTextModify:
 
     def set_text_content(self, content):
         current_text = self.text.get_text()
+        current_record_text = None
+        if self.project_record is not None:
+            current_record_text = self.project_record.get("text", current_text)
         try:
             self.text.set_text(content)
             self.update_project_record(text=content)
             self.redraw()
-        except ValueError:
+        except Exception as exc:
+            tex_config.tex_logger().warning(
+                "TeX text render failed action=set_text_content text_length=%s text_preview=%r error=%s",
+                len(content),
+                content[:80],
+                exc,
+            )
             self.text.set_text(current_text)
-            self.redraw()
+            self.update_project_record(text=current_record_text if current_record_text is not None else current_text)
+            try:
+                self.redraw()
+            except Exception as rollback_exc:
+                tex_config.tex_logger().warning(
+                    "TeX text rollback redraw failed action=set_text_content error=%s",
+                    rollback_exc,
+                )
+            raise TextRenderError(
+                "Text render failed; keeping last valid text. Remove unsupported TeX or Unicode input."
+            ) from exc
 
     def set_xy_position(self, x, y):
         self.text.set_position((x, y))

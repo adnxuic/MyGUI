@@ -10,3 +10,10 @@ QFrame#bottom_bar
     padding: 0px;
     margin: 0px;
 }
+
+QLabel#bottom_bar_message
+{
+    background-color: transparent;
+    color: #f2f2f2;
+    font-size: 12px;
+}
