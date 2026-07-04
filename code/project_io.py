@@ -124,6 +124,7 @@ def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         for text_record in figure.get("texts", []):
             if isinstance(text_record, dict):
                 text_record.setdefault("scope", "axes")
+                text_record.setdefault("usetex", False)
 
     validate_project_snapshot(migrated)
     return migrated
@@ -175,6 +176,12 @@ def _coerce_float(value: Any, path: str) -> float:
         return float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Invalid project field {path}: expected number, got {value!r}") from exc
+
+
+def _coerce_bool(value: Any, path: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"Invalid project field {path}: expected boolean, got {value!r}")
 
 
 def _validate_tables(tables: dict[str, Any]) -> set[str]:
@@ -262,6 +269,8 @@ def _validate_text_record(record: dict[str, Any], path: str, axes_count: int) ->
     _require_field(record, "text", path)
     _coerce_float(_require_field(record, "x", path), f"{path}.x")
     _coerce_float(_require_field(record, "y", path), f"{path}.y")
+    if "usetex" in record:
+        _coerce_bool(record["usetex"], f"{path}.usetex")
 
 
 def restore_databases(tables: dict[str, dict[str, dict[str, list[Any]]]]) -> None:

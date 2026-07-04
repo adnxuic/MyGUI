@@ -32,5 +32,9 @@ def show_error(message: str) -> bool:
     return show_message(message, "error")
 
 
+def show_success(message: str) -> bool:
+    return show_message(message, "success")
+
+
 def clear_message() -> bool:
     return show_message("", "info")

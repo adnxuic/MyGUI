@@ -241,6 +241,7 @@ class ProjectIoTests(unittest.TestCase):
 
         text_record = snapshot["figures"][0]["texts"][0]
         self.assertEqual(text_record["scope"], "figure")
+        self.assertFalse(text_record["usetex"])
         self.assertNotIn("axes_index", text_record)
 
 

@@ -1,6 +1,7 @@
 from Qt_core import *
 
 from code.widgets import qss_func
+from code import tex_config
 from code import status_messages
 from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 
@@ -78,6 +79,19 @@ class PyTextModWidget(QFrame):
         self.font_size_layout.addWidget(self.font_size_input)
         self.layout.addLayout(self.font_size_layout)
 
+        self.tex_layout = QHBoxLayout()
+        self.tex_layout.setSpacing(0)
+        self.tex_layout.addWidget(QLabel("Render:"))
+        self.tex_render = QCheckBox("TeX")
+        self.tex_render.setToolTip("Render this text with TeX")
+        self.tex_layout.addWidget(self.tex_render)
+        self.tex_layout.addStretch()
+        self.layout.addLayout(self.tex_layout)
+        self._sync_tex_button()
+        self.tex_render.checkStateChanged.connect(self.set_tex_render)
+        tex_config.register_tex_state_listener(self._tex_state_changed)
+        self.destroyed.connect(self._unregister_tex_state_listener)
+
         # 文本内容
         self.text_content = QPlainTextEdit()
         self.text_content.setPlaceholderText("Text content")
@@ -118,7 +132,45 @@ class PyTextModWidget(QFrame):
         self.setLayout(self.layout)
 
     def delete_object(self):
+        self._unregister_tex_state_listener()
         self.text_modify.delete_object()
+
+    def _unregister_tex_state_listener(self, *_args):
+        tex_config.unregister_tex_state_listener(self._tex_state_changed)
+
+    def _sync_tex_button(self):
+        tex_enabled = tex_config.is_tex_enabled()
+        self.tex_render.blockSignals(True)
+        self.tex_render.setEnabled(tex_enabled)
+        self.tex_render.setChecked(tex_enabled and self.text_modify.get_text_usetex())
+        self.tex_render.blockSignals(False)
+
+    def _tex_state_changed(self, enabled: bool):
+        if not enabled and self.text_modify.get_text_usetex():
+            try:
+                self.text_modify.set_text_usetex(False)
+            except TextRenderError as exc:
+                status_messages.show_error(str(exc))
+        self._sync_tex_button()
+
+    def set_tex_render(self, state):
+        checked = state == Qt.Checked or state == Qt.CheckState.Checked
+        if checked and not tex_config.is_tex_enabled():
+            status_messages.show_error("Enable TeX before using TeX rendering for this text.")
+            self._sync_tex_button()
+            return
+
+        try:
+            self.text_modify.set_text_usetex(checked)
+        except TextRenderError as exc:
+            status_messages.show_error(str(exc))
+            self._sync_tex_button()
+        else:
+            if getattr(self.text_modify, "last_render_warning", None) is None:
+                if checked:
+                    status_messages.show_success("Text TeX rendering enabled.")
+                else:
+                    status_messages.clear_message()
 
     def set_text_content(self):
         content = self.text_content.toPlainText()
@@ -135,3 +187,7 @@ class PyTextModWidget(QFrame):
         y = self.text_y_pos.value()
 
         self.text_modify.set_xy_position(x, y)
+
+    def closeEvent(self, event):
+        self._unregister_tex_state_listener()
+        super().closeEvent(event)

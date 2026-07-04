@@ -120,6 +120,7 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
             self.assertEqual(snapshot["scatters"][0]["marker"], "s")
             self.assertEqual(snapshot["interpolates"][0]["method"], interpolate_method)
             self.assertEqual(snapshot["texts"][0]["fontsize"], 14.0)
+            self.assertFalse(snapshot["texts"][0]["usetex"])
         finally:
             if loaded_window is not None:
                 loaded_window.close()
@@ -190,6 +191,7 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
             self.assertEqual(loaded_canvas.project_texts[0]["x"], 0.4)
             self.assertEqual(loaded_canvas.project_texts[0]["y"], 0.6)
             self.assertEqual(loaded_canvas.project_texts[0]["fontsize"], 22.0)
+            self.assertFalse(loaded_canvas.project_texts[0]["usetex"])
 
             text_box.delete_widget(0)
             self.app.processEvents()

@@ -46,7 +46,8 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def tearDown(self):
         PyDatabase.clear()
-        mpl.rcParams['text.usetex'] = False
+        tex_config.set_tex_enabled(False, notify=False)
+        tex_config.clear_tex_state_listeners()
         mpl.rcParams['text.latex.preamble'] = mpl.rcParamsDefault['text.latex.preamble']
         status_messages.clear_status_handler()
         self.close_matlab_log_handlers()
@@ -89,10 +90,14 @@ class OptionalDependencyTests(unittest.TestCase):
             time.sleep(0.01)
         self.fail("Timed out waiting for asynchronous GUI update.")
 
-    def test_tex_missing_engine_warns_and_keeps_usetex_disabled(self):
+    def test_tex_missing_engine_reports_status_and_keeps_usetex_disabled(self):
         window = PyTexWindow()
+        status_events = []
         try:
             mpl.rcParams['text.usetex'] = True
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
             with patch.object(PyTexWindow, "_has_tex_engine", return_value=False), \
                     patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
                 window.use_latex_engine(Qt.CheckState.Checked)
@@ -100,7 +105,8 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertFalse(window.is_latex)
             self.assertFalse(window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
-            warning.assert_called_once()
+            warning.assert_not_called()
+            self.assertEqual(status_events[-1], ("No TeX executable was found on PATH.", "error"))
         finally:
             window.close()
             mpl.rcParams['text.usetex'] = False
@@ -115,8 +121,12 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def test_tex_render_probe_failure_warns_and_keeps_usetex_disabled(self):
         window = PyTexWindow()
+        status_events = []
         try:
             mpl.rcParams['text.usetex'] = False
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
             with patch.object(tex_config, "_LOG_TO_FILE", False), \
                     patch.object(tex_config, "_LOG_TO_STDERR", False), \
                     self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
@@ -132,7 +142,8 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertFalse(window.is_latex)
             self.assertFalse(window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
-            warning.assert_called_once()
+            warning.assert_not_called()
+            self.assertEqual(status_events[-1], ("render probe failed", "error"))
             log_text = "\n".join(logs.output)
             self.assertIn("TeX enable request started", log_text)
             self.assertIn("TeX enable request failed", log_text)
@@ -141,8 +152,12 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def test_tex_enable_success_commits_usetex_and_normalized_preamble(self):
         window = PyTexWindow()
+        status_events = []
         try:
             window.preamble_input.setPlainText("\\usepackage{amsmath}\n\n\\usepackage{xcolor}")
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
             with patch.object(tex_config, "_LOG_TO_FILE", False), \
                     patch.object(tex_config, "_LOG_TO_STDERR", False), \
                     self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
@@ -162,6 +177,10 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertEqual(mpl.rcParams['text.latex.preamble'], expected_preamble)
             self.assertEqual(window.preamble_text, expected_preamble)
             warning.assert_not_called()
+            self.assertEqual(
+                status_events[-1],
+                ("TeX runtime check passed; TeX rendering is enabled.", "success"),
+            )
             log_text = "\n".join(logs.output)
             self.assertIn("TeX enable request started", log_text)
             self.assertIn("TeX enable request succeeded", log_text)
@@ -170,13 +189,17 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def test_tex_preamble_update_failure_preserves_old_rcparams(self):
         window = PyTexWindow()
+        status_events = []
         try:
             old_preamble = "\\usepackage{old}"
-            mpl.rcParams['text.usetex'] = True
+            tex_config.set_tex_enabled(True, notify=False)
             mpl.rcParams['text.latex.preamble'] = old_preamble
             window.is_latex = True
             window.preamble_text = old_preamble
             window.preamble_input.setPlainText("\\usepackage{broken}")
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
 
             with patch.object(tex_config, "_LOG_TO_FILE", False), \
                     patch.object(tex_config, "_LOG_TO_STDERR", False), \
@@ -194,7 +217,8 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertTrue(mpl.rcParams['text.usetex'])
             self.assertEqual(mpl.rcParams['text.latex.preamble'], old_preamble)
             self.assertEqual(window.preamble_text, old_preamble)
-            warning.assert_called_once()
+            warning.assert_not_called()
+            self.assertEqual(status_events[-1], ("bad preamble", "error"))
             log_text = "\n".join(logs.output)
             self.assertIn("TeX preamble update request started", log_text)
             self.assertIn("TeX preamble update request failed", log_text)
@@ -242,7 +266,11 @@ class OptionalDependencyTests(unittest.TestCase):
         from main import MainWindow
 
         window = MainWindow()
+        status_events = []
         try:
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
             tex_window = window.fig_control_window.tex_window
             with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
                     patch(
@@ -255,7 +283,8 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertFalse(tex_window.is_latex)
             self.assertFalse(tex_window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
-            warning.assert_called_once()
+            warning.assert_not_called()
+            self.assertEqual(status_events[-1], ("render probe failed", "error"))
         finally:
             window.close()
 
@@ -338,6 +367,12 @@ class OptionalDependencyTests(unittest.TestCase):
             def set_text_content(self, _content):
                 raise TextRenderError("Text render failed; keeping last valid text.")
 
+            def get_text_usetex(self):
+                return False
+
+            def set_text_usetex(self, _use_tex):
+                pass
+
             def set_xy_position(self, _x, _y):
                 pass
 
@@ -396,6 +431,12 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.last_render_warning = "Current font is missing glyph U+FFE5."
                 status_messages.show_error(self.last_render_warning)
 
+            def get_text_usetex(self):
+                return False
+
+            def set_text_usetex(self, _use_tex):
+                pass
+
             def set_xy_position(self, _x, _y):
                 pass
 
@@ -414,6 +455,108 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertEqual(status_events[-1], ("Current font is missing glyph U+FFE5.", "error"))
         finally:
             widget.close()
+
+    def test_text_widget_tex_button_disabled_when_global_tex_is_off(self):
+        tex_config.set_tex_enabled(False, notify=False)
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "plain")
+        modifier = PyTextModify(figure, text=text, project_record={"text": "plain", "usetex": False})
+
+        widget = PyTextModWidget(modifier)
+        try:
+            self.assertFalse(widget.tex_render.isEnabled())
+            self.assertFalse(widget.tex_render.isChecked())
+            self.assertFalse(text.get_usetex())
+        finally:
+            widget.close()
+
+    def test_text_widget_tex_button_toggles_individual_text_rendering(self):
+        tex_config.set_tex_enabled(False, notify=False)
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "plain")
+        tex_config.set_tex_enabled(True, notify=False)
+        project_record = {"text": "plain", "usetex": False}
+        modifier = PyTextModify(figure, text=text, project_record=project_record)
+        status_events = []
+
+        widget = PyTextModWidget(modifier)
+        try:
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
+            self.assertTrue(widget.tex_render.isEnabled())
+            self.assertFalse(widget.tex_render.isChecked())
+
+            with patch.object(modifier, "redraw"):
+                widget.tex_render.setChecked(True)
+
+            self.assertTrue(text.get_usetex())
+            self.assertTrue(project_record["usetex"])
+            self.assertEqual(status_events[-1], ("Text TeX rendering enabled.", "success"))
+
+            with patch.object(modifier, "redraw"):
+                widget.tex_render.setChecked(False)
+
+            self.assertFalse(text.get_usetex())
+            self.assertFalse(project_record["usetex"])
+        finally:
+            widget.close()
+
+    def test_global_tex_disable_unchecks_and_disables_text_tex_button(self):
+        tex_config.set_tex_enabled(True, notify=False)
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "plain")
+        text.set_usetex(True)
+        project_record = {"text": "plain", "usetex": True}
+        modifier = PyTextModify(figure, text=text, project_record=project_record)
+
+        widget = PyTextModWidget(modifier)
+        try:
+            self.assertTrue(widget.tex_render.isEnabled())
+            self.assertTrue(widget.tex_render.isChecked())
+
+            with patch.object(modifier, "redraw"):
+                tex_config.set_tex_enabled(False)
+
+            self.assertFalse(widget.tex_render.isEnabled())
+            self.assertFalse(widget.tex_render.isChecked())
+            self.assertFalse(text.get_usetex())
+            self.assertFalse(project_record["usetex"])
+        finally:
+            widget.close()
+
+    def test_new_text_defaults_to_tex_when_global_tex_is_enabled(self):
+        from main import MainWindow
+
+        window = MainWindow()
+        try:
+            window.figure_window.add_figure(width=6.4, height=4.8, dpi=100, style="default", canva_name="tex")
+            canvas = window.figure_window.current_canva
+            canvas.add_axes(nrows=1, ncols=1)
+            tex_config.set_tex_enabled(True, notify=False)
+
+            with patch.object(PyTextModify, "redraw"), patch.object(canvas, "redraw"):
+                canvas.add_text(
+                    x=0.2,
+                    y=0.8,
+                    text="plain",
+                    fontfamily="DejaVu Sans",
+                    fontsize=12,
+                )
+
+            text_artist = canvas.current_axes.texts[-1]
+            all_mod_widget = canvas.fig_modify_widget.fine_all_mod_widget(canvas.current_axes)
+            text_widget = all_mod_widget.element_mod_window.boxs["text_box"].widget(0)
+
+            self.assertTrue(text_artist.get_usetex())
+            self.assertTrue(canvas.project_texts[-1]["usetex"])
+            self.assertTrue(text_widget.tex_render.isEnabled())
+            self.assertTrue(text_widget.tex_render.isChecked())
+        finally:
+            window.close()
 
     def test_matlab_import_failure_does_not_block_main_window_startup(self):
         from main import MainWindow

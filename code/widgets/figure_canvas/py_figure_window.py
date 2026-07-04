@@ -219,6 +219,7 @@ class PyFigureWindow(QFrame):
                         text=text.get("text", ""),
                         fontfamily=text.get("fontfamily", "Times New Roman"),
                         fontsize=int(float(text.get("fontsize", 20))),
+                        usetex=bool(text.get("usetex", False)),
                         record_project=True,
                     )
                     continue
@@ -230,5 +231,6 @@ class PyFigureWindow(QFrame):
                     text=text.get("text", ""),
                     fontfamily=text.get("fontfamily", "Times New Roman"),
                     fontsize=int(float(text.get("fontsize", 20))),
+                    usetex=bool(text.get("usetex", False)),
                     record_project=True,
                 )

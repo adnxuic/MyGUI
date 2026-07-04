@@ -10,8 +10,10 @@ from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets imp
 
 from code.figuremodify.py_axes_modify import PyAxesModify
 from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify, PyInterpolateModify
-from code.figuremodify.py_text_modify import PyTextModify
+from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 
+from code import tex_config
+from code import status_messages
 from code.database.py_database import PyDatabase
 from code.database.interpolate_func import interpolate_dict
 from code.database.safe_expression import evaluate_curve_expression
@@ -309,10 +311,18 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # 添加文本
-    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int, record_project=True):
+    @staticmethod
+    def _resolve_text_usetex(usetex: bool | None) -> bool:
+        if usetex is None:
+            return tex_config.is_tex_enabled()
+        return bool(usetex) and tex_config.is_tex_enabled()
+
+    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
+                 usetex: bool | None = None, record_project=True):
         # with mpl.style.context(self.style):
+        desired_usetex = self._resolve_text_usetex(usetex)
         text = self.current_axes.text(x, y, text, family=fontfamily, fontsize=fontsize,
-                                      transform=self.current_axes.transAxes)
+                                      transform=self.current_axes.transAxes, usetex=False)
         project_record = None
         if record_project:
             project_record = {
@@ -323,6 +333,7 @@ class PyFigureCanvas(QWidget):
                 "text": text.get_text(),
                 "fontfamily": fontfamily,
                 "fontsize": float(text.get_fontsize()),
+                "usetex": False,
             }
             self.project_texts.append(project_record)
         # self.current_axes.transAxes是坐标系的坐标变换
@@ -333,17 +344,25 @@ class PyFigureCanvas(QWidget):
         if all_mod_widget.element_mod_window.boxs.get('text_box') is None:
             all_mod_widget.add_element_box('text_box')
         # 添加文本调整窗口
-        text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text,
-                                                       project_record=project_record,
-                                                       project_collection=self.project_texts))
+        text_modify = PyTextModify(self.fig, self.style, text,
+                                   project_record=project_record,
+                                   project_collection=self.project_texts)
+        if desired_usetex:
+            try:
+                text_modify.set_text_usetex(True)
+            except TextRenderError as exc:
+                status_messages.show_error(str(exc))
+        text_mod_widget = PyTextModWidget(text_modify)
         text_box: PyModBox = all_mod_widget.element_mod_window.boxs['text_box']
         text_box.add_widget(text_mod_widget, 'text')
 
         self.redraw()
 
     def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
+                        usetex: bool | None = None,
                         record_project=True):
-        text = self.fig.text(x, y, text, family=fontfamily, fontsize=fontsize)
+        desired_usetex = self._resolve_text_usetex(usetex)
+        text = self.fig.text(x, y, text, family=fontfamily, fontsize=fontsize, usetex=False)
         project_record = None
         if record_project:
             project_record = {
@@ -353,17 +372,25 @@ class PyFigureCanvas(QWidget):
                 "text": text.get_text(),
                 "fontfamily": fontfamily,
                 "fontsize": float(text.get_fontsize()),
+                "usetex": False,
             }
             self.project_texts.append(project_record)
+
+        text_modify = PyTextModify(self.fig, self.style, text,
+                                   project_record=project_record,
+                                   project_collection=self.project_texts)
+        if desired_usetex:
+            try:
+                text_modify.set_text_usetex(True)
+            except TextRenderError as exc:
+                status_messages.show_error(str(exc))
 
         if self.fig_modify_widget is not None:
             figure_mod_widget = getattr(self.fig_modify_widget, "figure_element_mod_widget", None)
             if figure_mod_widget is not None:
                 if figure_mod_widget.element_mod_window.boxs.get('text_box') is None:
                     figure_mod_widget.add_element_box('text_box')
-                text_mod_widget = PyTextModWidget(PyTextModify(self.fig, self.style, text,
-                                                               project_record=project_record,
-                                                               project_collection=self.project_texts))
+                text_mod_widget = PyTextModWidget(text_modify)
                 text_box: PyModBox = figure_mod_widget.element_mod_window.boxs['text_box']
                 text_box.add_widget(text_mod_widget, 'text')
                 self.fig_modify_widget.stacklayout.setCurrentWidget(figure_mod_widget)

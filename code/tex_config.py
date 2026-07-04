@@ -1,5 +1,6 @@
 import io
 import logging
+from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ DEFAULT_PREAMBLE_LINES = (
     r"\usepackage{newtxtext,newtxmath}",
 )
 TEX_ENGINE_COMMANDS = ("latex", "pdflatex", "xelatex", "tectonic")
+TexStateListener = Callable[[bool], None]
+_TEX_STATE_LISTENERS: list[TexStateListener] = []
 
 
 def _configured_log_level() -> int:
@@ -147,6 +150,41 @@ def set_tex_log_sinks(include_file: bool, include_stderr: bool) -> logging.Logge
 
 def tex_logger() -> logging.Logger:
     return configure_tex_logging()
+
+
+def is_tex_enabled() -> bool:
+    return bool(mpl.rcParams.get("text.usetex", False))
+
+
+def register_tex_state_listener(listener: TexStateListener) -> None:
+    if listener not in _TEX_STATE_LISTENERS:
+        _TEX_STATE_LISTENERS.append(listener)
+
+
+def unregister_tex_state_listener(listener: TexStateListener) -> None:
+    try:
+        _TEX_STATE_LISTENERS.remove(listener)
+    except ValueError:
+        pass
+
+
+def clear_tex_state_listeners() -> None:
+    _TEX_STATE_LISTENERS.clear()
+
+
+def _notify_tex_state_listeners(enabled: bool) -> None:
+    for listener in list(_TEX_STATE_LISTENERS):
+        try:
+            listener(enabled)
+        except RuntimeError:
+            unregister_tex_state_listener(listener)
+
+
+def set_tex_enabled(enabled: bool, notify: bool = True) -> None:
+    previous = is_tex_enabled()
+    mpl.rcParams["text.usetex"] = bool(enabled)
+    if notify and previous != bool(enabled):
+        _notify_tex_state_listeners(bool(enabled))
 
 
 def default_preamble_text() -> str:

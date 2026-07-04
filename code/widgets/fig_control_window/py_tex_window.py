@@ -1,6 +1,7 @@
 from Qt_core import *
 from code.widgets.qss_func import qss_loader
 from code import tex_config
+from code import status_messages
 
 import matplotlib as mpl
 
@@ -55,14 +56,16 @@ class PyTexWindow(QFrame):
         logger = tex_config.tex_logger()
         if not checked:
             self.is_latex = False
-            mpl.rcParams['text.usetex'] = False
+            tex_config.set_tex_enabled(False)
             logger.info("TeX disable request succeeded")
+            status_messages.show_message("TeX rendering disabled.", "info")
             return
 
         preamble = tex_config.normalize_preamble(self.preamble_input.toPlainText())
         preamble_line_count = len(preamble.splitlines()) if preamble else 0
         started_at = time.monotonic()
         logger.info("TeX enable request started preamble_line_count=%s", preamble_line_count)
+        status_messages.show_message("Checking TeX runtime...", "info")
         error = self._validate_preamble(preamble)
         if error is not None:
             elapsed = time.monotonic() - started_at
@@ -73,13 +76,14 @@ class PyTexWindow(QFrame):
         self.preamble_text = preamble
         mpl.rcParams['text.latex.preamble'] = preamble
         self.is_latex = True
-        mpl.rcParams['text.usetex'] = True
+        tex_config.set_tex_enabled(True)
         elapsed = time.monotonic() - started_at
         logger.info(
             "TeX enable request succeeded elapsed=%.3fs preamble_line_count=%s",
             elapsed,
             preamble_line_count,
         )
+        status_messages.show_success("TeX runtime check passed; TeX rendering is enabled.")
 
     @staticmethod
     def _has_tex_engine() -> bool:
@@ -95,8 +99,8 @@ class PyTexWindow(QFrame):
         self.latex_engine.setChecked(False)
         self.latex_engine.blockSignals(False)
         self.is_latex = False
-        mpl.rcParams['text.usetex'] = False
-        QMessageBox.warning(self, "TeX Engine", message)
+        tex_config.set_tex_enabled(False)
+        status_messages.show_error(message)
 
     def update_preamble(self):
         preamble = tex_config.normalize_preamble(self.preamble_input.toPlainText())
@@ -118,7 +122,7 @@ class PyTexWindow(QFrame):
                     elapsed,
                     error,
                 )
-                QMessageBox.warning(self, "TeX Preamble", error)
+                status_messages.show_error(error)
                 return
 
         self.preamble_text = preamble
@@ -130,3 +134,7 @@ class PyTexWindow(QFrame):
             self.is_latex,
             preamble_line_count,
         )
+        if self.is_latex:
+            status_messages.show_success("TeX preamble updated and verified.")
+        else:
+            status_messages.show_message("TeX preamble updated.", "info")

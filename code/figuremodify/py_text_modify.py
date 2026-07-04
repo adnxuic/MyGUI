@@ -88,6 +88,52 @@ class PyTextModify:
         self.update_project_record(fontsize=float(self.text.get_fontsize()))
         self.redraw()
 
+    def get_text_usetex(self) -> bool:
+        get_usetex = getattr(self.text, "get_usetex", None)
+        if get_usetex is None:
+            return False
+        return bool(get_usetex())
+
+    def set_text_usetex(self, use_tex: bool):
+        use_tex = bool(use_tex)
+        set_usetex = getattr(self.text, "set_usetex", None)
+        if set_usetex is None:
+            self.update_project_record(usetex=False)
+            return
+
+        if use_tex and not tex_config.is_tex_enabled():
+            set_usetex(False)
+            self.update_project_record(usetex=False)
+            raise TextRenderError("Enable TeX before using TeX rendering for this text.")
+
+        current_usetex = self.get_text_usetex()
+        current_record_usetex = None
+        if self.project_record is not None:
+            current_record_usetex = self.project_record.get("usetex", current_usetex)
+
+        try:
+            set_usetex(use_tex)
+            self.update_project_record(usetex=use_tex)
+            self.redraw()
+        except Exception as exc:
+            tex_config.tex_logger().warning(
+                "TeX text render mode change failed action=set_text_usetex requested=%s error=%s",
+                use_tex,
+                exc,
+            )
+            set_usetex(current_usetex)
+            self.update_project_record(
+                usetex=current_record_usetex if current_record_usetex is not None else current_usetex
+            )
+            try:
+                self.redraw()
+            except Exception as rollback_exc:
+                tex_config.tex_logger().warning(
+                    "TeX text render mode rollback redraw failed action=set_text_usetex error=%s",
+                    rollback_exc,
+                )
+            raise TextRenderError("Text TeX render failed; keeping previous rendering mode.") from exc
+
     def set_text_content(self, content):
         current_text = self.text.get_text()
         current_record_text = None

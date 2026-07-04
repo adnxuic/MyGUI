@@ -30,11 +30,16 @@ class PyBottomBar(QFrame):
         self.message_label.setToolTip(message)
         if level == "error":
             self.message_label.setStyleSheet("color: #ff4d4f;")
+        elif level == "success":
+            self.message_label.setStyleSheet("color: #22c55e;")
         else:
             self.message_label.setStyleSheet("color: #f2f2f2;")
 
     def show_error(self, message):
         self.show_message(message, "error")
+
+    def show_success(self, message):
+        self.show_message(message, "success")
 
     def clear_message(self):
         self.show_message("", "info")
