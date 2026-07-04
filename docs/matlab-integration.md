@@ -299,16 +299,64 @@ python -m compileall -q .
 
 该编译检查已通过。GUI 单测和手动启动需要当前 Python 环境安装 `PySide6`；如果环境缺少该依赖，`python -m unittest tests.test_optional_dependencies` 和 `python main.py` 会在导入 `Qt_core.py` 时失败，错误为 `ModuleNotFoundError: No module named 'PySide6'`。
 
-## 当前实现限制
+## 依赖和运行环境限制
 
-- `_gof` 拟合优度已从 MATLAB 返回，但暂未展示给用户。
-- `value_exp` 和 `show_exp` 当前内容相同，没有区分计算表达式和展示表达式。
-- 表达式获取有 fallback，但拟合计算本身没有 Python fallback。
+- MATLAB 功能依赖本机 MATLAB Runtime 或 MATLAB 安装，以及 MathWorks 的 `matlab` Python 包。
+- MATLAB Runtime 和 MATLAB Python 包不是基础 GUI 的必需依赖；缺失时基础 GUI 仍应启动。
+- 当前生成包对应 MATLAB Runtime 25.1。运行环境需要能找到对应 runtime 动态库。
+- 当前只通过 `matlab.double` 判断导入到的 `matlab` 模块是否像 MathWorks runtime 包；这不能覆盖所有 runtime 损坏或动态库缺失场景。
 
-## 维护建议
+## Connect 检测限制
 
-- 修改 MATLAB 调用逻辑时优先改 `matlab_adapter.py`，保持 GUI 层只负责交互和状态更新。
-- 不要在 GUI 主线程中直接调用 MATLAB Runtime 或部署包。
-- 新增 MATLAB 操作时应通过 `_run_isolated()` 增加新的 `op`，并继续使用 JSON 协议返回结果。
-- 调整部署包或 `.ctf` 文件后，应确认 MCR 缓存 key 逻辑是否仍覆盖所有影响 runtime 缓存的输入文件。
-- 如果要展示拟合优度，可以从 `fit_curve()` 返回 `_gof` 中的有效字段，并在 `PyFitMatlabModWidget` 或 MATLAB 面板中增加只读显示区域。
+- 默认 Connect 只验证 MATLAB runtime 包和两个 MATLAB Compiler 生成包可以导入。
+- 默认 Connect 不初始化 `get_func` 和 `curve_fitting` 部署包，不保证之后的表达式提取或拟合一定成功。
+- 设置 `MYGUI_MATLAB_CONNECT_INITIALIZE_PACKAGES` 后，Connect 会做更严格的部署包初始化检查，但耗时和失败概率会高于默认轻量检查。
+- Connect 成功只表示最近一次连接检测成功，不表示 MATLAB Runtime 在之后操作时仍然可用。
+
+## 子进程和 Runtime 限制
+
+- 当前每次 MATLAB 操作都会启动独立 Python 子进程。
+- 当前没有常驻 MATLAB Runtime session，不复用已初始化的部署包 handle。
+- MCR cache 只复用 runtime/CTF 缓存目录，不等于复用已启动的 runtime 进程。
+- 子进程崩溃、超时或返回无效 JSON 时，父进程只拿到错误摘要，不保留完整子进程执行上下文。
+
+## MCR Cache 限制
+
+- 默认 cache 目录位于 `.matlab_runtime_cache/runtime/<key>`。
+- cache key 由生成包入口、CTF 文件和 Python 主次版本计算。
+- 当前不会自动清理旧 cache key 目录。
+- 如果用户显式设置 `MYGUI_MATLAB_MCR_CACHE_ROOT` 或 `MCR_CACHE_ROOT`，程序会使用外部指定目录，不再写入默认 manifest。
+
+## 表达式提取限制
+
+- `get_func_exp()` 在 MATLAB Runtime 初始化不可用时，只对当前已知 fit type 提供 Python fallback 表达式。
+- fallback 只用于 UI 表达式展示和系数名生成，不执行真实 MATLAB 拟合。
+- package import 失败不会被 fallback 隐藏；这种情况仍会作为 MATLAB package import failure 暴露。
+- 未覆盖的 fit type 不会生成 fallback 表达式。
+
+## 拟合限制
+
+- 实际拟合仍依赖 `curve_fitting` MATLAB Compiler 生成包和本机 MATLAB Runtime 初始化。
+- MATLAB fitting 失败时，GUI 只弹 warning，不更新当前曲线。
+- 当前 `_gof` 拟合优度从 MATLAB 返回后未展示给用户。
+- 当前拟合表达式会把 MATLAB 的 `^` 转成 Python 表达式使用的 `**`；其他 MATLAB 专有表达式语义不做通用转换。
+
+## GUI 状态限制
+
+- MATLAB 面板只更新当前选中的 MATLAB 拟合曲线控件。
+- 如果没有选中 MATLAB 拟合曲线，Fit 只提示用户先选择曲线。
+- Python fitting 当前未实现；选择 Python fitting 不会创建可连接拟合曲线。
+- Connect、expression load、fit 使用 request id 忽略过期回调；过期回调不会更新 UI。
+
+## 日志限制
+
+- MATLAB 日志默认写入 `logs/matlab.log`。
+- 默认 `INFO` 只记录 request 级别的开始、成功、失败和耗时。
+- runtime import 成功、package import/init/terminate、MCR cache root、GUI task 生命周期等细节默认只在 `DEBUG` 中记录。
+- 子进程普通 stderr 行默认只进 `DEBUG`；包含 warning/error/traceback/exception 的子进程行才会在 `INFO` 日志级别下保留为 warning。
+- 当前 GUI 不提供日志查看器。
+
+## 测试和验证限制
+
+- mock 测试不依赖真实 MATLAB Runtime，不能证明本机 MCR 一定可初始化。
+- 当前环境下 `python -m compileall -q .` 可能因既有 `__pycache__` 的 `.pyc` 替换权限失败；无 pyc 写入的源码语法检查用于区分语法问题和环境权限问题。
