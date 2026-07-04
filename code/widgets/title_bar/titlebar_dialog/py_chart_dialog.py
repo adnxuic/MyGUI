@@ -390,13 +390,29 @@ class PyFitDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        x_data = PyDatabase.get_data(self.x_data_input.currentText())
-        y_data = PyDatabase.get_data(self.y_data_input.currentText())
+        try:
+            x_data = PyDatabase.get_data(self.x_data_input.currentText())
+            y_data = PyDatabase.get_data(self.y_data_input.currentText())
+        except KeyError as exc:
+            QMessageBox.warning(self, 'Warning', str(exc))
+            return
 
         # 如果x_data和y_data长度不一致，弹出警告
         if len(x_data) != len(y_data):
             QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
             return
+
+        if not self.matlab_button.isChecked():
+            QMessageBox.warning(self, 'Warning', 'Python fitting is not implemented yet.')
+            return
+
+        self.figure_window.current_canva.add_fit_curve(
+            engine='Matlab',
+            x=x_data,
+            y=y_data,
+            color='black',
+            label='Matlab fitting',
+        )
 
         super().accept()
 

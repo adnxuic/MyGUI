@@ -1,4 +1,4 @@
-import importlib
+from code.database import matlab_adapter
 
 def matlab_fitting(x, y, fit_type, isdefault,
                    up_limit=None, low_limit=None, start_point=None):
@@ -29,41 +29,4 @@ def matlab_fitting(x, y, fit_type, isdefault,
     Note:
     Ensure that the MATLAB engine is properly set up and accessible in the system environment where this function is used.
     """
-    fitting = None
-    try:
-        matlab = importlib.import_module('matlab')
-        curve_fitting = importlib.import_module('code.database.matlab_func.curve_fitting')
-        fitting = curve_fitting.initialize()
-    except Exception as e:
-        raise RuntimeError(f"Error initializing fittest package: {e}") from e
-    try:
-        x_data = matlab.double(x, size=(len(x), 1))
-        y_data = matlab.double(y, size=(len(y), 1))
-        exp, coeff_name, coeff_value, gof = fitting.curve_fitting(x_data, y_data, fit_type, isdefault, nargout=4)
-
-        value_exp = exp
-        show_exp = exp
-
-        # 将公式中的变量名替换为实际的数值
-        for name, value in zip(coeff_name, coeff_value[0]):
-            value_exp = value_exp.replace(name, str(value))
-
-        # # 将coeff_value[0]的值保留两位小数
-        # for i in range(len(coeff_value[0])):
-        #     coeff_value[0][i] = round(coeff_value[0][i], 2)
-        #
-        # # 展示用的公式只保留前2位小数
-        for name, value in zip(coeff_name, coeff_value[0]):
-            show_exp = show_exp.replace(name, str(value))
-
-        # 将^替换为**
-        value_exp = value_exp.replace('^', '**')
-        show_exp = show_exp.replace('^', '**')
-
-    except Exception as e:
-        raise RuntimeError(f"Error occurred during program execution: {e}") from e
-    finally:
-        if fitting is not None:
-            fitting.terminate()
-
-    return value_exp, show_exp
+    return matlab_adapter.fit_curve(x, y, fit_type, isdefault, up_limit, low_limit, start_point)

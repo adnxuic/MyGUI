@@ -33,6 +33,7 @@ htmlcov/
 *.log
 *.out
 *.err
+logs/
 
 # Local backup/sync artifacts
 *~
@@ -41,3 +42,8 @@ htmlcov/
 codex_handoff/
 tests/_tmp/
 tests/fixtures/
+
+# Matlab
+.matlab_runtime_cache/
+matlab_sources/r2025a_build_*/
+test.mygui.json

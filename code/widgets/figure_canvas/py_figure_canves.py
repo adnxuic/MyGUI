@@ -243,11 +243,11 @@ class PyFigureCanvas(QWidget):
 
     # 添加拟合曲线
     def add_fit_curve(self, engine: str, x, y, color, label):
+        if engine != 'Matlab':
+            raise NotImplementedError("Only Matlab fitting is implemented.")
+
         with mpl.style.context(self.style):
-            if engine == 'Python':
-                line, = self.current_axes.plot(x, y, color=color, label=label)
-            else:
-                line, = self.current_axes.plot(x, y, color=color, label=label)
+            line, = self.current_axes.plot(x, y, color=color, label=label)
 
         # 获取当前坐标系的所有修改窗口
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -256,14 +256,18 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('fitting_box')
 
         # 添加拟合曲线调整窗口
-        if engine == 'Python':
-            fitting_mod_widget = None
-        else:
-            fitting_mod_widget = PyFitMatlabModWidget(
-                PyCurveModify(self.fig, self.current_axes, 0, 0, self.style, line, '', label))
+        x_start = float(np.min(x))
+        x_stop = float(np.max(x))
+        fitting_mod_widget = PyFitMatlabModWidget(
+            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, '', label))
 
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
         fitting_box.add_widget(fitting_mod_widget, engine + 'fitting')
+        fitting_box.setCurrentWidget(fitting_mod_widget)
+
+        matlab_widget = getattr(self.fig_modify_widget, "matlab_widget", None)
+        if matlab_widget is not None:
+            matlab_widget.set_connect_widget(fitting_mod_widget)
 
         self.redraw()
 
