@@ -27,9 +27,15 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
 These checks depend on local system setup and should not block baseline GUI maintenance.
 
 1. Enable TeX rendering and update the TeX preamble.
-2. Open the MATLAB panel, connect MATLAB, and run a fitting workflow.
+2. Open the MATLAB panel and click `Connect Matlab`.
+3. Load metadata for at least `poly2` and `gauss1`; confirm their advanced option controls differ by model.
+4. With advanced options disabled, fit `poly2` and confirm the curve redraws.
+5. With advanced options disabled, fit a nonlinear model such as `gauss1`; confirm the curve redraws instead of leaving a previous polynomial line in place.
+6. Enable advanced options, set valid numeric bounds or start points, fit once, and confirm the result area shows coefficient values, 95% bounds, and goodness-of-fit metrics.
+7. Enter an invalid advanced numeric value and confirm the GUI warns locally without starting a MATLAB fitting request.
 
 ## Notes
 
 - If MATLAB or LaTeX is unavailable, record that as an environment limitation rather than a baseline GUI failure.
 - If a smoke step fails, capture the exact action, visible error, and whether the Python process stayed alive.
+- MATLAB fitting currently requires regenerated package signatures: `get_func(..., nargout=3)` and `curve_fitting(x, y, fit_type, options_json, nargout=6)`. Do not validate by mixing old generated packages with the new Python adapter.

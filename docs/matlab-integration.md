@@ -24,7 +24,7 @@
 5. 用户选择拟合类型和数据后点击 `Fit`。
 6. GUI 再次通过后台任务调用 `matlab_adapter.fit_curve_isolated()`。
 7. 子进程调用 `curve_fitting.curve_fitting(...)` 执行 MATLAB 拟合逻辑。
-8. 拟合表达式通过 JSON 返回 GUI 主进程。
+8. 拟合表达式、系数、95% 置信边界和拟合优度通过 JSON 返回 GUI 主进程。
 9. GUI 更新当前 MATLAB 拟合曲线控件和 matplotlib 曲线。
 
 ## MATLAB 面板和异步任务
@@ -42,7 +42,7 @@ MATLAB 面板定义在 `PyMatlabWindow` 中。为了避免 MATLAB Runtime 初始
 子进程的输入是 JSON payload，例如：
 
 - `{"op": "ensure_matlab_available"}`
-- `{"op": "get_func_exp", "func_name": "poly2"}`
+- `{"op": "get_func_info", "func_name": "poly2"}`
 - `{"op": "fit_curve", "x": [...], "y": [...], "fit_type": "poly1", ...}`
 
 子进程执行完成后，会在 stdout 输出一行带固定前缀的 JSON：
@@ -119,20 +119,20 @@ __MATLAB_ADAPTER_RESULT__{"ok": true, "result": ...}
 
 底层流程是：
 
-1. GUI 调用 `matlab_adapter.get_func_exp_isolated(func_name)`。
-2. 子进程进入 `matlab_adapter.get_func_exp(func_name)`。
+1. GUI 调用 `matlab_adapter.get_func_info_isolated(func_name)`。
+2. 子进程进入 `matlab_adapter.get_func_info(func_name)`。
 3. 初始化 `code.database.matlab_func.get_func` 部署包。
-4. 调用 `get_func.get_func(func_name, nargout=2)`。
-5. 返回 MATLAB 表达式和系数名列表。
-6. GUI 更新表达式文本框和高级参数表格。
+4. 调用 `get_func.get_func(func_name, nargout=3)`。
+5. 返回 MATLAB 表达式、系数名列表和 option metadata JSON。
+6. GUI 更新表达式文本框、高级参数控件和系数约束表格。
 
-如果 MATLAB Runtime 初始化不可用，`get_func_exp()` 对常见拟合类型提供 Python fallback 表达式。例如 `poly2` 会退化为：
+如果 MATLAB Runtime 初始化不可用，`get_func_info()` 对常见拟合类型提供 Python fallback 表达式和基础 option metadata。例如 `poly2` 会退化为：
 
 ```text
 p1*x^2 + p2*x + p3
 ```
 
-这个 fallback 只用于表达式展示和系数名生成，不能替代真正的 MATLAB 拟合计算。
+这个 fallback 只用于表达式展示、系数名生成和高级选项 UI 初始化，不能替代真正的 MATLAB 拟合计算。
 
 ## 曲线拟合流程
 
@@ -143,7 +143,7 @@ p1*x^2 + p2*x + p3
 3. 通过 `PyDatabase.get_data()` 获取实际数据。
 4. 检查 X/Y 数据非空。
 5. 检查 X/Y 数据长度一致。
-6. 读取当前拟合类型、是否使用默认参数、上限、下限和起始点。
+6. 读取当前拟合类型和可选高级参数；高级选项关闭时传入 `fit_options=None`。
 7. 禁用按钮并显示 `Fitting...`。
 8. 异步调用 `matlab_adapter.fit_curve_isolated()`。
 
@@ -151,8 +151,8 @@ p1*x^2 + p2*x + p3
 
 - X 数据转换为 MATLAB 列向量：`matlab.double(values, size=(len(values), 1))`
 - Y 数据转换为 MATLAB 列向量。
-- 上限、下限、起始点转换为 MATLAB 行向量。
-- 未提供的高级参数转换为空 MATLAB double。
+- 高级参数通过 JSON 传给 MATLAB 部署函数。
+- 未开启高级选项时传入空配置，MATLAB 使用 `fitoptions(fit_type)` 默认值。
 
 随后初始化 `curve_fitting` 部署包，并调用：
 
@@ -161,30 +161,39 @@ fitting.curve_fitting(
     x_data,
     y_data,
     fit_type,
-    isdefault,
-    upper,
-    lower,
-    start,
-    nargout=4,
+    options_json,
+    nargout=6,
 )
 ```
 
 返回值包含：
 
-- `exp`：带系数名的 MATLAB 表达式。
+- `exp`：MATLAB `formula(fitresult)` 返回的表达式。
 - `coeff_name`：系数名列表。
 - `coeff_value`：拟合得到的系数值。
-- `_gof`：拟合优度，目前代码接收但没有展示或使用。
+- `gof_json`：拟合优度，包含 `sse`、`rsquare`、`dfe`、`adjrsquare`、`rmse`。
+- `confidence_bounds`：`confint(fitresult, 0.95)` 返回的系数 95% 置信边界。
+- `option_json`：MATLAB 实际使用的部分 option 回显。
 
-拟合完成后，代码会把表达式中的系数名替换成具体数值，并把 MATLAB 的 `^` 替换成 Python 表达式使用的 `**`：
+拟合完成后，`matlab_adapter` 会构造结构化结果：
 
 ```python
-value_exp = _replace_coefficients(exp, coeff_name, coeff_value[0])
-show_exp = _replace_coefficients(exp, coeff_name, coeff_value[0])
-return value_exp.replace("^", "**"), show_exp.replace("^", "**")
+{
+    "value_expression": "...",
+    "show_expression": "...",
+    "formula": "...",
+    "fit_type": "poly2",
+    "coefficients": [
+        {"name": "p1", "value": -0.5, "lower": -3.3412, "upper": 2.3412}
+    ],
+    "goodness": {"sse": 0.2, "rsquare": 0.9, "dfe": 1, "adjrsquare": 0.7, "rmse": 0.4472},
+    "confidence_level": 0.95,
+}
 ```
 
-当前 `value_exp` 和 `show_exp` 实际相同，并没有对展示表达式做单独格式化或四舍五入。
+`value_expression` 用于 `safe_expression` 计算 matplotlib 曲线。它会把 MATLAB 表达式中的系数名替换为数值，并把 MATLAB element-wise 运算符转成 Python 表达式：`.^` 转为 `**`，`.*` 转为 `*`，`./` 转为 `/`，普通 `^` 也转为 `**`。这一步修复了非多项式拟合结果可返回但曲线无法重绘的问题。
+
+当前 Python 侧只支持新部署包接口，不再兼容旧的 `isdefault/upper/lower/start/nargout=4` 调用。若部署包还停留在旧接口，拟合应失败并提示需要重新生成包，而不是混用旧包逻辑。
 
 ## 拟合结果如何更新图形
 
@@ -194,7 +203,8 @@ return value_exp.replace("^", "**"), show_exp.replace("^", "**")
 
 1. 把展示表达式写入只读表达式文本框。
 2. 把 X 起点和终点设置为数据范围。
-3. 调用 `PyCurveModify.update_all(x_start, x_stop, value_expression)` 更新 matplotlib 曲线。
+3. 更新只读结果区：模型/公式、系数值与 95% 置信边界、拟合优度。
+4. 调用 `PyCurveModify.update_all(x_start, x_stop, value_expression)` 更新 matplotlib 曲线。
 
 `PyMatlabWindow` 本身不直接创建曲线，它只负责更新当前选中的 MATLAB 拟合曲线控件。拟合曲线是在 `FigureCanvas.add_fit_curve()` 中创建的，创建后会通过 `matlab_widget.set_connect_widget(fitting_mod_widget)` 注册给 MATLAB 面板。
 
@@ -202,24 +212,23 @@ return value_exp.replace("^", "**"), show_exp.replace("^", "**")
 
 ## 高级参数
 
-`PyFitWindow` 中的高级选项用于设置系数约束。
+`PyFitWindow` 中的高级选项按当前拟合模型动态显示。不同 MATLAB fit type 的 `fitoptions` 可用属性不同，UI 只展示当前方法对应的参数。
 
 默认情况下，高级选项关闭，拟合调用参数为：
 
 ```python
-fit_type_order, True, None, None, None
+fit_type_order, None
 ```
 
 开启高级选项后：
 
-- 每个系数都有上限和下限。
-- `poly` 和 `log` 只有上限、下限。
-- 其他拟合类型还会提供起始点。
-- 上限默认显示为 `inf`。
-- 下限默认显示为 `-inf`。
-- 起始点默认用 `numpy.random.rand(1)` 生成一个 0 到 1 之间的小数。
+- 所有模型显示 `Normalize` 和只读 `Method`。
+- `LinearLeastSquares` 显示 `Robust`、`TolCon`、系数 `Lower`、`Upper`。
+- `NonlinearLeastSquares` 额外显示 `Algorithm`、`DiffMinChange`、`DiffMaxChange`、`MaxFunEvals`、`MaxIter`、`TolFun`、`TolX`、系数 `StartPoint`、`Lower`、`Upper`。
+- 上限默认显示为 `Inf`，下限默认显示为 `-Inf`。
+- 空 `StartPoint` 不传给 MATLAB，使用 MATLAB 默认值。
 
-高级参数最终会传给 MATLAB 部署函数，让 MATLAB 拟合逻辑按指定约束执行。
+高级参数最终会编码成 `options_json` 传给 MATLAB 部署函数，由 `matlab_sources/curve_fitting.m` 通过 `fitoptions(fit_type)` 构造默认选项后逐项安全设置。当前不提供 `Exclude`、`Weights`、`ConstraintPoints` 的数据点或矩阵 UI；`TolCon` 可显示，但只有后续支持 `ConstraintPoints` 时才会实际影响约束点。
 
 ## 日志和超时配置
 
@@ -273,6 +282,7 @@ MATLAB 调用失败时，程序不会让 GUI 崩溃，而是：
 - 部署包 `.ctf` 缺失或版本不匹配。
 - 拟合数据为空或 X/Y 长度不一致。
 - 高级参数无法转换为浮点数。
+- 当前 Python 侧调用新接口，但部署包仍是旧接口。
 - MATLAB Runtime 初始化或释放失败。
 - 子进程超时。
 
@@ -289,7 +299,7 @@ MATLAB 调用失败时，程序不会让 GUI 崩溃，而是：
 - 拟合成功或失败后，`Fit` 按钮恢复可点击并显示 `Fit`。
 - 数据为空、X/Y 长度不一致、参数非法等本地校验失败会提前提示，不会禁用 `Fit` 按钮，也不会进入 MATLAB 子进程调用。
 
-相关测试位于 `tests/test_optional_dependencies.py`，覆盖 MATLAB 可选依赖缺失、连接失败、过期连接回调、表达式加载失败、拟合失败按钮恢复，以及非法拟合参数不会调用 `fit_curve_isolated()`。
+相关测试位于 `tests/test_optional_dependencies.py`，覆盖 MATLAB 可选依赖缺失、连接失败、过期连接回调、表达式加载失败、拟合失败按钮恢复、高级参数解析、结构化拟合结果解析、非多项式 MATLAB element-wise 表达式转换，以及非法拟合参数不会调用 `fit_curve_isolated()`。
 
 当前验证命令：
 
@@ -297,7 +307,7 @@ MATLAB 调用失败时，程序不会让 GUI 崩溃，而是：
 python -m compileall -q .
 ```
 
-该编译检查已通过。GUI 单测和手动启动需要当前 Python 环境安装 `PySide6`；如果环境缺少该依赖，`python -m unittest tests.test_optional_dependencies` 和 `python main.py` 会在导入 `Qt_core.py` 时失败，错误为 `ModuleNotFoundError: No module named 'PySide6'`。
+在 2026-07-04 的 MATLAB 拟合高级选项改动后，相关单测和 offscreen GUI smoke 已通过；当前环境下 `python -m compileall -q .` 可能因既有 `__pycache__` 的 `.pyc` 替换权限失败。GUI 单测和手动启动需要当前 Python 环境安装 `PySide6`；如果环境缺少该依赖，`python -m unittest tests.test_optional_dependencies` 和 `python main.py` 会在导入 `Qt_core.py` 时失败，错误为 `ModuleNotFoundError: No module named 'PySide6'`。
 
 ## 依赖和运行环境限制
 
@@ -329,7 +339,7 @@ python -m compileall -q .
 
 ## 表达式提取限制
 
-- `get_func_exp()` 在 MATLAB Runtime 初始化不可用时，只对当前已知 fit type 提供 Python fallback 表达式。
+- `get_func_info()` 在 MATLAB Runtime 初始化不可用时，只对当前已知 fit type 提供 Python fallback 表达式和 option metadata。
 - fallback 只用于 UI 表达式展示和系数名生成，不执行真实 MATLAB 拟合。
 - package import 失败不会被 fallback 隐藏；这种情况仍会作为 MATLAB package import failure 暴露。
 - 未覆盖的 fit type 不会生成 fallback 表达式。
@@ -338,8 +348,8 @@ python -m compileall -q .
 
 - 实际拟合仍依赖 `curve_fitting` MATLAB Compiler 生成包和本机 MATLAB Runtime 初始化。
 - MATLAB fitting 失败时，GUI 只弹 warning，不更新当前曲线。
-- 当前 `_gof` 拟合优度从 MATLAB 返回后未展示给用户。
-- 当前拟合表达式会把 MATLAB 的 `^` 转成 Python 表达式使用的 `**`；其他 MATLAB 专有表达式语义不做通用转换。
+- 拟合结果区会展示系数值、95% 置信边界和拟合优度。
+- 当前拟合表达式会把 MATLAB 的 `.^`、`.*`、`./` 和 `^` 转成 Python 表达式可计算的形式；其他 MATLAB 专有表达式语义不做通用转换。
 
 ## GUI 状态限制
 

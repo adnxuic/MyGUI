@@ -24,8 +24,10 @@ from code import tex_config
 from code import status_messages
 from code.database import matlab_adapter
 from code.database.py_database import PyDatabase
+from code.database.safe_expression import evaluate_curve_expression
 from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 from code.widgets.fig_control_window import py_matlab_window as matlab_window_module
+from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitMatlabModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 from code.widgets.fig_control_window.py_matlab_window import PyFitWindow, PyMatlabWindow
 from code.widgets.fig_control_window.py_tex_window import PyTexWindow
@@ -688,10 +690,14 @@ class OptionalDependencyTests(unittest.TestCase):
         fit_window = None
         with patch.object(
             matlab_window_module.matlab_adapter,
-            "get_func_exp_isolated",
+            "get_func_info_isolated",
             side_effect=[
-                ("a*x+b", ["a", "b"]),
-                RuntimeError("MATLAB function extraction failed: extraction failed"),
+                {
+                    "expression": "a*x+b",
+                    "coefficients": ["a", "b"],
+                    "options": matlab_adapter.default_fit_options("poly1", ["a", "b"]),
+                },
+                RuntimeError("MATLAB function metadata extraction failed: extraction failed"),
             ],
         ):
             with patch.object(matlab_adapter, "_LOG_TO_FILE", False), \
@@ -714,6 +720,103 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertIn("MATLAB expression request succeeded request_id=1", log_text)
             self.assertIn("MATLAB expression request failed request_id=2", log_text)
 
+    def test_matlab_fit_window_shows_method_specific_advanced_options(self):
+        with patch.object(matlab_window_module, "start_matlab_task", return_value=(None, None)):
+            poly_window = PyFitWindow(fit_type_name="poly")
+            gauss_window = PyFitWindow(fit_type_name="gauss")
+            try:
+                self.assertEqual(poly_window.option_metadata["Method"], "LinearLeastSquares")
+                self.assertEqual(poly_window.coefficient_table.columnCount(), 3)
+                self.assertNotIn("Algorithm", poly_window.option_widgets)
+
+                self.assertEqual(gauss_window.option_metadata["Method"], "NonlinearLeastSquares")
+                self.assertEqual(gauss_window.coefficient_table.columnCount(), 4)
+                self.assertIn("Algorithm", gauss_window.option_widgets)
+                self.assertEqual(gauss_window.coefficient_table.item(2, 2).text(), "0")
+            finally:
+                poly_window.close()
+                gauss_window.close()
+
+    def test_matlab_fit_window_parses_advanced_options_and_validates_startpoints(self):
+        with patch.object(matlab_window_module, "start_matlab_task", return_value=(None, None)):
+            fit_window = PyFitWindow(fit_type_name="gauss")
+            try:
+                fit_window.advanced_option.setChecked(True)
+                for row, value in enumerate(("0.1", "0.2", "0.3")):
+                    fit_window.coefficient_table.item(row, 1).setText(value)
+                fit_window.coefficient_table.item(0, 2).setText("-inf")
+                fit_window.coefficient_table.item(1, 2).setText("-1e3")
+                fit_window.coefficient_table.item(2, 2).setText("0")
+                fit_window.coefficient_table.item(0, 3).setText("inf")
+                fit_window.coefficient_table.item(1, 3).setText("1e3")
+                fit_window.coefficient_table.item(2, 3).setText("inf")
+                fit_window.option_widgets["TolFun"].setText("1e-7")
+
+                fit_type, options = fit_window.fit_parameters()
+
+                self.assertEqual(fit_type, "gauss1")
+                self.assertEqual(options["StartPoint"], [0.1, 0.2, 0.3])
+                self.assertEqual(options["Lower"][2], 0.0)
+                self.assertTrue(np.isinf(options["Upper"][0]))
+                self.assertEqual(options["TolFun"], 1e-7)
+
+                fit_window.coefficient_table.item(1, 1).setText("")
+                with self.assertRaisesRegex(ValueError, "StartPoint"):
+                    fit_window.fit_parameters()
+
+                fit_window.coefficient_table.item(1, 1).setText("0.2")
+                fit_window.option_widgets["TolFun"].setText("bad")
+                with self.assertRaisesRegex(ValueError, "TolFun"):
+                    fit_window.fit_parameters()
+            finally:
+                fit_window.close()
+
+    def test_matlab_fit_mod_widget_displays_structured_fit_result(self):
+        class FakeLine:
+            def get_linestyle(self):
+                return "solid"
+
+        class FakeCurveModify:
+            def __init__(self):
+                self.expression = ""
+                self.x_start = 0.0
+                self.x_stop = 1.0
+                self.line = FakeLine()
+                self.label = "fit"
+                self.update_all = Mock()
+                self.update_expression = Mock()
+                self.update_x_start = Mock()
+                self.update_x_stop = Mock()
+                self.update_style = Mock()
+                self.update_color = Mock()
+                self.change_legend = Mock()
+
+        widget = PyFitMatlabModWidget(FakeCurveModify())
+        result = {
+            "value_expression": "2.0*x**2+3.0",
+            "show_expression": "2.0*x**2+3.0",
+            "formula": "a*x^2+b",
+            "fit_type": "poly1",
+            "coefficients": [
+                {"name": "a", "value": 2.0, "lower": 1.0, "upper": 3.0},
+                {"name": "b", "value": 3.0, "lower": 2.0, "upper": 4.0},
+            ],
+            "goodness": {"sse": 0.2, "rsquare": 0.9, "dfe": 1, "adjrsquare": 0.7, "rmse": 0.4472},
+            "confidence_level": 0.95,
+        }
+        try:
+            widget.update_curve(result, 1.0, 3.0)
+
+            self.assertEqual(widget.expression_input.toPlainText(), "2.0*x**2+3.0")
+            self.assertEqual(widget.result_model_label.text(), "Model: poly1")
+            self.assertEqual(widget.result_formula_input.toPlainText(), "a*x^2+b")
+            self.assertEqual(widget.result_coeff_table.item(0, 0).text(), "a")
+            self.assertEqual(widget.result_coeff_table.item(0, 1).text(), "2.0000")
+            self.assertEqual(widget.result_goodness_table.item(1, 1).text(), "0.9000")
+            widget.curve_modify.update_all.assert_called_once_with(1.0, 3.0, "2.0*x**2+3.0")
+        finally:
+            widget.close()
+
     def test_matlab_fitting_failure_only_warns(self):
         database = PyDatabase()
         PyDatabase.register_sheet("Data", "Sheet1", database)
@@ -726,7 +829,7 @@ class OptionalDependencyTests(unittest.TestCase):
             window.data_choice_widget.get_x_data.return_value = "Data/Sheet1/1"
             window.data_choice_widget.get_y_data.return_value = "Data/Sheet1/2"
             window.fit_type_window = Mock()
-            window.fit_type_window.fit_parameters.return_value = ("poly1", True, None, None, None)
+            window.fit_type_window.fit_parameters.return_value = ("poly1", None)
             window.connect_widget = Mock()
             window.fit_button = Mock()
 
@@ -785,10 +888,15 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def test_adapter_get_func_exp_releases_runtime_on_success_and_failure(self):
         success_handle = Mock()
-        success_handle.get_func.return_value = ("a*x+b", ["a", "b"])
+        success_handle.get_func.return_value = (
+            "a*x+b",
+            ["a", "b"],
+            json.dumps(matlab_adapter.default_fit_options("poly1", ["a", "b"])),
+        )
         success_package = SimpleNamespace(initialize=Mock(return_value=success_handle))
         with patch.object(matlab_adapter.importlib, "import_module", return_value=success_package):
             self.assertEqual(matlab_adapter.get_func_exp("poly1"), ("a*x+b", ["a", "b"]))
+        success_handle.get_func.assert_called_once_with("poly1", nargout=3)
         success_handle.terminate.assert_called_once()
 
         failure_handle = Mock()
@@ -965,7 +1073,14 @@ class OptionalDependencyTests(unittest.TestCase):
         )
 
         success_handle = Mock()
-        success_handle.curve_fitting.return_value = ("a*x^2+b", ["a", "b"], [[2.0, 3.0]], object())
+        success_handle.curve_fitting.return_value = (
+            "a*x^2+b",
+            ["a", "b"],
+            [[2.0, 3.0]],
+            json.dumps({"sse": 0.2, "rsquare": 0.9, "dfe": 1, "adjrsquare": 0.7, "rmse": 0.4472}),
+            [[1.0, 2.0], [3.0, 4.0]],
+            "{}",
+        )
         success_package = SimpleNamespace(initialize=Mock(return_value=success_handle))
 
         def success_import(name):
@@ -976,10 +1091,15 @@ class OptionalDependencyTests(unittest.TestCase):
             raise ImportError(name)
 
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=success_import):
-            self.assertEqual(
-                matlab_adapter.fit_curve([1.0], [2.0], "poly1", True),
-                ("2.0*x**2+3.0", "2.0*x**2+3.0"),
-            )
+            result = matlab_adapter.fit_curve([1.0], [2.0], "poly1")
+            self.assertEqual(result["value_expression"], "2.0*x**2+3.0")
+            self.assertEqual(result["coefficients"][0], {"name": "a", "value": 2.0, "lower": 1.0, "upper": 3.0})
+            self.assertEqual(result["goodness"]["rsquare"], 0.9)
+            self.assertEqual(result["confidence_level"], 0.95)
+        success_call = success_handle.curve_fitting.call_args
+        self.assertEqual(success_call.kwargs["nargout"], 6)
+        self.assertEqual(len(success_call.args), 4)
+        self.assertEqual(success_call.args[3], "")
         success_handle.terminate.assert_called_once()
 
         failure_handle = Mock()
@@ -995,15 +1115,105 @@ class OptionalDependencyTests(unittest.TestCase):
 
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=failure_import):
             with self.assertRaisesRegex(RuntimeError, "MATLAB fitting failed"):
-                matlab_adapter.fit_curve([1.0], [2.0], "poly1", True)
+                matlab_adapter.fit_curve([1.0], [2.0], "poly1")
         failure_handle.terminate.assert_called_once()
+
+    def test_adapter_fit_curve_encodes_advanced_options_json(self):
+        matlab_module = SimpleNamespace(
+            double=Mock(side_effect=lambda values, size: ("double", list(values), size))
+        )
+        handle = Mock()
+        handle.curve_fitting.return_value = (
+            "a*x+b",
+            ["a", "b"],
+            [[2.0, 3.0]],
+            json.dumps({"sse": 0, "rsquare": 1, "dfe": 1, "adjrsquare": 1, "rmse": 0}),
+            [[1.0, 2.0], [3.0, 4.0]],
+            "{}",
+        )
+        package = SimpleNamespace(initialize=Mock(return_value=handle))
+
+        def fake_import(name):
+            if name == "matlab":
+                return matlab_module
+            if name == matlab_adapter.CURVE_FITTING_PACKAGE:
+                return package
+            raise ImportError(name)
+
+        fit_options = {
+            "Normalize": "on",
+            "TolFun": 1e-7,
+            "Lower": [float("-inf"), 0.0],
+            "Upper": [float("inf"), 10.0],
+            "StartPoint": [0.1, 0.2],
+        }
+        with patch.object(matlab_adapter.importlib, "import_module", side_effect=fake_import):
+            matlab_adapter.fit_curve([1.0], [2.0], "gauss1", fit_options)
+
+        options_json = handle.curve_fitting.call_args.args[3]
+        payload = json.loads(options_json)
+        self.assertEqual(payload["Normalize"], "on")
+        self.assertEqual(payload["TolFun"], 1e-7)
+        self.assertEqual(payload["Lower"], ["-Inf", 0.0])
+        self.assertEqual(payload["Upper"], ["Inf", 10.0])
+        self.assertEqual(payload["StartPoint"], [0.1, 0.2])
+
+    def test_adapter_fit_result_converts_matlab_elementwise_formula(self):
+        result = matlab_adapter._build_fit_result(
+            "gauss1",
+            "a1.*exp(-((x-b1)./c1).^2)",
+            ["a1", "b1", "c1"],
+            [[2.0, 3.0, 4.0]],
+            json.dumps({"sse": 0, "rsquare": 1, "dfe": 1, "adjrsquare": 1, "rmse": 0}),
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        )
+
+        self.assertEqual(result["value_expression"], "2.0*exp(-((x-3.0)/4.0)**2)")
+        x = np.array([3.0, 7.0])
+        y = evaluate_curve_expression(result["value_expression"], x)
+        np.testing.assert_allclose(y, 2.0 * np.exp(-((x - 3.0) / 4.0) ** 2))
+
+    def test_adapter_fit_curve_rejects_legacy_signature_error(self):
+        matlab_module = SimpleNamespace(
+            double=Mock(side_effect=lambda values, size: ("double", list(values), size))
+        )
+        legacy_handle = Mock()
+        legacy_handle.curve_fitting.side_effect = RuntimeError(
+            "An error occurred when evaluating the result from a function. Details: \u8f93\u5165\u53c2\u6570\u592a\u591a\u3002"
+        )
+        legacy_package = SimpleNamespace(initialize=Mock(return_value=legacy_handle))
+
+        def fake_import(name):
+            if name == "matlab":
+                return matlab_module
+            if name == matlab_adapter.CURVE_FITTING_PACKAGE:
+                return legacy_package
+            raise ImportError(name)
+
+        with patch.object(matlab_adapter.importlib, "import_module", side_effect=fake_import):
+            with self.assertRaisesRegex(RuntimeError, "must be regenerated"):
+                matlab_adapter.fit_curve([1.0], [5.0], "poly1")
+
+        self.assertEqual(legacy_handle.curve_fitting.call_count, 1)
+        call = legacy_handle.curve_fitting.call_args
+        self.assertEqual(call.kwargs["nargout"], 6)
+        self.assertEqual(len(call.args), 4)
+        self.assertEqual(call.args[3], "")
+        legacy_handle.terminate.assert_called_once()
 
     def test_adapter_fit_curve_replaces_overlapping_coefficient_names_safely(self):
         matlab_module = SimpleNamespace(
             double=Mock(side_effect=lambda values, size: ("double", list(values), size))
         )
         handle = Mock()
-        handle.curve_fitting.return_value = ("p10*x+p1", ["p1", "p10"], [[2.0, 10.0]], object())
+        handle.curve_fitting.return_value = (
+            "p10*x+p1",
+            ["p1", "p10"],
+            [[2.0, 10.0]],
+            json.dumps({"sse": 0, "rsquare": 1, "dfe": 1, "adjrsquare": 1, "rmse": 0}),
+            [[None, None], [None, None]],
+            "{}",
+        )
         package = SimpleNamespace(initialize=Mock(return_value=handle))
 
         def fake_import(name):
@@ -1014,10 +1224,8 @@ class OptionalDependencyTests(unittest.TestCase):
             raise ImportError(name)
 
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=fake_import):
-            self.assertEqual(
-                matlab_adapter.fit_curve([1.0], [2.0], "poly9", True),
-                ("10.0*x+2.0", "10.0*x+2.0"),
-            )
+            result = matlab_adapter.fit_curve([1.0], [2.0], "poly9")
+            self.assertEqual(result["value_expression"], "10.0*x+2.0")
 
     def test_matlab_helpers_raise_runtime_errors_instead_of_exiting(self):
         root = Path(__file__).resolve().parents[1]
@@ -1032,7 +1240,7 @@ class OptionalDependencyTests(unittest.TestCase):
 
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=ImportError("missing matlab")):
             with self.assertRaisesRegex(RuntimeError, "MATLAB runtime unavailable"):
-                matlab_fitting_module.matlab_fitting([1.0], [2.0], "poly1", True)
+                matlab_fitting_module.matlab_fitting([1.0], [2.0], "poly1")
 
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=ImportError("missing matlab runtime")):
             with self.assertRaisesRegex(RuntimeError, "MATLAB package import failed"):

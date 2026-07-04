@@ -6,6 +6,7 @@ import importlib
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+import math
 import os
 from pathlib import Path
 import re
@@ -57,6 +58,11 @@ DEFAULT_CONNECT_TIMEOUT_SECONDS = _timeout_from_env("MYGUI_MATLAB_CONNECT_TIMEOU
 DEFAULT_EXPRESSION_TIMEOUT_SECONDS = _timeout_from_env("MYGUI_MATLAB_EXPRESSION_TIMEOUT_SECONDS", 120)
 DEFAULT_FIT_TIMEOUT_SECONDS = _timeout_from_env("MYGUI_MATLAB_FIT_TIMEOUT_SECONDS", 180)
 CONNECT_INITIALIZE_PACKAGES = _bool_from_env("MYGUI_MATLAB_CONNECT_INITIALIZE_PACKAGES", False)
+CONFIDENCE_LEVEL = 0.95
+GOODNESS_FIELDS = ("sse", "rsquare", "dfe", "adjrsquare", "rmse")
+LINEAR_LEAST_SQUARES_FIT_PREFIXES = ("poly",)
+LINEAR_LEAST_SQUARES_FIT_NAMES = {"log"}
+NONLINEAR_ALGORITHMS = ("Trust-Region", "Levenberg-Marquardt", "Interior-Point")
 
 
 @dataclass(frozen=True)
@@ -104,6 +110,70 @@ def set_matlab_enabled(enabled: bool, notify: bool = True) -> None:
     _MATLAB_ENABLED = bool(enabled)
     if notify and previous != _MATLAB_ENABLED:
         _notify_matlab_state_listeners(_MATLAB_ENABLED)
+
+
+def fit_method_for_name(func_name: str) -> str:
+    if func_name in LINEAR_LEAST_SQUARES_FIT_NAMES:
+        return "LinearLeastSquares"
+    if any(func_name.startswith(prefix) for prefix in LINEAR_LEAST_SQUARES_FIT_PREFIXES):
+        suffix = func_name[4:] if func_name.startswith("poly") else ""
+        if suffix.isdigit():
+            return "LinearLeastSquares"
+    return "NonlinearLeastSquares"
+
+
+def _default_lower_bounds(func_name: str, coefficients: list[str]) -> list[float]:
+    lower = [float("-inf")] * len(coefficients)
+    if func_name.startswith("gauss"):
+        for index, coefficient in enumerate(coefficients):
+            if coefficient.startswith("c"):
+                lower[index] = 0.0
+    return lower
+
+
+def _default_upper_bounds(coefficients: list[str]) -> list[float]:
+    return [float("inf")] * len(coefficients)
+
+
+def _empty_start_points(method: str, coefficients: list[str]) -> list[float | None]:
+    if method != "NonlinearLeastSquares":
+        return []
+    return [None] * len(coefficients)
+
+
+def default_fit_options(func_name: str, coefficients: list[str]) -> dict[str, Any]:
+    method = fit_method_for_name(func_name)
+    options: dict[str, Any] = {
+        "Method": method,
+        "Normalize": "off",
+        "Robust": "Off",
+        "Lower": _default_lower_bounds(func_name, coefficients),
+        "Upper": _default_upper_bounds(coefficients),
+        "TolCon": 1e-6,
+        "StartPoint": _empty_start_points(method, coefficients),
+    }
+    if method == "NonlinearLeastSquares":
+        options.update({
+            "Algorithm": "Trust-Region",
+            "DiffMinChange": 1e-8,
+            "DiffMaxChange": 0.1,
+            "Display": "Notify",
+            "MaxFunEvals": 600,
+            "MaxIter": 400,
+            "TolFun": 1e-6,
+            "TolX": 1e-6,
+        })
+    return options
+
+
+def fallback_func_info(func_name: str) -> dict[str, Any]:
+    expression, coefficients = _fallback_func_exp(func_name)
+    coefficients = [str(coefficient) for coefficient in coefficients]
+    return {
+        "expression": str(expression),
+        "coefficients": coefficients,
+        "options": default_fit_options(func_name, coefficients),
+    }
 
 
 def _configured_log_level() -> int:
@@ -359,9 +429,7 @@ def _payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
             "x_len": len(payload.get("x") or []),
             "y_len": len(payload.get("y") or []),
             "fit_type": payload.get("fit_type"),
-            "isdefault": payload.get("isdefault"),
-            "has_limits": bool(payload.get("up_limit") or payload.get("low_limit")),
-            "has_start": bool(payload.get("start_point")),
+            "has_fit_options": bool(payload.get("fit_options")),
         }
     if op == "get_func_exp":
         return {"op": op, "func_name": payload.get("func_name")}
@@ -404,15 +472,14 @@ try:
         result = {{"available": status.available, "message": status.message}}
     elif op == "get_func_exp":
         result = matlab_adapter.get_func_exp(payload["func_name"])
+    elif op == "get_func_info":
+        result = matlab_adapter.get_func_info(payload["func_name"])
     elif op == "fit_curve":
         result = matlab_adapter.fit_curve(
             payload["x"],
             payload["y"],
             payload["fit_type"],
-            payload["isdefault"],
-            payload.get("up_limit"),
-            payload.get("low_limit"),
-            payload.get("start_point"),
+            payload.get("fit_options"),
         )
     else:
         raise RuntimeError(f"unknown MATLAB adapter operation: {{op}}")
@@ -538,31 +605,41 @@ def get_func_exp_isolated(
     return result[0], list(result[1])
 
 
+def get_func_info_isolated(
+    func_name: str,
+    timeout: float = DEFAULT_EXPRESSION_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    result = _run_isolated(
+        {"op": "get_func_info", "func_name": func_name},
+        timeout,
+        "MATLAB function metadata extraction failed",
+    )
+    if not isinstance(result, dict):
+        raise RuntimeError("MATLAB function metadata extraction failed: invalid metadata result")
+    return result
+
+
 def fit_curve_isolated(
     x: list[float],
     y: list[float],
     fit_type: str,
-    isdefault: bool,
-    up_limit: list[float] | None = None,
-    low_limit: list[float] | None = None,
-    start_point: list[float] | None = None,
+    fit_options: dict[str, Any] | None = None,
     timeout: float = DEFAULT_FIT_TIMEOUT_SECONDS,
-) -> tuple[str, str]:
+) -> dict[str, Any]:
     result = _run_isolated(
         {
             "op": "fit_curve",
             "x": x,
             "y": y,
             "fit_type": fit_type,
-            "isdefault": isdefault,
-            "up_limit": up_limit,
-            "low_limit": low_limit,
-            "start_point": start_point,
+            "fit_options": fit_options,
         },
         timeout,
         "MATLAB fitting failed",
     )
-    return result[0], result[1]
+    if not isinstance(result, dict):
+        raise RuntimeError("MATLAB fitting failed: invalid fitting result")
+    return result
 
 
 def _import_package(package_name: str) -> Any:
@@ -710,46 +787,96 @@ def _initialized_package(package_name: str) -> Iterator[Any]:
             matlab_logger().debug("MATLAB package terminate succeeded package=%s", package_name)
 
 
-def get_func_exp(func_name: str) -> tuple[str, list[str]]:
-    matlab_logger().debug("MATLAB function extraction started func_name=%s", func_name)
+def _loads_json_object(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, (list, tuple)) and value:
+        value = value[0]
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    text = str(value).strip()
+    if not text:
+        return {}
+    parsed = json.loads(text)
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _normalize_func_info(func_name: str, expression: Any, coefficients: Any,
+                         option_json: Any | None = None) -> dict[str, Any]:
+    coefficient_names = [str(coefficient) for coefficient in list(coefficients or [])]
+    options = default_fit_options(func_name, coefficient_names)
+    try:
+        parsed_options = _loads_json_object(option_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        parsed_options = {}
+    if parsed_options:
+        options.update(parsed_options)
+        options.setdefault("Method", fit_method_for_name(func_name))
+        options.setdefault("Normalize", "off")
+        options.setdefault("Robust", "Off")
+        options.setdefault("Lower", _default_lower_bounds(func_name, coefficient_names))
+        options.setdefault("Upper", _default_upper_bounds(coefficient_names))
+        options.setdefault("StartPoint", _empty_start_points(options["Method"], coefficient_names))
+    return {
+        "expression": str(expression),
+        "coefficients": coefficient_names,
+        "options": options,
+    }
+
+
+def get_func_info(func_name: str) -> dict[str, Any]:
+    matlab_logger().debug("MATLAB function metadata extraction started func_name=%s", func_name)
     try:
         with _initialized_package(GET_FUNC_PACKAGE) as get_func:
             try:
-                func_exp, func_coefs = get_func.get_func(func_name, nargout=2)
+                func_exp, func_coefs, option_json = get_func.get_func(func_name, nargout=3)
             except Exception as exc:
                 matlab_logger().warning(
-                    "MATLAB function extraction failed func_name=%s error=%s",
+                    "MATLAB function metadata extraction failed func_name=%s error=%s",
                     func_name,
                     exc,
                 )
-                raise RuntimeError(f"MATLAB function extraction failed: {exc}") from exc
+                raise RuntimeError(f"MATLAB function metadata extraction failed: {exc}") from exc
     except RuntimeError as exc:
         if not str(exc).startswith("MATLAB runtime unavailable"):
             raise
-        func_exp, func_coefs = _fallback_func_exp(func_name)
+        info = fallback_func_info(func_name)
         matlab_logger().warning(
-            "MATLAB function extraction used fallback func_name=%s reason=%s",
+            "MATLAB function metadata extraction used fallback func_name=%s reason=%s",
             func_name,
             exc,
         )
+        return info
+    info = _normalize_func_info(func_name, func_exp, func_coefs, option_json)
     matlab_logger().debug(
-        "MATLAB function extraction succeeded func_name=%s coefficient_count=%s",
+        "MATLAB function metadata extraction succeeded func_name=%s coefficient_count=%s",
         func_name,
-        len(func_coefs),
+        len(info["coefficients"]),
     )
-    return func_exp, func_coefs
+    return info
+
+
+def get_func_exp(func_name: str) -> tuple[str, list[str]]:
+    try:
+        info = get_func_info(func_name)
+    except RuntimeError as exc:
+        message = str(exc)
+        if message.startswith("MATLAB function metadata extraction failed"):
+            message = message.replace(
+                "MATLAB function metadata extraction failed",
+                "MATLAB function extraction failed",
+                1,
+            )
+            raise RuntimeError(message) from exc
+        raise
+    return info["expression"], list(info["coefficients"])
 
 
 def _column_double(matlab: Any, values) -> Any:
     values = [float(value) for value in values]
     return matlab.double(values, size=(len(values), 1))
-
-
-def _row_double(matlab: Any, values) -> Any:
-    if values is None:
-        return matlab.double([], size=(0, 0))
-    values = [float(value) for value in values]
-    return matlab.double(values, size=(1, len(values)))
 
 
 def _replace_coefficients(expression: str, coefficient_names, coefficient_values) -> str:
@@ -765,21 +892,179 @@ def _replace_coefficients(expression: str, coefficient_names, coefficient_values
     return result
 
 
+def _matlab_text(value: Any) -> str:
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        return _matlab_text(value[0])
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _matlab_formula_to_python_expression(formula: Any) -> str:
+    expression = _matlab_text(formula).strip()
+    expression = re.sub(r"^\s*\w+\s*\([^)]*\)\s*=\s*", "", expression)
+    expression = re.sub(r"\.\s*\^", "**", expression)
+    expression = re.sub(r"\.\s*\*", "*", expression)
+    expression = re.sub(r"\.\s*/", "/", expression)
+    return expression.replace("^", "**")
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)):
+        return [value]
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
+
+def _to_float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and value:
+        value = value[0]
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coefficient_values(coeff_value: Any) -> list[float]:
+    values = _as_list(coeff_value)
+    if values and not isinstance(values[0], (int, float, str, bytes)):
+        values = _as_list(values[0])
+    return [float(value) for value in values]
+
+
+def _confidence_rows(confidence_bounds: Any, coefficient_count: int) -> tuple[list[float | None], list[float | None]]:
+    rows = _as_list(confidence_bounds)
+    if len(rows) < 2:
+        return [None] * coefficient_count, [None] * coefficient_count
+    lower = [_to_float_or_none(value) for value in _as_list(rows[0])]
+    upper = [_to_float_or_none(value) for value in _as_list(rows[1])]
+    lower.extend([None] * max(0, coefficient_count - len(lower)))
+    upper.extend([None] * max(0, coefficient_count - len(upper)))
+    return lower[:coefficient_count], upper[:coefficient_count]
+
+
+def _goodness_to_dict(gof_value: Any) -> dict[str, float | None]:
+    if isinstance(gof_value, (str, bytes)):
+        try:
+            parsed = _loads_json_object(gof_value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = {}
+    elif isinstance(gof_value, dict):
+        parsed = gof_value
+    else:
+        parsed = {field: getattr(gof_value, field, None) for field in GOODNESS_FIELDS}
+    return {field: _to_float_or_none(parsed.get(field)) for field in GOODNESS_FIELDS}
+
+
+def _build_fit_result(
+    fit_type: str,
+    formula: Any,
+    coefficient_names: Any,
+    coefficient_values: Any,
+    gof_value: Any = None,
+    confidence_bounds: Any = None,
+) -> dict[str, Any]:
+    names = [str(name) for name in _as_list(coefficient_names)]
+    values = _coefficient_values(coefficient_values)
+    values.extend([float("nan")] * max(0, len(names) - len(values)))
+    values = values[:len(names)]
+    lower_bounds, upper_bounds = _confidence_rows(confidence_bounds, len(names))
+    formula_text = _matlab_text(formula)
+    python_formula = _matlab_formula_to_python_expression(formula_text)
+    value_exp = _replace_coefficients(python_formula, names, values)
+    coefficients = []
+    for index, name in enumerate(names):
+        coefficients.append({
+            "name": name,
+            "value": values[index],
+            "lower": lower_bounds[index],
+            "upper": upper_bounds[index],
+        })
+    return {
+        "value_expression": value_exp,
+        "show_expression": value_exp,
+        "formula": formula_text,
+        "fit_type": fit_type,
+        "coefficients": coefficients,
+        "goodness": _goodness_to_dict(gof_value),
+        "confidence_level": CONFIDENCE_LEVEL,
+    }
+
+
+def _json_fit_option_value(value: Any) -> Any:
+    if isinstance(value, (list, tuple)):
+        return [_json_fit_option_value(item) for item in value]
+    if isinstance(value, float):
+        if math.isnan(value):
+            return None
+        if math.isinf(value):
+            return "Inf" if value > 0 else "-Inf"
+    return value
+
+
+def _fit_options_json(fit_options: dict[str, Any] | None) -> str:
+    if not fit_options:
+        return ""
+    fields = (
+        "Normalize",
+        "Robust",
+        "Algorithm",
+        "DiffMinChange",
+        "DiffMaxChange",
+        "Display",
+        "MaxFunEvals",
+        "MaxIter",
+        "TolFun",
+        "TolX",
+        "TolCon",
+        "Lower",
+        "Upper",
+        "StartPoint",
+    )
+    payload = {}
+    for field in fields:
+        value = fit_options.get(field)
+        if value is not None and value != "":
+            payload[field] = _json_fit_option_value(value)
+    return json.dumps(payload, ensure_ascii=True, allow_nan=False)
+
+
+def _looks_like_signature_mismatch(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(token in message for token in (
+        "too many",
+        "not enough",
+        "number of input",
+        "number of output",
+        "nargout",
+        "positional argument",
+        "input arguments",
+        "output arguments",
+        "\u8f93\u5165\u53c2\u6570\u592a\u591a",
+        "\u8f93\u5165\u53c2\u6570\u7684\u6570\u76ee\u592a\u591a",
+        "\u8f93\u51fa\u53c2\u6570\u592a\u591a",
+        "\u8f93\u51fa\u53c2\u6570\u7684\u6570\u76ee\u592a\u591a",
+    ))
+
+
 def fit_curve(
     x: list[float],
     y: list[float],
     fit_type: str,
-    isdefault: bool,
-    up_limit: list[float] | None = None,
-    low_limit: list[float] | None = None,
-    start_point: list[float] | None = None,
-) -> tuple[str, str]:
+    fit_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     matlab_logger().debug(
-        "MATLAB fitting started fit_type=%s isdefault=%s x_len=%s y_len=%s",
+        "MATLAB fitting started fit_type=%s x_len=%s y_len=%s has_fit_options=%s",
         fit_type,
-        isdefault,
         len(x),
         len(y),
+        bool(fit_options),
     )
     matlab = _import_matlab_runtime()
 
@@ -787,34 +1072,34 @@ def fit_curve(
         try:
             x_data = _column_double(matlab, x)
             y_data = _column_double(matlab, y)
-            upper = _row_double(matlab, up_limit)
-            lower = _row_double(matlab, low_limit)
-            start = _row_double(matlab, start_point)
-            exp, coeff_name, coeff_value, _gof = fitting.curve_fitting(
-                x_data,
-                y_data,
-                fit_type,
-                isdefault,
-                upper,
-                lower,
-                start,
-                nargout=4,
-            )
+            options_json = _fit_options_json(fit_options)
+            try:
+                exp, coeff_name, coeff_value, gof_json, confidence_bounds, _option_json = fitting.curve_fitting(
+                    x_data,
+                    y_data,
+                    fit_type,
+                    options_json,
+                    nargout=6,
+                )
+            except Exception as exc:
+                if _looks_like_signature_mismatch(exc):
+                    raise RuntimeError(
+                        "MATLAB curve_fitting package must be regenerated for the current interface"
+                    ) from exc
+                raise
         except Exception as exc:
             matlab_logger().warning(
-                "MATLAB fitting failed fit_type=%s isdefault=%s error=%s",
+                "MATLAB fitting failed fit_type=%s error=%s",
                 fit_type,
-                isdefault,
                 exc,
             )
             raise RuntimeError(f"MATLAB fitting failed: {exc}") from exc
 
-    value_exp = _replace_coefficients(exp, coeff_name, coeff_value[0])
-    show_exp = _replace_coefficients(exp, coeff_name, coeff_value[0])
+    result = _build_fit_result(fit_type, exp, coeff_name, coeff_value, gof_json, confidence_bounds)
 
     matlab_logger().debug(
         "MATLAB fitting succeeded fit_type=%s coefficient_count=%s",
         fit_type,
-        len(coeff_name),
+        len(result["coefficients"]),
     )
-    return value_exp.replace("^", "**"), show_exp.replace("^", "**")
+    return result

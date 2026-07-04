@@ -330,7 +330,7 @@ class PyMatlabWindow(QFrame):
         x_min = min(x_data)
 
         try:
-            fit_type_order, isdefault, up_limit, down_limit, start_point = self.fit_type_window.fit_parameters()
+            fit_type_order, fit_options = self.fit_type_window.fit_parameters()
         except ValueError as exc:
             matlab_adapter.matlab_logger().warning("MATLAB fit parameter validation failed error=%s", exc)
             QMessageBox.warning(self, "Matlab Fit", str(exc))
@@ -366,10 +366,7 @@ class PyMatlabWindow(QFrame):
             x_values,
             y_values,
             fit_type_order,
-            isdefault,
-            up_limit,
-            down_limit,
-            start_point,
+            fit_options,
         )
 
     def _restore_fit_button(self):
@@ -386,7 +383,6 @@ class PyMatlabWindow(QFrame):
             )
             return
         self._restore_fit_button()
-        value_exp, show_exp = result
         elapsed = time.monotonic() - started_at
         matlab_adapter.matlab_logger().info(
             "MATLAB fit request succeeded request_id=%s elapsed=%.3fs",
@@ -394,7 +390,7 @@ class PyMatlabWindow(QFrame):
             elapsed,
         )
         if self.connect_widget is not None:
-            self.connect_widget.update_curve(value_exp, show_exp, x_min, x_max)
+            self.connect_widget.update_curve(result, x_min, x_max)
 
     def _fit_failed(self, request_id, started_at, message):
         if request_id != self._fit_request_id:
@@ -474,8 +470,15 @@ class PyFitWindow(QFrame):
         # 系数的上下限
         self.coeff_up_limit = []
         self.coeff_down_limit = []
+        self.start_point = []
+        self.option_widgets = {}
+        self.option_metadata = {}
+        self.option_form = QFormLayout()
+        self.advanced_option_layout.addLayout(self.option_form)
 
         self.coefficient_table = QTableWidget()
+        self.coefficient_table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
+        self.coefficient_table.horizontalHeader().setStretchLastSection(True)
 
         if fit_type_name == 'poly' or fit_type_name == 'log':
             self.coefficient_table.setColumnCount(3)
@@ -501,13 +504,117 @@ class PyFitWindow(QFrame):
                 # 展示前4位
                 self.coefficient_table.setItem(i, 3, QTableWidgetItem(str(num[0])[:4]))
 
+        self.advanced_option_layout.addWidget(QLabel("Coefficient Constraints:"))
         self.advanced_option_layout.addWidget(self.coefficient_table)
 
         self.layout.addWidget(self.fit_option)
         self.layout.addWidget(self.advanced_option)
         self.setLayout(self.layout)
+        self._apply_fit_info(matlab_adapter.fallback_func_info(self.order_input.currentText()))
         self.load_expression(self.order_input.currentText())
 
+
+    def _clear_form_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+    def _option_text(self, value, default=""):
+        if value is None:
+            return default
+        return str(value)
+
+    def _option_float_text(self, value, default=""):
+        if value is None:
+            return default
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if np.isnan(number):
+            return default
+        if np.isposinf(number):
+            return "inf"
+        if np.isneginf(number):
+            return "-inf"
+        return f"{number:g}"
+
+    def _combo_option(self, values, current):
+        combo = QComboBox()
+        combo.addItems(values)
+        if current in values:
+            combo.setCurrentText(current)
+        return combo
+
+    def _line_option(self, value):
+        line = QLineEdit()
+        line.setText(self._option_float_text(value))
+        return line
+
+    def _add_option_row(self, name, widget):
+        self.option_widgets[name] = widget
+        self.option_form.addRow(QLabel(f"{name}:"), widget)
+
+    def _rebuild_option_widgets(self):
+        self._clear_form_layout(self.option_form)
+        self.option_widgets = {}
+        method = self.option_metadata.get("Method", matlab_adapter.fit_method_for_name(self.order_input.currentText()))
+
+        method_label = QLabel(method)
+        method_label.setObjectName("matlab_fit_method")
+        self._add_option_row("Method", method_label)
+        self._add_option_row(
+            "Normalize",
+            self._combo_option(["off", "on"], self._option_text(self.option_metadata.get("Normalize"), "off")),
+        )
+        self._add_option_row(
+            "Robust",
+            self._combo_option(["Off", "LAR", "Bisquare"], self._option_text(self.option_metadata.get("Robust"), "Off")),
+        )
+        self._add_option_row("TolCon", self._line_option(self.option_metadata.get("TolCon", 1e-6)))
+
+        if method == "NonlinearLeastSquares":
+            self._add_option_row(
+                "Algorithm",
+                self._combo_option(list(matlab_adapter.NONLINEAR_ALGORITHMS),
+                                   self._option_text(self.option_metadata.get("Algorithm"), "Trust-Region")),
+            )
+            for name, default in (
+                ("DiffMinChange", 1e-8),
+                ("DiffMaxChange", 0.1),
+                ("MaxFunEvals", 600),
+                ("MaxIter", 400),
+                ("TolFun", 1e-6),
+                ("TolX", 1e-6),
+            ):
+                self._add_option_row(name, self._line_option(self.option_metadata.get(name, default)))
+
+    def _apply_fit_info(self, info):
+        if not isinstance(info, dict):
+            expression, coefficients = info
+            info = {
+                "expression": expression,
+                "coefficients": list(coefficients),
+                "options": matlab_adapter.default_fit_options(self.order_input.currentText(), list(coefficients)),
+            }
+        self.func_exp = str(info.get("expression", ""))
+        self.func_coefs = [str(coef) for coef in info.get("coefficients", [])]
+        self.option_metadata = dict(info.get("options") or {})
+        self.option_metadata.setdefault(
+            "Method",
+            matlab_adapter.fit_method_for_name(self.order_input.currentText()),
+        )
+        self.expression_input.setPlainText(self.func_exp)
+        self._rebuild_option_widgets()
+        self._set_coefficients(self.func_coefs)
+
+    def _list_option(self, name, length, default):
+        values = list(self.option_metadata.get(name) or [])
+        values.extend([default] * max(0, length - len(values)))
+        return values[:length]
 
     def load_expression(self, text):
         self._expression_request_id += 1
@@ -520,10 +627,9 @@ class PyFitWindow(QFrame):
         )
         self.order_input.setEnabled(False)
         self.expression_input.setPlainText("Loading MATLAB expression...")
-        self.coefficient_table.setRowCount(0)
         start_matlab_task(
             self,
-            matlab_adapter.get_func_exp_isolated,
+            matlab_adapter.get_func_info_isolated,
             lambda result, rid=request_id, started=started_at: self._expression_loaded(rid, started, result),
             lambda message, rid=request_id, started=started_at: self._expression_failed(rid, started, message),
             text,
@@ -538,9 +644,7 @@ class PyFitWindow(QFrame):
             )
             return
         self.order_input.setEnabled(True)
-        self.func_exp, self.func_coefs = result
-        self.expression_input.setPlainText(self.func_exp)
-        self._set_coefficients(self.func_coefs)
+        self._apply_fit_info(result)
         elapsed = time.monotonic() - started_at
         matlab_adapter.matlab_logger().info(
             "MATLAB expression request succeeded request_id=%s elapsed=%.3fs coefficient_count=%s",
@@ -574,39 +678,90 @@ class PyFitWindow(QFrame):
         QMessageBox.warning(self, "Matlab Fit", message)
 
     def _set_coefficients(self, coefficients):
+        method = self.option_metadata.get("Method", matlab_adapter.fit_method_for_name(self.order_input.currentText()))
+        has_start = method == "NonlinearLeastSquares"
+        if has_start:
+            self.coefficient_table.setColumnCount(4)
+            self.coefficient_table.setHorizontalHeaderLabels(["Coefficient", "Start", "Lower", "Upper"])
+        else:
+            self.coefficient_table.setColumnCount(3)
+            self.coefficient_table.setHorizontalHeaderLabels(["Coefficient", "Lower", "Upper"])
+
+        lower_values = self._list_option("Lower", len(coefficients), "-inf")
+        upper_values = self._list_option("Upper", len(coefficients), "inf")
+        start_values = self._list_option("StartPoint", len(coefficients), None)
         self.coefficient_table.setRowCount(len(coefficients))
         for i, coef in enumerate(coefficients):
             self.coefficient_table.setItem(i, 0, QTableWidgetItem(coef))
             self.coefficient_table.item(i, 0).setFlags(Qt.ItemIsEnabled)
-        for i in range(len(coefficients)):
-            self.coefficient_table.setItem(i, 1, QTableWidgetItem('inf'))
-            self.coefficient_table.setItem(i, 2, QTableWidgetItem('-inf'))
-
-            if self.fit_type != 'poly' and self.fit_type != 'log':
-                num = np.random.rand(1)
-                self.coefficient_table.setItem(i, 3, QTableWidgetItem(str(num[0])[:4]))
+            if has_start:
+                self.coefficient_table.setItem(i, 1, QTableWidgetItem(self._option_float_text(start_values[i])))
+                self.coefficient_table.setItem(i, 2, QTableWidgetItem(self._option_float_text(lower_values[i], "-inf")))
+                self.coefficient_table.setItem(i, 3, QTableWidgetItem(self._option_float_text(upper_values[i], "inf")))
+            else:
+                self.coefficient_table.setItem(i, 1, QTableWidgetItem(self._option_float_text(lower_values[i], "-inf")))
+                self.coefficient_table.setItem(i, 2, QTableWidgetItem(self._option_float_text(upper_values[i], "inf")))
 
     def expression_change(self, text):
         self.load_expression(text)
 
-    # 获得上下限
+    def _parse_float_text(self, text, field_name):
+        text = str(text).strip()
+        if not text:
+            raise ValueError(f"{field_name} must not be empty.")
+        try:
+            return float(text)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be a number.") from exc
+
+    def _parse_optional_float_text(self, text, field_name):
+        text = str(text).strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be a number.") from exc
+
+    def _coefficient_cell_text(self, row, column):
+        item = self.coefficient_table.item(row, column)
+        return "" if item is None else item.text()
+
+    def _option_widget_value(self, name):
+        widget = self.option_widgets.get(name)
+        if isinstance(widget, QComboBox):
+            return widget.currentText()
+        if isinstance(widget, QLineEdit):
+            return self._parse_float_text(widget.text(), name)
+        if isinstance(widget, QLabel):
+            return widget.text()
+        return None
+
     def get_coef_limit(self):
-        # 清空上下限
         self.coeff_up_limit.clear()
         self.coeff_down_limit.clear()
-        if hasattr(self, "start_point"):
-            self.start_point.clear()
+        self.start_point.clear()
+        method = self.option_metadata.get("Method", matlab_adapter.fit_method_for_name(self.order_input.currentText()))
+        has_start = method == "NonlinearLeastSquares"
 
         for i in range(self.coefficient_table.rowCount()):
-            up = self.coefficient_table.item(i, 1).text()
-            down = self.coefficient_table.item(i, 2).text()
-            self.coeff_up_limit.append(float(up))
-            self.coeff_down_limit.append(float(down))
+            coefficient = self._coefficient_cell_text(i, 0) or f"coefficient {i + 1}"
+            if has_start:
+                start = self._parse_optional_float_text(self._coefficient_cell_text(i, 1), f"{coefficient} Start")
+                lower = self._parse_float_text(self._coefficient_cell_text(i, 2), f"{coefficient} Lower")
+                upper = self._parse_float_text(self._coefficient_cell_text(i, 3), f"{coefficient} Upper")
+                self.start_point.append(start)
+            else:
+                lower = self._parse_float_text(self._coefficient_cell_text(i, 1), f"{coefficient} Lower")
+                upper = self._parse_float_text(self._coefficient_cell_text(i, 2), f"{coefficient} Upper")
+            self.coeff_down_limit.append(lower)
+            self.coeff_up_limit.append(upper)
 
-        if self.fit_type != 'poly' and self.fit_type != 'log':
-            for i in range(self.coefficient_table.rowCount()):
-                start = self.coefficient_table.item(i, 3).text()
-                self.start_point.append(float(start))
+        if has_start:
+            has_any_start = any(value is not None for value in self.start_point)
+            has_blank_start = any(value is None for value in self.start_point)
+            if has_any_start and has_blank_start:
+                raise ValueError("StartPoint must be either fully specified or left fully blank.")
 
     def fit_parameters(self):
         fit_type_order = self.order_input.currentText()
@@ -614,11 +769,37 @@ class PyFitWindow(QFrame):
             raise ValueError("Please select a Matlab fit type first.")
 
         if not self.advanced_option.isChecked():
-            return fit_type_order, True, None, None, None
+            return fit_type_order, None
 
         self.get_coef_limit()
-        start_point = list(getattr(self, "start_point", [])) or None
-        return fit_type_order, False, list(self.coeff_up_limit), list(self.coeff_down_limit), start_point
+        method = self.option_metadata.get("Method", matlab_adapter.fit_method_for_name(fit_type_order))
+        start_point = None
+        if method == "NonlinearLeastSquares" and any(value is not None for value in self.start_point):
+            start_point = [float(value) for value in self.start_point if value is not None]
+
+        fit_options = {
+            "Method": method,
+            "Normalize": self._option_widget_value("Normalize"),
+            "Robust": self._option_widget_value("Robust"),
+            "TolCon": self._option_widget_value("TolCon"),
+            "Lower": list(self.coeff_down_limit),
+            "Upper": list(self.coeff_up_limit),
+        }
+        if start_point is not None:
+            fit_options["StartPoint"] = start_point
+        if method == "NonlinearLeastSquares":
+            for name in (
+                "Algorithm",
+                "DiffMinChange",
+                "DiffMaxChange",
+                "MaxFunEvals",
+                "MaxIter",
+                "TolFun",
+                "TolX",
+            ):
+                fit_options[name] = self._option_widget_value(name)
+
+        return fit_type_order, fit_options
 
     def fit_curve(self, x, y):
         '''
@@ -628,28 +809,14 @@ class PyFitWindow(QFrame):
         :return: exp的matlab表达式
         '''
 
-        if self.advanced_option.isChecked():
-            isdefault = False
-            self.get_coef_limit()
-        else:
-            isdefault = True
+        fit_type_order, fit_options = self.fit_parameters()
 
-        # if self.fit_type != 'poly' and self.fit_type != 'log':
-        #     print(self.start_point)
-
-        fit_type_order = self.order_input.currentText()
-
-        value_exp, show_exp = matlab_adapter.fit_curve_isolated(
+        return matlab_adapter.fit_curve_isolated(
             x,
             y,
             fit_type_order,
-            isdefault,
-            self.coeff_up_limit if not isdefault else None,
-            self.coeff_down_limit if not isdefault else None,
-            self.start_point if not isdefault and hasattr(self, "start_point") else None,
+            fit_options,
         )
-
-        return value_exp, show_exp
 
 
 

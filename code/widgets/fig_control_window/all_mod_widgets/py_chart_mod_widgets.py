@@ -8,6 +8,7 @@ from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorCh
 from code.database.py_database import PyDatabase
 from code.database.interpolate_func import interpolate_dict
 
+import math
 import os
 
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -315,6 +316,34 @@ class PyFitMatlabModWidget(QFrame):
 
         self.expression_box.setLayout(self.expression_layout)
 
+        self.result_box = QGroupBox("Fit Result", self)
+        self.result_layout = QVBoxLayout()
+        self.result_model_label = QLabel("Model: -")
+        self.result_formula_input = QPlainTextEdit(self)
+        self.result_formula_input.setReadOnly(True)
+        self.result_formula_input.setFixedHeight(55)
+
+        self.result_coeff_table = QTableWidget(self)
+        self.result_coeff_table.setColumnCount(4)
+        self.result_coeff_table.setHorizontalHeaderLabels(["Coefficient", "Value", "Lower", "Upper"])
+        self.result_coeff_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.result_coeff_table.horizontalHeader().setStretchLastSection(True)
+
+        self.result_goodness_table = QTableWidget(self)
+        self.result_goodness_table.setColumnCount(2)
+        self.result_goodness_table.setHorizontalHeaderLabels(["Metric", "Value"])
+        self.result_goodness_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.result_goodness_table.horizontalHeader().setStretchLastSection(True)
+
+        self.result_layout.addWidget(self.result_model_label)
+        self.result_layout.addWidget(QLabel("Formula:"))
+        self.result_layout.addWidget(self.result_formula_input)
+        self.result_layout.addWidget(QLabel("Coefficients and 95% Confidence Bounds:"))
+        self.result_layout.addWidget(self.result_coeff_table)
+        self.result_layout.addWidget(QLabel("Goodness of Fit:"))
+        self.result_layout.addWidget(self.result_goodness_table)
+        self.result_box.setLayout(self.result_layout)
+
         # 添加x轴起始点和终止点
         self.x_start_layout = QHBoxLayout()
         self.x_stop_layout = QHBoxLayout()
@@ -356,6 +385,7 @@ class PyFitMatlabModWidget(QFrame):
         self.style_box.setLayout(self.style_layout)
 
         self.layout.addWidget(self.expression_box)
+        self.layout.addWidget(self.result_box)
         self.layout.addLayout(self.x_start_layout)
         self.layout.addLayout(self.x_stop_layout)
         self.layout.addWidget(self.style_box)
@@ -383,7 +413,78 @@ class PyFitMatlabModWidget(QFrame):
         current_expression = self.expression_input.toPlainText()
         self.curve_modify.update_expression(current_expression)
 
-    def update_curve(self, value_expression: str, show_expression: str, x_start: float, x_stop: float):
+    def _format_result_number(self, value):
+        if value is None:
+            return ""
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if math.isnan(number):
+            return "NaN"
+        if math.isinf(number):
+            return "Inf" if number > 0 else "-Inf"
+        if number != 0 and (abs(number) < 1e-4 or abs(number) >= 1e6):
+            return f"{number:.4g}"
+        return f"{number:.4f}"
+
+    def _set_table_item(self, table, row, column, value):
+        item = QTableWidgetItem(self._format_result_number(value))
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        table.setItem(row, column, item)
+
+    def _populate_fit_result(self, fit_result):
+        self.result_model_label.setText(f"Model: {fit_result.get('fit_type', '-')}")
+        self.result_formula_input.setPlainText(str(fit_result.get("formula", "")))
+
+        coefficients = list(fit_result.get("coefficients") or [])
+        self.result_coeff_table.setRowCount(len(coefficients))
+        for row, coefficient in enumerate(coefficients):
+            name_item = QTableWidgetItem(str(coefficient.get("name", "")))
+            name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.result_coeff_table.setItem(row, 0, name_item)
+            self._set_table_item(self.result_coeff_table, row, 1, coefficient.get("value"))
+            self._set_table_item(self.result_coeff_table, row, 2, coefficient.get("lower"))
+            self._set_table_item(self.result_coeff_table, row, 3, coefficient.get("upper"))
+
+        goodness = fit_result.get("goodness") or {}
+        labels = [
+            ("SSE", "sse"),
+            ("R Square", "rsquare"),
+            ("DFE", "dfe"),
+            ("Adjusted R Square", "adjrsquare"),
+            ("RMSE", "rmse"),
+        ]
+        self.result_goodness_table.setRowCount(len(labels))
+        for row, (label, key) in enumerate(labels):
+            label_item = QTableWidgetItem(label)
+            label_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.result_goodness_table.setItem(row, 0, label_item)
+            self._set_table_item(self.result_goodness_table, row, 1, goodness.get(key))
+
+    def update_curve(self, fit_result, *args):
+        if isinstance(fit_result, dict):
+            if len(args) < 2:
+                raise TypeError("update_curve requires x_start and x_stop")
+            x_start, x_stop = args[0], args[1]
+            value_expression = fit_result.get("value_expression", "")
+            show_expression = fit_result.get("show_expression", value_expression)
+            self._populate_fit_result(fit_result)
+        else:
+            if len(args) == 3:
+                show_expression, x_start, x_stop = args
+            elif len(args) >= 2:
+                x_start, x_stop = args[0], args[1]
+                show_expression = str(fit_result)
+            else:
+                raise TypeError("update_curve requires x_start and x_stop")
+            value_expression = str(fit_result)
+            self._populate_fit_result({
+                "fit_type": "-",
+                "formula": show_expression,
+                "coefficients": [],
+                "goodness": {},
+            })
         self.expression_input.setPlainText(show_expression)
         self.x_start_input.setValue(x_start)
         self.x_stop_input.setValue(x_stop)
