@@ -7,7 +7,11 @@ import numpy as np
 
 from code.database.py_database import databases
 from code.database.py_database import PyDatabase
-from code.database.interpolate_func import interpolate_dict
+from code.database.interpolate_func import (
+    MAX_INTERPOLATION_SAMPLES,
+    MIN_INTERPOLATION_SAMPLES,
+    interpolate_dict,
+)
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
@@ -257,7 +261,22 @@ def _validate_project_object(collection: str, record: Any, path: str,
         if method not in interpolate_dict:
             raise ValueError(f"Unknown interpolation method at {path}.method: {method}")
         if "k" in record:
-            _coerce_int(record["k"], f"{path}.k")
+            k = _coerce_int(record["k"], f"{path}.k")
+            if k < 1 or k > 5:
+                raise ValueError(f"Invalid project field {path}.k: must be between 1 and 5")
+        if "samples" in record:
+            samples = _coerce_int(record["samples"], f"{path}.samples")
+            if samples < MIN_INTERPOLATION_SAMPLES or samples > MAX_INTERPOLATION_SAMPLES:
+                raise ValueError(
+                    f"Invalid project field {path}.samples: must be between "
+                    f"{MIN_INTERPOLATION_SAMPLES} and {MAX_INTERPOLATION_SAMPLES}"
+                )
+        if "lam_auto" in record:
+            _coerce_bool(record["lam_auto"], f"{path}.lam_auto")
+        if record.get("lam") is not None:
+            lam = _coerce_float(record["lam"], f"{path}.lam")
+            if not np.isfinite(lam) or lam < 0:
+                raise ValueError(f"Invalid project field {path}.lam: must be finite and non-negative")
 
 def _validate_text_record(record: dict[str, Any], path: str, axes_count: int) -> None:
     scope = record.get("scope", "axes")

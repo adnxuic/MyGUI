@@ -18,19 +18,6 @@ Scope: this file applies to the whole repository.
 - Do not delete tracked IDE files, backup files, or sync artifacts as part of unrelated work. Repository hygiene cleanup should be a separate commit.
 - Treat `code.database.py_database.databases` as shared global runtime state. Changes around it need focused tests or a clear manual verification path.
 - Treat user-entered expression evaluation as high risk. Replacing `eval` should be done as a dedicated task.
-
-## Validation
-
-- After every code change, run at least:
-
-```powershell
-python -m compileall -q .
-```
-
-- For GUI-facing changes, also run a manual smoke test from the repository root:
-
-```powershell
-python main.py
-```
-
-- When a change touches MATLAB or TeX, verify the basic GUI still starts even if those optional local dependencies are unavailable.
+- When implementing features, consider the Message Bar and State Bar. Prefer surfacing useful user-facing information through the Message Bar, using red for errors, yellow for warnings, and green for successful actions.
+- Keep handoff notes up to date under `codex_handoff/`. Handoff notes should record only current limitations, not next-step plans.
+- After completing a feature, write feature documentation under `docs/`. Keep it to a concise feature description and detailed parameter documentation; do not include limitations or unrelated commentary.

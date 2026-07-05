@@ -38,6 +38,13 @@ class ProjectIoTests(unittest.TestCase):
         project_file.write_text(json.dumps(snapshot), encoding="utf-8")
         return project_file
 
+    def remove_project_file(self, project_file):
+        if project_file.exists():
+            try:
+                os.remove(project_file)
+            except PermissionError:
+                pass
+
     def test_save_and_restore_project_round_trip(self):
         database = PyDatabase()
         PyDatabase.register_sheet("Data", "SheetA", database)
@@ -79,8 +86,7 @@ class ProjectIoTests(unittest.TestCase):
             self.assertEqual(snapshot["figures"], figure_snapshot)
             self.assertEqual(loaded_figure.loaded, figure_snapshot)
         finally:
-            if project_file.exists():
-                os.remove(project_file)
+            self.remove_project_file(project_file)
 
     def test_load_project_file_migrates_v1_figure_object_collections(self):
         project_file = self.make_project_file()
@@ -118,8 +124,7 @@ class ProjectIoTests(unittest.TestCase):
             self.assertEqual(figure["interpolates"], [])
             self.assertEqual(figure["texts"], [])
         finally:
-            if project_file.exists():
-                os.remove(project_file)
+            self.remove_project_file(project_file)
 
     def test_load_project_file_accepts_utf8_bom_before_schema_migration(self):
         project_file = Path(__file__).with_name("fixtures") / "utf8_bom_project_v1.mygui.json"
@@ -161,8 +166,7 @@ class ProjectIoTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Missing data source.*Data/Sheet1/1"):
                 load_project_file(project_file)
         finally:
-            if project_file.exists():
-                os.remove(project_file)
+            self.remove_project_file(project_file)
 
     def test_load_project_file_rejects_unknown_interpolate_method(self):
         project_file = self.write_project({
@@ -200,8 +204,92 @@ class ProjectIoTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unknown interpolation method.*unknown-method"):
                 load_project_file(project_file)
         finally:
-            if project_file.exists():
-                os.remove(project_file)
+            self.remove_project_file(project_file)
+
+    def test_load_project_file_accepts_interpolate_parameters(self):
+        project_file = self.write_project({
+            "schema": "mygui-project",
+            "schema_version": PROJECT_SCHEMA_VERSION,
+            "tables": {
+                "Data": {
+                    "Sheet1": {
+                        "1": [0.0, 1.0, 2.0, 3.0, 4.0],
+                        "2": [1.0, 2.0, 3.0, 2.0, 1.0],
+                    }
+                }
+            },
+            "figures": [{
+                "name": "interpolate-params",
+                "style": "default",
+                "dpi": 100.0,
+                "size_inches": [6.4, 4.8],
+                "axes_count": 1,
+                "axes_layouts": [{"nrows": 1, "ncols": 1, "start_index": 0, "count": 1}],
+                "curves": [],
+                "plots": [],
+                "scatters": [],
+                "interpolates": [{
+                    "axes_index": 0,
+                    "x_data_name": "Data/Sheet1/1",
+                    "y_data_name": "Data/Sheet1/2",
+                    "method": "平滑样条",
+                    "k": 3,
+                    "samples": 250,
+                    "lam": 0.25,
+                    "lam_auto": False,
+                }],
+                "texts": [],
+            }],
+        })
+
+        try:
+            snapshot = load_project_file(project_file)
+
+            interpolate = snapshot["figures"][0]["interpolates"][0]
+            self.assertEqual(interpolate["samples"], 250)
+            self.assertEqual(interpolate["lam"], 0.25)
+            self.assertFalse(interpolate["lam_auto"])
+        finally:
+            self.remove_project_file(project_file)
+
+    def test_load_project_file_rejects_invalid_interpolate_parameters(self):
+        project_file = self.write_project({
+            "schema": "mygui-project",
+            "schema_version": PROJECT_SCHEMA_VERSION,
+            "tables": {
+                "Data": {
+                    "Sheet1": {
+                        "1": [0.0, 1.0, 2.0],
+                        "2": [1.0, 2.0, 3.0],
+                    }
+                }
+            },
+            "figures": [{
+                "name": "bad-interpolate-params",
+                "style": "default",
+                "dpi": 100.0,
+                "size_inches": [6.4, 4.8],
+                "axes_count": 1,
+                "axes_layouts": [{"nrows": 1, "ncols": 1, "start_index": 0, "count": 1}],
+                "curves": [],
+                "plots": [],
+                "scatters": [],
+                "interpolates": [{
+                    "axes_index": 0,
+                    "x_data_name": "Data/Sheet1/1",
+                    "y_data_name": "Data/Sheet1/2",
+                    "method": "线性插值",
+                    "samples": 1,
+                }],
+                "texts": [],
+            }],
+        })
+
+        try:
+            with self.assertRaisesRegex(ValueError, "samples"):
+                load_project_file(project_file)
+        finally:
+            self.remove_project_file(project_file)
 
     def test_load_project_file_rejects_invalid_axes_index(self):
         project_file = self.write_project({
@@ -232,8 +320,7 @@ class ProjectIoTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, r"axes_index.*outside axes_count 1"):
                 load_project_file(project_file)
         finally:
-            if project_file.exists():
-                os.remove(project_file)
+            self.remove_project_file(project_file)
 
     def test_load_project_file_accepts_figure_text_without_axes_index(self):
         project_file = Path(__file__).with_name("fixtures") / "figure_text_without_axes.mygui.json"

@@ -18,9 +18,12 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
 4. Save table data to the in-memory database from the sheet/table workflow.
 5. Create a plot using two saved data columns.
 6. Create a scatter chart using two saved data columns.
-7. Create an interpolation curve from saved data.
-8. Modify axis range, axis labels, and legend position.
-9. Add a text element and edit its content, font, size, and position.
+7. Create an interpolation curve from saved data, change its method, set `Samples`, and confirm the curve redraws.
+8. For `B样条插值`, change `k`; for `平滑样条`, toggle `Auto lambda` and set a manual lambda.
+9. Change the interpolation X/Y data sources from the right-side panel and confirm the dense interpolation curve redraws.
+10. Enter invalid interpolation input such as duplicate X values and confirm the Message Bar shows a red error while the app stays open.
+11. Modify axis range, axis labels, and legend position.
+12. Add a text element and edit its content, font, size, and position.
 
 ## Optional Local Integrations
 
@@ -39,3 +42,4 @@ These checks depend on local system setup and should not block baseline GUI main
 - If MATLAB or LaTeX is unavailable, record that as an environment limitation rather than a baseline GUI failure.
 - If a smoke step fails, capture the exact action, visible error, and whether the Python process stayed alive.
 - Fitting engines, options, and MATLAB runtime settings are documented in `docs/fitting.md`.
+- Interpolation methods and parameters are documented in `docs/interpolation.md`.

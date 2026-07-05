@@ -5,7 +5,15 @@ from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorCh
 from code.widgets import qss_func
 
 from code.database.py_database import databases, PyDatabase
-from code.database.interpolate_func import interpolate_dict
+from code import status_messages
+from code.database.interpolate_func import (
+    DEFAULT_INTERPOLATION_SAMPLES,
+    MAX_INTERPOLATION_SAMPLES,
+    MIN_INTERPOLATION_SAMPLES,
+    interpolate_dict,
+    interpolation_uses_lambda,
+    interpolation_uses_order,
+)
 
 import os
 
@@ -442,20 +450,45 @@ class PyInterpolationDialog(QDialog):
         self.layout.addWidget(QLabel('Interpolation Method:'))
         self.layout.addWidget(self.method_input)
 
-        # Order selection
+        self.samples_layout = QHBoxLayout()
+        self.samples_input = QSpinBox()
+        self.samples_input.setRange(MIN_INTERPOLATION_SAMPLES, MAX_INTERPOLATION_SAMPLES)
+        self.samples_input.setValue(DEFAULT_INTERPOLATION_SAMPLES)
+        self.samples_layout.addWidget(QLabel('Samples:'))
+        self.samples_layout.addWidget(self.samples_input)
+        self.layout.addLayout(self.samples_layout)
+
         self.k_widget = QFrame()
         self.k_input = QSpinBox()
         self.k_input.setRange(1, 5)
         self.k_input.setValue(3)
-
         self.k_layout = QHBoxLayout()
         self.k_layout.addWidget(QLabel('阶数k:'))
         self.k_layout.addWidget(self.k_input)
         self.k_widget.setLayout(self.k_layout)
+        self.layout.addWidget(self.k_widget)
 
-        # Hide order selection unless B-spline interpolation is selected
-        self.is_k_widget_added = False
+        self.lambda_widget = QFrame()
+        self.lambda_layout = QVBoxLayout()
+        self.lambda_auto_input = QCheckBox("Auto lambda")
+        self.lambda_auto_input.setChecked(True)
+        self.lambda_value_input = QDoubleSpinBox()
+        self.lambda_value_input.setRange(0.0, 1e12)
+        self.lambda_value_input.setDecimals(6)
+        self.lambda_value_input.setSingleStep(0.1)
+        self.lambda_value_input.setValue(1.0)
+        self.lambda_value_input.setEnabled(False)
+        self.lambda_layout.addWidget(self.lambda_auto_input)
+        self.lambda_row = QHBoxLayout()
+        self.lambda_row.addWidget(QLabel('Lambda:'))
+        self.lambda_row.addWidget(self.lambda_value_input)
+        self.lambda_layout.addLayout(self.lambda_row)
+        self.lambda_widget.setLayout(self.lambda_layout)
+        self.layout.addWidget(self.lambda_widget)
+
         self.method_input.currentTextChanged.connect(self.change_method)
+        self.lambda_auto_input.toggled.connect(self.lambda_auto_changed)
+        self.change_method()
 
         # OK and Cancel buttons
         self.button_bar = QFrame()
@@ -475,19 +508,19 @@ class PyInterpolationDialog(QDialog):
         self.setLayout(self.layout)
 
     def change_method(self):
-        # Get currently selected interpolation method
         current_method = self.method_input.currentText()
+        self.k_widget.setVisible(interpolation_uses_order(current_method))
+        self.lambda_widget.setVisible(interpolation_uses_lambda(current_method))
 
-        # Add order selection when B-spline is selected and widget is absent
-        # Insert order selection before the last row
-        if current_method == "B样条插值" and self.is_k_widget_added is False:
-            self.layout.insertWidget(self.layout.count() - 1, self.k_widget)
-            self.is_k_widget_added = True
+    def lambda_auto_changed(self, checked: bool):
+        self.lambda_value_input.setEnabled(not checked)
 
-        # Remove order selection when B-spline is not selected
-        elif current_method != "B样条插值" and self.is_k_widget_added is True:
-            self.layout.itemAt(self.layout.count() - 2).widget().setParent(None)
-            self.is_k_widget_added = False
+    def _lambda_options(self, method: str):
+        if not interpolation_uses_lambda(method):
+            return None, True
+        if self.lambda_auto_input.isChecked():
+            return None, True
+        return self.lambda_value_input.value(), False
 
     def accept(self):
         # Warn if current canvas is empty
@@ -503,22 +536,33 @@ class PyInterpolationDialog(QDialog):
         x_data_name = self.x_data_input.currentText()
         y_data_name = self.y_data_input.currentText()
 
-        x_data = PyDatabase.get_data(x_data_name)
-        y_data = PyDatabase.get_data(y_data_name)
+        try:
+            x_data = PyDatabase.get_data(x_data_name)
+            y_data = PyDatabase.get_data(y_data_name)
+        except KeyError as exc:
+            status_messages.show_error(str(exc))
+            return
 
         # Warn if x_data and y_data lengths differ
         if len(x_data) != len(y_data):
-            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+            status_messages.show_error('X Data and Y Data must have the same length!')
             return
 
         method = self.method_input.currentText()
-        if method == "B样条插值":
-            k = self.k_input.value()
-            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name,
-                                                                   y_name=y_data_name, method=method, k=k)
-        else:
-            self.figure_window.current_canva.add_interpolate_curve(x=x_data, y=y_data, x_name=x_data_name,
-                                                                   y_name=y_data_name, method=method)
+        lam, lam_auto = self._lambda_options(method)
+        line = self.figure_window.current_canva.add_interpolate_curve(
+            x=x_data,
+            y=y_data,
+            x_name=x_data_name,
+            y_name=y_data_name,
+            method=method,
+            k=self.k_input.value(),
+            samples=self.samples_input.value(),
+            lam=lam,
+            lam_auto=lam_auto,
+        )
+        if line is None:
+            return
 
         super().accept()
 

@@ -8,7 +8,14 @@ from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorCh
 from code import status_messages
 from code.database import matlab_adapter
 from code.database.py_database import PyDatabase
-from code.database.interpolate_func import interpolate_dict
+from code.database.interpolate_func import (
+    DEFAULT_INTERPOLATION_SAMPLES,
+    MAX_INTERPOLATION_SAMPLES,
+    MIN_INTERPOLATION_SAMPLES,
+    interpolate_dict,
+    interpolation_uses_lambda,
+    interpolation_uses_order,
+)
 
 import math
 import os
@@ -769,64 +776,93 @@ class PyFitModWidget(QFrame):
 
 class PyInterpolateWidget(QFrame):
     def __init__(self, curve_modify: PyInterpolateModify, init_interpolat: str, init_k: int,
-                 color: str = "#000000"):
+                 color: str = "#000000", x_data_name: str = "", y_data_name: str = "",
+                 samples: int = DEFAULT_INTERPOLATION_SAMPLES,
+                 lam: float | None = None, lam_auto: bool = True):
         super().__init__()
 
         self.modify = curve_modify
 
         self.layout = QVBoxLayout()
 
-        # Interpolation method
+        self.data_choice_widget = PyDataChoiceWidget()
+        if x_data_name:
+            self.data_choice_widget.set_x_data(x_data_name)
+        if y_data_name:
+            self.data_choice_widget.set_y_data(y_data_name)
+        self.layout.addWidget(self.data_choice_widget)
+
         self.interpolat_box = QGroupBox('Interpolation')
         self.interpolat_layout = QVBoxLayout()
 
         self.interpolat_input = QComboBox(self)
         self.interpolat_input.addItems(interpolate_dict.keys())
-
+        self.interpolat_input.setCurrentText(init_interpolat)
         self.interpolat_layout.addWidget(self.interpolat_input)
-        # Add stretch spacer
-        self.interpolat_layout.addStretch()
 
-        # Order selection
+        self.samples_layout = QHBoxLayout()
+        self.samples_input = QSpinBox()
+        self.samples_input.setRange(MIN_INTERPOLATION_SAMPLES, MAX_INTERPOLATION_SAMPLES)
+        self.samples_input.setValue(int(samples))
+        self.samples_layout.addWidget(QLabel('Samples:'))
+        self.samples_layout.addWidget(self.samples_input)
+        self.interpolat_layout.addLayout(self.samples_layout)
+
         self.k_widget = QFrame()
         self.k_input = QSpinBox()
         self.k_input.setRange(1, 5)
         self.k_input.setValue(init_k)
-        self.k_input.valueChanged.connect(self.interpolat_change)
-
         self.k_layout = QHBoxLayout()
         self.k_layout.addWidget(QLabel('阶数k:'))
         self.k_layout.addWidget(self.k_input)
         self.k_widget.setLayout(self.k_layout)
+        self.interpolat_layout.addWidget(self.k_widget)
 
-        # Hide order selection unless B-spline interpolation is selected
-        self.is_k_widget_added = False
-        self.interpolat_input.currentTextChanged.connect(self.change_method)
-        self.interpolat_input.setCurrentText(init_interpolat)
-        self.interpolat_input.currentTextChanged.connect(self.interpolat_change)
+        self.lambda_widget = QFrame()
+        self.lambda_layout = QVBoxLayout()
+        self.lambda_auto_input = QCheckBox("Auto lambda")
+        self.lambda_auto_input.setChecked(bool(lam_auto))
+        self.lambda_value_input = QDoubleSpinBox()
+        self.lambda_value_input.setRange(0.0, 1e12)
+        self.lambda_value_input.setDecimals(6)
+        self.lambda_value_input.setSingleStep(0.1)
+        self.lambda_value_input.setValue(1.0 if lam is None else float(lam))
+        self.lambda_value_input.setEnabled(not bool(lam_auto))
+        self.lambda_layout.addWidget(self.lambda_auto_input)
+        self.lambda_row = QHBoxLayout()
+        self.lambda_row.addWidget(QLabel('Lambda:'))
+        self.lambda_row.addWidget(self.lambda_value_input)
+        self.lambda_layout.addLayout(self.lambda_row)
+        self.lambda_widget.setLayout(self.lambda_layout)
+        self.interpolat_layout.addWidget(self.lambda_widget)
 
+        self.interpolat_layout.addStretch()
         self.interpolat_box.setLayout(self.interpolat_layout)
-
         self.layout.addWidget(self.interpolat_box)
 
-        # Line color
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
 
-        # Legend
         self.legend_layout = QHBoxLayout()
         self.legend_input = QLineEdit(self)
         self.legend_input.setPlaceholderText('Legend')
-        self.legend_input.textChanged.connect(self.legend_change)
         self.legend_input.setText(curve_modify.label)
         self.legend_layout.addWidget(QLabel('Legend:'))
         self.legend_layout.addWidget(self.legend_input)
         self.layout.addLayout(self.legend_layout)
 
-        # Add stretch spacer
         self.layout.addStretch()
-
         self.setLayout(self.layout)
+
+        self._update_option_visibility()
+        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
+        self.interpolat_input.currentTextChanged.connect(self.change_method)
+        self.interpolat_input.currentTextChanged.connect(self.interpolat_change)
+        self.samples_input.valueChanged.connect(self.interpolat_change)
+        self.k_input.valueChanged.connect(self.interpolat_change)
+        self.lambda_auto_input.toggled.connect(self.lambda_auto_changed)
+        self.lambda_value_input.valueChanged.connect(self.interpolat_change)
+        self.legend_input.textChanged.connect(self.legend_change)
 
     def get_colorupdate_func(self):
         return self.color_choice.updateColor
@@ -834,25 +870,43 @@ class PyInterpolateWidget(QFrame):
     def delete_object(self):
         self.modify.delete_object()
 
-    def change_method(self):
-        # Get currently selected interpolation method
+    def _current_lambda(self, method: str):
+        if not interpolation_uses_lambda(method):
+            return None, True
+        if self.lambda_auto_input.isChecked():
+            return None, True
+        return self.lambda_value_input.value(), False
+
+    def _update_option_visibility(self):
         current_method = self.interpolat_input.currentText()
+        self.k_widget.setVisible(interpolation_uses_order(current_method))
+        self.lambda_widget.setVisible(interpolation_uses_lambda(current_method))
 
-        # Add order selection when B-spline is selected and widget is absent
-        # Insert order selection before the last row
-        if current_method == "B样条插值" and self.is_k_widget_added is False:
-            self.interpolat_layout.insertWidget(self.interpolat_layout.count() - 1, self.k_widget)
-            self.is_k_widget_added = True
+    def change_method(self):
+        self._update_option_visibility()
 
-        # Remove order selection when B-spline is not selected
-        elif current_method != "B样条插值" and self.is_k_widget_added is True:
-            self.interpolat_layout.itemAt(self.interpolat_layout.count() - 2).widget().setParent(None)
-            self.is_k_widget_added = False
+    def lambda_auto_changed(self, checked: bool):
+        self.lambda_value_input.setEnabled(not checked)
+        self.interpolat_change()
 
     def interpolat_change(self):
         current_interpolat = self.interpolat_input.currentText()
-        k = self.k_input.value()
-        self.modify.update_interpolate(current_interpolat, k)
+        lam, lam_auto = self._current_lambda(current_interpolat)
+        self.modify.update_interpolate(
+            current_interpolat,
+            self.k_input.value(),
+            samples=self.samples_input.value(),
+            lam=lam,
+            lam_auto=lam_auto,
+        )
+
+    def x_data_change(self):
+        data_name = self.data_choice_widget.get_x_data()
+        self.modify.set_x_data_name(data_name)
+
+    def y_data_change(self):
+        data_name = self.data_choice_widget.get_y_data()
+        self.modify.set_y_data_name(data_name)
 
     def color_change(self, color: str):
         self.modify.update_color(color)

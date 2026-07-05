@@ -7,7 +7,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 
 from Qt_core import QApplication
-from code.database.interpolate_func import interpolate_dict
 from code.database.py_database import PyDatabase
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import PyTextDialog
@@ -50,7 +49,7 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
         x_data = PyDatabase.get_data(x_name)
         y_data = PyDatabase.get_data(y_name)
         canvas = self.add_canvas_axes()
-        interpolate_method = next(iter(interpolate_dict.keys()))
+        interpolate_method = "B样条插值"
 
         canvas.add_plot(
             x=x_data,
@@ -78,6 +77,8 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
             x_name=x_name,
             y_name=y_name,
             method=interpolate_method,
+            k=2,
+            samples=128,
             color="#0000ff",
             label="saved interpolate",
         )
@@ -112,6 +113,7 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
             self.assertEqual(loaded_axes.lines[0].get_label(), "saved plot")
             self.assertEqual(loaded_axes.collections[0].get_label(), "saved scatter")
             self.assertEqual(loaded_axes.lines[1].get_label(), "saved interpolate")
+            self.assertEqual(len(loaded_axes.lines[1].get_xdata()), 128)
             self.assertEqual(loaded_axes.texts[0].get_text(), "saved text")
             self.assertEqual(loaded_axes.texts[0].get_position(), (0.25, 0.75))
 
@@ -119,6 +121,10 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
             self.assertEqual(snapshot["plots"][0]["x_data_name"], x_name)
             self.assertEqual(snapshot["scatters"][0]["marker"], "s")
             self.assertEqual(snapshot["interpolates"][0]["method"], interpolate_method)
+            self.assertEqual(snapshot["interpolates"][0]["k"], 2)
+            self.assertEqual(snapshot["interpolates"][0]["samples"], 128)
+            self.assertIsNone(snapshot["interpolates"][0]["lam"])
+            self.assertTrue(snapshot["interpolates"][0]["lam_auto"])
             self.assertEqual(snapshot["texts"][0]["fontsize"], 14.0)
             self.assertFalse(snapshot["texts"][0]["usetex"])
         finally:

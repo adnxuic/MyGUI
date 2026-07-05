@@ -197,6 +197,24 @@ class ChartLifecycleTests(unittest.TestCase):
         self.assertEqual(interpolate_widget.modify.line.get_label(), "after table delete")
         self.assert_column_callbacks_empty(old_database)
 
+    def test_interpolate_curve_recomputes_when_source_data_changes(self):
+        database, x_name, y_name = self.register_data()
+        canvas = self.add_canvas_axes()
+        self.add_objects(canvas, x_name, y_name)
+        interpolate_widget = self.get_mod_widgets(canvas)["interpolate"]
+        line = interpolate_widget.modify.line
+
+        self.assertEqual(len(line.get_xdata()), 1000)
+
+        database.update_data(1, np.array([10.0, 11.0, 12.0, 13.0]))
+        database.update_data(2, np.array([3.0, 1.0, 2.0, 4.0]))
+        self.app.processEvents()
+
+        self.assertEqual(len(line.get_xdata()), 1000)
+        self.assertEqual(len(line.get_ydata()), 1000)
+        self.assertAlmostEqual(float(line.get_xdata()[0]), 10.0)
+        self.assertAlmostEqual(float(line.get_xdata()[-1]), 13.0)
+
 
 if __name__ == "__main__":
     unittest.main()

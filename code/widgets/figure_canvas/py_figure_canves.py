@@ -15,7 +15,7 @@ from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 from code import tex_config
 from code import status_messages
 from code.database.py_database import PyDatabase
-from code.database.interpolate_func import interpolate_dict
+from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
 from code.database.safe_expression import evaluate_curve_expression
 
 import matplotlib as mpl
@@ -270,12 +270,23 @@ class PyFigureCanvas(QWidget):
 
     # Add interpolation curve
     def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate',
-                              color='black', record_project=True):
+                              color='black', record_project=True,
+                              samples=DEFAULT_INTERPOLATION_SAMPLES,
+                              lam=None, lam_auto=True):
         with mpl.style.context(self.style):
-            if method == "B样条插值":
-                x_new, y_new = interpolate_dict[method](x, y, k=k)
-            else:
-                x_new, y_new = interpolate_dict[method](x, y)
+            try:
+                x_new, y_new = interpolate_curve(
+                    x,
+                    y,
+                    method,
+                    k=k,
+                    samples=samples,
+                    lam=lam,
+                    lam_auto=lam_auto,
+                )
+            except ValueError as exc:
+                status_messages.show_error(str(exc))
+                return None
             line, = self.current_axes.plot(x_new, y_new, color=color, label=label)
 
         project_record = None
@@ -286,6 +297,9 @@ class PyFigureCanvas(QWidget):
                 "y_data_name": y_name,
                 "method": method,
                 "k": int(k),
+                "samples": int(samples),
+                "lam": None if lam is None else float(lam),
+                "lam_auto": bool(lam_auto),
                 "color": line.get_color(),
                 "label": label,
             }
@@ -300,8 +314,10 @@ class PyFigureCanvas(QWidget):
         # Add interpolation curve adjustment panel
         interpolate_mod_widget = PyInterpolateWidget(
             PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name, label,
-                                method=method, k=k, project_record=project_record,
-                                project_collection=self.project_interpolates), method, k, color)
+                                method=method, k=k, samples=samples, lam=lam, lam_auto=lam_auto,
+                                project_record=project_record,
+                                project_collection=self.project_interpolates), method, k, color,
+            x_data_name=x_name, y_data_name=y_name, samples=samples, lam=lam, lam_auto=lam_auto)
 
         # Add visualization object
         self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
@@ -310,6 +326,8 @@ class PyFigureCanvas(QWidget):
         interpolate_box.add_widget(interpolate_mod_widget, 'interpolate')
 
         self.redraw()
+        status_messages.show_success("Interpolation curve created.")
+        return line
 
     # Add text
     @staticmethod
