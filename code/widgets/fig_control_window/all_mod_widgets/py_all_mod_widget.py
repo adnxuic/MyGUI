@@ -4,23 +4,20 @@ from code.widgets.fig_control_window.all_mod_widgets.py_axes_mod_widgets import 
     PyCommonModWidget, PyBottomSpineModWidget, PyTopSpineModWidget, PyLeftSpineModWidget, PyRightSpineModWidget,
     PyAxeLegendModWidget
 )
-from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitMatlabModWidget
-from code.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 
 from code.figuremodify.py_axes_modify import PyAxesModify
 
-from typing import Optional
 import os
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
 
 
-# 调整坐标系
+# Adjust axes
 class PyAxesModWindow(QFrame):
     """
-    坐标系调整窗口
-    一个坐标系对应一个
+    Axes adjustment panel.
+    One panel per axes.
     """
 
     def __init__(self, axe, axe_modify: PyAxesModify):
@@ -60,19 +57,18 @@ class PyAxesModWindow(QFrame):
         pass
 
 
-# 调整曲线
+# Adjust curves
 class PyChartModWindow(QFrame):
     """
-    曲线调整窗口
-    一个坐标系对应一个
-    用来容纳不同类的曲线调整箱
+    Curve adjustment panel.
+    One panel per axes.
+    Holds curve-type adjustment toolboxes.
     """
 
-    def __init__(self, axe, matlab_widget):
+    def __init__(self, axe):
         super().__init__()
 
         self.axe = axe
-        self.matlab_widget = matlab_widget
 
         self.boxs = {}
 
@@ -83,7 +79,7 @@ class PyChartModWindow(QFrame):
         self.setLayout(self.layout)
 
     def add_box(self, box_name: str, btn: QPushButton):
-        widget = PyModBox(self.matlab_widget)
+        widget = PyModBox()
         self.boxs[box_name] = widget
         self.stacklayout.addWidget(widget)
 
@@ -94,7 +90,7 @@ class PyChartModWindow(QFrame):
         self.stacklayout.setCurrentWidget(widget)
 
 
-# 调整元素
+# Adjust elements
 class PyElementModWindow(QFrame):
     def __init__(self, axe):
         super().__init__()
@@ -123,23 +119,17 @@ class PyElementModWindow(QFrame):
 
 class PyModBox(QToolBox):
     """
-    调整箱
-    用来容纳同类的多条调整窗口
+    Adjustment toolbox.
+    Holds multiple adjustment panels of the same type.
     """
 
-    def __init__(self, matlab_widget=None):
+    def __init__(self):
         super().__init__()
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
-        if matlab_widget is not None:
-            self.matlab_widget: Optional[PyMatlabWindow] = matlab_widget
-
         self.item_num = 0
         self.setContextMenuPolicy(Qt.DefaultContextMenu)
-
-        # 标签改变时，如果是matlab窗口，调用change_matlab_widget
-        self.currentChanged.connect(self.change_widget)
 
     def add_widget(self, widget, widget_name: str):
         self.addItem(widget, widget_name + str(self.item_num))
@@ -168,11 +158,3 @@ class PyModBox(QToolBox):
         self.removeItem(index)
         widget.setParent(None)
         widget.deleteLater()
-
-    def change_widget(self):
-        widget = self.currentWidget()
-        # 如果是matlab窗口，调用change_matlab_widget
-        if isinstance(widget, PyFitMatlabModWidget):
-            self.matlab_widget.set_connect_widget(widget)
-        else:
-            return

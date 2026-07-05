@@ -15,6 +15,7 @@ import sys
 import time
 from typing import Any, Iterator
 
+from code.database import fit_result as shared_fit_result
 from code.database.py_matlab_fit import fit_type as FIT_TYPES
 
 
@@ -58,8 +59,8 @@ DEFAULT_CONNECT_TIMEOUT_SECONDS = _timeout_from_env("MYGUI_MATLAB_CONNECT_TIMEOU
 DEFAULT_EXPRESSION_TIMEOUT_SECONDS = _timeout_from_env("MYGUI_MATLAB_EXPRESSION_TIMEOUT_SECONDS", 120)
 DEFAULT_FIT_TIMEOUT_SECONDS = _timeout_from_env("MYGUI_MATLAB_FIT_TIMEOUT_SECONDS", 180)
 CONNECT_INITIALIZE_PACKAGES = _bool_from_env("MYGUI_MATLAB_CONNECT_INITIALIZE_PACKAGES", False)
-CONFIDENCE_LEVEL = 0.95
-GOODNESS_FIELDS = ("sse", "rsquare", "dfe", "adjrsquare", "rmse")
+CONFIDENCE_LEVEL = shared_fit_result.CONFIDENCE_LEVEL
+GOODNESS_FIELDS = shared_fit_result.GOODNESS_FIELDS
 LINEAR_LEAST_SQUARES_FIT_PREFIXES = ("poly",)
 LINEAR_LEAST_SQUARES_FIT_NAMES = {"log"}
 NONLINEAR_ALGORITHMS = ("Trust-Region", "Levenberg-Marquardt", "Interior-Point")
@@ -788,19 +789,7 @@ def _initialized_package(package_name: str) -> Iterator[Any]:
 
 
 def _loads_json_object(value: Any) -> dict[str, Any]:
-    if value is None:
-        return {}
-    if isinstance(value, dict):
-        return dict(value)
-    if isinstance(value, (list, tuple)) and value:
-        value = value[0]
-    if isinstance(value, bytes):
-        value = value.decode("utf-8", errors="replace")
-    text = str(value).strip()
-    if not text:
-        return {}
-    parsed = json.loads(text)
-    return parsed if isinstance(parsed, dict) else {}
+    return shared_fit_result.loads_json_object(value)
 
 
 def _normalize_func_info(func_name: str, expression: Any, coefficients: Any,
@@ -880,16 +869,7 @@ def _column_double(matlab: Any, values) -> Any:
 
 
 def _replace_coefficients(expression: str, coefficient_names, coefficient_values) -> str:
-    result = expression
-    pairs = sorted(
-        ((str(name), value) for name, value in zip(coefficient_names, coefficient_values)),
-        key=lambda item: len(item[0]),
-        reverse=True,
-    )
-    for name, value in pairs:
-        pattern = rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])"
-        result = re.sub(pattern, str(value), result)
-    return result
+    return shared_fit_result.replace_coefficients(expression, coefficient_names, coefficient_values)
 
 
 def _matlab_text(value: Any) -> str:
@@ -910,56 +890,23 @@ def _matlab_formula_to_python_expression(formula: Any) -> str:
 
 
 def _as_list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    if isinstance(value, (str, bytes)):
-        return [value]
-    try:
-        return list(value)
-    except TypeError:
-        return [value]
+    return shared_fit_result.as_list(value)
 
 
 def _to_float_or_none(value: Any) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, (list, tuple)) and value:
-        value = value[0]
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    return shared_fit_result.to_float_or_none(value)
 
 
 def _coefficient_values(coeff_value: Any) -> list[float]:
-    values = _as_list(coeff_value)
-    if values and not isinstance(values[0], (int, float, str, bytes)):
-        values = _as_list(values[0])
-    return [float(value) for value in values]
+    return shared_fit_result.coefficient_values(coeff_value)
 
 
 def _confidence_rows(confidence_bounds: Any, coefficient_count: int) -> tuple[list[float | None], list[float | None]]:
-    rows = _as_list(confidence_bounds)
-    if len(rows) < 2:
-        return [None] * coefficient_count, [None] * coefficient_count
-    lower = [_to_float_or_none(value) for value in _as_list(rows[0])]
-    upper = [_to_float_or_none(value) for value in _as_list(rows[1])]
-    lower.extend([None] * max(0, coefficient_count - len(lower)))
-    upper.extend([None] * max(0, coefficient_count - len(upper)))
-    return lower[:coefficient_count], upper[:coefficient_count]
+    return shared_fit_result.confidence_rows(confidence_bounds, coefficient_count)
 
 
 def _goodness_to_dict(gof_value: Any) -> dict[str, float | None]:
-    if isinstance(gof_value, (str, bytes)):
-        try:
-            parsed = _loads_json_object(gof_value)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            parsed = {}
-    elif isinstance(gof_value, dict):
-        parsed = gof_value
-    else:
-        parsed = {field: getattr(gof_value, field, None) for field in GOODNESS_FIELDS}
-    return {field: _to_float_or_none(parsed.get(field)) for field in GOODNESS_FIELDS}
+    return shared_fit_result.goodness_to_dict(gof_value)
 
 
 def _build_fit_result(
@@ -970,31 +917,19 @@ def _build_fit_result(
     gof_value: Any = None,
     confidence_bounds: Any = None,
 ) -> dict[str, Any]:
-    names = [str(name) for name in _as_list(coefficient_names)]
-    values = _coefficient_values(coefficient_values)
-    values.extend([float("nan")] * max(0, len(names) - len(values)))
-    values = values[:len(names)]
-    lower_bounds, upper_bounds = _confidence_rows(confidence_bounds, len(names))
     formula_text = _matlab_text(formula)
     python_formula = _matlab_formula_to_python_expression(formula_text)
-    value_exp = _replace_coefficients(python_formula, names, values)
-    coefficients = []
-    for index, name in enumerate(names):
-        coefficients.append({
-            "name": name,
-            "value": values[index],
-            "lower": lower_bounds[index],
-            "upper": upper_bounds[index],
-        })
-    return {
-        "value_expression": value_exp,
-        "show_expression": value_exp,
-        "formula": formula_text,
-        "fit_type": fit_type,
-        "coefficients": coefficients,
-        "goodness": _goodness_to_dict(gof_value),
-        "confidence_level": CONFIDENCE_LEVEL,
-    }
+    return shared_fit_result.build_fit_result(
+        fit_type,
+        formula_text,
+        coefficient_names,
+        coefficient_values,
+        gof_value,
+        confidence_bounds,
+        python_formula=python_formula,
+        confidence_level=CONFIDENCE_LEVEL,
+        engine="Matlab",
+    )
 
 
 def _json_fit_option_value(value: Any) -> Any:

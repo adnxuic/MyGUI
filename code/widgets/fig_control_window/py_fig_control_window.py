@@ -4,12 +4,9 @@ from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWindow
 from code.widgets.fig_control_window.py_tex_window import PyTexWindow
 from code.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 
-from typing import Optional
 import os
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
-
-matlab_widget: Optional[PyMatlabWindow] = None
 
 class PyFigControlWindow(QFrame):
     def __init__(self):
@@ -23,7 +20,7 @@ class PyFigControlWindow(QFrame):
         self.setMouseTracking(True)
 
         self.matlab_window = PyMatlabWindow()
-        self.figmod_window = PyFigModWindow(self.matlab_window)
+        self.figmod_window = PyFigModWindow()
         self.tex_window = PyTexWindow()
 
         self.layout = QStackedLayout()

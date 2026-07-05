@@ -13,7 +13,7 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
-# 曲线创建对话框
+# Curve creation dialog
 class PyCurveDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
@@ -28,23 +28,23 @@ class PyCurveDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # 输入函数表达式
+        # Function expression input
         self.expression_label = QLabel("函数表达式")
         self.expression_edit = QLineEdit()
         self.expression_edit.setText("x")
-        # 函数表达式变化时，图例标签也随之变化
+        # Update legend label when expression changes
         self.expression_edit.textChanged.connect(lambda: self.label_input.setText(self.expression_edit.text()))
         self.layout.addWidget(self.expression_label)
         self.layout.addWidget(self.expression_edit)
 
-        # 输入x的范围
+        # X range input
         self.x_range_label = QLabel("x的范围")
         self.x_range_layout = QHBoxLayout()
         self.x_start_input = QDoubleSpinBox(self)
         self.x_start_input.setValue(0)
         self.x_stop_input = QDoubleSpinBox(self)
         self.x_stop_input.setValue(100)
-        # 设置上下限为无穷大
+        # Set bounds to infinity
         self.x_start_input.setRange(float('-inf'), float('inf'))
         self.x_stop_input.setRange(float('-inf'), float('inf'))
 
@@ -53,24 +53,24 @@ class PyCurveDialog(QDialog):
         self.layout.addWidget(self.x_range_label)
         self.layout.addLayout(self.x_range_layout)
 
-        # 选择线条样式
+        # Line style selection
         self.style_input = QComboBox(self)
         self.style_input.addItems(['-', '--', '-.', ':'])
         self.layout.addWidget(QLabel('Line Style:'))
         self.layout.addWidget(self.style_input)
 
-        # 选择颜色和颜色预览
+        # Color selection and preview
         self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
-        # 输入图例标签
+        # Legend label input
         self.label_input = QLineEdit(self)
         self.label_input.setText('x')
         self.layout.addWidget(QLabel('Label:'))
         self.layout.addWidget(self.label_input)
 
-        # 确定和取消按钮
+        # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
         self.ok_button.clicked.connect(self.accept)
@@ -84,12 +84,12 @@ class PyCurveDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
-        # 如果current_canva为空，弹出警告
+        # Warn if current canvas is empty
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
 
-        # 如果current_axes为空，弹出警告
+        # Warn if current axes is empty
         if self.figure_window.current_canva.current_axes is None:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
@@ -110,7 +110,7 @@ class PyCurveDialog(QDialog):
         super().reject()
 
 
-# 折线图对话框
+# Line plot dialog
 class PyPlotDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
@@ -125,7 +125,7 @@ class PyPlotDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # 选择数据
+        # Data selection
         self.x_data_input = QComboBox(self)
         self.x_data_layout = QHBoxLayout()
         self.y_data_input = QComboBox(self)
@@ -144,7 +144,7 @@ class PyPlotDialog(QDialog):
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
 
-        # 选择大小
+        # Size selection
         self.size_input = QDoubleSpinBox(self)
         self.size_input.setRange(0.1, 10)
         self.size_input.setSingleStep(0.1)
@@ -152,24 +152,24 @@ class PyPlotDialog(QDialog):
         self.layout.addWidget(QLabel('Size:'))
         self.layout.addWidget(self.size_input)
 
-        # 选择颜色和颜色预览
+        # Color selection and preview
         self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
-        # 选择线条样式
+        # Line style selection
         self.style_input = QComboBox(self)
         self.style_input.addItems(['-', '--', '-.', ':'])
         self.layout.addWidget(QLabel('Line Style:'))
         self.layout.addWidget(self.style_input)
 
-        # 输入图例标签
+        # Legend label input
         self.label_input = QLineEdit(self)
         self.label_input.setText('plot')
         self.layout.addWidget(QLabel('Label:'))
         self.layout.addWidget(self.label_input)
 
-        # 确定和取消按钮
+        # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
         self.ok_button.clicked.connect(self.accept)
@@ -183,12 +183,12 @@ class PyPlotDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
-        # 如果current_canva为空，弹出警告
+        # Warn if current canvas is empty
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
 
-        # 如果current_axes为空，弹出警告
+        # Warn if current axes is empty
         if self.figure_window.current_canva.current_axes is None:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
@@ -196,7 +196,7 @@ class PyPlotDialog(QDialog):
         x_data = PyDatabase.get_data(self.x_data_input.currentText())
         y_data = PyDatabase.get_data(self.y_data_input.currentText())
 
-        # 如果x_data和y_data长度不一致，弹出警告
+        # Warn if x_data and y_data lengths differ
         if len(x_data) != len(y_data):
             QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
             return
@@ -215,7 +215,7 @@ class PyPlotDialog(QDialog):
         super().reject()
 
 
-# 散点图对话框
+# Scatter plot dialog
 class PyScatterDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
         super().__init__()
@@ -230,7 +230,7 @@ class PyScatterDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # 选择数据
+        # Data selection
         self.x_data_input = QComboBox(self)
         self.x_data_layout = QHBoxLayout()
         self.y_data_input = QComboBox(self)
@@ -249,31 +249,31 @@ class PyScatterDialog(QDialog):
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
 
-        # 选择大小
+        # Size selection
         self.size_input = QSpinBox(self)
         self.size_input.setRange(0, 100)
         self.size_input.setValue(20)
         self.layout.addWidget(QLabel('Size:'))
         self.layout.addWidget(self.size_input)
 
-        # 选择颜色和颜色预览
+        # Color selection and preview
         self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
-        # 选择散点样式
+        # Scatter marker selection
         self.style_input = QComboBox(self)
         self.style_input.addItems(['o', 's', 'D', 'x', '+'])
         self.layout.addWidget(QLabel('Marker Style:'))
         self.layout.addWidget(self.style_input)
 
-        # 输入图例标签
+        # Legend label input
         self.label_input = QLineEdit(self)
         self.label_input.setText('scatter')
         self.layout.addWidget(QLabel('Label:'))
         self.layout.addWidget(self.label_input)
 
-        # 确定和取消按钮
+        # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
         self.ok_button.clicked.connect(self.accept)
@@ -287,12 +287,12 @@ class PyScatterDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
-        # 如果current_canva为空，弹出警告
+        # Warn if current canvas is empty
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
 
-        # 如果current_axes为空，弹出警告
+        # Warn if current axes is empty
         if self.figure_window.current_canva.current_axes is None:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
@@ -300,7 +300,7 @@ class PyScatterDialog(QDialog):
         x_data = PyDatabase.get_data(self.x_data_input.currentText())
         y_data = PyDatabase.get_data(self.y_data_input.currentText())
 
-        # 如果x_data和y_data长度不一致，弹出警告
+        # Warn if x_data and y_data lengths differ
         if len(x_data) != len(y_data):
             QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
             return
@@ -333,20 +333,7 @@ class PyFitDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # 选择拟合的引擎：Python或Matlab
-        self.engine_layout = QHBoxLayout()
-        self.engine_label = QLabel("Engine:")
-        self.python_button = QRadioButton("Python")
-        self.matlab_button = QRadioButton("Matlab")
-        self.python_button.setChecked(True)
-
-        self.engine_layout.addWidget(self.python_button)
-        self.engine_layout.addWidget(self.matlab_button)
-
-        self.layout.addWidget(self.engine_label)
-        self.layout.addLayout(self.engine_layout)
-
-        # 选择数据
+        # Data selection
         self.x_data_input = QComboBox(self)
         self.x_data_layout = QHBoxLayout()
         self.y_data_input = QComboBox(self)
@@ -365,7 +352,7 @@ class PyFitDialog(QDialog):
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
 
-        # 确定和取消按钮
+        # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
         self.ok_button.clicked.connect(self.accept)
@@ -379,13 +366,12 @@ class PyFitDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
-        # 如果选择matlab引擎
-        # 如果current_canva为空，弹出警告
+        # Warn if current canvas is empty
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
 
-        # 如果current_axes为空，弹出警告
+        # Warn if current axes is empty
         if self.figure_window.current_canva.current_axes is None:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
@@ -397,21 +383,18 @@ class PyFitDialog(QDialog):
             QMessageBox.warning(self, 'Warning', str(exc))
             return
 
-        # 如果x_data和y_data长度不一致，弹出警告
+        # Warn if x_data and y_data lengths differ
         if len(x_data) != len(y_data):
             QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
             return
 
-        if not self.matlab_button.isChecked():
-            QMessageBox.warning(self, 'Warning', 'Python fitting is not implemented yet.')
-            return
-
         self.figure_window.current_canva.add_fit_curve(
-            engine='Matlab',
             x=x_data,
             y=y_data,
             color='black',
-            label='Matlab fitting',
+            label='fitting',
+            x_data_name=self.x_data_input.currentText(),
+            y_data_name=self.y_data_input.currentText(),
         )
 
         super().accept()
@@ -434,7 +417,7 @@ class PyInterpolationDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # 选择数据
+        # Data selection
         self.x_data_input = QComboBox(self)
         self.x_data_layout = QHBoxLayout()
         self.y_data_input = QComboBox(self)
@@ -453,13 +436,13 @@ class PyInterpolationDialog(QDialog):
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
 
-        # 选择插值方法
+        # Interpolation method selection
         self.method_input = QComboBox(self)
         self.method_input.addItems(interpolate_dict.keys())
         self.layout.addWidget(QLabel('Interpolation Method:'))
         self.layout.addWidget(self.method_input)
 
-        # 阶数选择
+        # Order selection
         self.k_widget = QFrame()
         self.k_input = QSpinBox()
         self.k_input.setRange(1, 5)
@@ -470,11 +453,11 @@ class PyInterpolationDialog(QDialog):
         self.k_layout.addWidget(self.k_input)
         self.k_widget.setLayout(self.k_layout)
 
-        # 如果不是选择B样条插值,则不显示阶数选择
+        # Hide order selection unless B-spline interpolation is selected
         self.is_k_widget_added = False
         self.method_input.currentTextChanged.connect(self.change_method)
 
-        # 确定和取消按钮
+        # OK and Cancel buttons
         self.button_bar = QFrame()
         self.ok_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
@@ -492,27 +475,27 @@ class PyInterpolationDialog(QDialog):
         self.setLayout(self.layout)
 
     def change_method(self):
-        # 获取当前选择的插值方法
+        # Get currently selected interpolation method
         current_method = self.method_input.currentText()
 
-        # 如果选择的是B样条插值且阶数选择不存在，则添加阶数选择
-        # 再倒数第二行添加阶数选择
+        # Add order selection when B-spline is selected and widget is absent
+        # Insert order selection before the last row
         if current_method == "B样条插值" and self.is_k_widget_added is False:
             self.layout.insertWidget(self.layout.count() - 1, self.k_widget)
             self.is_k_widget_added = True
 
-        # 如果选择的不是B样条插值且阶数选择存在，则删除阶数选择
+        # Remove order selection when B-spline is not selected
         elif current_method != "B样条插值" and self.is_k_widget_added is True:
             self.layout.itemAt(self.layout.count() - 2).widget().setParent(None)
             self.is_k_widget_added = False
 
     def accept(self):
-        # 如果current_canva为空，弹出警告
+        # Warn if current canvas is empty
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
 
-        # 如果current_axes为空，弹出警告
+        # Warn if current axes is empty
         if self.figure_window.current_canva.current_axes is None:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
@@ -523,7 +506,7 @@ class PyInterpolationDialog(QDialog):
         x_data = PyDatabase.get_data(x_data_name)
         y_data = PyDatabase.get_data(y_data_name)
 
-        # 如果x_data和y_data长度不一致，弹出警告
+        # Warn if x_data and y_data lengths differ
         if len(x_data) != len(y_data):
             QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
             return

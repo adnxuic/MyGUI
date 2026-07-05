@@ -5,11 +5,14 @@ from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, Py
 from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 
+from code import status_messages
+from code.database import matlab_adapter
 from code.database.py_database import PyDatabase
 from code.database.interpolate_func import interpolate_dict
 
 import math
 import os
+import weakref
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "chart_mod_style.qss")
@@ -26,7 +29,7 @@ class PyCurveModWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        # 函数表达式
+        # Function expression
         self.expression_box = QGroupBox('Expression', self)
         self.expression_box.setFixedSize(180, 80)
         self.expression_layout = QVBoxLayout()
@@ -38,7 +41,7 @@ class PyCurveModWidget(QFrame):
 
         self.expression_box.setLayout(self.expression_layout)
 
-        # 添加x轴起始点和终止点
+        # Add x-axis start and end points
         self.x_start_layout = QHBoxLayout()
         self.x_stop_layout = QHBoxLayout()
         self.x_start_input = QDoubleSpinBox(self)
@@ -62,15 +65,15 @@ class PyCurveModWidget(QFrame):
         self.x_stop_layout.addWidget(self.x_stop_input)
         self.x_stop_layout.addStretch()
 
-        # 线条的样式
+        # Line style
         self.style_box = QGroupBox('Style', self)
         self.style_layout = QVBoxLayout()
 
-        # 线条的颜色
+        # Line color
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.style_layout.addWidget(self.color_choice)
 
-        # 线条的形状
+        # Line marker
         self.style_input = QComboBox(self)
         self.style_input.addItem('solid')
         self.style_input.addItem('dashed')
@@ -87,7 +90,7 @@ class PyCurveModWidget(QFrame):
         self.layout.addLayout(self.x_stop_layout)
         self.layout.addWidget(self.style_box)
 
-        # 图例
+        # Legend
         self.legend_layout = QHBoxLayout()
         self.legend_input = QLineEdit(self)
         self.legend_input.setPlaceholderText('Legend')
@@ -98,7 +101,7 @@ class PyCurveModWidget(QFrame):
         self.layout.addLayout(self.legend_layout)
 
 
-        # 添加弹性空间
+        # Add stretch spacer
         self.layout.addStretch()
 
         self.setLayout(self.layout)
@@ -148,11 +151,11 @@ class PyPlotModWidget(QFrame):
 
         self.layout.addWidget(self.data_choice_widget)
 
-        # 线条的颜色
+        # Line color
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
 
-        # 图例
+        # Legend
         self.legend_layout = QHBoxLayout()
         self.legend_input = QLineEdit(self)
         self.legend_input.setPlaceholderText('Legend')
@@ -162,7 +165,7 @@ class PyPlotModWidget(QFrame):
         self.legend_layout.addWidget(self.legend_input)
         self.layout.addLayout(self.legend_layout)
 
-        # 添加弹性空间
+        # Add stretch spacer
         self.layout.addStretch()
 
         self.setLayout(self.layout)
@@ -178,9 +181,9 @@ class PyPlotModWidget(QFrame):
         if not PyDatabase.has_data(data_name):
             return
         current_x_data = PyDatabase.get_data(data_name)
-        # 更新x轴数据
+        # Update x-axis data
         self.curve_modify.update_x_data(current_x_data)
-        # 更新映射连接
+        # Update mapping connection
         changed = PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, data_name,
                                                     id(self.curve_modify.line), 'x')
         if not changed:
@@ -193,9 +196,9 @@ class PyPlotModWidget(QFrame):
         if not PyDatabase.has_data(data_name):
             return
         current_y_data = PyDatabase.get_data(data_name)
-        # 更新y轴数据
+        # Update y-axis data
         self.curve_modify.update_y_data(current_y_data)
-        # 更新映射连接
+        # Update mapping connection
         changed = PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, data_name,
                                                     id(self.curve_modify.line), 'y')
         if not changed:
@@ -229,11 +232,11 @@ class PyScatterModWidget(QFrame):
 
         self.layout.addWidget(self.data_choice_widget)
 
-        # 线条的颜色
+        # Line color
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
 
-        # 图例
+        # Legend
         self.legend_layout = QHBoxLayout()
         self.legend_input = QLineEdit(self)
         self.legend_input.setPlaceholderText('Legend')
@@ -243,7 +246,7 @@ class PyScatterModWidget(QFrame):
         self.legend_layout.addWidget(self.legend_input)
         self.layout.addLayout(self.legend_layout)
 
-        # 添加弹性空间
+        # Add stretch spacer
         self.layout.addStretch()
 
         self.setLayout(self.layout)
@@ -259,9 +262,9 @@ class PyScatterModWidget(QFrame):
         if not PyDatabase.has_data(data_name):
             return
         current_x_data = PyDatabase.get_data(data_name)
-        # 更新x轴数据
+        # Update x-axis data
         self.curve_modify.update_x_data(current_x_data)
-        # 更新映射连接
+        # Update mapping connection
         changed = PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, data_name,
                                                     id(self.curve_modify.scatter), 'x')
         if not changed:
@@ -274,9 +277,9 @@ class PyScatterModWidget(QFrame):
         if not PyDatabase.has_data(data_name):
             return
         current_y_data = PyDatabase.get_data(data_name)
-        # 更新y轴数据
+        # Update y-axis data
         self.curve_modify.update_y_data(current_y_data)
-        # 更新映射连接
+        # Update mapping connection
         changed = PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, data_name,
                                                     id(self.curve_modify.scatter), 'y')
         if not changed:
@@ -292,23 +295,54 @@ class PyScatterModWidget(QFrame):
         self.curve_modify.change_legend(current_legend)
 
 
-class PyFitMatlabModWidget(QFrame):
-    def __init__(self, curve_modify: PyCurveModify):
+class PyFitModWidget(QFrame):
+    def __init__(self, curve_modify: PyCurveModify, x_data_name: str = "", y_data_name: str = "",
+                 engine: str = "Python"):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
-        self.   curve_modify = curve_modify
+        self.engine = engine
+        self.x_data_name = x_data_name
+        self.y_data_name = y_data_name
+        self.curve_modify = curve_modify
+        self._fit_dialogs = []
+        self._fit_request_id = 0
 
         self.layout = QVBoxLayout()
 
-        # 函数表达式
+        self.data_choice_widget = PyDataChoiceWidget()
+        if x_data_name:
+            self.data_choice_widget.set_x_data(x_data_name)
+        if y_data_name:
+            self.data_choice_widget.set_y_data(y_data_name)
+        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
+
+        self.engine_layout = QHBoxLayout()
+        self.scipy_button = QPushButton("SciPy")
+        self.matlab_button = QPushButton("Matlab")
+        self.scipy_button.clicked.connect(lambda: self.open_fit_window("Python"))
+        self.matlab_button.clicked.connect(lambda: self.open_fit_window("Matlab"))
+        self.engine_layout.addWidget(QLabel("Engine:"))
+        self.engine_layout.addWidget(self.scipy_button)
+        self.engine_layout.addWidget(self.matlab_button)
+        self.engine_layout.addStretch()
+
+        self._matlab_state_listener = self._matlab_enabled_changed
+        matlab_adapter.register_matlab_state_listener(self._matlab_state_listener)
+        matlab_state_listener = self._matlab_state_listener
+        self.destroyed.connect(lambda *_args, listener=matlab_state_listener: (
+            matlab_adapter.unregister_matlab_state_listener(listener)
+        ))
+        self._matlab_enabled_changed(matlab_adapter.is_matlab_enabled())
+
+        # Function expression
         self.expression_box = QGroupBox('Expression', self)
         self.expression_layout = QVBoxLayout()
 
         self.expression_input = QPlainTextEdit(self)
-        # 设置是否可以编辑
+        # Set whether editing is allowed
         self.expression_input.setReadOnly(True)
         self.expression_input.setPlainText(curve_modify.expression)
         self.expression_input.textChanged.connect(self.expression_change)
@@ -318,6 +352,7 @@ class PyFitMatlabModWidget(QFrame):
 
         self.result_box = QGroupBox("Fit Result", self)
         self.result_layout = QVBoxLayout()
+        self.result_engine_label = QLabel(f"Engine: {self._engine_display_name(self.engine)}")
         self.result_model_label = QLabel("Model: -")
         self.result_formula_input = QPlainTextEdit(self)
         self.result_formula_input.setReadOnly(True)
@@ -335,6 +370,7 @@ class PyFitMatlabModWidget(QFrame):
         self.result_goodness_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.result_goodness_table.horizontalHeader().setStretchLastSection(True)
 
+        self.result_layout.addWidget(self.result_engine_label)
         self.result_layout.addWidget(self.result_model_label)
         self.result_layout.addWidget(QLabel("Formula:"))
         self.result_layout.addWidget(self.result_formula_input)
@@ -344,7 +380,7 @@ class PyFitMatlabModWidget(QFrame):
         self.result_layout.addWidget(self.result_goodness_table)
         self.result_box.setLayout(self.result_layout)
 
-        # 添加x轴起始点和终止点
+        # Add x-axis start and end points
         self.x_start_layout = QHBoxLayout()
         self.x_stop_layout = QHBoxLayout()
         self.x_start_input = QDoubleSpinBox(self)
@@ -367,12 +403,12 @@ class PyFitMatlabModWidget(QFrame):
         self.x_stop_layout.addWidget(self.x_stop_input)
         self.x_stop_layout.addStretch()
 
-        # 线条的样式
+        # Line style
         self.style_box = QGroupBox('Style', self)
         self.style_box.setFixedSize(180, 80)
         self.style_layout = QVBoxLayout()
 
-        # 线条的形状
+        # Line marker
         self.style_input = QComboBox(self)
         self.style_input.addItem('solid')
         self.style_input.addItem('dashed')
@@ -384,17 +420,19 @@ class PyFitMatlabModWidget(QFrame):
         self.style_layout.addWidget(self.style_input)
         self.style_box.setLayout(self.style_layout)
 
+        self.layout.addWidget(self.data_choice_widget)
+        self.layout.addLayout(self.engine_layout)
         self.layout.addWidget(self.expression_box)
         self.layout.addWidget(self.result_box)
         self.layout.addLayout(self.x_start_layout)
         self.layout.addLayout(self.x_stop_layout)
         self.layout.addWidget(self.style_box)
 
-        # 线条的颜色
+        # Line color
         self.color_choice = ColorChoiceWidget(connect_signal=self.color_change)
         self.layout.addWidget(self.color_choice)
 
-        # 图例
+        # Legend
         self.legend_layout = QHBoxLayout()
         self.legend_input = QLineEdit(self)
         self.legend_input.setPlaceholderText('Legend')
@@ -404,7 +442,7 @@ class PyFitMatlabModWidget(QFrame):
         self.legend_layout.addWidget(self.legend_input)
         self.layout.addLayout(self.legend_layout)
 
-        # 添加弹性空间
+        # Add stretch spacer
         self.layout.addStretch()
 
         self.setLayout(self.layout)
@@ -412,6 +450,222 @@ class PyFitMatlabModWidget(QFrame):
     def expression_change(self):
         current_expression = self.expression_input.toPlainText()
         self.curve_modify.update_expression(current_expression)
+
+    def _engine_display_name(self, engine: str) -> str:
+        return "SciPy" if engine == "Python" else engine
+
+    def _matlab_enabled_changed(self, enabled: bool):
+        self.matlab_button.setEnabled(bool(enabled))
+        if enabled:
+            self.matlab_button.setToolTip("")
+        else:
+            self.matlab_button.setToolTip("Connect MATLAB from the Matlab panel first.")
+
+    def delete_object(self):
+        self.curve_modify.delete_object()
+
+    def x_data_change(self, *_args):
+        self.x_data_name = self.data_choice_widget.get_x_data()
+
+    def y_data_change(self, *_args):
+        self.y_data_name = self.data_choice_widget.get_y_data()
+
+    def _current_fit_data(self):
+        self.x_data_change()
+        self.y_data_change()
+        x_name = self.x_data_name
+        y_name = self.y_data_name
+        if not x_name or not y_name:
+            raise ValueError("Please select X Data and Y Data.")
+
+        try:
+            x_data = PyDatabase.get_data(x_name)
+            y_data = PyDatabase.get_data(y_name)
+        except KeyError as exc:
+            raise ValueError(str(exc)) from exc
+
+        if len(x_data) == 0 or len(y_data) == 0:
+            raise ValueError("X Data and Y Data must not be empty.")
+        if len(x_data) != len(y_data):
+            raise ValueError("X Data and Y Data must have the same length.")
+
+        try:
+            x_values = [float(value) for value in x_data]
+            y_values = [float(value) for value in y_data]
+        except (TypeError, ValueError) as exc:
+            raise ValueError("X Data and Y Data must contain only numbers.") from exc
+
+        return x_name, y_name, x_values, y_values, min(x_values), max(x_values)
+
+    def open_fit_window(self, engine: str):
+        if engine not in {"Python", "Matlab"}:
+            raise ValueError(f"Unsupported fitting engine: {engine}")
+        display_engine = self._engine_display_name(engine)
+        if engine == "Matlab" and not matlab_adapter.is_matlab_enabled():
+            status_messages.show_error("Connect MATLAB before using Matlab fitting.")
+            return None
+        try:
+            self._current_fit_data()
+        except ValueError as exc:
+            status_messages.show_error(str(exc))
+            return None
+
+        from code.widgets.fig_control_window.py_fit_options_window import (
+            PyMatlabFitOptionsWidget,
+            PyScipyFitOptionsWidget,
+        )
+
+        dialog = QDialog(self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+        dialog.setModal(False)
+        dialog.setWindowTitle(f"{display_engine} Fit")
+
+        dialog_layout = QVBoxLayout(dialog)
+        fit_type_box = QGroupBox("Fit Type", dialog)
+        fit_type_layout = QVBoxLayout()
+        dialog.fit_type_input = QComboBox(dialog)
+        options_widget_class = PyScipyFitOptionsWidget if engine == "Python" else PyMatlabFitOptionsWidget
+        fit_type_groups = options_widget_class.fit_type_groups()
+        dialog.fit_type_input.addItems(list(fit_type_groups.keys()))
+        fit_type_layout.addWidget(dialog.fit_type_input)
+        fit_type_box.setLayout(fit_type_layout)
+        dialog_layout.addWidget(fit_type_box)
+
+        dialog.fit_options_layout = QVBoxLayout()
+        dialog.fit_options_widget = options_widget_class(
+            fit_type_name=dialog.fit_type_input.currentText(),
+        )
+        dialog.fit_options_layout.addWidget(dialog.fit_options_widget)
+        dialog_layout.addLayout(dialog.fit_options_layout)
+
+        def replace_fit_options(text):
+            try:
+                new_widget = options_widget_class(fit_type_name=text)
+            except Exception as exc:
+                status_messages.show_error(str(exc))
+                return
+            old_widget = dialog.fit_options_widget
+            dialog.fit_options_layout.removeWidget(old_widget)
+            old_widget.setParent(None)
+            old_widget.deleteLater()
+            dialog.fit_options_widget = new_widget
+            dialog.fit_options_layout.addWidget(new_widget)
+
+        dialog.fit_type_input.currentTextChanged.connect(replace_fit_options)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        dialog.fit_button = QPushButton("Fit", dialog)
+        dialog.close_button = QPushButton("Close", dialog)
+        dialog.fit_button.clicked.connect(lambda: self._start_fit_from_dialog(dialog, engine))
+        dialog.close_button.clicked.connect(dialog.close)
+        button_layout.addWidget(dialog.fit_button)
+        button_layout.addWidget(dialog.close_button)
+        dialog_layout.addLayout(button_layout)
+
+        self._fit_dialogs.append(dialog)
+        dialog.destroyed.connect(lambda *_args, target=dialog: self._forget_fit_dialog(target))
+        dialog.show()
+        return dialog
+
+    def _forget_fit_dialog(self, dialog):
+        try:
+            self._fit_dialogs.remove(dialog)
+        except ValueError:
+            pass
+
+    def _start_fit_from_dialog(self, dialog, engine: str):
+        from code.database import scipy_fit_adapter
+        from code.widgets.fig_control_window.background_task import start_background_task
+
+        display_engine = self._engine_display_name(engine)
+        try:
+            x_name, y_name, x_values, y_values, x_min, x_max = self._current_fit_data()
+            fit_type_order, fit_options = dialog.fit_options_widget.fit_parameters()
+        except ValueError as exc:
+            status_messages.show_error(str(exc))
+            return
+
+        self._fit_request_id += 1
+        request_id = self._fit_request_id
+        try:
+            dialog._fit_request_id = request_id
+        except RuntimeError:
+            pass
+        dialog.fit_button.setEnabled(False)
+        dialog.fit_button.setText("Fitting...")
+        status_messages.show_message(f"{display_engine} fitting started.", "info")
+
+        matlab_adapter.matlab_logger().info(
+            "%s fit request started request_id=%s fit_type=%s x_data=%s y_data=%s x_len=%s y_len=%s",
+            display_engine,
+            request_id,
+            fit_type_order,
+            x_name,
+            y_name,
+            len(x_values),
+            len(y_values),
+        )
+        fit_func = matlab_adapter.fit_curve_isolated if engine == "Matlab" else scipy_fit_adapter.fit_curve
+        dialog_ref = weakref.ref(dialog)
+        start_background_task(
+            self,
+            fit_func,
+            lambda result, rid=request_id, dref=dialog_ref, xmin=x_min, xmax=x_max: self._fit_dialog_succeeded(
+                dref,
+                rid,
+                result,
+                xmin,
+                xmax,
+                engine,
+            ),
+            lambda message, rid=request_id, dref=dialog_ref: self._fit_dialog_failed(dref, rid, message, engine),
+            x_values,
+            y_values,
+            fit_type_order,
+            fit_options,
+            logger=matlab_adapter.matlab_logger(),
+            task_log_prefix=f"{display_engine} fit task",
+        )
+
+    def _dialog_for_request(self, dialog_ref, request_id):
+        dialog = dialog_ref()
+        if dialog is None:
+            return None
+        try:
+            if request_id != getattr(dialog, "_fit_request_id", None):
+                return None
+        except RuntimeError:
+            return None
+        return dialog
+
+    def _restore_dialog_fit_button(self, dialog_ref, request_id):
+        dialog = self._dialog_for_request(dialog_ref, request_id)
+        if dialog is None:
+            return False
+        try:
+            if hasattr(dialog, "fit_button"):
+                dialog.fit_button.setEnabled(True)
+                dialog.fit_button.setText("Fit")
+        except RuntimeError:
+            return False
+        return True
+
+    def _fit_dialog_succeeded(self, dialog_ref, request_id, result, x_min, x_max, engine: str):
+        if not self._restore_dialog_fit_button(dialog_ref, request_id):
+            return
+        if request_id != self._fit_request_id:
+            return
+        self.engine = engine
+        self.update_curve(result, x_min, x_max)
+        status_messages.show_success(f"{self._engine_display_name(engine)} fitting completed.")
+
+    def _fit_dialog_failed(self, dialog_ref, request_id, message, engine: str):
+        if not self._restore_dialog_fit_button(dialog_ref, request_id):
+            return
+        if request_id != self._fit_request_id:
+            return
+        status_messages.show_error(str(message))
 
     def _format_result_number(self, value):
         if value is None:
@@ -434,6 +688,9 @@ class PyFitMatlabModWidget(QFrame):
         table.setItem(row, column, item)
 
     def _populate_fit_result(self, fit_result):
+        engine = fit_result.get("engine", self.engine)
+        self.engine = engine if engine in {"Python", "Matlab"} else self.engine
+        self.result_engine_label.setText(f"Engine: {self._engine_display_name(self.engine)}")
         self.result_model_label.setText(f"Model: {fit_result.get('fit_type', '-')}")
         self.result_formula_input.setPlainText(str(fit_result.get("formula", "")))
 
@@ -510,7 +767,6 @@ class PyFitMatlabModWidget(QFrame):
         current_legend = self.legend_input.text()
         self.curve_modify.change_legend(current_legend)
 
-
 class PyInterpolateWidget(QFrame):
     def __init__(self, curve_modify: PyInterpolateModify, init_interpolat: str, init_k: int,
                  color: str = "#000000"):
@@ -520,7 +776,7 @@ class PyInterpolateWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        # 插值方式
+        # Interpolation method
         self.interpolat_box = QGroupBox('Interpolation')
         self.interpolat_layout = QVBoxLayout()
 
@@ -528,10 +784,10 @@ class PyInterpolateWidget(QFrame):
         self.interpolat_input.addItems(interpolate_dict.keys())
 
         self.interpolat_layout.addWidget(self.interpolat_input)
-        # 添加弹性空间
+        # Add stretch spacer
         self.interpolat_layout.addStretch()
 
-        # 阶数选择
+        # Order selection
         self.k_widget = QFrame()
         self.k_input = QSpinBox()
         self.k_input.setRange(1, 5)
@@ -543,7 +799,7 @@ class PyInterpolateWidget(QFrame):
         self.k_layout.addWidget(self.k_input)
         self.k_widget.setLayout(self.k_layout)
 
-        # 如果不是选择B样条插值,则不显示阶数选择
+        # Hide order selection unless B-spline interpolation is selected
         self.is_k_widget_added = False
         self.interpolat_input.currentTextChanged.connect(self.change_method)
         self.interpolat_input.setCurrentText(init_interpolat)
@@ -553,11 +809,11 @@ class PyInterpolateWidget(QFrame):
 
         self.layout.addWidget(self.interpolat_box)
 
-        # 线条的颜色
+        # Line color
         self.color_choice = ColorChoiceWidget(color, self.color_change)
         self.layout.addWidget(self.color_choice)
 
-        # 图例
+        # Legend
         self.legend_layout = QHBoxLayout()
         self.legend_input = QLineEdit(self)
         self.legend_input.setPlaceholderText('Legend')
@@ -567,7 +823,7 @@ class PyInterpolateWidget(QFrame):
         self.legend_layout.addWidget(self.legend_input)
         self.layout.addLayout(self.legend_layout)
 
-        # 添加弹性空间
+        # Add stretch spacer
         self.layout.addStretch()
 
         self.setLayout(self.layout)
@@ -579,16 +835,16 @@ class PyInterpolateWidget(QFrame):
         self.modify.delete_object()
 
     def change_method(self):
-        # 获取当前选择的插值方法
+        # Get currently selected interpolation method
         current_method = self.interpolat_input.currentText()
 
-        # 如果选择的是B样条插值且阶数选择不存在，则添加阶数选择
-        # 再倒数第二行添加阶数选择
+        # Add order selection when B-spline is selected and widget is absent
+        # Insert order selection before the last row
         if current_method == "B样条插值" and self.is_k_widget_added is False:
             self.interpolat_layout.insertWidget(self.interpolat_layout.count() - 1, self.k_widget)
             self.is_k_widget_added = True
 
-        # 如果选择的不是B样条插值且阶数选择存在，则删除阶数选择
+        # Remove order selection when B-spline is not selected
         elif current_method != "B样条插值" and self.is_k_widget_added is True:
             self.interpolat_layout.itemAt(self.interpolat_layout.count() - 2).widget().setParent(None)
             self.is_k_widget_added = False

@@ -5,7 +5,7 @@ from Qt_core import *
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import PyModBox
 from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyCurveModWidget, PyScatterModWidget, \
-    PyPlotModWidget, PyFitMatlabModWidget, PyInterpolateWidget
+    PyPlotModWidget, PyFitModWidget, PyInterpolateWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 
 from code.figuremodify.py_axes_modify import PyAxesModify
@@ -53,12 +53,12 @@ class PyFigureCanvas(QWidget):
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
 
-        # 添加滚动条
+        # Add scroll area
         self.scroArea = QScrollArea()
         self.scroArea.setWidget(self.canva)
         self.scroArea.setAlignment(Qt.AlignCenter)
-        self.scroArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 设置显示策略
-        self.scroArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 设置显示策略
+        self.scroArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # Set scroll bar visibility policy
+        self.scroArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # Set scroll bar visibility policy
 
         layout = QVBoxLayout()
 
@@ -92,7 +92,7 @@ class PyFigureCanvas(QWidget):
         self.cancel_pending_draw()
         super().closeEvent(event)
 
-    # 添加坐标系
+    # Add axes
     def add_axes(self, nrows=1, ncols=1, record_project=True):
         start_index = len(self.fig.axes)
         with mpl.style.context(self.style):
@@ -118,7 +118,7 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-    # 添加自定义曲线
+    # Add custom curve
     def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str,
                   record_project=True):
 
@@ -140,19 +140,19 @@ class PyFigureCanvas(QWidget):
             }
             self.project_curves.append(project_record)
 
-        # 获取当前坐标系的所有修改窗口
+        # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
 
-        # 如果all_mod_widget中没有curve_box，则添加一个
+        # Add curve_box to all_mod_widget if missing
         if all_mod_widget.cahrt_mod_window.boxs.get('curve_box') is None:
             all_mod_widget.add_chart_box('curve_box')
 
-        # 添加曲线调整窗口
+        # Add curve adjustment panel
         curve_mod_widget = PyCurveModWidget(
             PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text, label,
-                          project_record=project_record), color)
+                          project_record=project_record, project_collection=self.project_curves), color)
 
-        # 添加可视化对象
+        # Add visualization object
         self.current_axes_mod.add_vis_object(curve_mod_widget.get_colorupdate_func())
 
         curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
@@ -160,7 +160,7 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-    # 添加折线图
+    # Add line plot
     def add_plot(self, x, y, style, size, color, label, x_data_name: str, y_data_name: str,
                  record_project=True):
         with mpl.style.context(self.style):
@@ -179,18 +179,18 @@ class PyFigureCanvas(QWidget):
             }
             self.project_plots.append(project_record)
 
-        # 获取当前坐标系的所有修改窗口
+        # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-        # 如果all_mod_widget中没有plot_box，则添加一个
+        # Add plot_box to all_mod_widget if missing
         if all_mod_widget.cahrt_mod_window.boxs.get('plot_box') is None:
             all_mod_widget.add_chart_box('plot_box')
-        # 添加曲线调整窗口
+        # Add curve adjustment panel
         plot_mod_widget = PyPlotModWidget(
             PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name, label,
                          project_record=project_record, project_collection=self.project_plots),
             x_data_name, y_data_name, color)
 
-        # 添加可视化对象
+        # Add visualization object
         self.current_axes_mod.add_vis_object(plot_mod_widget.get_colorupdate_func())
 
         plot_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['plot_box']
@@ -198,7 +198,7 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-    # 添加散点图
+    # Add scatter plot
     def add_scatter(self, x, y, size, color, marker, label, x_data_name: str, y_data_name: str,
                     record_project=True):
         with mpl.style.context(self.style):
@@ -217,19 +217,19 @@ class PyFigureCanvas(QWidget):
             }
             self.project_scatters.append(project_record)
 
-        # 获取当前坐标系的所有修改窗口
+        # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-        # 如果all_mod_widget中没有scatter_box，则添加一个
+        # Add scatter_box to all_mod_widget if missing
         if all_mod_widget.cahrt_mod_window.boxs.get('scatter_box') is None:
             all_mod_widget.add_chart_box('scatter_box')
 
-        # 添加散点调整窗口
+        # Add scatter adjustment panel
         scatter_mod_widget = PyScatterModWidget(
             PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name, label,
                             project_record=project_record, project_collection=self.project_scatters),
             x_data_name, y_data_name, color)
 
-        # 添加可视化对象
+        # Add visualization object
         self.current_axes_mod.add_vis_object(scatter_mod_widget.get_colorupdate_func())
 
         scatter_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['scatter_box']
@@ -237,37 +237,38 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-    # 添加拟合曲线
-    def add_fit_curve(self, engine: str, x, y, color, label):
-        if engine != 'Matlab':
-            raise NotImplementedError("Only Matlab fitting is implemented.")
+    # Add fit curve
+    def add_fit_curve(self, x, y, color, label, x_data_name: str = "", y_data_name: str = "",
+                      engine: str = "Python"):
+        if engine not in {"Python", "Matlab"}:
+            raise ValueError(f"Unsupported fitting engine: {engine}")
 
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, color=color, label=label)
 
-        # 获取当前坐标系的所有修改窗口
+        # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-        # 如果all_mod_widget中没有fitting_box，则添加一个
+        # Add fitting_box to all_mod_widget if missing
         if all_mod_widget.cahrt_mod_window.boxs.get('fitting_box') is None:
             all_mod_widget.add_chart_box('fitting_box')
 
-        # 添加拟合曲线调整窗口
+        # Add fit curve adjustment panel
         x_start = float(np.min(x))
         x_stop = float(np.max(x))
-        fitting_mod_widget = PyFitMatlabModWidget(
-            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, '', label))
+        fitting_mod_widget = PyFitModWidget(
+            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, '', label),
+            x_data_name=x_data_name,
+            y_data_name=y_data_name,
+            engine=engine,
+        )
 
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
-        fitting_box.add_widget(fitting_mod_widget, engine + 'fitting')
+        fitting_box.add_widget(fitting_mod_widget, "fitting")
         fitting_box.setCurrentWidget(fitting_mod_widget)
-
-        matlab_widget = getattr(self.fig_modify_widget, "matlab_widget", None)
-        if matlab_widget is not None:
-            matlab_widget.set_connect_widget(fitting_mod_widget)
 
         self.redraw()
 
-    # 添加插值曲线
+    # Add interpolation curve
     def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate',
                               color='black', record_project=True):
         with mpl.style.context(self.style):
@@ -290,19 +291,19 @@ class PyFigureCanvas(QWidget):
             }
             self.project_interpolates.append(project_record)
 
-        # 获取当前坐标系的所有修改窗口
+        # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-        # 如果all_mod_widget中没有interpolate_box，则添加一个
+        # Add interpolate_box to all_mod_widget if missing
         if all_mod_widget.cahrt_mod_window.boxs.get('interpolate_box') is None:
             all_mod_widget.add_chart_box('interpolate_box')
 
-        # 添加插值曲线调整窗口
+        # Add interpolation curve adjustment panel
         interpolate_mod_widget = PyInterpolateWidget(
             PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name, label,
                                 method=method, k=k, project_record=project_record,
                                 project_collection=self.project_interpolates), method, k, color)
 
-        # 添加可视化对象
+        # Add visualization object
         self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
 
         interpolate_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['interpolate_box']
@@ -310,7 +311,7 @@ class PyFigureCanvas(QWidget):
 
         self.redraw()
 
-    # 添加文本
+    # Add text
     @staticmethod
     def _resolve_text_usetex(usetex: bool | None) -> bool:
         if usetex is None:
@@ -336,14 +337,14 @@ class PyFigureCanvas(QWidget):
                 "usetex": False,
             }
             self.project_texts.append(project_record)
-        # self.current_axes.transAxes是坐标系的坐标变换
+        # self.current_axes.transAxes is the axes coordinate transform
 
-        # 获取当前坐标系的所有修改窗口
+        # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
-        # 如果all_mod_widget中没有text_box，则添加一个
+        # Add text_box to all_mod_widget if missing
         if all_mod_widget.element_mod_window.boxs.get('text_box') is None:
             all_mod_widget.add_element_box('text_box')
-        # 添加文本调整窗口
+        # Add text adjustment panel
         text_modify = PyTextModify(self.fig, self.style, text,
                                    project_record=project_record,
                                    project_collection=self.project_texts)

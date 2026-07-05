@@ -37,8 +37,9 @@ def _remove_artist(artist):
 
 class PyCurveModify:
     def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style,
-                line: Line2D, expression: str, label: str,
-                project_record: dict[str, Any] | None = None):
+                 line: Line2D, expression: str, label: str,
+                 project_record: dict[str, Any] | None = None,
+                 project_collection: list[dict[str, Any]] | None = None):
 
         self.style = style
         self.fig = fig
@@ -52,6 +53,8 @@ class PyCurveModify:
 
         self.line = line
         self.project_record = project_record
+        self.project_collection = project_collection
+        self._deleted = False
 
     def update_project_record(self, **values):
         if self.project_record is not None:
@@ -63,6 +66,14 @@ class PyCurveModify:
     def update_legend(self):
         self.axe.legend().remove()
         self.axe.legend()
+
+    def delete_object(self):
+        if self._deleted:
+            return
+        self._deleted = True
+        _remove_project_record(self.project_collection, self.project_record)
+        _remove_artist(self.line)
+        self.redraw()
 
     def update_x_start(self, x_start: float):
         self.x_start = x_start
@@ -162,7 +173,7 @@ class PyPlotModify:
         self.current_x_data_name = x_data_name
         self.current_y_data_name = y_data_name
 
-        # 数据和映射连接
+        # Data and mapping connection
         PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
         PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
 
@@ -184,10 +195,10 @@ class PyPlotModify:
         self.redraw()
 
     def update_x_data(self, x_data: ndarray):
-        # 如果数据长度不一致，则需要重新设置数据
+        # Reset data when lengths do not match
         if len(x_data) == len(self.line.get_ydata()):
             self.line.set_xdata(x_data)
-            # 重新计算坐标轴范围
+            # Recalculate axes limits
             self.axe.relim()
             self.axe.autoscale_view()
         else:
@@ -197,7 +208,7 @@ class PyPlotModify:
         self.redraw()
 
     def update_y_data(self, y_data: ndarray):
-        # 如果数据长度不一致，则需要重新设置数据
+        # Reset data when lengths do not match
         if len(y_data) == len(self.line.get_xdata()):
             self.line.set_ydata(y_data)
             self.axe.relim()
@@ -245,7 +256,7 @@ class PyScatterModify:
         self.project_collection = project_collection
         self._deleted = False
 
-        # 数据和映射连接
+        # Data and mapping connection
         PyDatabase.data_connect(x_data_name, id_num=id(scatter), xy='x', connection_func=self.update_x_data)
         PyDatabase.data_connect(y_data_name, id_num=id(scatter), xy='y', connection_func=self.update_y_data)
 
@@ -267,7 +278,7 @@ class PyScatterModify:
         self.redraw()
 
     def update_x_data(self, x_data: ndarray):
-        # 如果数据长度不一致，则需要重新设置数据
+        # Reset data when lengths do not match
         if len(x_data) == len(self.scatter.get_offsets()):
             self.scatter.set_offsets(np.c_[x_data, self.scatter.get_offsets()[:, 1]])
             self.axe.relim()
@@ -279,7 +290,7 @@ class PyScatterModify:
         self.redraw()
 
     def update_y_data(self, y_data: ndarray):
-        # 如果数据长度不一致，则需要重新设置数据
+        # Reset data when lengths do not match
         if len(y_data) == len(self.scatter.get_offsets()):
             self.scatter.set_offsets(np.c_[self.scatter.get_offsets()[:, 0], y_data])
             self.axe.relim()
@@ -331,7 +342,7 @@ class PyInterpolateModify:
         self.project_collection = project_collection
         self._deleted = False
 
-        # 数据和映射连接
+        # Data and mapping connection
         PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
         PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
 
@@ -354,10 +365,10 @@ class PyInterpolateModify:
 
     def update_x_data(self, x_data: ndarray):
         self.x_data = x_data
-        # 如果数据长度不一致，则需要重新设置数据
+        # Reset data when lengths do not match
         if len(x_data) == len(self.line.get_ydata()):
             self.line.set_xdata(x_data)
-            # 重新计算坐标轴范围
+            # Recalculate axes limits
             self.axe.relim()
             self.axe.autoscale_view()
         else:
@@ -368,7 +379,7 @@ class PyInterpolateModify:
 
     def update_y_data(self, y_data: ndarray):
         self.y_data = y_data
-        # 如果数据长度不一致，则需要重新设置数据
+        # Reset data when lengths do not match
         if len(y_data) == len(self.line.get_xdata()):
             self.line.set_ydata(y_data)
             self.axe.relim()

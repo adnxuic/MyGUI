@@ -19,17 +19,19 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 import numpy as np
 
-from Qt_core import QApplication, Qt
+from Qt_core import QApplication, QDialog, QPushButton, Qt
 from code import tex_config
 from code import status_messages
-from code.database import matlab_adapter
+from code.database import matlab_adapter, scipy_fit_adapter
 from code.database.py_database import PyDatabase
 from code.database.safe_expression import evaluate_curve_expression
 from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 from code.widgets.fig_control_window import py_matlab_window as matlab_window_module
-from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitMatlabModWidget
+from code.widgets.fig_control_window import py_fit_options_window as fit_options_module
+from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitModWidget
 from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
-from code.widgets.fig_control_window.py_matlab_window import PyFitWindow, PyMatlabWindow
+from code.widgets.fig_control_window.py_fit_options_window import PyMatlabFitOptionsWidget
+from code.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 from code.widgets.fig_control_window.py_tex_window import PyTexWindow
 
 
@@ -590,6 +592,21 @@ class OptionalDependencyTests(unittest.TestCase):
             finally:
                 window.close()
 
+    def test_scipy_fitting_does_not_call_matlab_adapter(self):
+        x = np.linspace(-2.0, 2.0, 9)
+        y = 2.0 * x ** 2 + 1.0
+
+        with patch.object(
+            matlab_window_module.matlab_adapter,
+            "fit_curve_isolated",
+            side_effect=AssertionError("SciPy fitting should not call MATLAB"),
+        ):
+            result = scipy_fit_adapter.fit_curve(x, y, "poly2")
+
+        self.assertEqual(result["engine"], "Python")
+        self.assertEqual(result["fit_type"], "poly2")
+        np.testing.assert_allclose(evaluate_curve_expression(result["value_expression"], x), y)
+
     def test_matlab_sources_directory_does_not_satisfy_runtime_import(self):
         root = Path(__file__).resolve().parents[1]
         self.assertTrue((root / "matlab_sources").is_dir())
@@ -658,9 +675,10 @@ class OptionalDependencyTests(unittest.TestCase):
                     window.matlab_connect_click()
                     self.wait_until(lambda: warning.called)
 
-                self.assertEqual(window.layout.count(), 1)
+                self.assertEqual(window.layout.count(), 2)
                 self.assertEqual(window.matlab_isconnect.text(), "Connect Matlab")
-                self.assertIsNone(window.connect_widget)
+                self.assertFalse(hasattr(window, "data_choice_widget"))
+                self.assertFalse(hasattr(window, "fit_type_window"))
                 warning.assert_called_once()
 
             log_text = "\n".join(logs.output)
@@ -673,14 +691,14 @@ class OptionalDependencyTests(unittest.TestCase):
         window = PyMatlabWindow()
         try:
             window._connect_request_id = 2
-            window.init = Mock()
+            window._show_connected_description = Mock()
             window.reset_to_connect_button = Mock()
 
             with patch.object(matlab_window_module.QMessageBox, "warning") as warning:
                 window._matlab_connect_succeeded(1, time.monotonic(), matlab_adapter.MatlabStatus(True))
                 window._matlab_connect_failed(1, time.monotonic(), "MATLAB runtime unavailable")
 
-            window.init.assert_not_called()
+            window._show_connected_description.assert_not_called()
             window.reset_to_connect_button.assert_not_called()
             warning.assert_not_called()
         finally:
@@ -689,7 +707,7 @@ class OptionalDependencyTests(unittest.TestCase):
     def test_matlab_expression_extraction_failure_only_warns(self):
         fit_window = None
         with patch.object(
-            matlab_window_module.matlab_adapter,
+            fit_options_module.matlab_adapter,
             "get_func_info_isolated",
             side_effect=[
                 {
@@ -703,10 +721,10 @@ class OptionalDependencyTests(unittest.TestCase):
             with patch.object(matlab_adapter, "_LOG_TO_FILE", False), \
                     patch.object(matlab_adapter, "_LOG_TO_STDERR", False), \
                     self.assertLogs(matlab_adapter.LOGGER_NAME, level="INFO") as logs:
-                fit_window = PyFitWindow()
+                fit_window = PyMatlabFitOptionsWidget()
                 try:
                     self.wait_until(lambda: fit_window.expression_input.toPlainText() == "a*x+b")
-                    with patch.object(matlab_window_module.QMessageBox, "warning") as warning:
+                    with patch.object(fit_options_module.QMessageBox, "warning") as warning:
                         fit_window.expression_change("poly2")
                         self.wait_until(lambda: warning.called)
 
@@ -721,9 +739,9 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertIn("MATLAB expression request failed request_id=2", log_text)
 
     def test_matlab_fit_window_shows_method_specific_advanced_options(self):
-        with patch.object(matlab_window_module, "start_matlab_task", return_value=(None, None)):
-            poly_window = PyFitWindow(fit_type_name="poly")
-            gauss_window = PyFitWindow(fit_type_name="gauss")
+        with patch.object(fit_options_module, "start_matlab_task", return_value=(None, None)):
+            poly_window = PyMatlabFitOptionsWidget(fit_type_name="poly")
+            gauss_window = PyMatlabFitOptionsWidget(fit_type_name="gauss")
             try:
                 self.assertEqual(poly_window.option_metadata["Method"], "LinearLeastSquares")
                 self.assertEqual(poly_window.coefficient_table.columnCount(), 3)
@@ -738,8 +756,8 @@ class OptionalDependencyTests(unittest.TestCase):
                 gauss_window.close()
 
     def test_matlab_fit_window_parses_advanced_options_and_validates_startpoints(self):
-        with patch.object(matlab_window_module, "start_matlab_task", return_value=(None, None)):
-            fit_window = PyFitWindow(fit_type_name="gauss")
+        with patch.object(fit_options_module, "start_matlab_task", return_value=(None, None)):
+            fit_window = PyMatlabFitOptionsWidget(fit_type_name="gauss")
             try:
                 fit_window.advanced_option.setChecked(True)
                 for row, value in enumerate(("0.1", "0.2", "0.3")):
@@ -791,7 +809,7 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.update_color = Mock()
                 self.change_legend = Mock()
 
-        widget = PyFitMatlabModWidget(FakeCurveModify())
+        widget = PyFitModWidget(FakeCurveModify(), engine="Matlab")
         result = {
             "value_expression": "2.0*x**2+3.0",
             "show_expression": "2.0*x**2+3.0",
@@ -817,74 +835,175 @@ class OptionalDependencyTests(unittest.TestCase):
         finally:
             widget.close()
 
+    def test_stale_fit_result_restores_dialog_button_without_updating_curve(self):
+        class FakeLine:
+            def get_linestyle(self):
+                return "solid"
+
+        class FakeCurveModify:
+            def __init__(self):
+                self.expression = ""
+                self.x_start = 0.0
+                self.x_stop = 1.0
+                self.line = FakeLine()
+                self.label = "fit"
+                self.update_all = Mock()
+                self.update_expression = Mock()
+                self.update_x_start = Mock()
+                self.update_x_stop = Mock()
+                self.update_style = Mock()
+                self.update_color = Mock()
+                self.change_legend = Mock()
+
+        widget = PyFitModWidget(FakeCurveModify())
+        dialog = QDialog(widget)
+        dialog.fit_button = QPushButton("Fit", dialog)
+        dialog.fit_button.setEnabled(False)
+        dialog.fit_button.setText("Fitting...")
+        dialog._fit_request_id = 1
+        widget._fit_request_id = 2
+        result = {
+            "value_expression": "x",
+            "show_expression": "x",
+            "formula": "x",
+            "fit_type": "poly1",
+            "coefficients": [],
+            "goodness": {},
+            "engine": "Python",
+        }
+        try:
+            widget._fit_dialog_succeeded(lambda: dialog, 1, result, 0.0, 1.0, "Python")
+
+            self.assertTrue(dialog.fit_button.isEnabled())
+            self.assertEqual(dialog.fit_button.text(), "Fit")
+            self.assertEqual(widget.result_model_label.text(), "Model: -")
+            widget.curve_modify.update_all.assert_not_called()
+
+            widget._fit_dialog_succeeded(lambda: None, 2, result, 0.0, 1.0, "Python")
+            widget.curve_modify.update_all.assert_not_called()
+        finally:
+            dialog.close()
+            widget.close()
+
     def test_matlab_fitting_failure_only_warns(self):
+        class FakeLine:
+            def get_linestyle(self):
+                return "solid"
+
+        class FakeCurveModify:
+            def __init__(self):
+                self.expression = ""
+                self.x_start = 0.0
+                self.x_stop = 1.0
+                self.line = FakeLine()
+                self.label = "fit"
+                self.update_all = Mock()
+                self.update_expression = Mock()
+                self.update_x_start = Mock()
+                self.update_x_stop = Mock()
+                self.update_style = Mock()
+                self.update_color = Mock()
+                self.change_legend = Mock()
+
         database = PyDatabase()
         PyDatabase.register_sheet("Data", "Sheet1", database)
         database.update_data(1, np.array([1.0, 2.0, 3.0]))
         database.update_data(2, np.array([2.0, 4.0, 6.0]))
+        matlab_adapter.set_matlab_enabled(True, notify=False)
 
-        window = PyMatlabWindow()
+        messages = []
+        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
+        widget = PyFitModWidget(
+            FakeCurveModify(),
+            x_data_name="Data/Sheet1/1",
+            y_data_name="Data/Sheet1/2",
+            engine="Matlab",
+        )
         try:
-            window.data_choice_widget = Mock()
-            window.data_choice_widget.get_x_data.return_value = "Data/Sheet1/1"
-            window.data_choice_widget.get_y_data.return_value = "Data/Sheet1/2"
-            window.fit_type_window = Mock()
-            window.fit_type_window.fit_parameters.return_value = ("poly1", None)
-            window.connect_widget = Mock()
-            window.fit_button = Mock()
-
             with patch.object(matlab_adapter, "_LOG_TO_FILE", False), \
                     patch.object(matlab_adapter, "_LOG_TO_STDERR", False), \
                     self.assertLogs(matlab_adapter.LOGGER_NAME, level="INFO") as logs:
                 with patch.object(
-                    matlab_window_module.matlab_adapter,
+                    fit_options_module.matlab_adapter,
+                    "get_func_info_isolated",
+                    return_value=matlab_adapter.fallback_func_info("poly1"),
+                ), patch.object(
+                    matlab_adapter,
                     "fit_curve_isolated",
                     side_effect=RuntimeError("MATLAB fitting failed: fit failed"),
-                ), patch.object(matlab_window_module.QMessageBox, "warning") as warning:
-                    window.fit_curve()
-                    self.wait_until(lambda: warning.called)
+                ):
+                    dialog = widget.open_fit_window("Matlab")
+                    self.assertIsNotNone(dialog)
+                    dialog.fit_options_widget.order_input.setCurrentText("poly1")
+                    dialog.fit_button.click()
+                    self.wait_until(lambda: any(level == "error" for _, level in messages))
 
-            warning.assert_called_once()
-            window.connect_widget.update_curve.assert_not_called()
-            window.fit_button.setEnabled.assert_any_call(False)
-            window.fit_button.setEnabled.assert_any_call(True)
-            window.fit_button.setText.assert_any_call("Fitting...")
-            window.fit_button.setText.assert_any_call("Fit")
+            self.assertEqual(widget.result_model_label.text(), "Model: -")
+            self.assertTrue(dialog.fit_button.isEnabled())
+            self.assertIn(("MATLAB fitting failed: fit failed", "error"), messages)
 
             log_text = "\n".join(logs.output)
-            self.assertIn("MATLAB fit request started request_id=1", log_text)
-            self.assertIn("MATLAB fit request failed request_id=1", log_text)
+            self.assertIn("Matlab fit request started request_id=1", log_text)
         finally:
-            window.close()
+            if "dialog" in locals() and dialog is not None:
+                dialog.close()
+            widget.close()
+            matlab_adapter.set_matlab_enabled(False, notify=False)
 
     def test_matlab_invalid_fit_parameters_warns_without_calling_matlab(self):
+        class FakeLine:
+            def get_linestyle(self):
+                return "solid"
+
+        class FakeCurveModify:
+            def __init__(self):
+                self.expression = ""
+                self.x_start = 0.0
+                self.x_stop = 1.0
+                self.line = FakeLine()
+                self.label = "fit"
+                self.update_all = Mock()
+                self.update_expression = Mock()
+                self.update_x_start = Mock()
+                self.update_x_stop = Mock()
+                self.update_style = Mock()
+                self.update_color = Mock()
+                self.change_legend = Mock()
+
         database = PyDatabase()
         PyDatabase.register_sheet("Data", "Sheet1", database)
         database.update_data(1, np.array([1.0, 2.0, 3.0]))
         database.update_data(2, np.array([2.0, 4.0, 6.0]))
+        matlab_adapter.set_matlab_enabled(True, notify=False)
 
-        window = PyMatlabWindow()
+        messages = []
+        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
+        widget = PyFitModWidget(
+            FakeCurveModify(),
+            x_data_name="Data/Sheet1/1",
+            y_data_name="Data/Sheet1/2",
+            engine="Matlab",
+        )
         try:
-            window.data_choice_widget = Mock()
-            window.data_choice_widget.get_x_data.return_value = "Data/Sheet1/1"
-            window.data_choice_widget.get_y_data.return_value = "Data/Sheet1/2"
-            window.fit_type_window = Mock()
-            window.fit_type_window.fit_parameters.side_effect = ValueError("bad fit parameter")
-            window.connect_widget = Mock()
-            window.fit_button = Mock()
-
             with patch.object(
-                matlab_window_module.matlab_adapter,
-                "fit_curve_isolated",
-            ) as fit_curve_isolated, patch.object(matlab_window_module.QMessageBox, "warning") as warning:
-                window.fit_curve()
+                fit_options_module.matlab_adapter,
+                "get_func_info_isolated",
+                return_value=matlab_adapter.fallback_func_info("poly1"),
+            ), patch.object(matlab_adapter, "fit_curve_isolated") as fit_curve_isolated:
+                dialog = widget.open_fit_window("Matlab")
+                self.assertIsNotNone(dialog)
+                dialog.fit_options_widget.advanced_option.setChecked(True)
+                dialog.fit_options_widget.coefficient_table.item(0, 1).setText("bad")
+                dialog.fit_button.click()
 
-            warning.assert_called_once()
+            self.assertIn(("p1 Lower must be a number.", "error"), messages)
             fit_curve_isolated.assert_not_called()
-            window.fit_button.setEnabled.assert_not_called()
-            window.fit_button.setText.assert_not_called()
+            self.assertTrue(dialog.fit_button.isEnabled())
         finally:
-            window.close()
+            if "dialog" in locals() and dialog is not None:
+                dialog.close()
+            widget.close()
+            matlab_adapter.set_matlab_enabled(False, notify=False)
 
     def test_adapter_get_func_exp_releases_runtime_on_success_and_failure(self):
         success_handle = Mock()

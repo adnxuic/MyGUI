@@ -38,4 +38,4 @@ These checks depend on local system setup and should not block baseline GUI main
 
 - If MATLAB or LaTeX is unavailable, record that as an environment limitation rather than a baseline GUI failure.
 - If a smoke step fails, capture the exact action, visible error, and whether the Python process stayed alive.
-- MATLAB fitting currently requires regenerated package signatures: `get_func(..., nargout=3)` and `curve_fitting(x, y, fit_type, options_json, nargout=6)`. Do not validate by mixing old generated packages with the new Python adapter.
+- Fitting engines, options, and MATLAB runtime settings are documented in `docs/fitting.md`.
