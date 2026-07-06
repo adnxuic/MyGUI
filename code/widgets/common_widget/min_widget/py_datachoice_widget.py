@@ -6,6 +6,7 @@ from code.database.py_database import PyDatabase
 
 class PyDataChoiceWidget(QFrame):
     instances = weakref.WeakSet()
+    active_table_name: str | None = None
 
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls, *args, **kwargs)
@@ -42,7 +43,7 @@ class PyDataChoiceWidget(QFrame):
         self.x_data_input.blockSignals(True)
         self.y_data_input.blockSignals(True)
 
-        data_names = list(PyDatabase.iter_data_names())
+        data_names = list(PyDatabase.iter_data_names(self.active_table_name))
         self.x_data_input.clear()
         self.y_data_input.clear()
         self.x_data_input.addItems(data_names)
@@ -71,16 +72,32 @@ class PyDataChoiceWidget(QFrame):
             except RuntimeError:
                 cls.instances.discard(instance)
 
+    @classmethod
+    def set_active_table_name(cls, table_name: str | None):
+        cls.active_table_name = table_name
+        cls.update_all_instances()
+
     def get_x_data(self):
         return self.x_data_input.currentText()
 
     def get_y_data(self):
         return self.y_data_input.currentText()
 
+    @staticmethod
+    def _ensure_data_choice(combo: QComboBox, data_name: str):
+        if not data_name:
+            return
+        if combo.findText(data_name) >= 0:
+            return
+        if PyDatabase.has_data(data_name):
+            combo.addItem(data_name)
+
     def set_x_data(self, data_name: str):
+        self._ensure_data_choice(self.x_data_input, data_name)
         self.x_data_input.setCurrentText(data_name)
 
     def set_y_data(self, data_name: str):
+        self._ensure_data_choice(self.y_data_input, data_name)
         self.y_data_input.setCurrentText(data_name)
 
     def text_connect(self, x_func, y_func):

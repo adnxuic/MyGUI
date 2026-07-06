@@ -4,6 +4,16 @@ import numpy as np
 from numpy import ndarray
 
 databases: Dict[str, Dict[str, Any]] = {}
+INVALID_NAME_CHARS = {"/", "\\"}
+
+
+def validate_project_component_name(name: str, label: str = "name") -> str:
+    cleaned = str(name).strip()
+    if not cleaned:
+        raise ValueError(f"{label} must not be empty.")
+    if any(char in cleaned for char in INVALID_NAME_CHARS):
+        raise ValueError(f"{label} must not contain / or \\.")
+    return cleaned
 
 
 class PyDatabase:
@@ -30,6 +40,7 @@ class PyDatabase:
 
     @staticmethod
     def register_table(table_name: str):
+        validate_project_component_name(table_name, "Table name")
         databases.setdefault(table_name, {})
         PyDatabase.notify_data_choices()
 
@@ -43,8 +54,37 @@ class PyDatabase:
 
     @staticmethod
     def register_sheet(table_name: str, sheet_name: str, database: "PyDatabase"):
+        validate_project_component_name(table_name, "Table name")
+        validate_project_component_name(sheet_name, "Sheet name")
         PyDatabase.register_table(table_name)
         databases[table_name][sheet_name] = database
+        PyDatabase.notify_data_choices()
+
+    @staticmethod
+    def rename_table(old_name: str, new_name: str):
+        new_name = validate_project_component_name(new_name, "Project name")
+        if old_name == new_name:
+            return
+        if old_name not in databases:
+            raise KeyError(f"Unknown table: {old_name}")
+        if new_name in databases:
+            raise ValueError(f"Project already exists: {new_name}")
+        databases[new_name] = databases.pop(old_name)
+        PyDatabase.notify_data_choices()
+
+    @staticmethod
+    def rename_sheet(table_name: str, old_name: str, new_name: str):
+        new_name = validate_project_component_name(new_name, "Sheet name")
+        sheets = databases.get(table_name)
+        if sheets is None:
+            raise KeyError(f"Unknown table: {table_name}")
+        if old_name == new_name:
+            return
+        if old_name not in sheets:
+            raise KeyError(f"Unknown sheet: {old_name}")
+        if new_name in sheets:
+            raise ValueError(f"Sheet already exists: {new_name}")
+        sheets[new_name] = sheets.pop(old_name)
         PyDatabase.notify_data_choices()
 
     @staticmethod
@@ -89,8 +129,12 @@ class PyDatabase:
             return False
 
     @staticmethod
-    def iter_data_names() -> Iterable[str]:
-        for table_name, sheets in databases.items():
+    def iter_data_names(table_name: str | None = None) -> Iterable[str]:
+        if table_name is None:
+            table_items = databases.items()
+        else:
+            table_items = ((table_name, databases.get(table_name, {})),)
+        for table_name, sheets in table_items:
             for sheet_name, database in sheets.items():
                 for column_name in database.data.keys():
                     yield f"{table_name}/{sheet_name}/{column_name}"

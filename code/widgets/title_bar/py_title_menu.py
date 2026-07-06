@@ -9,9 +9,12 @@ from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import element_dialog_dict
 from code.excel_io import import_excel_into_table
 from code.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
+from code import status_messages
+from code.database.py_database import validate_project_component_name
 
 import json
 import os
+from pathlib import Path
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -144,6 +147,9 @@ class MenuBar(QFrame):
         file_save_action = QAction(QIcon("pictures/icons/save.svg"), "保存项目...", self.file_menu)
         file_save_action.triggered.connect(self.save_file)
 
+        file_save_as_action = QAction(QIcon("pictures/icons/save.svg"), "Project Save As...", self.file_menu)
+        file_save_as_action.triggered.connect(self.save_file_as)
+
         file_export_figure_action = QAction("导出当前图片...", self.file_menu)
         file_export_figure_action.triggered.connect(self.export_current_figure)
 
@@ -153,6 +159,7 @@ class MenuBar(QFrame):
         self.file_menu.addAction(file_open_action)
         self.file_menu.addAction(file_open_project_action)
         self.file_menu.addAction(file_save_action)
+        self.file_menu.addAction(file_save_as_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(file_export_figure_action)
         self.file_menu.addAction(file_export_data_action)
@@ -213,6 +220,85 @@ class MenuBar(QFrame):
             export_database_snapshot(file_name)
         except Exception as exc:
             QMessageBox.warning(self, "导出数据", str(exc))
+
+    def open_file(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel", "", "Excel Files (*.xlsx *.xls)")
+        if not file_name or not os.path.exists(file_name):
+            return
+
+        try:
+            if self.figure_window is not None and self.figure_window.current_canva is None:
+                project_name = validate_project_component_name(Path(file_name).stem, "Project name")
+                self.figure_window.add_figure(
+                    width=6.4,
+                    height=4.8,
+                    dpi=100,
+                    style="default",
+                    canva_name=project_name,
+                )
+            load_excel_into_table(file_name, self.table)
+            status_messages.show_success(f"Excel imported: {Path(file_name).name}")
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            QMessageBox.warning(self, "Open Excel", str(exc))
+
+    def open_project(self):
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Open Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+        if not file_name or not os.path.exists(file_name):
+            return
+
+        try:
+            restore_project_snapshot(file_name, table=self.table, figure_window=self.figure_window)
+            status_messages.show_success(f"Project opened: {Path(file_name).name}")
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            QMessageBox.warning(self, "Open Project", str(exc))
+
+    def save_file(self):
+        if self.figure_window is None or self.figure_window.current_canva is None:
+            message = "Please create or open a project before saving."
+            status_messages.show_error(message)
+            QMessageBox.warning(self, "Save Project", message)
+            return
+
+        project_path = getattr(self.figure_window.current_canva, "project_path", None)
+        if project_path:
+            self._save_project_to(project_path)
+        else:
+            self.save_file_as()
+
+    def save_file_as(self):
+        if self.figure_window is None or self.figure_window.current_canva is None:
+            message = "Please create or open a project before saving."
+            status_messages.show_error(message)
+            QMessageBox.warning(self, "Save Project", message)
+            return
+
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Save Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+        if not file_name:
+            return
+        self._save_project_to(file_name)
+
+    @staticmethod
+    def _project_save_path(file_name: str) -> str:
+        path = Path(file_name)
+        if not path.name.endswith(".mygui.json") and path.suffix == "":
+            path = path.with_suffix(".mygui.json")
+        return str(path)
+
+    def _save_project_to(self, file_name: str):
+        file_name = self._project_save_path(file_name)
+        try:
+            canvas = self.figure_window.current_canva
+            self.table.save_table_to_database(canvas.project_table_name)
+            save_project_snapshot(file_name, self.figure_window)
+            canvas.project_path = file_name
+            status_messages.show_success(f"Project saved: {Path(file_name).name}")
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            QMessageBox.warning(self, "Save Project", str(exc))
 
 
 class ControlBar(QFrame):

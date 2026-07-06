@@ -21,6 +21,16 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
+def _add_current_table_data_names(x_input: QComboBox, y_input: QComboBox,
+                                  figure_window: PyFigureWindow | None):
+    table_name = None
+    if figure_window is not None and figure_window.current_canva is not None:
+        table_name = figure_window.current_canva.project_table_name
+    for data_name in PyDatabase.iter_data_names(table_name):
+        x_input.addItem(data_name)
+        y_input.addItem(data_name)
+
+
 # Curve creation dialog
 class PyCurveDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
@@ -139,11 +149,7 @@ class PyPlotDialog(QDialog):
         self.y_data_input = QComboBox(self)
         self.y_data_layout = QHBoxLayout()
 
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
 
         self.x_data_layout.addWidget(QLabel('X Data:'))
         self.x_data_layout.addWidget(self.x_data_input)
@@ -244,11 +250,7 @@ class PyScatterDialog(QDialog):
         self.y_data_input = QComboBox(self)
         self.y_data_layout = QHBoxLayout()
 
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
 
         self.x_data_layout.addWidget(QLabel('X Data:'))
         self.x_data_layout.addWidget(self.x_data_input)
@@ -347,11 +349,7 @@ class PyFitDialog(QDialog):
         self.y_data_input = QComboBox(self)
         self.y_data_layout = QHBoxLayout()
 
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
 
         self.x_data_layout.addWidget(QLabel('X Data:'))
         self.x_data_layout.addWidget(self.x_data_input)
@@ -431,11 +429,7 @@ class PyInterpolationDialog(QDialog):
         self.y_data_input = QComboBox(self)
         self.y_data_layout = QHBoxLayout()
 
-        for key1, value1 in databases.items():
-            for key2, value2 in value1.items():
-                for key3, value3 in value2.data.items():
-                    self.x_data_input.addItem(f"{key1}/{key2}/{key3}")
-                    self.y_data_input.addItem(f"{key1}/{key2}/{key3}")
+        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
 
         self.x_data_layout.addWidget(QLabel('X Data:'))
         self.x_data_layout.addWidget(self.x_data_input)

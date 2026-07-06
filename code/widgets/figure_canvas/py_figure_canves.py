@@ -32,9 +32,13 @@ mpl.use("QtAgg")
 
 
 class PyFigureCanvas(QWidget):
-    def __init__(self, parent=None, width=4, height=3, dpi=200, style=None):
+    def __init__(self, parent=None, width=4, height=3, dpi=200, style=None,
+                 project_name: str | None = None, project_path: str | None = None):
         super().__init__()
         self.style = style
+        self.project_name = project_name or ""
+        self.project_table_name = self.project_name
+        self.project_path = project_path
         with mpl.style.context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
 
@@ -48,6 +52,7 @@ class PyFigureCanvas(QWidget):
         self.project_plots: list[dict[str, Any]] = []
         self.project_scatters: list[dict[str, Any]] = []
         self.project_interpolates: list[dict[str, Any]] = []
+        self.project_fits: list[dict[str, Any]] = []
         self.project_texts: list[dict[str, Any]] = []
 
         self.canva = FigureCanvasQTAgg(self.fig)
@@ -239,12 +244,55 @@ class PyFigureCanvas(QWidget):
 
     # Add fit curve
     def add_fit_curve(self, x, y, color, label, x_data_name: str = "", y_data_name: str = "",
-                      engine: str = "Python"):
+                      engine: str = "Python", record_project=True, fit_type=None,
+                      fit_options=None, fit_result=None, expression: str = "",
+                      x_start: float | None = None, x_stop: float | None = None,
+                      style: str = "solid"):
         if engine not in {"Python", "Matlab"}:
             raise ValueError(f"Unsupported fitting engine: {engine}")
 
+        x_array = np.asarray(x, dtype=float)
+        y_array = np.asarray(y, dtype=float)
+        if x_array.size:
+            default_x_start = float(np.min(x_array))
+            default_x_stop = float(np.max(x_array))
+        else:
+            default_x_start = 0.0
+            default_x_stop = 1.0
+        x_start = default_x_start if x_start is None else float(x_start)
+        x_stop = default_x_stop if x_stop is None else float(x_stop)
+
+        line_x = x_array
+        line_y = y_array
+        if expression:
+            try:
+                line_x = np.linspace(x_start, x_stop, 1000)
+                line_y = evaluate_curve_expression(expression, line_x)
+            except ValueError:
+                status_messages.show_error("Saved fit expression could not be restored; showing source data.")
+                expression = ""
+
         with mpl.style.context(self.style):
-            line, = self.current_axes.plot(x, y, color=color, label=label)
+            line, = self.current_axes.plot(line_x, line_y, ls=style, color=color, label=label)
+
+        project_record = None
+        if record_project:
+            project_record = {
+                "axes_index": int(self.fig.axes.index(self.current_axes)),
+                "x_data_name": x_data_name,
+                "y_data_name": y_data_name,
+                "engine": engine,
+                "fit_type": fit_type,
+                "fit_options": fit_options,
+                "fit_result": fit_result,
+                "expression": expression or "",
+                "x_start": float(x_start),
+                "x_stop": float(x_stop),
+                "style": line.get_linestyle(),
+                "color": line.get_color(),
+                "label": label,
+            }
+            self.project_fits.append(project_record)
 
         # Get modification panels for current axes
         all_mod_widget = self.fig_modify_widget.fine_all_mod_widget(self.current_axes)
@@ -253,13 +301,25 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('fitting_box')
 
         # Add fit curve adjustment panel
-        x_start = float(np.min(x))
-        x_stop = float(np.max(x))
         fitting_mod_widget = PyFitModWidget(
-            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, '', label),
+            PyCurveModify(
+                self.fig,
+                self.current_axes,
+                x_start,
+                x_stop,
+                self.style,
+                line,
+                expression or "",
+                label,
+                project_record=project_record,
+                project_collection=self.project_fits,
+            ),
             x_data_name=x_data_name,
             y_data_name=y_data_name,
             engine=engine,
+            fit_type=fit_type,
+            fit_options=fit_options,
+            fit_result=fit_result,
         )
 
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
@@ -267,6 +327,7 @@ class PyFigureCanvas(QWidget):
         fitting_box.setCurrentWidget(fitting_mod_widget)
 
         self.redraw()
+        return line
 
     # Add interpolation curve
     def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate',
@@ -424,16 +485,204 @@ class PyFigureCanvas(QWidget):
         with mpl.style.context(self.style):
             self.fig.savefig(filename, dpi=save_dpi)
 
+    @staticmethod
+    def _rewrite_data_name(data_name: str, old_table: str, new_table: str,
+                           old_sheet: str | None = None, new_sheet: str | None = None) -> str:
+        try:
+            table_name, sheet_name, column_name = PyDatabase.split_data_name(data_name)
+        except (KeyError, AttributeError):
+            return data_name
+        if table_name != old_table:
+            return data_name
+        if old_sheet is not None and sheet_name != old_sheet:
+            return data_name
+        return f"{new_table}/{new_sheet or sheet_name}/{column_name}"
+
+    def rewrite_data_references(self, old_table: str, new_table: str,
+                                old_sheet: str | None = None, new_sheet: str | None = None):
+        for collection in (self.project_plots, self.project_scatters, self.project_interpolates, self.project_fits):
+            for record in collection:
+                for field in ("x_data_name", "y_data_name"):
+                    if field in record:
+                        record[field] = self._rewrite_data_name(
+                            record[field],
+                            old_table,
+                            new_table,
+                            old_sheet=old_sheet,
+                            new_sheet=new_sheet,
+                        )
+
+        if self.fig_modify_widget is not None:
+            from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
+
+            for widget in self.fig_modify_widget.findChildren(PyDataChoiceWidget):
+                old_x = widget.get_x_data()
+                old_y = widget.get_y_data()
+                new_x = self._rewrite_data_name(
+                    old_x, old_table, new_table, old_sheet=old_sheet, new_sheet=new_sheet
+                )
+                new_y = self._rewrite_data_name(
+                    old_y, old_table, new_table, old_sheet=old_sheet, new_sheet=new_sheet
+                )
+                if new_x != old_x:
+                    widget.set_x_data(new_x)
+                if new_y != old_y:
+                    widget.set_y_data(new_y)
+
+    @staticmethod
+    def _json_position(position):
+        if isinstance(position, (list, tuple)):
+            return [PyFigureCanvas._json_position(value) for value in position]
+        try:
+            return float(position)
+        except (TypeError, ValueError):
+            return str(position)
+
+    @staticmethod
+    def _legend_location(legend):
+        if legend is None:
+            return None
+        loc = getattr(legend, "_loc", None)
+        if isinstance(loc, tuple):
+            return [float(value) for value in loc]
+        if isinstance(loc, list):
+            return [float(value) for value in loc]
+        if isinstance(loc, np.integer):
+            return int(loc)
+        if isinstance(loc, np.floating):
+            return float(loc)
+        return loc
+
+    @staticmethod
+    def _restore_location(location):
+        if isinstance(location, list) and len(location) == 2:
+            return (float(location[0]), float(location[1]))
+        return location
+
+    def axes_snapshot(self) -> list[dict[str, Any]]:
+        axes_records: list[dict[str, Any]] = []
+        for index, axe in enumerate(self.fig.axes):
+            x_family = axe.xaxis.label.get_fontfamily()
+            if isinstance(x_family, (list, tuple)):
+                label_fontfamily = x_family[0] if x_family else ""
+            else:
+                label_fontfamily = str(x_family)
+
+            legend = axe.get_legend()
+            legend_record = None
+            if legend is not None:
+                legend_record = {
+                    "visible": bool(legend.get_visible()),
+                    "loc": self._legend_location(legend),
+                }
+
+            axes_records.append({
+                "index": int(index),
+                "xlim": [float(value) for value in axe.get_xlim()],
+                "ylim": [float(value) for value in axe.get_ylim()],
+                "xlabel": axe.get_xlabel(),
+                "ylabel": axe.get_ylabel(),
+                "label_fontfamily": label_fontfamily,
+                "label_fontsize": float(axe.xaxis.label.get_fontsize()),
+                "x_label_position": [float(value) for value in axe.xaxis.label.get_position()],
+                "y_label_position": [float(value) for value in axe.yaxis.label.get_position()],
+                "xaxis_visible": bool(axe.xaxis.get_visible()),
+                "yaxis_visible": bool(axe.yaxis.get_visible()),
+                "spines": {
+                    name: {
+                        "visible": bool(spine.get_visible()),
+                        "position": self._json_position(spine.get_position()),
+                    }
+                    for name, spine in axe.spines.items()
+                },
+                "legend": legend_record,
+            })
+        return axes_records
+
+    def apply_axes_snapshot(self, axes_records: list[dict[str, Any]] | None):
+        if not axes_records:
+            return
+        for record in axes_records:
+            try:
+                axes_index = int(record.get("index", -1))
+            except (TypeError, ValueError):
+                continue
+            if axes_index < 0 or axes_index >= len(self.fig.axes):
+                continue
+            axe = self.fig.axes[axes_index]
+
+            xlim = record.get("xlim")
+            if isinstance(xlim, list) and len(xlim) == 2:
+                axe.set_xlim(float(xlim[0]), float(xlim[1]))
+            ylim = record.get("ylim")
+            if isinstance(ylim, list) and len(ylim) == 2:
+                axe.set_ylim(float(ylim[0]), float(ylim[1]))
+
+            axe.set_xlabel(str(record.get("xlabel", "")))
+            axe.set_ylabel(str(record.get("ylabel", "")))
+            label_fontfamily = record.get("label_fontfamily")
+            if label_fontfamily:
+                axe.xaxis.label.set_fontfamily(label_fontfamily)
+                axe.yaxis.label.set_fontfamily(label_fontfamily)
+            if "label_fontsize" in record:
+                axe.xaxis.label.set_fontsize(float(record["label_fontsize"]))
+                axe.yaxis.label.set_fontsize(float(record["label_fontsize"]))
+            x_label_position = record.get("x_label_position")
+            if isinstance(x_label_position, list) and len(x_label_position) == 2:
+                axe.xaxis.set_label_coords(float(x_label_position[0]), float(x_label_position[1]))
+            y_label_position = record.get("y_label_position")
+            if isinstance(y_label_position, list) and len(y_label_position) == 2:
+                axe.yaxis.set_label_coords(float(y_label_position[0]), float(y_label_position[1]))
+
+            if "xaxis_visible" in record:
+                axe.xaxis.set_visible(bool(record["xaxis_visible"]))
+            if "yaxis_visible" in record:
+                axe.yaxis.set_visible(bool(record["yaxis_visible"]))
+
+            spines = record.get("spines")
+            if isinstance(spines, dict):
+                for spine_name, spine_state in spines.items():
+                    if spine_name not in axe.spines or not isinstance(spine_state, dict):
+                        continue
+                    spine = axe.spines[spine_name]
+                    if "visible" in spine_state:
+                        spine.set_visible(bool(spine_state["visible"]))
+                    position = spine_state.get("position")
+                    if isinstance(position, list) and len(position) == 2:
+                        spine.set_position((position[0], float(position[1])))
+
+            legend_state = record.get("legend")
+            existing_legend = axe.get_legend()
+            if isinstance(legend_state, dict) and legend_state.get("visible", False):
+                loc = self._restore_location(legend_state.get("loc", "best"))
+                try:
+                    axe.legend(loc=loc)
+                except Exception:
+                    axe.legend(loc="best")
+            elif existing_legend is not None:
+                existing_legend.remove()
+        self.redraw()
+
+    def set_project_name(self, name: str):
+        old_table = self.project_table_name
+        self.project_name = name
+        self.project_table_name = name
+        if old_table and old_table != name:
+            self.rewrite_data_references(old_table, name)
+
     def project_snapshot(self) -> dict[str, Any]:
         return {
+            "name": self.project_name,
             "style": self.style,
             "dpi": float(self.fig.dpi),
             "size_inches": [float(value) for value in self.fig.get_size_inches()],
             "axes_count": len(self.fig.axes),
             "axes_layouts": [dict(layout) for layout in self.project_axes_layouts],
+            "axes": self.axes_snapshot(),
             "curves": [dict(curve) for curve in self.project_curves],
             "plots": [dict(plot) for plot in self.project_plots],
             "scatters": [dict(scatter) for scatter in self.project_scatters],
             "interpolates": [dict(interpolate) for interpolate in self.project_interpolates],
+            "fits": [dict(fit) for fit in self.project_fits],
             "texts": [dict(text) for text in self.project_texts],
         }

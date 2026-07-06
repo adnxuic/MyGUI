@@ -12,18 +12,26 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
 
 ## Core Workflow
 
-1. Create a new figure from the style toolbar.
-2. Add axes from the layout toolbar.
-3. Import an Excel workbook through the file menu.
-4. Save table data to the in-memory database from the sheet/table workflow.
-5. Create a plot using two saved data columns.
-6. Create a scatter chart using two saved data columns.
-7. Create an interpolation curve from saved data, change its method, set `Samples`, and confirm the curve redraws.
-8. For `B样条插值`, change `k`; for `平滑样条`, toggle `Auto lambda` and set a manual lambda.
-9. Change the interpolation X/Y data sources from the right-side panel and confirm the dense interpolation curve redraws.
-10. Enter invalid interpolation input such as duplicate X values and confirm the Message Bar shows a red error while the app stays open.
-11. Modify axis range, axis labels, and legend position.
-12. Add a text element and edit its content, font, size, and position.
+1. Create a new project from the style toolbar and enter a unique project name.
+2. Confirm the table area shows only that project's table and a `Sheet1` sheet.
+3. Add axes from the layout toolbar.
+4. Import an Excel workbook through the file menu and confirm data lands in the current project table.
+5. Save table data to the in-memory database from the sheet/table workflow if needed.
+6. Create a plot using two saved data columns.
+7. Create a scatter chart using two saved data columns.
+8. Create an interpolation curve from saved data, change its method, set `Samples`, and confirm the curve redraws.
+9. Change method-specific interpolation options and confirm the curve redraws.
+10. Change interpolation X/Y data sources from the right-side panel and confirm only current-project data is listed.
+11. Create a SciPy fitting curve, run `poly2`, and confirm the result area shows coefficients and goodness metrics.
+12. Modify axis range, axis labels, label font size, bottom spine state, and legend position.
+13. Add a text element and edit its content, font, size, and position.
+14. Save the current project, open it in a fresh workspace, and confirm plot, scatter, interpolation, fitting result, axes state, and text restore.
+15. Right-click the canvas tab, rename the project, and confirm existing charts and fitting data references still redraw.
+16. Right-click the sheet tab, rename the sheet, and confirm existing charts and fitting data references still redraw.
+17. Create a second project and confirm switching canvas tabs switches the visible table.
+18. Open a second different project and confirm it coexists with the current project.
+19. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
+20. Enter invalid interpolation input such as duplicate X values and confirm the Message Bar shows a red error while the app stays open.
 
 ## Optional Local Integrations
 

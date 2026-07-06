@@ -3,7 +3,9 @@ from typing import Any, Optional
 
 from Qt_core import *
 from code.database.py_database import PyDatabase
+from code.database.py_database import validate_project_component_name
 from code.database.interpolate_func import interpolate_dict
+from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 
@@ -18,6 +20,26 @@ qss_path = os.path.join(current_path, "style.qss")
 matplotlib.use("QtAgg")
 
 
+class FigureTabWidget(QTabWidget):
+    def __init__(self, figure_window, parent=None):
+        super().__init__(parent)
+        self.figure_window = figure_window
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.RightButton:
+            clicked_tab_index = self.tabBar().tabAt(event.position().toPoint())
+            if clicked_tab_index != -1:
+                self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
+        super().mousePressEvent(event)
+
+    def show_context_menu(self, position, tab_index):
+        menu = QMenu(self)
+        rename_action = menu.addAction("Rename")
+        action = menu.exec(position)
+        if action == rename_action:
+            self.figure_window.rename_project_from_tab(tab_index)
+
+
 class PyFigureWindow(QFrame):
     def __init__(self, fig_modify_window=None):
         super().__init__()
@@ -29,35 +51,77 @@ class PyFigureWindow(QFrame):
         self.fig_modify_window = fig_modify_window
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
+        self.table = None
 
         self.current_fig_modify_widget: Optional[PyFigModWidget] = None
 
         self.layout = QVBoxLayout()
-        self.tabwindow = QTabWidget()
+        self.tabwindow = FigureTabWidget(self)
         self.tabwindow.currentChanged.connect(self.change_current_canvas)
 
         self.layout.addWidget(self.tabwindow)
         self.setLayout(self.layout)
 
-    def add_figure(self, width=None, height=None, dpi=None, style=None, canva_name=None):
-        canva = PyFigureCanvas(self, width=width, height=height, dpi=dpi, style=style)
+    def set_table(self, table):
+        self.table = table
+        if hasattr(table, "set_figure_window"):
+            table.set_figure_window(self)
+        self.change_current_canvas()
+
+    def _default_project_name(self) -> str:
+        index = 1
+        while self.has_project_name(f"Project{index}"):
+            index += 1
+        return f"Project{index}"
+
+    def has_project_name(self, name: str) -> bool:
+        for index in range(self.tabwindow.count()):
+            canvas = self.tabwindow.widget(index)
+            if getattr(canvas, "project_name", None) == name:
+                return True
+        return False
+
+    def add_figure(self, width=None, height=None, dpi=None, style=None, canva_name=None,
+                   create_table=True, project_path=None):
+        project_name = validate_project_component_name(canva_name or self._default_project_name(), "Project name")
+        if self.has_project_name(project_name):
+            raise ValueError(f"Project already exists: {project_name}")
+        if self.table is not None and create_table:
+            self.table.create_project_table(project_name)
+
+        canva = PyFigureCanvas(
+            self,
+            width=width,
+            height=height,
+            dpi=dpi,
+            style=style,
+            project_name=project_name,
+            project_path=project_path,
+        )
         self.canvas['canva' + str(len(self.canvas) + 1)] = canva
 
         figmod_widget = self.fig_modify_window.add_figmod_widget()
 
         canva.setFigModifyWidget(figmod_widget)
 
-        if canva_name != '':
-            self.tabwindow.addTab(canva, canva_name)
-        else:
-            self.tabwindow.addTab(canva, 'canva' + str(len(self.canvas) + 1))
+        self.tabwindow.addTab(canva, project_name)
 
         self.tabwindow.setCurrentWidget(canva)
 
     def change_current_canvas(self):
         self.current_canva = self.tabwindow.currentWidget()
+        if self.current_canva is None:
+            self.current_fig_modify_widget = None
+            if self.table is not None:
+                self.table.switch_to_table(None)
+            PyDataChoiceWidget.set_active_table_name(None)
+            return
         self.fig_modify_window.stacklayout.setCurrentIndex(self.tabwindow.currentIndex())
         self.current_fig_modify_widget = self.fig_modify_window.stacklayout.currentWidget()
+        table_name = getattr(self.current_canva, "project_table_name", None)
+        if self.table is not None:
+            self.table.switch_to_table(table_name)
+        PyDataChoiceWidget.set_active_table_name(table_name)
 
     def get_current_canvas_axes_colorselector(self):
         return self.current_canva.current_axes_mod.color_selector
@@ -74,6 +138,28 @@ class PyFigureWindow(QFrame):
         self.current_fig_modify_widget = None
         if hasattr(self.fig_modify_window, "clear_figmod_widgets"):
             self.fig_modify_window.clear_figmod_widgets()
+        PyDataChoiceWidget.set_active_table_name(None)
+
+    def remove_project(self, project_name: str):
+        for index in range(self.tabwindow.count()):
+            canvas = self.tabwindow.widget(index)
+            if getattr(canvas, "project_name", None) != project_name:
+                continue
+            self.tabwindow.removeTab(index)
+            if hasattr(canvas, "cancel_pending_draw"):
+                canvas.cancel_pending_draw()
+            canvas.deleteLater()
+            if self.fig_modify_window is not None and index < self.fig_modify_window.stacklayout.count():
+                widget = self.fig_modify_window.stacklayout.widget(index)
+                self.fig_modify_window.stacklayout.removeWidget(widget)
+                widget.deleteLater()
+            self.canvas = {
+                key: value
+                for key, value in self.canvas.items()
+                if value is not canvas
+            }
+            self.change_current_canvas()
+            return
 
     def cancel_pending_draws(self):
         for index in range(self.tabwindow.count()):
@@ -91,6 +177,50 @@ class PyFigureWindow(QFrame):
             snapshot["name"] = self.tabwindow.tabText(index)
             canvases.append(snapshot)
         return canvases
+
+    def rename_project_from_tab(self, tab_index: int):
+        if tab_index < 0 or tab_index >= self.tabwindow.count():
+            return
+        old_name = self.tabwindow.tabText(tab_index)
+        new_name, ok = QInputDialog.getText(self, "Rename Project", "Project name:", text=old_name)
+        if not ok:
+            return
+        try:
+            self.rename_project(tab_index, new_name)
+        except Exception as exc:
+            QMessageBox.warning(self, "Rename Project", str(exc))
+
+    def rename_project(self, tab_index: int, new_name: str):
+        new_name = validate_project_component_name(new_name, "Project name")
+        canvas = self.tabwindow.widget(tab_index)
+        if canvas is None:
+            raise IndexError(f"Invalid project index: {tab_index}")
+        old_name = canvas.project_name
+        if old_name == new_name:
+            return
+        if self.has_project_name(new_name):
+            raise ValueError(f"Project already exists: {new_name}")
+        if self.table is not None:
+            self.table.rename_project_table(old_name, new_name)
+        if self.current_canva is canvas:
+            PyDataChoiceWidget.set_active_table_name(new_name)
+        canvas.set_project_name(new_name)
+        self.tabwindow.setTabText(tab_index, new_name)
+        if self.current_canva is canvas:
+            PyDataChoiceWidget.set_active_table_name(new_name)
+
+    def rename_sheet_references(self, table_name: str, old_sheet_name: str, new_sheet_name: str):
+        for index in range(self.tabwindow.count()):
+            canvas = self.tabwindow.widget(index)
+            if getattr(canvas, "project_table_name", None) == table_name:
+                canvas.rewrite_data_references(
+                    table_name,
+                    table_name,
+                    old_sheet=old_sheet_name,
+                    new_sheet=new_sheet_name,
+                )
+        if self.current_canva is not None:
+            PyDataChoiceWidget.set_active_table_name(self.current_canva.project_table_name)
 
     @staticmethod
     def _select_project_axes(canvas: PyFigureCanvas, record: dict[str, Any]) -> bool:
@@ -237,3 +367,169 @@ class PyFigureWindow(QFrame):
                     usetex=bool(text.get("usetex", False)),
                     record_project=True,
                 )
+
+    def _populate_canvas_from_snapshot(self, canvas: PyFigureCanvas, figure: dict[str, Any]):
+        axes_layouts = figure.get("axes_layouts") or []
+        if not axes_layouts and figure.get("axes_count"):
+            axes_layouts = [{"nrows": int(figure["axes_count"]), "ncols": 1}]
+
+        for layout in axes_layouts:
+            canvas.add_axes(
+                nrows=int(layout.get("nrows", 1)),
+                ncols=int(layout.get("ncols", 1)),
+                record_project=True,
+            )
+
+        for curve in figure.get("curves", []):
+            if not canvas.fig.axes:
+                continue
+            axes_index = int(curve.get("axes_index", 0))
+            if axes_index >= len(canvas.fig.axes):
+                continue
+            canvas.set_current_axes_by_index(axes_index)
+            canvas.add_curve(
+                func_text=curve.get("expression", "x"),
+                x_start=float(curve.get("x_start", 0.0)),
+                x_stop=float(curve.get("x_stop", 100.0)),
+                style=curve.get("style", "-"),
+                color=curve.get("color", "black"),
+                label=curve.get("label", ""),
+                record_project=True,
+            )
+
+        for plot in figure.get("plots", []):
+            if not self._select_project_axes(canvas, plot):
+                continue
+            data_pair = self._project_data_pair(plot)
+            if data_pair is None:
+                continue
+            x_data_name, y_data_name, x_data, y_data = data_pair
+            canvas.add_plot(
+                x=x_data,
+                y=y_data,
+                style=plot.get("style", "-"),
+                size=float(plot.get("size", 2.0)),
+                color=plot.get("color", "black"),
+                label=plot.get("label", ""),
+                x_data_name=x_data_name,
+                y_data_name=y_data_name,
+                record_project=True,
+            )
+
+        for scatter in figure.get("scatters", []):
+            if not self._select_project_axes(canvas, scatter):
+                continue
+            data_pair = self._project_data_pair(scatter)
+            if data_pair is None:
+                continue
+            x_data_name, y_data_name, x_data, y_data = data_pair
+            canvas.add_scatter(
+                x=x_data,
+                y=y_data,
+                size=float(scatter.get("size", 20.0)),
+                color=scatter.get("color", "black"),
+                marker=scatter.get("marker", "o"),
+                label=scatter.get("label", ""),
+                x_data_name=x_data_name,
+                y_data_name=y_data_name,
+                record_project=True,
+            )
+
+        for interpolate in figure.get("interpolates", []):
+            if not self._select_project_axes(canvas, interpolate):
+                continue
+            method = interpolate.get("method")
+            if method not in interpolate_dict:
+                continue
+            data_pair = self._project_data_pair(interpolate)
+            if data_pair is None:
+                continue
+            x_data_name, y_data_name, x_data, y_data = data_pair
+            canvas.add_interpolate_curve(
+                x=x_data,
+                y=y_data,
+                x_name=x_data_name,
+                y_name=y_data_name,
+                method=method,
+                k=int(interpolate.get("k", 3)),
+                samples=int(interpolate.get("samples", 1000)),
+                lam=interpolate.get("lam"),
+                lam_auto=bool(interpolate.get("lam_auto", True)),
+                color=interpolate.get("color", "black"),
+                label=interpolate.get("label", "interpolate"),
+                record_project=True,
+            )
+
+        for fit in figure.get("fits", []):
+            if not self._select_project_axes(canvas, fit):
+                continue
+            data_pair = self._project_data_pair(fit)
+            if data_pair is None:
+                continue
+            x_data_name, y_data_name, x_data, y_data = data_pair
+            canvas.add_fit_curve(
+                x=x_data,
+                y=y_data,
+                color=fit.get("color", "black"),
+                label=fit.get("label", "fitting"),
+                x_data_name=x_data_name,
+                y_data_name=y_data_name,
+                engine=fit.get("engine", "Python"),
+                record_project=True,
+                fit_type=fit.get("fit_type"),
+                fit_options=fit.get("fit_options"),
+                fit_result=fit.get("fit_result"),
+                expression=fit.get("expression", ""),
+                x_start=float(fit.get("x_start", 0.0)),
+                x_stop=float(fit.get("x_stop", 1.0)),
+                style=fit.get("style", "solid"),
+            )
+
+        for text in figure.get("texts", []):
+            if text.get("scope", "axes") == "figure":
+                canvas.add_global_text(
+                    x=float(text.get("x", 0.5)),
+                    y=float(text.get("y", 0.5)),
+                    text=text.get("text", ""),
+                    fontfamily=text.get("fontfamily", "Times New Roman"),
+                    fontsize=int(float(text.get("fontsize", 20))),
+                    usetex=bool(text.get("usetex", False)),
+                    record_project=True,
+                )
+                continue
+            if not self._select_project_axes(canvas, text):
+                continue
+            canvas.add_text(
+                x=float(text.get("x", 0.5)),
+                y=float(text.get("y", 0.5)),
+                text=text.get("text", ""),
+                fontfamily=text.get("fontfamily", "Times New Roman"),
+                fontsize=int(float(text.get("fontsize", 20))),
+                usetex=bool(text.get("usetex", False)),
+                record_project=True,
+            )
+
+        canvas.apply_axes_snapshot(figure.get("axes", []))
+
+    def load_project_figure_snapshot(self, figure: dict[str, Any], project_name: str,
+                                     project_path: str | None = None):
+        size_inches = figure.get("size_inches") or [6.4, 4.8]
+        self.add_figure(
+            width=float(size_inches[0]),
+            height=float(size_inches[1]),
+            dpi=int(float(figure.get("dpi", 100))),
+            style=figure.get("style") or "default",
+            canva_name=project_name,
+            create_table=False,
+            project_path=project_path,
+        )
+        canvas = self.current_canva
+        if canvas is not None:
+            self._populate_canvas_from_snapshot(canvas, figure)
+        return canvas
+
+    def load_figure_snapshot(self, figures: list[dict[str, Any]]):
+        self.clear_figures()
+        for figure in figures:
+            name = figure.get("name") or self._default_project_name()
+            self.load_project_figure_snapshot(figure, name)

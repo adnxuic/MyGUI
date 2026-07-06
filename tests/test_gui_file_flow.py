@@ -7,6 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+_TEST_TMP_DIR = Path(__file__).with_name("_tmp")
+_TEST_TMP_DIR.mkdir(exist_ok=True)
+os.environ["TEMP"] = str(_TEST_TMP_DIR)
+os.environ["TMP"] = str(_TEST_TMP_DIR)
+tempfile.tempdir = str(_TEST_TMP_DIR)
 
 import numpy as np
 import openpyxl
@@ -17,6 +22,7 @@ from code.widgets.title_bar import py_title_menu as title_menu_module
 from main import MainWindow
 
 
+@unittest.skip("legacy workspace-level file flow tests; v3 uses one canvas and one table")
 class GuiFileFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -175,3 +181,77 @@ class GuiFileFlowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuiSingleProjectFileFlowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        PyDatabase.clear()
+        temp_root = Path(__file__).with_name("_tmp")
+        temp_root.mkdir(exist_ok=True)
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="mygui-v3-file-flow-", dir=temp_root))
+        self.window = MainWindow()
+        self.menu_bar = self.window.title_bar.stacklayout_top.widget(1)
+
+    def tearDown(self):
+        self.window.close()
+        PyDatabase.clear()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def add_project_with_unsaved_table_data(self, name="ProjectA"):
+        self.window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name=name)
+        canvas = self.window.figure_window.current_canva
+        canvas.add_axes(nrows=1, ncols=1)
+        table_view = self.window.table.current_subtable().get_table(0)
+        table_view.model.setData(table_view.model.index(0, 0), "1")
+        table_view.model.setData(table_view.model.index(1, 0), "2")
+        table_view.model.setData(table_view.model.index(0, 1), "10")
+        table_view.model.setData(table_view.model.index(1, 1), "20")
+        return canvas
+
+    def test_save_current_project_writes_v3_and_syncs_table_model(self):
+        self.add_project_with_unsaved_table_data()
+        project_file = self.temp_dir / "project_a.mygui.json"
+
+        with patch.object(title_menu_module.QFileDialog, "getSaveFileName", return_value=(str(project_file), "")), \
+                patch.object(title_menu_module.QMessageBox, "warning") as warning:
+            self.menu_bar.save_file_as()
+
+        warning.assert_not_called()
+        saved_project = json.loads(project_file.read_text(encoding="utf-8"))
+        self.assertEqual(saved_project["schema_version"], 3)
+        self.assertEqual(saved_project["name"], "ProjectA")
+        self.assertEqual(saved_project["table"]["name"], "ProjectA")
+        self.assertEqual(saved_project["table"]["sheets"]["Sheet1"]["1"], [1.0, 2.0])
+        self.assertEqual(self.window.figure_window.current_canva.project_path, str(project_file))
+
+    def test_open_project_appends_and_duplicate_name_rejected(self):
+        self.add_project_with_unsaved_table_data("ProjectA")
+        project_file = self.temp_dir / "project_a.mygui.json"
+        with patch.object(title_menu_module.QFileDialog, "getSaveFileName", return_value=(str(project_file), "")):
+            self.menu_bar.save_file_as()
+
+        loaded_window = MainWindow()
+        try:
+            loaded_menu = loaded_window.title_bar.stacklayout_top.widget(1)
+            loaded_window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name="Existing")
+
+            with patch.object(title_menu_module.QFileDialog, "getOpenFileName", return_value=(str(project_file), "")), \
+                    patch.object(title_menu_module.QMessageBox, "warning") as warning:
+                loaded_menu.open_project()
+            warning.assert_not_called()
+
+            self.assertEqual(loaded_window.table.table_names(), ["Existing", "ProjectA"])
+            self.assertEqual(loaded_window.figure_window.tabwindow.count(), 2)
+
+            with patch.object(title_menu_module.QFileDialog, "getOpenFileName", return_value=(str(project_file), "")), \
+                    patch.object(title_menu_module.QMessageBox, "warning") as warning:
+                loaded_menu.open_project()
+            warning.assert_called_once()
+            self.assertEqual(loaded_window.table.table_names(), ["Existing", "ProjectA"])
+            self.assertEqual(loaded_window.figure_window.tabwindow.count(), 2)
+        finally:
+            loaded_window.close()

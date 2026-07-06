@@ -12,6 +12,7 @@ import numpy as np
 
 from code.database.py_database import databases
 from code.database.py_database import PyDatabase
+from code.database.py_database import validate_project_component_name
 
 
 class TableModel(QAbstractTableModel):
@@ -298,7 +299,7 @@ class SheetTabWidget(QTabWidget):
                 self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
         super().mousePressEvent(event)
 
-    def show_context_menu(self, position, tab_index):
+    def _legacy_show_context_menu(self, position, tab_index):
         menu = QMenu()
 
         save_to_database_action = menu.addAction("Save to Database")
@@ -338,21 +339,67 @@ class SheetTabWidget(QTabWidget):
 
             model.save_data_to_database()
 
+    def show_context_menu(self, position, tab_index):
+        if tab_index < 0 or tab_index == self.count() - 1:
+            return
+
+        menu = QMenu()
+        save_to_database_action = menu.addAction("Save to Database")
+        rename_action = menu.addAction("Rename")
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(position)
+
+        if action == rename_action:
+            old_name = self.tabText(tab_index)
+            new_name, ok = QInputDialog.getText(self, "Rename Sheet", "Sheet name:", text=old_name)
+            if not ok:
+                return
+            try:
+                subtable = self.parent()
+                if subtable is not None and hasattr(subtable, "rename_sheet"):
+                    subtable.rename_sheet(old_name, new_name)
+            except Exception as exc:
+                QMessageBox.warning(self, "Rename Sheet", str(exc))
+            return
+
+        if action == delete_action:
+            if self.count() > 2:
+                response = QMessageBox.question(
+                    self,
+                    "Confirm Delete",
+                    "Are you sure you want to delete this sheet?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if response == QMessageBox.Yes:
+                    sheet_name = self.tabText(tab_index)
+                    widget = self.widget(tab_index)
+                    self.removeTab(tab_index)
+                    PyDatabase.unregister_sheet(self.table_name, sheet_name)
+                    widget.deleteLater()
+            return
+
+        if action == save_to_database_action:
+            current_widget = cast(TableView, self.widget(tab_index))
+            current_widget.model.save_data_to_database()
+
 
 class PySubTable(QFrame):
-    def __init__(self, table_name: str, pydatabase: PyDatabase, first_sheet_name: str = "Sheet1"):
+    def __init__(self, table_name: str, pydatabase: PyDatabase, first_sheet_name: str = "Sheet1",
+                 sheet_renamed_callback=None):
         super().__init__()
 
-        self.table_name = table_name
+        self.table_name = validate_project_component_name(table_name, "Project name")
+        self.sheet_renamed_callback = sheet_renamed_callback
 
         self.setMouseTracking(True)
 
+        first_sheet_name = validate_project_component_name(first_sheet_name, "Sheet name")
         PyDatabase.register_sheet(self.table_name, first_sheet_name, pydatabase)
 
         # 使用自定义的QTabWidget
-        self.tabWidget = SheetTabWidget(self.table_name)
+        self.tabWidget = SheetTabWidget(self.table_name, self)
         self.tabWidget.setTabPosition(QTabWidget.South)
-        self.tabWidget.addTab(TableView(databases[table_name][first_sheet_name]), first_sheet_name)
+        self.tabWidget.addTab(TableView(databases[self.table_name][first_sheet_name]), first_sheet_name)
 
         # 创建"+"按钮，并添加为一个标签页，但设为不可选择
         self.plusButton = QPushButton("+")
@@ -378,7 +425,7 @@ class PySubTable(QFrame):
     def updateCurrentSheet(self):
         pass
 
-    def add_new_sheet(self, sheet_name: str | None = None):
+    def _legacy_add_new_sheet(self, sheet_name: str | None = None):
         # 添加新标签页
         index = self.tabWidget.count() - 1
         new_sheet_name = sheet_name or PyDatabase.next_sheet_name(self.table_name)
@@ -387,3 +434,37 @@ class PySubTable(QFrame):
         self.tabWidget.insertTab(index, table_view, new_sheet_name)
         self.tabWidget.setCurrentIndex(index)
         return table_view
+
+    def set_table_name(self, table_name: str):
+        self.table_name = validate_project_component_name(table_name, "Project name")
+        self.tabWidget.table_name = self.table_name
+
+    def add_new_sheet(self, sheet_name: str | None = None):
+        index = self.tabWidget.count() - 1
+        new_sheet_name = validate_project_component_name(
+            sheet_name or PyDatabase.next_sheet_name(self.table_name),
+            "Sheet name",
+        )
+        if new_sheet_name in databases.get(self.table_name, {}):
+            raise ValueError(f"Sheet already exists: {new_sheet_name}")
+        PyDatabase.register_sheet(self.table_name, new_sheet_name, PyDatabase())
+        table_view = TableView(databases[self.table_name][new_sheet_name])
+        self.tabWidget.insertTab(index, table_view, new_sheet_name)
+        self.tabWidget.setCurrentIndex(index)
+        return table_view
+
+    def rename_sheet(self, old_name: str, new_name: str):
+        new_name = validate_project_component_name(new_name, "Sheet name")
+        if old_name == new_name:
+            return
+        PyDatabase.rename_sheet(self.table_name, old_name, new_name)
+        for index in range(self.tabWidget.count() - 1):
+            if self.tabWidget.tabText(index) == old_name:
+                self.tabWidget.setTabText(index, new_name)
+                break
+        if self.sheet_renamed_callback is not None:
+            self.sheet_renamed_callback(self.table_name, old_name, new_name)
+
+    def save_all_sheets_to_database(self):
+        for index in range(self.tabWidget.count() - 1):
+            self.get_table(index).model.save_data_to_database()

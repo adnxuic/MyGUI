@@ -48,3 +48,4 @@ tests/fixtures/
 matlab_sources/r2025a_build_*/
 test.mygui.json
 test_tex.mygui.json
+test2.mygui.json

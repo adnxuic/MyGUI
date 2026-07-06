@@ -22,6 +22,7 @@ from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import PyFitDialog, 
 from main import MainWindow
 
 
+@unittest.skip("legacy global-table GUI data flow tests; v3 scopes data to the current project table")
 class GuiDataFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -310,3 +311,161 @@ class GuiDataFlowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SingleProjectGuiDataFlowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        PyDatabase.clear()
+        self.window = MainWindow()
+
+    def tearDown(self):
+        self.window.close()
+        PyDatabase.clear()
+
+    def add_project_with_data(self, name: str):
+        self.window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name=name)
+        canvas = self.window.figure_window.current_canva
+        subtable = self.window.table.current_subtable()
+        table_view = subtable.get_table(0)
+        table_view.model.setData(table_view.model.index(0, 0), "1")
+        table_view.model.setData(table_view.model.index(1, 0), "2")
+        table_view.model.setData(table_view.model.index(0, 1), "10")
+        table_view.model.setData(table_view.model.index(1, 1), "20")
+        self.window.table.save_current_table_to_database()
+        canvas.add_axes(nrows=1, ncols=1)
+        return canvas
+
+    def test_startup_has_no_business_table_until_project_created(self):
+        self.assertEqual(self.window.table.table_names(), [])
+        self.assertIsNone(self.window.table.current_table_name)
+        self.assertEqual(self.window.figure_window.tabwindow.count(), 0)
+
+    def test_creating_and_switching_projects_switches_visible_table(self):
+        first = self.add_project_with_data("First")
+        second = self.add_project_with_data("Second")
+
+        self.assertEqual(self.window.table.table_names(), ["First", "Second"])
+        self.assertEqual(self.window.table.current_table_name, "Second")
+        self.window.figure_window.tabwindow.setCurrentIndex(0)
+        self.app.processEvents()
+
+        self.assertIs(self.window.figure_window.current_canva, first)
+        self.assertEqual(self.window.table.current_table_name, "First")
+
+        self.window.figure_window.tabwindow.setCurrentIndex(1)
+        self.app.processEvents()
+        self.assertIs(self.window.figure_window.current_canva, second)
+        self.assertEqual(self.window.table.current_table_name, "Second")
+
+    def test_project_rename_updates_table_database_and_chart_references(self):
+        canvas = self.add_project_with_data("Before")
+        x_name = "Before/Sheet1/1"
+        y_name = "Before/Sheet1/2"
+        canvas.add_plot(
+            x=PyDatabase.get_data(x_name),
+            y=PyDatabase.get_data(y_name),
+            style="-",
+            size=2.0,
+            color="black",
+            label="plot",
+            x_data_name=x_name,
+            y_data_name=y_name,
+        )
+
+        self.window.figure_window.rename_project(0, "After")
+
+        self.assertEqual(self.window.figure_window.tabwindow.tabText(0), "After")
+        self.assertEqual(self.window.table.table_names(), ["After"])
+        self.assertFalse(PyDatabase.has_data("Before/Sheet1/1"))
+        self.assertTrue(PyDatabase.has_data("After/Sheet1/1"))
+        self.assertEqual(canvas.project_plots[0]["x_data_name"], "After/Sheet1/1")
+
+    def test_sheet_rename_updates_chart_references(self):
+        canvas = self.add_project_with_data("ProjectA")
+        x_name = "ProjectA/Sheet1/1"
+        y_name = "ProjectA/Sheet1/2"
+        canvas.add_scatter(
+            x=PyDatabase.get_data(x_name),
+            y=PyDatabase.get_data(y_name),
+            size=20,
+            color="black",
+            marker="o",
+            label="scatter",
+            x_data_name=x_name,
+            y_data_name=y_name,
+        )
+
+        self.window.table.current_subtable().rename_sheet("Sheet1", "Raw")
+
+        self.assertTrue(PyDatabase.has_data("ProjectA/Raw/1"))
+        self.assertEqual(canvas.project_scatters[0]["x_data_name"], "ProjectA/Raw/1")
+
+    def test_chart_dialog_data_choices_are_scoped_to_current_project_table(self):
+        self.add_project_with_data("First")
+        self.add_project_with_data("Second")
+        self.window.figure_window.tabwindow.setCurrentIndex(0)
+        self.app.processEvents()
+
+        dialog = PyPlotDialog("plot", self.window.figure_window)
+        try:
+            choices = [dialog.x_data_input.itemText(i) for i in range(dialog.x_data_input.count())]
+            self.assertTrue(choices)
+            self.assertTrue(all(choice.startswith("First/") for choice in choices))
+        finally:
+            dialog.close()
+
+    def test_project_rename_updates_fit_references(self):
+        canvas = self.add_project_with_data("Before")
+        x_name = "Before/Sheet1/1"
+        y_name = "Before/Sheet1/2"
+        canvas.add_fit_curve(
+            x=PyDatabase.get_data(x_name),
+            y=PyDatabase.get_data(y_name),
+            color="black",
+            label="fit",
+            x_data_name=x_name,
+            y_data_name=y_name,
+            engine="Python",
+        )
+
+        self.window.figure_window.rename_project(0, "After")
+
+        self.assertEqual(canvas.project_fits[0]["x_data_name"], "After/Sheet1/1")
+        self.assertEqual(canvas.project_fits[0]["y_data_name"], "After/Sheet1/2")
+
+    def test_sheet_rename_updates_fit_references(self):
+        canvas = self.add_project_with_data("ProjectA")
+        x_name = "ProjectA/Sheet1/1"
+        y_name = "ProjectA/Sheet1/2"
+        canvas.add_fit_curve(
+            x=PyDatabase.get_data(x_name),
+            y=PyDatabase.get_data(y_name),
+            color="black",
+            label="fit",
+            x_data_name=x_name,
+            y_data_name=y_name,
+            engine="Python",
+        )
+
+        self.window.table.current_subtable().rename_sheet("Sheet1", "Raw")
+
+        self.assertEqual(canvas.project_fits[0]["x_data_name"], "ProjectA/Raw/1")
+        self.assertEqual(canvas.project_fits[0]["y_data_name"], "ProjectA/Raw/2")
+
+    def test_fit_dialog_data_choices_are_scoped_to_current_project_table(self):
+        self.add_project_with_data("First")
+        self.add_project_with_data("Second")
+        self.window.figure_window.tabwindow.setCurrentIndex(0)
+        self.app.processEvents()
+
+        dialog = PyFitDialog("fit", self.window.figure_window)
+        try:
+            choices = [dialog.x_data_input.itemText(i) for i in range(dialog.x_data_input.count())]
+            self.assertTrue(choices)
+            self.assertTrue(all(choice.startswith("First/") for choice in choices))
+        finally:
+            dialog.close()

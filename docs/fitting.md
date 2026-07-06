@@ -66,6 +66,18 @@ High-order Gaussian, Fourier, and rational models can be numerically sensitive.
 
 A failed fit does not update the plotted curve or result table.
 
+## Project Files
+
+Fitting curves are saved in schema v3 project files under `figure.fits`.
+Saved records include the selected X/Y data names, fitting engine, fit type,
+advanced options when used, fit result, drawing expression, X range, style,
+color, and legend label.
+
+Opening a project restores fitting curves from the saved drawing expression and
+result payload. It does not rerun SciPy or MATLAB fitting during load. MATLAB
+fit results can therefore be viewed without reconnecting MATLAB, but running a
+new MATLAB fit still requires a successful MATLAB connection.
+
 ## SciPy Engine
 
 SciPy fitting uses `code/database/scipy_fit_models.py` and `code/database/scipy_fit_adapter.py`.

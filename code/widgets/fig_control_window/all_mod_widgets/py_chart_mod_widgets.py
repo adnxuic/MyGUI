@@ -20,6 +20,7 @@ from code.database.interpolate_func import (
 import math
 import os
 import weakref
+from copy import deepcopy
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "chart_mod_style.qss")
@@ -123,10 +124,12 @@ class PyCurveModWidget(QFrame):
     def x_start_change(self):
         current_x_start = self.x_start_input.value()
         self.curve_modify.update_x_start(current_x_start)
+        self.update_project_record(x_start=float(current_x_start))
 
     def x_stop_change(self):
         current_x_stop = self.x_stop_input.value()
         self.curve_modify.update_x_stop(current_x_stop)
+        self.update_project_record(x_stop=float(current_x_stop))
 
     def style_change(self):
         current_style = self.style_input.currentText()
@@ -304,13 +307,16 @@ class PyScatterModWidget(QFrame):
 
 class PyFitModWidget(QFrame):
     def __init__(self, curve_modify: PyCurveModify, x_data_name: str = "", y_data_name: str = "",
-                 engine: str = "Python"):
+                 engine: str = "Python", fit_type=None, fit_options=None, fit_result=None):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
 
         self.engine = engine
+        self.fit_type = fit_type
+        self.fit_options = deepcopy(fit_options)
+        self.fit_result = deepcopy(fit_result)
         self.x_data_name = x_data_name
         self.y_data_name = y_data_name
         self.curve_modify = curve_modify
@@ -453,10 +459,30 @@ class PyFitModWidget(QFrame):
         self.layout.addStretch()
 
         self.setLayout(self.layout)
+        self.update_project_record(
+            engine=self.engine,
+            fit_type=self.fit_type,
+            fit_options=deepcopy(self.fit_options),
+            fit_result=deepcopy(self.fit_result),
+            expression=self.curve_modify.expression,
+            x_start=float(self.curve_modify.x_start),
+            x_stop=float(self.curve_modify.x_stop),
+        )
+        if isinstance(self.fit_result, dict):
+            self._populate_fit_result(self.fit_result)
+            show_expression = str(self.fit_result.get("show_expression", self.curve_modify.expression))
+            self.expression_input.blockSignals(True)
+            self.expression_input.setPlainText(show_expression)
+            self.expression_input.blockSignals(False)
 
     def expression_change(self):
         current_expression = self.expression_input.toPlainText()
         self.curve_modify.update_expression(current_expression)
+
+    def update_project_record(self, **values):
+        update_project_record = getattr(self.curve_modify, "update_project_record", None)
+        if callable(update_project_record):
+            update_project_record(**values)
 
     def _engine_display_name(self, engine: str) -> str:
         return "SciPy" if engine == "Python" else engine
@@ -473,9 +499,11 @@ class PyFitModWidget(QFrame):
 
     def x_data_change(self, *_args):
         self.x_data_name = self.data_choice_widget.get_x_data()
+        self.update_project_record(x_data_name=self.x_data_name)
 
     def y_data_change(self, *_args):
         self.y_data_name = self.data_choice_widget.get_y_data()
+        self.update_project_record(y_data_name=self.y_data_name)
 
     def _current_fit_data(self):
         self.x_data_change()
@@ -615,6 +643,7 @@ class PyFitModWidget(QFrame):
         )
         fit_func = matlab_adapter.fit_curve_isolated if engine == "Matlab" else scipy_fit_adapter.fit_curve
         dialog_ref = weakref.ref(dialog)
+        fit_options_record = deepcopy(fit_options)
         start_background_task(
             self,
             fit_func,
@@ -625,6 +654,8 @@ class PyFitModWidget(QFrame):
                 xmin,
                 xmax,
                 engine,
+                fit_type_order,
+                fit_options_record,
             ),
             lambda message, rid=request_id, dref=dialog_ref: self._fit_dialog_failed(dref, rid, message, engine),
             x_values,
@@ -658,12 +689,15 @@ class PyFitModWidget(QFrame):
             return False
         return True
 
-    def _fit_dialog_succeeded(self, dialog_ref, request_id, result, x_min, x_max, engine: str):
+    def _fit_dialog_succeeded(self, dialog_ref, request_id, result, x_min, x_max, engine: str,
+                              fit_type=None, fit_options=None):
         if not self._restore_dialog_fit_button(dialog_ref, request_id):
             return
         if request_id != self._fit_request_id:
             return
         self.engine = engine
+        self.fit_type = fit_type
+        self.fit_options = deepcopy(fit_options)
         self.update_curve(result, x_min, x_max)
         status_messages.show_success(f"{self._engine_display_name(engine)} fitting completed.")
 
@@ -731,9 +765,11 @@ class PyFitModWidget(QFrame):
             if len(args) < 2:
                 raise TypeError("update_curve requires x_start and x_stop")
             x_start, x_stop = args[0], args[1]
-            value_expression = fit_result.get("value_expression", "")
-            show_expression = fit_result.get("show_expression", value_expression)
-            self._populate_fit_result(fit_result)
+            self.fit_result = deepcopy(fit_result)
+            self.fit_type = self.fit_result.get("fit_type", self.fit_type)
+            value_expression = self.fit_result.get("value_expression", "")
+            show_expression = self.fit_result.get("show_expression", value_expression)
+            self._populate_fit_result(self.fit_result)
         else:
             if len(args) == 3:
                 show_expression, x_start, x_stop = args
@@ -749,11 +785,21 @@ class PyFitModWidget(QFrame):
                 "coefficients": [],
                 "goodness": {},
             })
+            self.fit_result = None
         self.expression_input.setPlainText(show_expression)
         self.x_start_input.setValue(x_start)
         self.x_stop_input.setValue(x_stop)
 
         self.curve_modify.update_all(x_start, x_stop, value_expression)
+        self.update_project_record(
+            engine=self.engine,
+            fit_type=self.fit_type,
+            fit_options=deepcopy(self.fit_options),
+            fit_result=deepcopy(self.fit_result),
+            expression=value_expression,
+            x_start=float(x_start),
+            x_stop=float(x_stop),
+        )
 
     def x_start_change(self):
         current_x_start = self.x_start_input.value()

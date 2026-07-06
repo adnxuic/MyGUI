@@ -1,6 +1,9 @@
 from typing import Any
+from pathlib import Path
 
 import openpyxl as xl
+
+from code.database.py_database import validate_project_component_name
 
 
 def read_excel_columns(file_name: str) -> list[list[list[Any]]]:
@@ -16,14 +19,19 @@ def read_excel_columns(file_name: str) -> list[list[list[Any]]]:
 
 
 def import_excel_into_table(file_name: str, table):
-    subtable = table.add_new_table(is_open=True)
+    subtable = table.current_subtable() if hasattr(table, "current_subtable") else None
+    if subtable is None:
+        project_name = validate_project_component_name(Path(file_name).stem, "Project name")
+        subtable = table.create_project_table(project_name)
     for sheet_index, columns in enumerate(read_excel_columns(file_name)):
-        if sheet_index > 0:
-            subtable.add_new_sheet()
-
-        tableview = subtable.get_table(sheet_index)
-        for column_index, data_list in enumerate(columns):
-            tableview.add_excel_data(data_list, column_index)
+        if sheet_index < subtable.tabWidget.count() - 1:
+            tableview = subtable.get_table(sheet_index)
+        else:
+            tableview = subtable.add_new_sheet()
+        tableview.load_columns({
+            str(column_index + 1): data_list
+            for column_index, data_list in enumerate(columns)
+        })
         tableview.model.save_data_to_database()
 
     return subtable

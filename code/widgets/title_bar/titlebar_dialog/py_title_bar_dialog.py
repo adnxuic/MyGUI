@@ -70,8 +70,12 @@ class PyStyleDialog(QDialog):
         dpi = int(self.dpi_line.text())
         canva_name = self.canva_name_line.text()
 
-        self.figure_window.add_figure(width=width, height=height, dpi=dpi,
-                                      style=self.style, canva_name=canva_name)
+        try:
+            self.figure_window.add_figure(width=width, height=height, dpi=dpi,
+                                          style=self.style, canva_name=canva_name)
+        except Exception as exc:
+            QMessageBox.warning(self, "Create Project", str(exc))
+            return
 
         super().accept()
 
