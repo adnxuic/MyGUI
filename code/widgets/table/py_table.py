@@ -115,12 +115,12 @@ class LegacyPyTable(QFrame):
 
             first_table_view = subtable.get_table(0)
             first_table_view.load_columns(first_columns)
-            first_table_view.model.save_data_to_database()
+            first_table_view.flush_database_sync()
 
             for sheet_name, columns in sheet_items[1:]:
                 table_view = subtable.add_new_sheet(sheet_name=sheet_name)
                 table_view.load_columns(columns)
-                table_view.model.save_data_to_database()
+                table_view.flush_database_sync()
 
 
 class PyTable(QFrame):
@@ -265,12 +265,12 @@ class PyTable(QFrame):
 
         first_table_view = subtable.get_table(0)
         first_table_view.load_columns(first_columns)
-        first_table_view.model.save_data_to_database()
+        first_table_view.flush_database_sync()
 
         for sheet_name, columns in sheet_items[1:]:
             table_view = subtable.add_new_sheet(sheet_name=sheet_name)
             table_view.load_columns(columns)
-            table_view.model.save_data_to_database()
+            table_view.flush_database_sync()
         return subtable
 
     def load_database_snapshot(self, tables: dict):

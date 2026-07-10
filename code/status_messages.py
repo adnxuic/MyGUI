@@ -36,5 +36,9 @@ def show_success(message: str) -> bool:
     return show_message(message, "success")
 
 
+def show_warning(message: str) -> bool:
+    return show_message(message, "warning")
+
+
 def clear_message() -> bool:
     return show_message("", "info")

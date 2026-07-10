@@ -17,7 +17,10 @@ Scope: this file applies to the whole repository.
 - Preserve existing resource names and QSS/JSON file locations unless the task is specifically about resource cleanup.
 - Do not delete tracked IDE files, backup files, or sync artifacts as part of unrelated work. Repository hygiene cleanup should be a separate commit.
 - Treat `code.database.py_database.databases` as shared global runtime state. Changes around it need focused tests or a clear manual verification path.
+- For data-related features, consider whether artifacts connected to that data must refresh when the source data changes.
 - Treat user-entered expression evaluation as high risk. Replacing `eval` should be done as a dedicated task.
 - When implementing features, consider the Message Bar and State Bar. Prefer surfacing useful user-facing information through the Message Bar, using red for errors, yellow for warnings, and green for successful actions.
+- New feature implementations must consider project IO. Ensure feature state can follow the project's save and import workflows when applicable.
+- Place new code files according to the existing `code/` directory responsibilities: `code/widgets/` is for window and UI components, `code/figuremodify/` is for drawing style modification logic, and `code/database/` is for data processing and data-related helpers. Follow the nearest existing module location before creating a new file.
 - Keep handoff notes up to date under `codex_handoff/`. Handoff notes should record only current limitations, not next-step plans.
 - After completing a feature, write feature documentation under `docs/`. Keep it to a concise feature description and detailed parameter documentation; do not include limitations or unrelated commentary.

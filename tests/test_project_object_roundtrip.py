@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,8 +13,10 @@ tempfile.tempdir = str(_TEST_TMP_DIR)
 
 import numpy as np
 
+from code import status_messages
 from Qt_core import QApplication
 from code.database.py_database import PyDatabase
+from code.database.interpolate_func import interpolate_dict
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import PyTextDialog
 from main import MainWindow
@@ -32,6 +35,7 @@ class ProjectObjectRoundTripTests(unittest.TestCase):
     def tearDown(self):
         self.window.close()
         PyDatabase.clear()
+        status_messages.clear_status_handler()
 
     def make_project_file(self):
         temp_dir = Path(__file__).with_name("_tmp")
@@ -451,5 +455,111 @@ class ProjectObjectRoundTripV3Tests(unittest.TestCase):
             self.assertFalse(loaded_axes.spines["bottom"].get_visible())
             self.assertEqual(loaded_axes.spines["bottom"].get_position(), ("axes", 0.2))
             self.assertIsNotNone(loaded_axes.get_legend())
+        finally:
+            loaded_window.close()
+
+    def test_invalid_data_source_charts_are_skipped_during_v3_restore(self):
+        project_file = self.make_project_file()
+        interpolation_method = next(iter(interpolate_dict))
+        snapshot = {
+            "schema": "mygui-project",
+            "schema_version": 3,
+            "name": "ProjectA",
+            "table": {
+                "name": "ProjectA",
+                "sheets": {
+                    "Sheet1": {
+                        "1": [0.0, 1.0, 2.0],
+                        "2": [10.0, 20.0],
+                        "3": [0.0, 1.0],
+                        "4": ["bad", "data"],
+                        "5": [],
+                        "6": [],
+                    },
+                },
+            },
+            "figure": {
+                "name": "ProjectA",
+                "style": "default",
+                "dpi": 100.0,
+                "size_inches": [6.4, 4.8],
+                "axes_count": 1,
+                "axes_layouts": [{"nrows": 1, "ncols": 1}],
+                "axes": [],
+                "curves": [],
+                "plots": [{
+                    "axes_index": 0,
+                    "x_data_name": "ProjectA/Sheet1/1",
+                    "y_data_name": "ProjectA/Sheet1/2",
+                    "style": "-",
+                    "size": 2.0,
+                    "color": "black",
+                    "label": "bad plot",
+                }],
+                "scatters": [{
+                    "axes_index": 0,
+                    "x_data_name": "ProjectA/Sheet1/3",
+                    "y_data_name": "ProjectA/Sheet1/4",
+                    "size": 20.0,
+                    "color": "black",
+                    "marker": "o",
+                    "label": "bad scatter",
+                }],
+                "interpolates": [{
+                    "axes_index": 0,
+                    "x_data_name": "ProjectA/Sheet1/5",
+                    "y_data_name": "ProjectA/Sheet1/6",
+                    "method": interpolation_method,
+                    "k": 3,
+                    "samples": 1000,
+                    "lam": None,
+                    "lam_auto": True,
+                    "color": "black",
+                    "label": "bad interpolate",
+                }],
+                "fits": [{
+                    "axes_index": 0,
+                    "x_data_name": "ProjectA/Sheet1/3",
+                    "y_data_name": "ProjectA/Sheet1/4",
+                    "engine": "Python",
+                    "fit_type": None,
+                    "fit_options": None,
+                    "fit_result": None,
+                    "expression": "",
+                    "x_start": 0.0,
+                    "x_stop": 1.0,
+                    "style": "-",
+                    "color": "black",
+                    "label": "bad fit",
+                }],
+                "texts": [],
+            },
+        }
+        project_file.write_text(json.dumps(snapshot), encoding="utf-8")
+        loaded_window = MainWindow()
+        messages = []
+        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
+        try:
+            restore_project_snapshot(project_file, table=loaded_window.table,
+                                     figure_window=loaded_window.figure_window)
+            self.app.processEvents()
+
+            loaded_canvas = loaded_window.figure_window.tabwindow.widget(0)
+            loaded_axes = loaded_canvas.fig.axes[0]
+            self.assertEqual(len(loaded_axes.lines), 0)
+            self.assertEqual(len(loaded_axes.collections), 0)
+            self.assertEqual(loaded_canvas.project_snapshot()["plots"], [])
+            self.assertEqual(loaded_canvas.project_snapshot()["scatters"], [])
+            self.assertEqual(loaded_canvas.project_snapshot()["interpolates"], [])
+            self.assertEqual(loaded_canvas.project_snapshot()["fits"], [])
+            warning_messages = [message for message, level in messages if level == "warning"]
+            self.assertTrue(any("Plot" in message and "length mismatch" in message
+                                for message in warning_messages))
+            self.assertTrue(any("Scatter" in message and "must be numeric" in message
+                                for message in warning_messages))
+            self.assertTrue(any("Interpolation" in message and "data source is missing" in message
+                                for message in warning_messages))
+            self.assertTrue(any("Fit" in message and "must be numeric" in message
+                                for message in warning_messages))
         finally:
             loaded_window.close()

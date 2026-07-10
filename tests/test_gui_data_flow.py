@@ -14,7 +14,8 @@ tempfile.tempdir = str(_TEST_TMP_DIR)
 
 import numpy as np
 
-from Qt_core import QApplication
+from code import status_messages
+from Qt_core import QApplication, QGuiApplication, Qt
 from code.database import matlab_adapter
 from code.database.py_database import PyDatabase, databases
 from code.excel_io import import_excel_into_table
@@ -36,6 +37,7 @@ class GuiDataFlowTests(unittest.TestCase):
     def tearDown(self):
         self.window.close()
         PyDatabase.clear()
+        status_messages.clear_status_handler()
         matlab_adapter.set_matlab_enabled(False, notify=False)
         matlab_adapter.clear_matlab_state_listeners()
 
@@ -325,6 +327,7 @@ class SingleProjectGuiDataFlowTests(unittest.TestCase):
     def tearDown(self):
         self.window.close()
         PyDatabase.clear()
+        status_messages.clear_status_handler()
 
     def add_project_with_data(self, name: str):
         self.window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name=name)
@@ -417,6 +420,94 @@ class SingleProjectGuiDataFlowTests(unittest.TestCase):
             self.assertTrue(all(choice.startswith("First/") for choice in choices))
         finally:
             dialog.close()
+
+    def test_table_edit_auto_syncs_database_and_plot(self):
+        canvas = self.add_project_with_data("ProjectA")
+        x_name = "ProjectA/Sheet1/1"
+        y_name = "ProjectA/Sheet1/2"
+        canvas.add_plot(
+            x=PyDatabase.get_data(x_name),
+            y=PyDatabase.get_data(y_name),
+            style="-",
+            size=2.0,
+            color="black",
+            label="plot",
+            x_data_name=x_name,
+            y_data_name=y_name,
+        )
+        line = canvas.current_axes.lines[0]
+        table_view = self.window.table.current_subtable().get_table(0)
+
+        table_view.model.setData(table_view.model.index(1, 0), "3")
+        self.app.processEvents()
+
+        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 3.0]))
+        np.testing.assert_allclose(line.get_xdata(), np.array([1.0, 3.0]))
+        np.testing.assert_allclose(line.get_ydata(), np.array([10.0, 20.0]))
+
+    def test_table_bulk_operations_auto_sync_database(self):
+        self.add_project_with_data("ProjectA")
+        x_name = "ProjectA/Sheet1/1"
+        y_name = "ProjectA/Sheet1/2"
+        table_view = self.window.table.current_subtable().get_table(0)
+
+        table_view.load_columns({"1": [3, 1, 2], "2": [30, 10, 20]})
+        self.app.processEvents()
+        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([3.0, 1.0, 2.0]))
+        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([30.0, 10.0, 20.0]))
+
+        table_view.model.sort(0, Qt.AscendingOrder)
+        self.app.processEvents()
+        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0]))
+        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([10.0, 20.0, 30.0]))
+
+        table_view.setCurrentIndex(table_view.model.index(3, 0))
+        QGuiApplication.clipboard().setText("4\t40")
+        table_view.pasteItems()
+        self.app.processEvents()
+        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0, 4.0]))
+        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([10.0, 20.0, 30.0, 40.0]))
+
+        table_view.model.clearData([
+            table_view.model.index(3, 0),
+            table_view.model.index(3, 1),
+        ])
+        self.app.processEvents()
+        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0]))
+        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([10.0, 20.0, 30.0]))
+
+    def test_plot_keeps_previous_data_when_table_lengths_mismatch_then_recovers(self):
+        canvas = self.add_project_with_data("ProjectA")
+        x_name = "ProjectA/Sheet1/1"
+        y_name = "ProjectA/Sheet1/2"
+        canvas.add_plot(
+            x=PyDatabase.get_data(x_name),
+            y=PyDatabase.get_data(y_name),
+            style="-",
+            size=2.0,
+            color="black",
+            label="plot",
+            x_data_name=x_name,
+            y_data_name=y_name,
+        )
+        line = canvas.current_axes.lines[0]
+        table_view = self.window.table.current_subtable().get_table(0)
+        messages = []
+        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
+
+        table_view.model.setData(table_view.model.index(2, 0), "3")
+        self.app.processEvents()
+
+        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0]))
+        np.testing.assert_allclose(line.get_xdata(), np.array([1.0, 2.0]))
+        np.testing.assert_allclose(line.get_ydata(), np.array([10.0, 20.0]))
+        self.assertTrue(any(level == "warning" and "length mismatch" in message for message, level in messages))
+
+        table_view.model.setData(table_view.model.index(2, 1), "30")
+        self.app.processEvents()
+
+        np.testing.assert_allclose(line.get_xdata(), np.array([1.0, 2.0, 3.0]))
+        np.testing.assert_allclose(line.get_ydata(), np.array([10.0, 20.0, 30.0]))
 
     def test_project_rename_updates_fit_references(self):
         canvas = self.add_project_with_data("Before")

@@ -36,6 +36,28 @@ def _remove_artist(artist):
         pass
 
 
+def _valid_data_pair(x_data_name: str, y_data_name: str, chart_label: str):
+    if not PyDatabase.has_data(x_data_name) or not PyDatabase.has_data(y_data_name):
+        status_messages.show_warning(
+            f"{chart_label} data source is missing: {x_data_name}, {y_data_name}"
+        )
+        return None
+
+    x_data = PyDatabase.get_data(x_data_name)
+    y_data = PyDatabase.get_data(y_data_name)
+    if len(x_data) == 0 or len(y_data) == 0:
+        status_messages.show_warning(
+            f"{chart_label} data source is empty: x={len(x_data)}, y={len(y_data)}"
+        )
+        return None
+    if len(x_data) != len(y_data):
+        status_messages.show_warning(
+            f"{chart_label} X/Y data length mismatch: x={len(x_data)}, y={len(y_data)}"
+        )
+        return None
+    return x_data, y_data
+
+
 class PyCurveModify:
     def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style,
                  line: Line2D, expression: str, label: str,
@@ -195,30 +217,52 @@ class PyPlotModify:
         _remove_artist(self.line)
         self.redraw()
 
-    def update_x_data(self, x_data: ndarray):
-        # Reset data when lengths do not match
-        if len(x_data) == len(self.line.get_ydata()):
-            self.line.set_xdata(x_data)
-            # Recalculate axes limits
-            self.axe.relim()
-            self.axe.autoscale_view()
-        else:
-            y_data = np.zeros_like(x_data)
-            self.line.set_data(x_data, y_data)
-
+    def refresh_data_pair(self) -> bool:
+        data_pair = _valid_data_pair(self.current_x_data_name, self.current_y_data_name, "Plot")
+        if data_pair is None:
+            return False
+        x_data, y_data = data_pair
+        self.line.set_data(x_data, y_data)
+        self.axe.relim()
+        self.axe.autoscale_view()
         self.redraw()
+        return True
 
-    def update_y_data(self, y_data: ndarray):
-        # Reset data when lengths do not match
-        if len(y_data) == len(self.line.get_xdata()):
-            self.line.set_ydata(y_data)
-            self.axe.relim()
-            self.axe.autoscale_view()
-        else:
-            x_data = np.linspace(0, len(y_data), len(y_data))
-            self.line.set_data(x_data, y_data)
+    def update_x_data(self, _x_data: ndarray):
+        return self.refresh_data_pair()
 
-        self.redraw()
+    def update_y_data(self, _y_data: ndarray):
+        return self.refresh_data_pair()
+
+    def set_x_data_name(self, data_name: str) -> bool:
+        if not PyDatabase.has_data(data_name):
+            return False
+        changed = PyDatabase.change_data_connection(
+            self.current_x_data_name,
+            data_name,
+            id(self.line),
+            'x',
+        )
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.line), 'x', self.update_x_data)
+        self.current_x_data_name = data_name
+        self.update_project_record(x_data_name=data_name)
+        return self.refresh_data_pair()
+
+    def set_y_data_name(self, data_name: str) -> bool:
+        if not PyDatabase.has_data(data_name):
+            return False
+        changed = PyDatabase.change_data_connection(
+            self.current_y_data_name,
+            data_name,
+            id(self.line),
+            'y',
+        )
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.line), 'y', self.update_y_data)
+        self.current_y_data_name = data_name
+        self.update_project_record(y_data_name=data_name)
+        return self.refresh_data_pair()
 
     def update_color(self, color: str):
         self.line.set_color(color)
@@ -278,29 +322,57 @@ class PyScatterModify:
         _remove_artist(self.scatter)
         self.redraw()
 
-    def update_x_data(self, x_data: ndarray):
-        # Reset data when lengths do not match
-        if len(x_data) == len(self.scatter.get_offsets()):
-            self.scatter.set_offsets(np.c_[x_data, self.scatter.get_offsets()[:, 1]])
-            self.axe.relim()
-            self.axe.autoscale_view()
-        else:
-            y_data = np.zeros_like(x_data)
-            self.scatter.set_offsets(np.c_[x_data, y_data])
-
+    def refresh_data_pair(self) -> bool:
+        data_pair = _valid_data_pair(self.current_x_data_name, self.current_y_data_name, "Scatter")
+        if data_pair is None:
+            return False
+        x_data, y_data = data_pair
+        try:
+            offsets = np.column_stack((np.asarray(x_data, dtype=float), np.asarray(y_data, dtype=float)))
+        except (TypeError, ValueError):
+            status_messages.show_warning("Scatter X/Y data must be numeric.")
+            return False
+        self.scatter.set_offsets(offsets)
+        self.axe.relim()
+        self.axe.autoscale_view()
         self.redraw()
+        return True
 
-    def update_y_data(self, y_data: ndarray):
-        # Reset data when lengths do not match
-        if len(y_data) == len(self.scatter.get_offsets()):
-            self.scatter.set_offsets(np.c_[self.scatter.get_offsets()[:, 0], y_data])
-            self.axe.relim()
-            self.axe.autoscale_view()
-        else:
-            x_data = np.zeros_like(y_data)
-            self.scatter.set_offsets(np.c_[x_data, y_data])
+    def update_x_data(self, _x_data: ndarray):
+        return self.refresh_data_pair()
 
-        self.redraw()
+    def update_y_data(self, _y_data: ndarray):
+        return self.refresh_data_pair()
+
+    def set_x_data_name(self, data_name: str) -> bool:
+        if not PyDatabase.has_data(data_name):
+            return False
+        changed = PyDatabase.change_data_connection(
+            self.current_x_data_name,
+            data_name,
+            id(self.scatter),
+            'x',
+        )
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.scatter), 'x', self.update_x_data)
+        self.current_x_data_name = data_name
+        self.update_project_record(x_data_name=data_name)
+        return self.refresh_data_pair()
+
+    def set_y_data_name(self, data_name: str) -> bool:
+        if not PyDatabase.has_data(data_name):
+            return False
+        changed = PyDatabase.change_data_connection(
+            self.current_y_data_name,
+            data_name,
+            id(self.scatter),
+            'y',
+        )
+        if not changed:
+            PyDatabase.data_connect(data_name, id(self.scatter), 'y', self.update_y_data)
+        self.current_y_data_name = data_name
+        self.update_project_record(y_data_name=data_name)
+        return self.refresh_data_pair()
 
     def update_color(self, color: str):
         self.scatter.set_facecolor(color)
@@ -369,12 +441,10 @@ class PyInterpolateModify:
         _remove_artist(self.line)
         self.redraw()
 
-    def update_x_data(self, x_data: ndarray):
-        self.x_data = x_data
+    def update_x_data(self, _x_data: ndarray):
         self.refresh_interpolation(notify_success=False)
 
-    def update_y_data(self, y_data: ndarray):
-        self.y_data = y_data
+    def update_y_data(self, _y_data: ndarray):
         self.refresh_interpolation(notify_success=False)
 
     def _apply_interpolation(self, interpolate_name: str, k: int, samples: int,
@@ -416,6 +486,14 @@ class PyInterpolateModify:
     def refresh_interpolation(self, notify_success: bool = False) -> bool:
         if self.method is None:
             return False
+        data_pair = _valid_data_pair(
+            self.current_x_data_name,
+            self.current_y_data_name,
+            "Interpolation",
+        )
+        if data_pair is None:
+            return False
+        self.x_data, self.y_data = data_pair
         return self._apply_interpolation(
             self.method,
             self.k,
@@ -430,6 +508,14 @@ class PyInterpolateModify:
         target_samples = self.samples if samples is None else int(samples)
         target_lam_auto = self.lam_auto if lam_auto is None else bool(lam_auto)
         target_lam = self.lam if lam is None and not target_lam_auto else lam
+        data_pair = _valid_data_pair(
+            self.current_x_data_name,
+            self.current_y_data_name,
+            "Interpolation",
+        )
+        if data_pair is None:
+            return False
+        self.x_data, self.y_data = data_pair
         return self._apply_interpolation(
             interpolate_name,
             int(k),

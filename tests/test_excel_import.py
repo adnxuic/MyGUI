@@ -19,7 +19,7 @@ class FakeModel:
     def __init__(self):
         self.save_count = 0
 
-    def save_data_to_database(self):
+    def flush_database_sync(self):
         self.save_count += 1
 
 
@@ -30,6 +30,9 @@ class FakeTableView:
 
     def add_excel_data(self, data_list, index):
         self.columns[index] = data_list
+
+    def flush_database_sync(self):
+        self.model.flush_database_sync()
 
 
 class FakeSubTable:
@@ -113,6 +116,9 @@ class FakeTableViewV3:
 
     def load_columns(self, columns):
         self.columns = dict(columns)
+
+    def flush_database_sync(self):
+        self.model.flush_database_sync()
 
 
 class FakeSubTableV3:

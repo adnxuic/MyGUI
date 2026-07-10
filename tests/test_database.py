@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -81,6 +82,41 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertFalse(changed)
         self.assertIs(db.data["1"][1][40]["x"], callback)
+
+    def test_empty_update_without_callbacks_removes_existing_column(self):
+        db = PyDatabase()
+        PyDatabase.register_sheet("Table1", "Sheet1", db)
+        db.update_data(1, np.array([1.0]))
+
+        db.update_data(1, np.array([], dtype=float))
+
+        self.assertFalse(PyDatabase.has_data("Table1/Sheet1/1"))
+
+    def test_empty_update_with_callbacks_notifies_and_keeps_column(self):
+        db = PyDatabase()
+        PyDatabase.register_sheet("Table1", "Sheet1", db)
+        db.update_data(1, np.array([1.0]))
+        observed = []
+        PyDatabase.data_connect("Table1/Sheet1/1", 50, "x", lambda data: observed.append(data.copy()))
+
+        db.update_data(1, np.array([], dtype=float))
+
+        self.assertTrue(PyDatabase.has_data("Table1/Sheet1/1"))
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(len(observed[0]), 0)
+
+    def test_legacy_table_sync_method_name_is_removed(self):
+        legacy_name = "save_" + "data_to_database"
+        repo_root = Path(__file__).resolve().parents[1]
+        hits = []
+        for folder_name in ("code", "tests", "docs"):
+            for path in (repo_root / folder_name).rglob("*"):
+                if path.suffix not in {".py", ".md"}:
+                    continue
+                if legacy_name in path.read_text(encoding="utf-8", errors="ignore"):
+                    hits.append(str(path.relative_to(repo_root)))
+
+        self.assertEqual(hits, [])
 
 
 if __name__ == "__main__":

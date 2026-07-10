@@ -32,6 +32,6 @@ def import_excel_into_table(file_name: str, table):
             str(column_index + 1): data_list
             for column_index, data_list in enumerate(columns)
         })
-        tableview.model.save_data_to_database()
+        tableview.flush_database_sync()
 
     return subtable

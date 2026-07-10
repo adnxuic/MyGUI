@@ -1,7 +1,3 @@
-"""
-完成批量复制粘贴和删除 以及右键菜单添加数字
-"""
-
 import sys
 from typing import cast
 
@@ -23,6 +19,10 @@ class TableModel(QAbstractTableModel):
 
         data = [["" for _ in range(5)] for _ in range(20)]
         self._data = np.array(data, dtype=object)
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setSingleShot(True)
+        self._sync_timer.setInterval(0)
+        self._sync_timer.timeout.connect(self._sync_to_database)
 
     def data(self, index, role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
@@ -42,6 +42,7 @@ class TableModel(QAbstractTableModel):
         if role == Qt.EditRole:
             self._data[index.row(), index.column()] = value
             self.dataChanged.emit(index, index)
+            self.schedule_database_sync()
             # print('setData:', value)
             # print(self._data)
             return True
@@ -66,9 +67,9 @@ class TableModel(QAbstractTableModel):
 
     def Individual_sort(self, column, order):
         self.layoutAboutToBeChanged.emit()
-        # 提取列数据
+        # Extract column data
         col_data = self._data[:, column]
-        # 分离出非空值和空值
+        # Split non-empty and empty values
         non_null_data = col_data[col_data != '']
         null_data = col_data[col_data == '']
 
@@ -81,16 +82,17 @@ class TableModel(QAbstractTableModel):
         if order == Qt.DescendingOrder:
             non_null_data = non_null_data[::-1]
 
-        # 重建整列数据，将非空数据排序后与空数据结合
+        # Rebuild the column with sorted non-empty values followed by empty cells
         sorted_data = np.concatenate((non_null_data, null_data))
         self._data[:, column] = sorted_data
         self.layoutChanged.emit()
+        self.schedule_database_sync()
 
     def sort(self, column, order=Qt.AscendingOrder):
         self.layoutAboutToBeChanged.emit()
-        # 提取列数据
+        # Extract column data
         col_data = self._data[:, column]
-        # 分离出非空值和对应的索引
+        # Split non-empty values and their row indices
         valid_indices = np.where(col_data != '')[0]
         valid_data = col_data[valid_indices]
 
@@ -105,29 +107,56 @@ class TableModel(QAbstractTableModel):
         if order == Qt.DescendingOrder:
             sorted_indices = sorted_indices[::-1]
 
-        # 合并索引数组获取最终排序的完整行索引
+        # Merge index arrays to get the final full-row sort order
         final_indices = np.concatenate((valid_indices[sorted_indices], null_data_indices))
 
-        # 重排整个数组
+        # Reorder the full table array
         self._data = self._data[final_indices]
         self.layoutChanged.emit()
+        self.schedule_database_sync()
 
-    # 有关database的操作
-    def save_data_to_database(self):
-        # 提取每一列的数据
+    # Database-related operations
+    def schedule_database_sync(self):
+        self._sync_timer.start()
+
+    def flush_database_sync(self):
+        if self._sync_timer.isActive():
+            self._sync_timer.stop()
+        self._sync_to_database()
+
+    @staticmethod
+    def _cell_has_value(value) -> bool:
+        return value is not None and value != ""
+
+    def _column_data(self, column: int) -> np.ndarray:
+        col_data = self._data[:, column]
+        non_null_data = col_data[[self._cell_has_value(value) for value in col_data]]
+        try:
+            return non_null_data.astype(float)
+        except ValueError:
+            return non_null_data.astype(str)
+
+    def _sync_to_database(self):
+        # Extract each column's data
+        model_column_names = {str(i + 1) for i in range(self.columnCount())}
         for i in range(self.columnCount()):
-            col_data = self._data[:, i]
-            # 检查是否有数据
-            if col_data.any():
-                # 分离出非空值和空值
-                non_null_data = col_data[col_data != '']
-                # 转换
-                try:
-                    non_null_data = non_null_data.astype(float)
-                except ValueError:
-                    non_null_data = non_null_data.astype(str)
-                # 保存到数据库
+            non_null_data = self._column_data(i)
+            column_name = str(i + 1)
+            # Check whether the column has data
+            if len(non_null_data) > 0:
+                # Convert and save to the database
                 self.database.update_data(i + 1, non_null_data)
+            elif self.database.has_connections(column_name):
+                self.database.update_data(i + 1, np.array([], dtype=float))
+            elif column_name in self.database.data:
+                self.database.remove_data(column_name)
+
+        for column_name in list(self.database.data.keys()):
+            if column_name not in model_column_names:
+                if self.database.has_connections(column_name):
+                    self.database.update_data(column_name, np.array([], dtype=float))
+                else:
+                    self.database.remove_data(column_name)
 
     def load_columns(self, columns: dict):
         numeric_columns = {}
@@ -151,6 +180,7 @@ class TableModel(QAbstractTableModel):
         self.beginResetModel()
         self._data = loaded
         self.endResetModel()
+        self.schedule_database_sync()
 
 
 class TableView(QTableView):
@@ -165,7 +195,7 @@ class TableView(QTableView):
         self.selectionModel().currentChanged.connect(self.check_need_more_cells)
         self.initActions()
 
-        # 添加表头右键菜单
+        # Header right-click context menu
         self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.horizontalHeader().customContextMenuRequested.connect(self.headerContextMenu)
 
@@ -188,14 +218,9 @@ class TableView(QTableView):
         deleteAction.setShortcut("Delete")
         deleteAction.triggered.connect(self.deleteItems)
 
-        saveAction = QAction("Save", self)
-        saveAction.setShortcut("Ctrl+S")
-        saveAction.triggered.connect(self.model.save_data_to_database)
-
         self.addAction(copyAction)
         self.addAction(pasteAction)
         self.addAction(deleteAction)
-        self.addAction(saveAction)
 
     def copyItems(self):
         selection = self.selectedIndexes()
@@ -238,6 +263,9 @@ class TableView(QTableView):
         selection = self.selectedIndexes()
         self.model.clearData(selection)
 
+    def flush_database_sync(self):
+        self.model.flush_database_sync()
+
     def headerContextMenu(self, pos):
         menu = QMenu()
 
@@ -259,30 +287,30 @@ class TableView(QTableView):
 
     def add_excel_data(self, col_data: list, index):
         """
-           添加一列的数据到表格视图的指定位置。
-           :param col_data: 包含列数据的列表。
-           :param index: 指定在哪个位置插入新的列。
-           """
-        # 首先确保模型中列的数量足以添加新的数据列
+        Append a column of data to the table view at the given position.
+        :param col_data: List of values for the column.
+        :param index: Column index where data should be inserted.
+        """
+        # Ensure the model has enough columns for the new data
         if index >= self.model.columnCount():
             for i in range(index - self.model.columnCount() + 1):
                 self.model.addColumn()
 
-        # 逐个元素添加数据到新列
+        # Add each value to the new column
         for row, data in enumerate(col_data):
-            # 如果数据行数超过现有行数，添加新行
+            # Add a row when data exceeds current row count
             if row >= self.model.rowCount():
                 self.model.addRow()
-            # 获取对应的模型索引
+            # Resolve the model index for this cell
             model_index = self.model.index(row, index)
-            # 设置数据
+            # Set the cell value
             self.model.setData(model_index, data, Qt.EditRole)
 
     def load_columns(self, columns: dict):
         self.model.load_columns(columns)
 
 
-# 自定义的QTabWidget
+# Custom QTabWidget
 class SheetTabWidget(QTabWidget):
     def __init__(self, table_name: str, parent=None):
         super().__init__(parent)
@@ -299,52 +327,11 @@ class SheetTabWidget(QTabWidget):
                 self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
         super().mousePressEvent(event)
 
-    def _legacy_show_context_menu(self, position, tab_index):
-        menu = QMenu()
-
-        save_to_database_action = menu.addAction("Save to Database")
-        delete_action = menu.addAction("Delete")
-        action = menu.exec(position)  # 显示菜单
-
-        if action == delete_action:
-            if self.count() > 1 and tab_index != self.count() - 1:  # 确保至少有一个标签页，且不是"+"标签
-                response = QMessageBox.question(self, "Confirm Delete",
-                                                "Are you sure you want to delete this sheet?",
-                                                QMessageBox.Yes | QMessageBox.No)
-                if response == QMessageBox.Yes:
-                    sheet_name = self.tabText(tab_index)
-                    widget = self.widget(tab_index)
-                    self.removeTab(tab_index)
-                    PyDatabase.unregister_sheet(self.table_name, sheet_name)
-                    widget.deleteLater()
-
-        elif action == save_to_database_action:
-            # 提取前如果当前单元格有未保存的数据，先保存
-            current_widget = cast(TableView, self.currentWidget())
-            model = cast(TableModel, current_widget.model)
-            #
-            # editor = current_widget.focusWidget()
-            # current_index = current_widget.currentIndex()  # 获取当前编辑的索引
-            # value = editor.text()  # 从 QLineEdit 获取文本
-            # model.setData(current_index, value, Qt.EditRole)  # 提交到模型
-            # current_widget.update(current_index)  # 更新视图
-            # current_index = current_widget.currentIndex()
-            # # 退出编辑状态
-            # current_widget.closePersistentEditor(current_index)
-            #
-            #
-            # next_index = model.index(current_index.row(), current_index.column() + 1)
-            # current_widget.setCurrentIndex(next_index)
-            # current_widget.edit(next_index)
-
-            model.save_data_to_database()
-
     def show_context_menu(self, position, tab_index):
         if tab_index < 0 or tab_index == self.count() - 1:
             return
 
         menu = QMenu()
-        save_to_database_action = menu.addAction("Save to Database")
         rename_action = menu.addAction("Rename")
         delete_action = menu.addAction("Delete")
         action = menu.exec(position)
@@ -378,10 +365,6 @@ class SheetTabWidget(QTabWidget):
                     widget.deleteLater()
             return
 
-        if action == save_to_database_action:
-            current_widget = cast(TableView, self.widget(tab_index))
-            current_widget.model.save_data_to_database()
-
 
 class PySubTable(QFrame):
     def __init__(self, table_name: str, pydatabase: PyDatabase, first_sheet_name: str = "Sheet1",
@@ -396,20 +379,20 @@ class PySubTable(QFrame):
         first_sheet_name = validate_project_component_name(first_sheet_name, "Sheet name")
         PyDatabase.register_sheet(self.table_name, first_sheet_name, pydatabase)
 
-        # 使用自定义的QTabWidget
+        # Use the custom QTabWidget
         self.tabWidget = SheetTabWidget(self.table_name, self)
         self.tabWidget.setTabPosition(QTabWidget.South)
         self.tabWidget.addTab(TableView(databases[self.table_name][first_sheet_name]), first_sheet_name)
 
-        # 创建"+"按钮，并添加为一个标签页，但设为不可选择
+        # Create "+" button tab; keep it non-selectable
         self.plusButton = QPushButton("+")
         self.plusButton.clicked.connect(self.add_new_sheet)
         self.tabWidget.addTab(QWidget(), "")
-        self.tabWidget.setTabEnabled(self.tabWidget.count() - 1, False)  # 设为不可选择
+        self.tabWidget.setTabEnabled(self.tabWidget.count() - 1, False)  # Disable selection for the "+" tab
         self.tabWidget.tabBar().setTabButton(self.tabWidget.count() - 1, QTabBar.ButtonPosition.RightSide,
                                              self.plusButton)
 
-        # 连接标签页切换信号
+        # Connect tab-change signal
         self.currentSheet = self.tabWidget.currentWidget()
         self.tabWidget.currentChanged.connect(self.updateCurrentSheet)
 
@@ -426,7 +409,7 @@ class PySubTable(QFrame):
         pass
 
     def _legacy_add_new_sheet(self, sheet_name: str | None = None):
-        # 添加新标签页
+        # Add a new sheet tab
         index = self.tabWidget.count() - 1
         new_sheet_name = sheet_name or PyDatabase.next_sheet_name(self.table_name)
         PyDatabase.register_sheet(self.table_name, new_sheet_name, PyDatabase())
@@ -467,4 +450,4 @@ class PySubTable(QFrame):
 
     def save_all_sheets_to_database(self):
         for index in range(self.tabWidget.count() - 1):
-            self.get_table(index).model.save_data_to_database()
+            self.get_table(index).flush_database_sync()

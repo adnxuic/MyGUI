@@ -188,33 +188,11 @@ class PyPlotModWidget(QFrame):
 
     def x_data_change(self):
         data_name = self.data_choice_widget.get_x_data()
-        if not PyDatabase.has_data(data_name):
-            return
-        current_x_data = PyDatabase.get_data(data_name)
-        # Update x-axis data
-        self.curve_modify.update_x_data(current_x_data)
-        # Update mapping connection
-        changed = PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, data_name,
-                                                    id(self.curve_modify.line), 'x')
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.curve_modify.line), 'x', self.curve_modify.update_x_data)
-        self.curve_modify.current_x_data_name = data_name
-        self.curve_modify.update_project_record(x_data_name=data_name)
+        self.curve_modify.set_x_data_name(data_name)
 
     def y_data_change(self):
         data_name = self.data_choice_widget.get_y_data()
-        if not PyDatabase.has_data(data_name):
-            return
-        current_y_data = PyDatabase.get_data(data_name)
-        # Update y-axis data
-        self.curve_modify.update_y_data(current_y_data)
-        # Update mapping connection
-        changed = PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, data_name,
-                                                    id(self.curve_modify.line), 'y')
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.curve_modify.line), 'y', self.curve_modify.update_y_data)
-        self.curve_modify.current_y_data_name = data_name
-        self.curve_modify.update_project_record(y_data_name=data_name)
+        self.curve_modify.set_y_data_name(data_name)
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
@@ -269,33 +247,11 @@ class PyScatterModWidget(QFrame):
 
     def x_data_change(self):
         data_name = self.data_choice_widget.get_x_data()
-        if not PyDatabase.has_data(data_name):
-            return
-        current_x_data = PyDatabase.get_data(data_name)
-        # Update x-axis data
-        self.curve_modify.update_x_data(current_x_data)
-        # Update mapping connection
-        changed = PyDatabase.change_data_connection(self.curve_modify.current_x_data_name, data_name,
-                                                    id(self.curve_modify.scatter), 'x')
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.curve_modify.scatter), 'x', self.curve_modify.update_x_data)
-        self.curve_modify.current_x_data_name = data_name
-        self.curve_modify.update_project_record(x_data_name=data_name)
+        self.curve_modify.set_x_data_name(data_name)
 
     def y_data_change(self):
         data_name = self.data_choice_widget.get_y_data()
-        if not PyDatabase.has_data(data_name):
-            return
-        current_y_data = PyDatabase.get_data(data_name)
-        # Update y-axis data
-        self.curve_modify.update_y_data(current_y_data)
-        # Update mapping connection
-        changed = PyDatabase.change_data_connection(self.curve_modify.current_y_data_name, data_name,
-                                                    id(self.curve_modify.scatter), 'y')
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.curve_modify.scatter), 'y', self.curve_modify.update_y_data)
-        self.curve_modify.current_y_data_name = data_name
-        self.curve_modify.update_project_record(y_data_name=data_name)
+        self.curve_modify.set_y_data_name(data_name)
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)

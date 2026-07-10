@@ -140,35 +140,55 @@ class PyDatabase:
                     yield f"{table_name}/{sheet_name}/{column_name}"
 
     def update_data(self, index: int, data: ndarray):
-        # 如果该列数据不存在，则创建,且更新所有数据选择框
-        if self.data.get(str(index)) is None:
-            self.data[str(index)] = [data, {}]  # Dict[id: int, func: Any]
+        # Create column data if missing and refresh all data-choice widgets
+        data = np.asarray(data)
+        column_name = str(index)
+        if self.data.get(column_name) is None:
+            if len(data) == 0:
+                return
+            self.data[column_name] = [data, {}]  # Dict[id: int, func: Any]
             PyDatabase.notify_data_choices()
         else:
-            self.data[str(index)][0] = data
-            # 更新数据后，需要更新所有使用该数据的图像
-            for id_num, callback_map in list(self.data[str(index)][1].items()):
+            if len(data) == 0 and not self.data[column_name][1]:
+                self.data.pop(column_name, None)
+                PyDatabase.notify_data_choices()
+                return
+            self.data[column_name][0] = data
+            # After updating data, refresh charts that use this column
+            for id_num, callback_map in list(self.data[column_name][1].items()):
                 for xy, func in list(callback_map.items()):
                     func(data)
 
         # print(self.data[index][0])
 
+    def has_connections(self, index: int | str) -> bool:
+        column_data = self.data.get(str(index))
+        if column_data is None:
+            return False
+        return bool(column_data[1])
+
+    def remove_data(self, index: int | str):
+        column_data = self.data.pop(str(index), None)
+        if column_data is not None:
+            column_data[1].clear()
+            PyDatabase.notify_data_choices()
+
     def clear_connections(self):
         for column_data in self.data.values():
             column_data[1].clear()
 
-    # 提取数据
+    # Fetch data
     @staticmethod
     def get_data(data_name: str) -> ndarray:
         """
-        data_name: 数据名
-        形式为：Table/Sheet/Column
-        提取出表名，片名，列名
+        data_name: data identifier
+        Format: Table/Sheet/Column
+        Parses table name, sheet name, and column name.
         """
         table_name, sheet_name, column_name = PyDatabase.split_data_name(data_name)
         return databases[table_name][sheet_name].data[column_name][0]
 
-    # 数据连接到对应的映射
+    # Connect data updates to chart callbacks
     @staticmethod
     def data_connect(data_name: str, id_num: int, xy: str, connection_func: Callable[[ndarray], Any]):
         table_name, sheet_name, column_name = PyDatabase.split_data_name(data_name)
@@ -196,13 +216,13 @@ class PyDatabase:
         if not callback_map[id_num]:
             callback_map.pop(id_num, None)
 
-    # 改变数据连接的映射
+    # Change the data source for an existing connection
     @staticmethod
     def change_data_connection(before_data_name: str, after_data_name: str, id_num: int, xy: str) -> bool:
         """
 
         """
-        # 移除原来的连接
+        # Remove the previous connection
         if before_data_name == after_data_name:
             return PyDatabase.has_data(after_data_name)
 
@@ -218,7 +238,7 @@ class PyDatabase:
         if not old_callbacks[id_num]:
             old_callbacks.pop(id_num, None)
 
-        # 添加新的连接
+        # Add the new connection
         table_name, sheet_name, column_name = PyDatabase.split_data_name(after_data_name)
         if databases[table_name][sheet_name].data[column_name][1].get(id_num) is None:
             databases[table_name][sheet_name].data[column_name][1][id_num] = {}

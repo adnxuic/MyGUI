@@ -125,6 +125,8 @@ class BottomBarMessageFlowTests(unittest.TestCase):
             self.assertEqual(bottom_bar.message_bar.message_label.text(), "boom")
             status_messages.show_success("ok")
             self.assertEqual(bottom_bar.message_bar.message_label.text(), "ok")
+            status_messages.show_warning("careful")
+            self.assertEqual(bottom_bar.message_bar.message_label.text(), "careful")
         finally:
             bottom_bar.deleteLater()
 

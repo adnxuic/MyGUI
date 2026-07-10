@@ -24,6 +24,8 @@ class PyMessageBar(QFrame):
         self.message_label.setToolTip(message)
         if level == "error":
             self.message_label.setStyleSheet("color: #ff4d4f;")
+        elif level == "warning":
+            self.message_label.setStyleSheet("color: #facc15;")
         elif level == "success":
             self.message_label.setStyleSheet("color: #22c55e;")
         else:
