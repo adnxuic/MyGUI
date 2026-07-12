@@ -68,8 +68,8 @@ A failed fit does not update the plotted curve or result table.
 
 ## Project Files
 
-Fitting curves are saved in schema v3 project files under `figure.fits`.
-Saved records include the selected X/Y data names, fitting engine, fit type,
+Fitting curves are saved in schema v4 project files under `figure.fits`.
+Saved records include a stable `object_id`, X/Y `ColumnRef` objects, fitting engine, fit type,
 advanced options when used, fit result, drawing expression, X range, style,
 color, and legend label.
 

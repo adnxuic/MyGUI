@@ -46,9 +46,9 @@ See [docs/smoke-test.md](docs/smoke-test.md) for the manual smoke-test checklist
 
 ## Known Risks
 
-- Shared global state: table data is stored in `code.database.py_database.databases`, and chart objects register callbacks against it.
-- Expression evaluation: user-entered chart expressions currently use `eval`, which is high risk and should be replaced in a dedicated follow-up.
-- Project files: schema v3 stores one canvas and its same-name bound table; old workspace-level project files are not compatible.
+- Table data: each main window owns a pandas-backed `TableRepository`; charts use stable UUID column references.
+- Expression evaluation: curve and fitting expressions use the restricted safe-expression evaluator.
+- Project files: schema v4 stores one typed, row-aligned table and its canvas; schema v1-v3 files are intentionally unsupported.
 - Error handling: several paths use broad exception handling, `print`, or process exits instead of GUI-safe error reporting.
 - Optional integrations: MATLAB and TeX depend on local installations and should not be treated as required for baseline GUI maintenance.
 - Repository hygiene: some IDE, backup, and sync artifacts are already tracked. Removing them should be handled in a separate cleanup commit.

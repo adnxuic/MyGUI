@@ -6,8 +6,7 @@ from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataCho
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 
 from code import status_messages
-from code.database import matlab_adapter
-from code.database.py_database import PyDatabase
+from code.database import ColumnRef, TableRepository, matlab_adapter
 from code.database.interpolate_func import (
     DEFAULT_INTERPOLATION_SAMPLES,
     MAX_INTERPOLATION_SAMPLES,
@@ -144,7 +143,8 @@ class PyCurveModWidget(QFrame):
 
 
 class PyPlotModWidget(QFrame):
-    def __init__(self, curve_modify: PyPlotModify, x_data_name: str, y_data_name: str, color: str):
+    def __init__(self, curve_modify: PyPlotModify, repository: TableRepository, project_id: str,
+                 x_ref: ColumnRef, y_ref: ColumnRef, color: str):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -154,10 +154,10 @@ class PyPlotModWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        self.data_choice_widget = PyDataChoiceWidget()
-        self.data_choice_widget.set_x_data(x_data_name)
-        self.data_choice_widget.set_y_data(y_data_name)
-        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
+        self.data_choice_widget = PyDataChoiceWidget(repository, project_id)
+        self.data_choice_widget.set_x_ref(x_ref)
+        self.data_choice_widget.set_y_ref(y_ref)
+        self.data_choice_widget.refs_connect(self.x_data_change, self.y_data_change)
 
         self.layout.addWidget(self.data_choice_widget)
 
@@ -186,13 +186,11 @@ class PyPlotModWidget(QFrame):
     def delete_object(self):
         self.curve_modify.delete_object()
 
-    def x_data_change(self):
-        data_name = self.data_choice_widget.get_x_data()
-        self.curve_modify.set_x_data_name(data_name)
+    def x_data_change(self, *_args):
+        self.curve_modify.set_x_ref(self.data_choice_widget.get_x_ref())
 
-    def y_data_change(self):
-        data_name = self.data_choice_widget.get_y_data()
-        self.curve_modify.set_y_data_name(data_name)
+    def y_data_change(self, *_args):
+        self.curve_modify.set_y_ref(self.data_choice_widget.get_y_ref())
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
@@ -203,7 +201,8 @@ class PyPlotModWidget(QFrame):
 
 
 class PyScatterModWidget(QFrame):
-    def __init__(self, scatter_modify: PyScatterModify, x_data_name: str, y_data_name: str, color: str):
+    def __init__(self, scatter_modify: PyScatterModify, repository: TableRepository, project_id: str,
+                 x_ref: ColumnRef, y_ref: ColumnRef, color: str):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -213,10 +212,10 @@ class PyScatterModWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        self.data_choice_widget = PyDataChoiceWidget()
-        self.data_choice_widget.set_x_data(x_data_name)
-        self.data_choice_widget.set_y_data(y_data_name)
-        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
+        self.data_choice_widget = PyDataChoiceWidget(repository, project_id)
+        self.data_choice_widget.set_x_ref(x_ref)
+        self.data_choice_widget.set_y_ref(y_ref)
+        self.data_choice_widget.refs_connect(self.x_data_change, self.y_data_change)
 
         self.layout.addWidget(self.data_choice_widget)
 
@@ -245,13 +244,11 @@ class PyScatterModWidget(QFrame):
     def delete_object(self):
         self.curve_modify.delete_object()
 
-    def x_data_change(self):
-        data_name = self.data_choice_widget.get_x_data()
-        self.curve_modify.set_x_data_name(data_name)
+    def x_data_change(self, *_args):
+        self.curve_modify.set_x_ref(self.data_choice_widget.get_x_ref())
 
-    def y_data_change(self):
-        data_name = self.data_choice_widget.get_y_data()
-        self.curve_modify.set_y_data_name(data_name)
+    def y_data_change(self, *_args):
+        self.curve_modify.set_y_ref(self.data_choice_widget.get_y_ref())
 
     def color_change(self, color: str):
         self.curve_modify.update_color(color)
@@ -262,7 +259,8 @@ class PyScatterModWidget(QFrame):
 
 
 class PyFitModWidget(QFrame):
-    def __init__(self, curve_modify: PyCurveModify, x_data_name: str = "", y_data_name: str = "",
+    def __init__(self, curve_modify: PyCurveModify, repository: TableRepository, project_id: str,
+                 x_ref: ColumnRef | None = None, y_ref: ColumnRef | None = None,
                  engine: str = "Python", fit_type=None, fit_options=None, fit_result=None):
         super().__init__()
 
@@ -273,20 +271,20 @@ class PyFitModWidget(QFrame):
         self.fit_type = fit_type
         self.fit_options = deepcopy(fit_options)
         self.fit_result = deepcopy(fit_result)
-        self.x_data_name = x_data_name
-        self.y_data_name = y_data_name
+        self.repository = repository
+        self.project_id = project_id
+        self.x_ref = x_ref
+        self.y_ref = y_ref
         self.curve_modify = curve_modify
         self._fit_dialogs = []
         self._fit_request_id = 0
 
         self.layout = QVBoxLayout()
 
-        self.data_choice_widget = PyDataChoiceWidget()
-        if x_data_name:
-            self.data_choice_widget.set_x_data(x_data_name)
-        if y_data_name:
-            self.data_choice_widget.set_y_data(y_data_name)
-        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
+        self.data_choice_widget = PyDataChoiceWidget(repository, project_id)
+        self.data_choice_widget.set_x_ref(x_ref)
+        self.data_choice_widget.set_y_ref(y_ref)
+        self.data_choice_widget.refs_connect(self.x_data_change, self.y_data_change)
 
         self.engine_layout = QHBoxLayout()
         self.scipy_button = QPushButton("SciPy")
@@ -454,39 +452,36 @@ class PyFitModWidget(QFrame):
         self.curve_modify.delete_object()
 
     def x_data_change(self, *_args):
-        self.x_data_name = self.data_choice_widget.get_x_data()
-        self.update_project_record(x_data_name=self.x_data_name)
+        self.x_ref = self.data_choice_widget.get_x_ref()
+        self.update_project_record(x_ref=None if self.x_ref is None else self.x_ref.to_dict())
 
     def y_data_change(self, *_args):
-        self.y_data_name = self.data_choice_widget.get_y_data()
-        self.update_project_record(y_data_name=self.y_data_name)
+        self.y_ref = self.data_choice_widget.get_y_ref()
+        self.update_project_record(y_ref=None if self.y_ref is None else self.y_ref.to_dict())
 
     def _current_fit_data(self):
         self.x_data_change()
         self.y_data_change()
-        x_name = self.x_data_name
-        y_name = self.y_data_name
-        if not x_name or not y_name:
+        if self.x_ref is None or self.y_ref is None:
             raise ValueError("Please select X Data and Y Data.")
-
         try:
-            x_data = PyDatabase.get_data(x_name)
-            y_data = PyDatabase.get_data(y_name)
-        except KeyError as exc:
+            pair = self.repository.valid_pair(self.x_ref, self.y_ref)
+        except (KeyError, ValueError) as exc:
             raise ValueError(str(exc)) from exc
-
-        if len(x_data) == 0 or len(y_data) == 0:
-            raise ValueError("X Data and Y Data must not be empty.")
-        if len(x_data) != len(y_data):
-            raise ValueError("X Data and Y Data must have the same length.")
-
-        try:
-            x_values = [float(value) for value in x_data]
-            y_values = [float(value) for value in y_data]
-        except (TypeError, ValueError) as exc:
-            raise ValueError("X Data and Y Data must contain only numbers.") from exc
-
-        return x_name, y_name, x_values, y_values, min(x_values), max(x_values)
+        if pair.x.size == 0:
+            raise ValueError("X Data and Y Data have no valid row pairs.")
+        if pair.missing_count:
+            status_messages.show_warning(f"Fit ignored {pair.missing_count} rows with missing values.")
+        x_values = pair.x.tolist()
+        y_values = pair.y.tolist()
+        return (
+            self.repository.ref_label(self.x_ref),
+            self.repository.ref_label(self.y_ref),
+            x_values,
+            y_values,
+            min(x_values),
+            max(x_values),
+        )
 
     def open_fit_window(self, engine: str):
         if engine not in {"Python", "Matlab"}:
@@ -777,8 +772,9 @@ class PyFitModWidget(QFrame):
         self.curve_modify.change_legend(current_legend)
 
 class PyInterpolateWidget(QFrame):
-    def __init__(self, curve_modify: PyInterpolateModify, init_interpolat: str, init_k: int,
-                 color: str = "#000000", x_data_name: str = "", y_data_name: str = "",
+    def __init__(self, curve_modify: PyInterpolateModify, repository: TableRepository, project_id: str,
+                 init_interpolat: str, init_k: int, color: str = "#000000",
+                 x_ref: ColumnRef | None = None, y_ref: ColumnRef | None = None,
                  samples: int = DEFAULT_INTERPOLATION_SAMPLES,
                  lam: float | None = None, lam_auto: bool = True):
         super().__init__()
@@ -787,11 +783,9 @@ class PyInterpolateWidget(QFrame):
 
         self.layout = QVBoxLayout()
 
-        self.data_choice_widget = PyDataChoiceWidget()
-        if x_data_name:
-            self.data_choice_widget.set_x_data(x_data_name)
-        if y_data_name:
-            self.data_choice_widget.set_y_data(y_data_name)
+        self.data_choice_widget = PyDataChoiceWidget(repository, project_id)
+        self.data_choice_widget.set_x_ref(x_ref)
+        self.data_choice_widget.set_y_ref(y_ref)
         self.layout.addWidget(self.data_choice_widget)
 
         self.interpolat_box = QGroupBox('Interpolation')
@@ -857,7 +851,7 @@ class PyInterpolateWidget(QFrame):
         self.setLayout(self.layout)
 
         self._update_option_visibility()
-        self.data_choice_widget.text_connect(self.x_data_change, self.y_data_change)
+        self.data_choice_widget.refs_connect(self.x_data_change, self.y_data_change)
         self.interpolat_input.currentTextChanged.connect(self.change_method)
         self.interpolat_input.currentTextChanged.connect(self.interpolat_change)
         self.samples_input.valueChanged.connect(self.interpolat_change)
@@ -902,13 +896,11 @@ class PyInterpolateWidget(QFrame):
             lam_auto=lam_auto,
         )
 
-    def x_data_change(self):
-        data_name = self.data_choice_widget.get_x_data()
-        self.modify.set_x_data_name(data_name)
+    def x_data_change(self, *_args):
+        self.modify.set_x_ref(self.data_choice_widget.get_x_ref())
 
-    def y_data_change(self):
-        data_name = self.data_choice_widget.get_y_data()
-        self.modify.set_y_data_name(data_name)
+    def y_data_change(self, *_args):
+        self.modify.set_y_ref(self.data_choice_widget.get_y_ref())
 
     def color_change(self, color: str):
         self.modify.update_color(color)

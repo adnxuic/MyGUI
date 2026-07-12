@@ -4,7 +4,7 @@ from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 from code.widgets import qss_func
 
-from code.database.py_database import databases, PyDatabase
+from code.database import ColumnRef, ColumnType
 from code import status_messages
 from code.database.interpolate_func import (
     DEFAULT_INTERPOLATION_SAMPLES,
@@ -23,12 +23,35 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 def _add_current_table_data_names(x_input: QComboBox, y_input: QComboBox,
                                   figure_window: PyFigureWindow | None):
-    table_name = None
-    if figure_window is not None and figure_window.current_canva is not None:
-        table_name = figure_window.current_canva.project_table_name
-    for data_name in PyDatabase.iter_data_names(table_name):
-        x_input.addItem(data_name)
-        y_input.addItem(data_name)
+    if figure_window is None or figure_window.current_canva is None:
+        return
+    project_id = figure_window.current_canva.project_id
+    repository = figure_window.repository
+    for ref in repository.iter_column_refs(project_id, {ColumnType.NUMBER, ColumnType.DATETIME}):
+        x_input.addItem(repository.ref_label(ref), ref)
+    for ref in repository.iter_column_refs(project_id, {ColumnType.NUMBER}):
+        y_input.addItem(repository.ref_label(ref), ref)
+
+
+def _selected_ref(combo: QComboBox) -> ColumnRef | None:
+    value = combo.currentData(Qt.UserRole)
+    return value if isinstance(value, ColumnRef) else None
+
+
+def _selected_pair(figure_window: PyFigureWindow, x_input: QComboBox, y_input: QComboBox,
+                   *, line_mode: bool = False):
+    x_ref = _selected_ref(x_input)
+    y_ref = _selected_ref(y_input)
+    if x_ref is None or y_ref is None:
+        raise ValueError("Please select X Data and Y Data.")
+    pair = figure_window.repository.line_pair(x_ref, y_ref) if line_mode else figure_window.repository.valid_pair(
+        x_ref, y_ref
+    )
+    if not pair.valid_mask.any():
+        raise ValueError("X Data and Y Data have no valid row pairs.")
+    if pair.missing_count:
+        status_messages.show_warning(f"Ignored or masked {pair.missing_count} rows with missing values.")
+    return x_ref, y_ref, pair
 
 
 # Curve creation dialog
@@ -207,21 +230,21 @@ class PyPlotDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        x_data = PyDatabase.get_data(self.x_data_input.currentText())
-        y_data = PyDatabase.get_data(self.y_data_input.currentText())
-
-        # Warn if x_data and y_data lengths differ
-        if len(x_data) != len(y_data):
-            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+        try:
+            x_ref, y_ref, pair = _selected_pair(
+                self.figure_window, self.x_data_input, self.y_data_input, line_mode=True
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, 'Warning', str(exc))
             return
 
-        self.figure_window.current_canva.add_plot(x=x_data, y=y_data,
+        self.figure_window.current_canva.add_plot(x=pair.x, y=pair.y,
                                                   style=self.style_input.currentText(),
                                                   size=self.size_input.value(),
                                                   color=self.color_input.get_color(),
                                                   label=self.label_input.text(),
-                                                  x_data_name=self.x_data_input.currentText(),
-                                                  y_data_name=self.y_data_input.currentText())
+                                                  x_ref=x_ref,
+                                                  y_ref=y_ref)
 
         super().accept()
 
@@ -307,21 +330,21 @@ class PyScatterDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        x_data = PyDatabase.get_data(self.x_data_input.currentText())
-        y_data = PyDatabase.get_data(self.y_data_input.currentText())
-
-        # Warn if x_data and y_data lengths differ
-        if len(x_data) != len(y_data):
-            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
+        try:
+            x_ref, y_ref, pair = _selected_pair(
+                self.figure_window, self.x_data_input, self.y_data_input
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, 'Warning', str(exc))
             return
 
-        self.figure_window.current_canva.add_scatter(x=x_data, y=y_data,
+        self.figure_window.current_canva.add_scatter(x=pair.x, y=pair.y,
                                                      size=self.size_input.value(),
                                                      color=self.color_input.get_color(),
                                                      marker=self.style_input.currentText(),
                                                      label=self.label_input.text(),
-                                                     x_data_name=self.x_data_input.currentText(),
-                                                     y_data_name=self.y_data_input.currentText())
+                                                     x_ref=x_ref,
+                                                     y_ref=y_ref)
 
         super().accept()
 
@@ -383,24 +406,20 @@ class PyFitDialog(QDialog):
             return
 
         try:
-            x_data = PyDatabase.get_data(self.x_data_input.currentText())
-            y_data = PyDatabase.get_data(self.y_data_input.currentText())
-        except KeyError as exc:
+            x_ref, y_ref, pair = _selected_pair(
+                self.figure_window, self.x_data_input, self.y_data_input
+            )
+        except ValueError as exc:
             QMessageBox.warning(self, 'Warning', str(exc))
             return
 
-        # Warn if x_data and y_data lengths differ
-        if len(x_data) != len(y_data):
-            QMessageBox.warning(self, 'Warning', 'X Data and Y Data must have the same length!')
-            return
-
         self.figure_window.current_canva.add_fit_curve(
-            x=x_data,
-            y=y_data,
+            x=pair.x,
+            y=pair.y,
             color='black',
             label='fitting',
-            x_data_name=self.x_data_input.currentText(),
-            y_data_name=self.y_data_input.currentText(),
+            x_ref=x_ref,
+            y_ref=y_ref,
         )
 
         super().accept()
@@ -527,28 +546,21 @@ class PyInterpolationDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        x_data_name = self.x_data_input.currentText()
-        y_data_name = self.y_data_input.currentText()
-
         try:
-            x_data = PyDatabase.get_data(x_data_name)
-            y_data = PyDatabase.get_data(y_data_name)
-        except KeyError as exc:
+            x_ref, y_ref, pair = _selected_pair(
+                self.figure_window, self.x_data_input, self.y_data_input
+            )
+        except ValueError as exc:
             status_messages.show_error(str(exc))
-            return
-
-        # Warn if x_data and y_data lengths differ
-        if len(x_data) != len(y_data):
-            status_messages.show_error('X Data and Y Data must have the same length!')
             return
 
         method = self.method_input.currentText()
         lam, lam_auto = self._lambda_options(method)
         line = self.figure_window.current_canva.add_interpolate_curve(
-            x=x_data,
-            y=y_data,
-            x_name=x_data_name,
-            y_name=y_data_name,
+            x=pair.x,
+            y=pair.y,
+            x_ref=x_ref,
+            y_ref=y_ref,
             method=method,
             k=self.k_input.value(),
             samples=self.samples_input.value(),

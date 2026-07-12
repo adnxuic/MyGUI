@@ -7,10 +7,10 @@ from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import element_dialog_dict
-from code.excel_io import import_excel_into_table
+from code.excel_io import EXCEL_FILE_FILTER, import_excel_into_workspace
+from code.text_io import import_text_into_workspace
 from code.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
 from code import status_messages
-from code.database.py_database import validate_project_component_name
 
 import json
 import os
@@ -87,8 +87,16 @@ class SelectorMenuBar(QFrame):
             self.stacklayout_bottom.setCurrentIndex(3)
 
 
-def load_excel_into_table(file_name: str, table: PyTable):
-    return import_excel_into_table(file_name, table)
+def load_excel_into_table(file_name: str, table: PyTable, figure_window=None, parent=None):
+    return import_excel_into_workspace(
+        file_name, table, figure_window=figure_window, parent=parent or table
+    )
+
+
+def load_text_into_table(file_name: str, table: PyTable, figure_window=None, parent=None):
+    return import_text_into_workspace(
+        file_name, table, figure_window=figure_window, parent=parent or table
+    )
 
 
 class MenuBar(QFrame):
@@ -141,6 +149,9 @@ class MenuBar(QFrame):
         file_open_action = QAction(QIcon("pictures/icons/open.svg"), "打开 Excel...", self.file_menu)
         file_open_action.triggered.connect(self.open_file)
 
+        file_open_text_action = QAction(QIcon("pictures/icons/open.svg"), "打开文本数据...", self.file_menu)
+        file_open_text_action.triggered.connect(self.open_text_file)
+
         file_open_project_action = QAction(QIcon("pictures/icons/open.svg"), "打开项目...", self.file_menu)
         file_open_project_action.triggered.connect(self.open_project)
 
@@ -157,6 +168,7 @@ class MenuBar(QFrame):
         file_export_data_action.triggered.connect(self.export_data)
 
         self.file_menu.addAction(file_open_action)
+        self.file_menu.addAction(file_open_text_action)
         self.file_menu.addAction(file_open_project_action)
         self.file_menu.addAction(file_save_action)
         self.file_menu.addAction(file_save_as_action)
@@ -165,7 +177,7 @@ class MenuBar(QFrame):
         self.file_menu.addAction(file_export_data_action)
 
     def open_file(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "打开 Excel", "", "Excel Files (*.xlsx *.xls)")
+        file_name, _ = QFileDialog.getOpenFileName(self, "打开 Excel", "", EXCEL_FILE_FILTER)
         if not file_name or not os.path.exists(file_name):
             return
 
@@ -217,26 +229,22 @@ class MenuBar(QFrame):
             return
 
         try:
-            export_database_snapshot(file_name)
+            canvas = self.figure_window.current_canva
+            export_database_snapshot(file_name, self.table.repository, canvas.project_id)
         except Exception as exc:
             QMessageBox.warning(self, "导出数据", str(exc))
 
     def open_file(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel", "", "Excel Files (*.xlsx *.xls)")
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel", "", EXCEL_FILE_FILTER)
         if not file_name or not os.path.exists(file_name):
             return
 
         try:
-            if self.figure_window is not None and self.figure_window.current_canva is None:
-                project_name = validate_project_component_name(Path(file_name).stem, "Project name")
-                self.figure_window.add_figure(
-                    width=6.4,
-                    height=4.8,
-                    dpi=100,
-                    style="default",
-                    canva_name=project_name,
-                )
-            load_excel_into_table(file_name, self.table)
+            subtable = load_excel_into_table(
+                file_name, self.table, figure_window=self.figure_window, parent=self
+            )
+            if subtable is None:
+                return
             status_messages.show_success(f"Excel imported: {Path(file_name).name}")
         except Exception as exc:
             status_messages.show_error(str(exc))
@@ -254,6 +262,26 @@ class MenuBar(QFrame):
         except Exception as exc:
             status_messages.show_error(str(exc))
             QMessageBox.warning(self, "Open Project", str(exc))
+
+    def open_text_file(self):
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Text Data",
+            "",
+            "All Files (*.*);;Files without extension (*)",
+        )
+        if not file_name or not os.path.isfile(file_name):
+            return
+        try:
+            subtable = load_text_into_table(
+                file_name, self.table, figure_window=self.figure_window, parent=self
+            )
+            if subtable is None:
+                return
+            status_messages.show_success(f"Text data imported: {Path(file_name).name}")
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            QMessageBox.warning(self, "Open Text Data", str(exc))
 
     def save_file(self):
         if self.figure_window is None or self.figure_window.current_canva is None:
@@ -292,7 +320,6 @@ class MenuBar(QFrame):
         file_name = self._project_save_path(file_name)
         try:
             canvas = self.figure_window.current_canva
-            self.table.save_table_to_database(canvas.project_table_name)
             save_project_snapshot(file_name, self.figure_window)
             canvas.project_path = file_name
             status_messages.show_success(f"Project saved: {Path(file_name).name}")

@@ -1,39 +1,28 @@
-# Project Files
+# MyGUI Project Files
 
-MyGUI project files use schema version 3. A project is exactly one canvas and one
-table with the same name. The table contains all sheets that belong to that
-canvas.
+Project files use JSON schema version 4. A file contains one project, its typed Table document, and one matplotlib canvas.
 
-## Contents
+## Root fields
 
-- `name`: project, canvas, and table name. It must be non-empty and cannot
-  contain `/` or `\`.
-- `table`: the single bound table. `table.name` must match `name`.
-- `table.sheets`: all sheets in the bound table. Sheet names must be non-empty
-  and cannot contain `/` or `\`.
-- `figure`: the single canvas snapshot. `figure.name` must match `name`.
-- `figure.fits`: fitting curves. Each record stores the source X/Y data names,
-  engine, selected fit type/options, saved fit result, final drawing expression,
-  style, color, label, and X range.
-- `figure.axes`: per-axes view and label state, including limits, labels, label
-  font, label positions, axis visibility, spine state, and legend position.
+- `schema`: always `mygui-project`.
+- `schema_version`: always `4`.
+- `project`: stable project `id` and editable `name`.
+- `table`: project table document.
+- `figure`: canvas, axes, chart, fitting, interpolation, and text records.
 
-Data references still use `ProjectName/SheetName/Column`. Plot, scatter,
-interpolation, and fitting inputs must reference the current project's table.
-Cross-project table references are invalid in project files.
+## Table fields
 
-## Workflow
+`table.id` and `table.name` match the project. `table.sheets` is an ordered array. Each Sheet stores:
 
-- Creating a canvas from Style creates a same-name table with `Sheet1`.
-- Switching canvases switches the visible table to that canvas's bound table.
-- Renaming a canvas tab renames the project and its bound table, and rewrites
-  chart data references.
-- Renaming a sheet tab rewrites chart data references for that sheet.
-- Saving writes only the current canvas and its bound table.
-- Opening a project appends it beside existing projects. If a project with the
-  same name already exists, opening is rejected.
-- Opening restores saved fitting curves without rerunning the fitting engine.
-- Opening applies saved axes state after recreating charts, so saved ranges and
-  labels are not replaced by autoscaling.
+- `id`: stable UUID.
+- `name`: unique display name.
+- `row_count`: logical number of stored rows.
+- `columns`: ordered typed columns documented in `table-driven-chart-refresh.md`.
 
-Schema v3 intentionally does not load old workspace-level project files.
+Missing cells are JSON `null`; number, text, Boolean, and ISO 8601 date/time values retain their types.
+
+## Data-source fields
+
+Plot, Scatter, Interpolation, and Fit records contain a stable `object_id` plus `x_ref` and `y_ref` objects. Each reference contains `project_id`, `sheet_id`, and `column_id`. Every referenced column must exist in the same project.
+
+Project writes use a temporary file followed by replacement, with a direct-write fallback for Windows permission behavior. The loader validates the complete v4 structure before mutating the application.

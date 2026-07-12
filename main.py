@@ -1,154 +1,159 @@
 import sys
-import os
-
-from code.widgets.mainwindow_init import mainwindow_qss
-from code.widgets.title_bar.py_title_bar import PyTitleBar
-from code.widgets.left_column.py_left_column import PyLeftColumn
-from code.widgets.table.py_table import PyTable
-from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
-from code.widgets.right_column.py_right_column import PyRightColumn
-from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
-from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
-from code import status_messages
-
-from Qt_core import *
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("QtAgg")
 
+from Qt_core import *
+
+from code import status_messages
+from code.database import TableRepository
+from code.excel_io import import_excel_into_workspace, is_supported_excel_workbook
+from code.text_io import import_text_into_workspace
+from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
+from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
+from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from code.widgets.left_column.py_left_column import PyLeftColumn
+from code.widgets.mainwindow_init import mainwindow_qss
+from code.widgets.right_column.py_right_column import PyRightColumn
+from code.widgets.table.py_table import PyTable
+from code.widgets.title_bar.py_title_bar import PyTitleBar
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-
-        # 设置窗口为无边框
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-
         self.setup_ui()
-
+        self.setAcceptDrops(True)
         self.setMouseTracking(True)
-
-        self.hide_grips = True  # 隐藏窗口
-
-        # 最大化窗口
+        self.hide_grips = True
         self.showMaximized()
 
     def setup_ui(self):
-        if not self.objectName():
-            self.setObjectName("MainWindow")
-
+        self.setObjectName("MainWindow")
         self.setStyleSheet(mainwindow_qss)
 
-        # 整个窗口布局
         self.central_widget = QWidget()
-        self.central_widget.setMouseTracking(True)
         self.central_widget_layout = QHBoxLayout(self.central_widget)
         self.central_widget_layout.setSpacing(0)
         self.central_widget_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 左侧布局：非画布区域
         self.left_layout = QVBoxLayout()
         self.left_layout.setSpacing(0)
 
-        # 自定义窗口标题栏:左上部分
-        # 右侧布局：画布区域
-        self.table = PyTable()
+        self.repository = TableRepository(self)
+        self.table = PyTable(self.repository)
         self.fig_control_window = PyFigControlWindow()
-
-        self.figure_window = PyFigureWindow(fig_modify_window=self.fig_control_window.figmod_window)
+        self.figure_window = PyFigureWindow(
+            fig_modify_window=self.fig_control_window.figmod_window,
+            repository=self.repository,
+        )
+        # Keep the canvas usable on narrower screens.  Without an explicit
+        # minimum the empty QTabWidget has a very small size hint, so the
+        # outer layout gives nearly all available width to the table/control
+        # area during the first maximized layout pass.
+        self.figure_window.setMinimumWidth(400)
         self.figure_window.set_table(self.table)
 
         self.title_bar = PyTitleBar(self, self.figure_window, self.fig_control_window, self.table)
         self.left_layout.addWidget(self.title_bar)
 
-        # 左中部分
         self.left_column = PyLeftColumn(self.table, self.fig_control_window)
-
-        # 拖动鼠标改变窗口大小相关
-        self.table_fig_dragging = False
-
-        self.table_fig_timer = QTimer(self)  # 创建计时器
-        self.table_fig_timer.setInterval(1)  # 设置更新间隔为10毫秒
-        self.table_fig_timer.timeout.connect(self.updatePositions)  # 连接计时器超时信号到更新函数
-
-        # 右边栏
         self.right_column = PyRightColumn(self.fig_control_window.layout)
+
+        self.table_control_splitter = QSplitter(Qt.Horizontal)
+        self.table_control_splitter.setChildrenCollapsible(False)
+        self.table_control_splitter.addWidget(self.table)
+        self.table_control_splitter.addWidget(self.fig_control_window)
+        self.table_control_splitter.setStretchFactor(0, 0)
+        self.table_control_splitter.setStretchFactor(1, 1)
+        self.table_control_splitter.setSizes([420, 240])
 
         self.left_middle_layout = QHBoxLayout()
         self.left_middle_layout.setSpacing(0)
         self.left_middle_layout.addWidget(self.left_column)
-        self.left_middle_layout.addWidget(self.table)
-        self.left_middle_layout.addWidget(self.fig_control_window)
+        self.left_middle_layout.addWidget(self.table_control_splitter)
         self.left_middle_layout.addWidget(self.right_column)
-
         self.left_layout.addLayout(self.left_middle_layout)
 
-        # 左下状态栏
         self.bottom_bar = PyBottomBar()
         status_messages.set_status_handler(self.bottom_bar.show_message)
         self.left_layout.addWidget(self.bottom_bar)
 
-        # 添加左侧窗口
-        self.central_widget_layout.addLayout(self.left_layout)
-
-        # 右侧布局：画布区域
-        self.central_widget_layout.addWidget(self.figure_window)
-
+        # The left workspace keeps its preferred width (roughly
+        # 420px table + 240px controls + side rails); remaining room belongs
+        # to the canvas.  These stretch factors must be present before the
+        # first showMaximized() layout pass.
+        self.central_widget_layout.addLayout(self.left_layout, 0)
+        self.central_widget_layout.addWidget(self.figure_window, 1)
         self.setCentralWidget(self.central_widget)
 
-    def mousePressEvent(self, event):
-        if event.buttons() == Qt.LeftButton:
-            if self.is_in_draggable_area(event.position().toPoint().x()):
-                self.table_fig_dragging = True
-                self.table_fig_drag_position = event.position().toPoint().x()
+    @staticmethod
+    def _local_drop_paths(event) -> list[Path]:
+        mime_data = event.mimeData()
+        if mime_data is None or not mime_data.hasUrls():
+            return []
+        return [
+            Path(url.toLocalFile())
+            for url in mime_data.urls()
+            if url.isLocalFile() and url.toLocalFile()
+        ]
 
-    def mouseMoveEvent(self, event):
-        x_pos = event.position().toPoint().x()
-        if self.is_in_draggable_area(x_pos):
-            self.central_widget.setCursor(Qt.SizeHorCursor)  # 改变光标为水平拉伸光标
-        else:
-            self.central_widget.unsetCursor()  # 改变光标为默认光标
+    def dragEnterEvent(self, event):
+        paths = self._local_drop_paths(event)
+        if len(paths) == 1 and paths[0].is_file():
+            event.acceptProposedAction()
+            return
+        event.ignore()
+        if paths:
+            status_messages.show_warning(
+                "Drop one Excel workbook or text data file at a time."
+            )
 
-        if self.table_fig_dragging:
-            self.table_fig_drag_position = x_pos
-            if not self.table_fig_timer.isActive():
-                self.table_fig_timer.start()
+    def import_excel_file(self, file_name: str, show_preview: bool = True):
+        subtable = import_excel_into_workspace(
+            file_name,
+            self.table,
+            figure_window=self.figure_window,
+            parent=self,
+            show_preview=show_preview,
+        )
+        if subtable is not None:
+            status_messages.show_success(f"Excel imported: {Path(file_name).name}")
+        return subtable
 
-    def mouseReleaseEvent(self, event):
-        self.table_fig_dragging = False
-        self.table_fig_timer.stop()
-        self.updatePositions()
-        self.unsetCursor()  # 还原到默认光标
+    def import_text_file(self, file_name: str, show_preview: bool = True):
+        subtable = import_text_into_workspace(
+            file_name,
+            self.table,
+            figure_window=self.figure_window,
+            parent=self,
+            show_preview=show_preview,
+        )
+        if subtable is not None:
+            status_messages.show_success(f"Text data imported: {Path(file_name).name}")
+        return subtable
 
-    def updatePositions(self):
-        if self.table_fig_dragging:
-            #
-            x_table = self.table.x()
-            sum_widht = self.table.width() + self.fig_control_window.width()
-            x_now = self.table_fig_drag_position
-
-            # 设置新宽度
-            if 30 < x_now - x_table and 30 < sum_widht - self.table.width():
-                new_table_width = x_now - x_table
-                new_fig_control_window_width = sum_widht - new_table_width
-                self.table.setFixedWidth(new_table_width)
-                self.fig_control_window.setFixedWidth(new_fig_control_window_width)
-            elif 30 < x_now - x_table and x_now <= x_table + self.table.width() and sum_widht - self.table.width() <= 30:
-                new_table_width = x_now - x_table
-                new_fig_control_window_width = sum_widht - new_table_width
-                self.table.setFixedWidth(new_table_width)
-                self.fig_control_window.setFixedWidth(new_fig_control_window_width)
-
-            self.update()  # 请求重绘窗口
-
-    def is_in_draggable_area(self, x):
-        # 扩大可拖动边界的宽度
-        boundary_width = 5  # 可根据需要调整
-        left_boundary = self.table.geometry().right() - boundary_width
-        right_boundary = self.fig_control_window.geometry().left() + boundary_width
-        return left_boundary <= x <= right_boundary
+    def dropEvent(self, event):
+        paths = self._local_drop_paths(event)
+        if len(paths) != 1 or not paths[0].is_file():
+            event.ignore()
+            status_messages.show_warning(
+                "Drop one Excel workbook or text data file at a time."
+            )
+            return
+        event.acceptProposedAction()
+        try:
+            if is_supported_excel_workbook(paths[0]):
+                self.import_excel_file(str(paths[0]))
+            else:
+                self.import_text_file(str(paths[0]))
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            QMessageBox.warning(self, "Import Data", str(exc))
 
     def closeEvent(self, event):
         if hasattr(self, "bottom_bar"):

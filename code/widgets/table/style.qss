@@ -2,9 +2,30 @@ QFrame#table
 {
     background-color: #ffffff;
     max-height: 640px;
-    max-width: 240px;
     min-height: 440px;
     min-width: 240px;
     padding: 0px;
     margin: 0px;
+}
+
+QTableView {
+    background-color: #ffffff;
+    alternate-background-color: #f8fafc;
+    gridline-color: #e5e7eb;
+    selection-background-color: #0281ff;
+    selection-color: #ffffff;
+}
+
+QHeaderView::section {
+    background-color: #f3f4f6;
+    border: 0px;
+    border-right: 1px solid #d1d5db;
+    border-bottom: 1px solid #d1d5db;
+    padding: 3px;
+}
+
+QToolBar {
+    border: 0px;
+    border-bottom: 1px solid #d1d5db;
+    spacing: 2px;
 }

@@ -1,20 +1,17 @@
-from Qt_core import *
+from __future__ import annotations
 
-from code.database.py_database import PyDatabase
-from code import status_messages
-from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
-from code.database.safe_expression import evaluate_curve_expression
-
-import numpy as np
-from numpy import ndarray
 from typing import Any
 
 import matplotlib as mpl
-from matplotlib.figure import Figure
+import numpy as np
 from matplotlib.axes import Axes
-from matplotlib.lines import Line2D
 from matplotlib.collections import PathCollection
-from matplotlib.style import use
+from matplotlib.lines import Line2D
+
+from code import status_messages
+from code.database import ColumnRef, TableRepository
+from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
+from code.database.safe_expression import evaluate_curve_expression
 
 
 def _remove_project_record(project_collection: list[dict[str, Any]] | None,
@@ -36,44 +33,17 @@ def _remove_artist(artist):
         pass
 
 
-def _valid_data_pair(x_data_name: str, y_data_name: str, chart_label: str):
-    if not PyDatabase.has_data(x_data_name) or not PyDatabase.has_data(y_data_name):
-        status_messages.show_warning(
-            f"{chart_label} data source is missing: {x_data_name}, {y_data_name}"
-        )
-        return None
-
-    x_data = PyDatabase.get_data(x_data_name)
-    y_data = PyDatabase.get_data(y_data_name)
-    if len(x_data) == 0 or len(y_data) == 0:
-        status_messages.show_warning(
-            f"{chart_label} data source is empty: x={len(x_data)}, y={len(y_data)}"
-        )
-        return None
-    if len(x_data) != len(y_data):
-        status_messages.show_warning(
-            f"{chart_label} X/Y data length mismatch: x={len(x_data)}, y={len(y_data)}"
-        )
-        return None
-    return x_data, y_data
-
-
 class PyCurveModify:
     def __init__(self, fig, axe: Axes, x_start: float, x_stop: float, style,
                  line: Line2D, expression: str, label: str,
                  project_record: dict[str, Any] | None = None,
                  project_collection: list[dict[str, Any]] | None = None):
-
         self.style = style
         self.fig = fig
         self.axe = axe
-
         self.x_start, self.x_stop = x_start, x_stop
-
         self.expression = expression
-
         self.label = label
-
         self.line = line
         self.project_record = project_record
         self.project_collection = project_collection
@@ -84,10 +54,12 @@ class PyCurveModify:
             self.project_record.update(values)
 
     def redraw(self):
-        self.fig.canvas.draw()
-    
+        self.fig.canvas.draw_idle()
+
     def update_legend(self):
-        self.axe.legend().remove()
+        legend = self.axe.get_legend()
+        if legend is not None:
+            legend.remove()
         self.axe.legend()
 
     def delete_object(self):
@@ -128,32 +100,28 @@ class PyCurveModify:
         try:
             x = np.linspace(self.x_start, self.x_stop, len(self.line.get_xdata()))
             y = evaluate_curve_expression(expression, x)
-            self.line.set_ydata(y)
-            self.expression = expression
-            self.update_project_record(expression=expression)
-            self.axe.relim()
-            self.axe.autoscale_view()
-            self.redraw()
         except ValueError:
-            pass
+            return
+        self.line.set_ydata(y)
+        self.expression = expression
+        self.update_project_record(expression=expression)
+        self.axe.relim()
+        self.axe.autoscale_view()
+        self.redraw()
 
     def update_all(self, x_start: float, x_stop: float, expression: str):
         try:
             x = np.linspace(x_start, x_stop, 1000)
             y = evaluate_curve_expression(expression, x)
-            self.x_start, self.x_stop = x_start, x_stop
-            self.expression = expression
-            self.update_project_record(
-                x_start=float(x_start),
-                x_stop=float(x_stop),
-                expression=expression,
-            )
-            self.line.set_data(x, y)
-            self.axe.relim()
-            self.axe.autoscale_view()
-            self.redraw()
         except ValueError:
-            pass
+            return
+        self.x_start, self.x_stop = x_start, x_stop
+        self.expression = expression
+        self.update_project_record(x_start=float(x_start), x_stop=float(x_stop), expression=expression)
+        self.line.set_data(x, y)
+        self.axe.relim()
+        self.axe.autoscale_view()
+        self.redraw()
 
     def update_style(self, style: str):
         self.line.set_linestyle(style)
@@ -168,101 +136,107 @@ class PyCurveModify:
         self.redraw()
 
     def change_legend(self, label: str):
-        try:
-            self.line.set_label(label)
-            self.label = label
-            self.update_project_record(label=label)
-            self.update_legend()
-            self.redraw()
-        except Exception:
-            pass
+        self.line.set_label(label)
+        self.label = label
+        self.update_project_record(label=label)
+        self.update_legend()
+        self.redraw()
 
-class PyPlotModify:
-    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
-                 y_data_name: str = None, label: str = None,
-                 project_record: dict[str, Any] | None = None,
-                 project_collection: list[dict[str, Any]] | None = None):
-        self.style = style
+
+class _DataModifyBase:
+    chart_label = "Chart"
+
+    def __init__(self, repository: TableRepository, fig, axe: Axes,
+                 x_ref: ColumnRef, y_ref: ColumnRef, label: str,
+                 project_record: dict[str, Any] | None,
+                 project_collection: list[dict[str, Any]] | None):
+        self.repository = repository
         self.fig = fig
         self.axe = axe
-
-        self.line = line
-
+        self.current_x_ref = x_ref
+        self.current_y_ref = y_ref
         self.label = label
         self.project_record = project_record
         self.project_collection = project_collection
         self._deleted = False
 
-        self.current_x_data_name = x_data_name
-        self.current_y_data_name = y_data_name
-
-        # Data and mapping connection
-        PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
-        PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
+    @property
+    def refs(self) -> set[ColumnRef]:
+        return {self.current_x_ref, self.current_y_ref}
 
     def update_project_record(self, **values):
         if self.project_record is not None:
             self.project_record.update(values)
 
     def redraw(self):
-        self.fig.canvas.draw()
+        self.fig.canvas.draw_idle()
+
+    def _valid_refs(self) -> bool:
+        if self.repository.has_ref(self.current_x_ref) and self.repository.has_ref(self.current_y_ref):
+            return True
+        status_messages.show_error(f"{self.chart_label} data source was removed.")
+        return False
+
+    def set_x_ref(self, ref: ColumnRef | None) -> bool:
+        if ref is None or not self.repository.has_ref(ref):
+            return False
+        self.current_x_ref = ref
+        self.update_project_record(x_ref=ref.to_dict())
+        return self.refresh_data_pair(redraw=True)
+
+    def set_y_ref(self, ref: ColumnRef | None) -> bool:
+        if ref is None or not self.repository.has_ref(ref):
+            return False
+        self.current_y_ref = ref
+        self.update_project_record(y_ref=ref.to_dict())
+        return self.refresh_data_pair(redraw=True)
+
+    def _warn_missing(self, count: int):
+        if count:
+            status_messages.show_warning(f"{self.chart_label}: ignored or masked {count} rows with missing values.")
+
+
+class PyPlotModify(_DataModifyBase):
+    chart_label = "Plot"
+
+    def __init__(self, repository: TableRepository, fig, axe: Axes, style=None,
+                 line: Line2D | None = None, x_ref: ColumnRef | None = None,
+                 y_ref: ColumnRef | None = None, label: str | None = None,
+                 project_record: dict[str, Any] | None = None,
+                 project_collection: list[dict[str, Any]] | None = None):
+        super().__init__(repository, fig, axe, x_ref, y_ref, label or "", project_record, project_collection)
+        self.style = style
+        self.line = line
 
     def delete_object(self):
         if self._deleted:
             return
         self._deleted = True
-        PyDatabase.remove_data_connection(self.current_x_data_name, id(self.line), 'x')
-        PyDatabase.remove_data_connection(self.current_y_data_name, id(self.line), 'y')
         _remove_project_record(self.project_collection, self.project_record)
         _remove_artist(self.line)
         self.redraw()
 
-    def refresh_data_pair(self) -> bool:
-        data_pair = _valid_data_pair(self.current_x_data_name, self.current_y_data_name, "Plot")
-        if data_pair is None:
+    def refresh_data_pair(self, redraw: bool = True) -> bool:
+        if not self._valid_refs():
+            self.line.set_data([], [])
+            if redraw:
+                self.redraw()
             return False
-        x_data, y_data = data_pair
-        self.line.set_data(x_data, y_data)
+        try:
+            pair = self.repository.line_pair(self.current_x_ref, self.current_y_ref)
+        except ValueError as exc:
+            self.line.set_data([], [])
+            status_messages.show_error(str(exc))
+            if redraw:
+                self.redraw()
+            return False
+        self.line.set_data(pair.x, pair.y)
+        self._warn_missing(pair.missing_count)
         self.axe.relim()
         self.axe.autoscale_view()
-        self.redraw()
-        return True
-
-    def update_x_data(self, _x_data: ndarray):
-        return self.refresh_data_pair()
-
-    def update_y_data(self, _y_data: ndarray):
-        return self.refresh_data_pair()
-
-    def set_x_data_name(self, data_name: str) -> bool:
-        if not PyDatabase.has_data(data_name):
-            return False
-        changed = PyDatabase.change_data_connection(
-            self.current_x_data_name,
-            data_name,
-            id(self.line),
-            'x',
-        )
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.line), 'x', self.update_x_data)
-        self.current_x_data_name = data_name
-        self.update_project_record(x_data_name=data_name)
-        return self.refresh_data_pair()
-
-    def set_y_data_name(self, data_name: str) -> bool:
-        if not PyDatabase.has_data(data_name):
-            return False
-        changed = PyDatabase.change_data_connection(
-            self.current_y_data_name,
-            data_name,
-            id(self.line),
-            'y',
-        )
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.line), 'y', self.update_y_data)
-        self.current_y_data_name = data_name
-        self.update_project_record(y_data_name=data_name)
-        return self.refresh_data_pair()
+        if redraw:
+            self.redraw()
+        return bool(pair.valid_mask.any())
 
     def update_color(self, color: str):
         self.line.set_color(color)
@@ -270,109 +244,57 @@ class PyPlotModify:
         self.redraw()
 
     def change_legend(self, label: str):
-        try:
-            self.line.set_label(label)
-            self.label = label
-            self.update_project_record(label=label)
-            self.axe.legend().remove()
-            self.axe.legend()
-            self.redraw()
-        except Exception:
-            pass
+        self.line.set_label(label)
+        self.label = label
+        self.update_project_record(label=label)
+        legend = self.axe.get_legend()
+        if legend is not None:
+            legend.remove()
+        self.axe.legend()
+        self.redraw()
 
 
+class PyScatterModify(_DataModifyBase):
+    chart_label = "Scatter"
 
-class PyScatterModify:
-    def __init__(self, fig, axe: Axes, style=None, scatter: PathCollection = None, x_data_name: str = None,
-                 y_data_name: str = None, label: str = None,
+    def __init__(self, repository: TableRepository, fig, axe: Axes, style=None,
+                 scatter: PathCollection | None = None, x_ref: ColumnRef | None = None,
+                 y_ref: ColumnRef | None = None, label: str | None = None,
                  project_record: dict[str, Any] | None = None,
                  project_collection: list[dict[str, Any]] | None = None):
+        super().__init__(repository, fig, axe, x_ref, y_ref, label or "", project_record, project_collection)
         self.style = style
-        self.fig = fig
-        self.axe = axe
-
         self.scatter = scatter
-
-        self.current_x_data_name = x_data_name
-        self.current_y_data_name = y_data_name
-
-        self.label = label
-        self.project_record = project_record
-        self.project_collection = project_collection
-        self._deleted = False
-
-        # Data and mapping connection
-        PyDatabase.data_connect(x_data_name, id_num=id(scatter), xy='x', connection_func=self.update_x_data)
-        PyDatabase.data_connect(y_data_name, id_num=id(scatter), xy='y', connection_func=self.update_y_data)
-
-    def update_project_record(self, **values):
-        if self.project_record is not None:
-            self.project_record.update(values)
-
-    def redraw(self):
-        self.fig.canvas.draw()
 
     def delete_object(self):
         if self._deleted:
             return
         self._deleted = True
-        PyDatabase.remove_data_connection(self.current_x_data_name, id(self.scatter), 'x')
-        PyDatabase.remove_data_connection(self.current_y_data_name, id(self.scatter), 'y')
         _remove_project_record(self.project_collection, self.project_record)
         _remove_artist(self.scatter)
         self.redraw()
 
-    def refresh_data_pair(self) -> bool:
-        data_pair = _valid_data_pair(self.current_x_data_name, self.current_y_data_name, "Scatter")
-        if data_pair is None:
+    def refresh_data_pair(self, redraw: bool = True) -> bool:
+        if not self._valid_refs():
+            self.scatter.set_offsets(np.empty((0, 2)))
+            if redraw:
+                self.redraw()
             return False
-        x_data, y_data = data_pair
         try:
-            offsets = np.column_stack((np.asarray(x_data, dtype=float), np.asarray(y_data, dtype=float)))
-        except (TypeError, ValueError):
-            status_messages.show_warning("Scatter X/Y data must be numeric.")
+            pair = self.repository.valid_pair(self.current_x_ref, self.current_y_ref)
+        except ValueError as exc:
+            self.scatter.set_offsets(np.empty((0, 2)))
+            status_messages.show_error(str(exc))
+            if redraw:
+                self.redraw()
             return False
-        self.scatter.set_offsets(offsets)
+        self.scatter.set_offsets(np.column_stack((pair.x, pair.y)) if pair.x.size else np.empty((0, 2)))
+        self._warn_missing(pair.missing_count)
         self.axe.relim()
         self.axe.autoscale_view()
-        self.redraw()
-        return True
-
-    def update_x_data(self, _x_data: ndarray):
-        return self.refresh_data_pair()
-
-    def update_y_data(self, _y_data: ndarray):
-        return self.refresh_data_pair()
-
-    def set_x_data_name(self, data_name: str) -> bool:
-        if not PyDatabase.has_data(data_name):
-            return False
-        changed = PyDatabase.change_data_connection(
-            self.current_x_data_name,
-            data_name,
-            id(self.scatter),
-            'x',
-        )
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.scatter), 'x', self.update_x_data)
-        self.current_x_data_name = data_name
-        self.update_project_record(x_data_name=data_name)
-        return self.refresh_data_pair()
-
-    def set_y_data_name(self, data_name: str) -> bool:
-        if not PyDatabase.has_data(data_name):
-            return False
-        changed = PyDatabase.change_data_connection(
-            self.current_y_data_name,
-            data_name,
-            id(self.scatter),
-            'y',
-        )
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.scatter), 'y', self.update_y_data)
-        self.current_y_data_name = data_name
-        self.update_project_record(y_data_name=data_name)
-        return self.refresh_data_pair()
+        if redraw:
+            self.redraw()
+        return bool(pair.x.size)
 
     def update_color(self, color: str):
         self.scatter.set_facecolor(color)
@@ -380,182 +302,113 @@ class PyScatterModify:
         self.redraw()
 
     def change_legend(self, label: str):
-        try:
-            self.scatter.set_label(label)
-            self.label = label
-            self.update_project_record(label=label)
-            self.axe.legend().remove()
-            self.axe.legend()
-            self.redraw()
-        except Exception:
-            pass
+        self.scatter.set_label(label)
+        self.label = label
+        self.update_project_record(label=label)
+        legend = self.axe.get_legend()
+        if legend is not None:
+            legend.remove()
+        self.axe.legend()
+        self.redraw()
 
 
-class PyInterpolateModify:
-    def __init__(self, fig, axe: Axes, style=None, line: Line2D = None, x_data_name: str = None,
-                 y_data_name: str = None, label: str = None, method: str | None = None, k: int = 3,
+class PyInterpolateModify(_DataModifyBase):
+    chart_label = "Interpolation"
+
+    def __init__(self, repository: TableRepository, fig, axe: Axes, style=None,
+                 line: Line2D | None = None, x_ref: ColumnRef | None = None,
+                 y_ref: ColumnRef | None = None, label: str | None = None,
+                 method: str | None = None, k: int = 3,
                  samples: int = DEFAULT_INTERPOLATION_SAMPLES,
                  lam: float | None = None, lam_auto: bool = True,
                  project_record: dict[str, Any] | None = None,
                  project_collection: list[dict[str, Any]] | None = None):
+        super().__init__(repository, fig, axe, x_ref, y_ref, label or "", project_record, project_collection)
         self.style = style
-        self.fig = fig
-        self.axe = axe
-
         self.line = line
-
-        self.current_x_data_name = x_data_name
-        self.current_y_data_name = y_data_name
-
-        self.x_data = PyDatabase.get_data(x_data_name)
-        self.y_data = PyDatabase.get_data(y_data_name)
-
-        self.label = label
         self.method = method
-        self.k = k
+        self.k = int(k)
         self.samples = int(samples)
         self.lam = lam
         self.lam_auto = bool(lam_auto)
-        self.project_record = project_record
-        self.project_collection = project_collection
-        self._deleted = False
-
-        # Data and mapping connection
-        PyDatabase.data_connect(x_data_name, id_num=id(line), xy='x', connection_func=self.update_x_data)
-        PyDatabase.data_connect(y_data_name, id_num=id(line), xy='y', connection_func=self.update_y_data)
-
-    def update_project_record(self, **values):
-        if self.project_record is not None:
-            self.project_record.update(values)
-
-    def redraw(self):
-        self.fig.canvas.draw()
 
     def delete_object(self):
         if self._deleted:
             return
         self._deleted = True
-        PyDatabase.remove_data_connection(self.current_x_data_name, id(self.line), 'x')
-        PyDatabase.remove_data_connection(self.current_y_data_name, id(self.line), 'y')
         _remove_project_record(self.project_collection, self.project_record)
         _remove_artist(self.line)
         self.redraw()
 
-    def update_x_data(self, _x_data: ndarray):
-        self.refresh_interpolation(notify_success=False)
-
-    def update_y_data(self, _y_data: ndarray):
-        self.refresh_interpolation(notify_success=False)
-
-    def _apply_interpolation(self, interpolate_name: str, k: int, samples: int,
+    def _apply_interpolation(self, method: str, k: int, samples: int,
                              lam: float | None, lam_auto: bool,
-                             notify_success: bool = False) -> bool:
+                             notify_success: bool = False, redraw: bool = True) -> bool:
+        if not self._valid_refs():
+            self.line.set_data([], [])
+            if redraw:
+                self.redraw()
+            return False
         try:
+            pair = self.repository.valid_pair(self.current_x_ref, self.current_y_ref)
+            if pair.x.size == 0:
+                raise ValueError("Interpolation has no valid X/Y row pairs.")
             x_new, y_new = interpolate_curve(
-                self.x_data,
-                self.y_data,
-                interpolate_name,
-                k=k,
-                samples=samples,
-                lam=lam,
-                lam_auto=lam_auto,
+                pair.x, pair.y, method, k=k, samples=samples, lam=lam, lam_auto=lam_auto
             )
         except ValueError as exc:
+            self.line.set_data([], [])
             status_messages.show_error(str(exc))
+            if redraw:
+                self.redraw()
             return False
         self.line.set_data(x_new, y_new)
-        self.method = interpolate_name
+        self._warn_missing(pair.missing_count)
+        self.method = method
         self.k = int(k)
         self.samples = int(samples)
         self.lam = lam
         self.lam_auto = bool(lam_auto)
         self.update_project_record(
-            method=interpolate_name,
-            k=int(k),
-            samples=int(samples),
-            lam=None if lam is None else float(lam),
-            lam_auto=bool(lam_auto),
+            method=method, k=int(k), samples=int(samples),
+            lam=None if lam is None else float(lam), lam_auto=bool(lam_auto),
         )
         self.axe.relim()
         self.axe.autoscale_view()
-        self.redraw()
+        if redraw:
+            self.redraw()
         if notify_success:
             status_messages.show_success("Interpolation curve updated.")
         return True
 
-    def refresh_interpolation(self, notify_success: bool = False) -> bool:
+    def refresh_data_pair(self, redraw: bool = True) -> bool:
         if self.method is None:
             return False
-        data_pair = _valid_data_pair(
-            self.current_x_data_name,
-            self.current_y_data_name,
-            "Interpolation",
-        )
-        if data_pair is None:
-            return False
-        self.x_data, self.y_data = data_pair
         return self._apply_interpolation(
-            self.method,
-            self.k,
-            self.samples,
-            self.lam,
-            self.lam_auto,
-            notify_success=notify_success,
+            self.method, self.k, self.samples, self.lam, self.lam_auto, redraw=redraw
         )
 
-    def update_interpolate(self, interpolate_name: str, k=3, samples: int | None = None,
+    def update_interpolate(self, method: str, k=3, samples: int | None = None,
                            lam: float | None = None, lam_auto: bool | None = None):
         target_samples = self.samples if samples is None else int(samples)
         target_lam_auto = self.lam_auto if lam_auto is None else bool(lam_auto)
         target_lam = self.lam if lam is None and not target_lam_auto else lam
-        data_pair = _valid_data_pair(
-            self.current_x_data_name,
-            self.current_y_data_name,
-            "Interpolation",
-        )
-        if data_pair is None:
-            return False
-        self.x_data, self.y_data = data_pair
         return self._apply_interpolation(
-            interpolate_name,
-            int(k),
-            target_samples,
-            target_lam,
-            target_lam_auto,
-            notify_success=True,
+            method, int(k), target_samples, target_lam, target_lam_auto, notify_success=True
         )
 
-    def set_x_data_name(self, data_name: str) -> bool:
-        if not PyDatabase.has_data(data_name):
+    def set_x_ref(self, ref: ColumnRef | None) -> bool:
+        if ref is None or not self.repository.has_ref(ref):
             return False
-        self.x_data = PyDatabase.get_data(data_name)
-        changed = PyDatabase.change_data_connection(
-            self.current_x_data_name,
-            data_name,
-            id(self.line),
-            'x',
-        )
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.line), 'x', self.update_x_data)
-        self.current_x_data_name = data_name
-        self.update_project_record(x_data_name=data_name)
-        return self.refresh_interpolation(notify_success=True)
+        self.current_x_ref = ref
+        self.update_project_record(x_ref=ref.to_dict())
+        return self.refresh_data_pair()
 
-    def set_y_data_name(self, data_name: str) -> bool:
-        if not PyDatabase.has_data(data_name):
+    def set_y_ref(self, ref: ColumnRef | None) -> bool:
+        if ref is None or not self.repository.has_ref(ref):
             return False
-        self.y_data = PyDatabase.get_data(data_name)
-        changed = PyDatabase.change_data_connection(
-            self.current_y_data_name,
-            data_name,
-            id(self.line),
-            'y',
-        )
-        if not changed:
-            PyDatabase.data_connect(data_name, id(self.line), 'y', self.update_y_data)
-        self.current_y_data_name = data_name
-        self.update_project_record(y_data_name=data_name)
-        return self.refresh_interpolation(notify_success=True)
+        self.current_y_ref = ref
+        self.update_project_record(y_ref=ref.to_dict())
+        return self.refresh_data_pair()
 
     def update_color(self, color: str):
         self.line.set_color(color)
@@ -563,14 +416,11 @@ class PyInterpolateModify:
         self.redraw()
 
     def change_legend(self, label: str):
-        try:
-            self.line.set_label(label)
-            self.label = label
-            self.update_project_record(label=label)
-            self.axe.legend().remove()
-            self.axe.legend()
-            self.redraw()
-        except Exception:
-            pass
-
-
+        self.line.set_label(label)
+        self.label = label
+        self.update_project_record(label=label)
+        legend = self.axe.get_legend()
+        if legend is not None:
+            legend.remove()
+        self.axe.legend()
+        self.redraw()

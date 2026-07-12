@@ -1,7 +1,7 @@
 QFrame#fig_control_window
 {
     max-height: 640px;
-    max-width: 240px;
+    max-width: 480px;
     min-height: 440px;
     min-width: 240px;
     padding: 0px;

@@ -33,8 +33,8 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 
 ## Data Requirements
 
-- X and Y data must be one-dimensional numeric columns with the same length.
-- Source values must not contain NaN or infinity.
+- X and Y must be numeric columns. Their values are aligned by Table row.
+- Rows with a missing or non-finite X/Y value are filtered as a pair before interpolation.
 - At least 2 source points are required for interpolation.
 - X values are sorted before interpolation.
 - Duplicate X values are rejected because they overspecify `y=f(x)`.
@@ -42,12 +42,12 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 
 ## Project Files
 
-Interpolation records are saved under each figure's `interpolates` collection. Existing fields remain unchanged: `method`, `k`, `color`, `label`, `x_data_name`, and `y_data_name`. New optional fields are:
+Interpolation records are saved under the figure's `interpolates` collection. Each record has a stable `object_id`, `x_ref`, and `y_ref`, plus these interpolation parameters:
 
 | Field | Description |
 | --- | --- |
-| `samples` | Saved output sample count. Missing values load as `1000`. |
-| `lam_auto` | Whether smoothing lambda is automatic. Missing values load as `true`. |
+| `samples` | Saved output sample count. |
+| `lam_auto` | Whether smoothing lambda is automatic. |
 | `lam` | Manual smoothing lambda. `null` means no manual lambda is saved. |
 
 Invalid interpolation input is reported through the Message Bar in red. Successful create and update actions are reported in green.

@@ -1,453 +1,938 @@
-import sys
-from typing import cast
+from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget
+from copy import deepcopy
+from typing import Any, Callable, Sequence, cast
+
+import numpy as np
+import pandas as pd
 
 from Qt_core import *
-import numpy as np
 
-from code.database.py_database import databases
-from code.database.py_database import PyDatabase
-from code.database.py_database import validate_project_component_name
+from code import status_messages
+from code.database import (
+    ColumnRef,
+    ColumnSchema,
+    ColumnType,
+    TableChangeSet,
+    TableMutationCommand,
+    TableRepository,
+    validate_component_name,
+)
+from code.database.table_document import (
+    DEFAULT_COLUMN_WIDTH,
+    PANDAS_DTYPES,
+    coerce_series,
+    display_value,
+    infer_column_type,
+    is_missing,
+    new_id,
+)
+
+
+DependencyHandler = Callable[
+    [list[ColumnRef], str],
+    tuple[Callable[[], None], Callable[[], None]] | bool | None,
+]
+
+
+def _same_value(left: Any, right: Any) -> bool:
+    if is_missing(left) and is_missing(right):
+        return True
+    try:
+        return bool(left == right)
+    except (TypeError, ValueError):
+        return False
 
 
 class TableModel(QAbstractTableModel):
-    def __init__(self, database: PyDatabase):
-        super().__init__()
+    def __init__(self, repository: TableRepository, project_id: str, sheet_id: str, parent=None):
+        super().__init__(parent)
+        self.repository = repository
+        self.project_id = project_id
+        self.sheet_id = sheet_id
+        self._error_cells: set[tuple[int, int]] = set()
+        self.repository.transaction_committed.connect(self._repository_changed)
 
-        self.database = database
+    @property
+    def sheet(self):
+        return self.repository.sheet(self.project_id, self.sheet_id)
 
-        data = [["" for _ in range(5)] for _ in range(20)]
-        self._data = np.array(data, dtype=object)
-        self._sync_timer = QTimer(self)
-        self._sync_timer.setSingleShot(True)
-        self._sync_timer.setInterval(0)
-        self._sync_timer.timeout.connect(self._sync_to_database)
+    def rowCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else self.sheet.row_count
+
+    def columnCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else len(self.sheet.columns)
 
     def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or not 0 <= index.row() < self.rowCount() or not 0 <= index.column() < self.columnCount():
+            return None
+        column = self.sheet.columns[index.column()]
+        value = self.sheet.frame.at[index.row(), column.id]
+        if role in (Qt.DisplayRole, Qt.EditRole):
+            return display_value(value, column.type)
+        if role == Qt.CheckStateRole and column.type == ColumnType.BOOLEAN:
+            if is_missing(value):
+                return Qt.PartiallyChecked
+            return Qt.Checked if bool(value) else Qt.Unchecked
+        if role == Qt.TextAlignmentRole:
+            if column.type == ColumnType.NUMBER:
+                return Qt.AlignRight | Qt.AlignVCenter
+            if column.type == ColumnType.BOOLEAN:
+                return Qt.AlignCenter
+            return Qt.AlignLeft | Qt.AlignVCenter
+        if role == Qt.ToolTipRole:
+            return display_value(value, column.type) or "Missing value"
+        if role == Qt.BackgroundRole:
+            if (index.row(), index.column()) in self._error_cells:
+                return QBrush(QColor("#fecaca"))
+            if is_missing(value):
+                return QBrush(QColor("#f3f4f6"))
+        return None
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
-            value = self._data[index.row(), index.column()]
-            return str(value) if value is not None else ""
-
-    def rowCount(self, index=QModelIndex()):
-        return self._data.shape[0]
-
-    def columnCount(self, index=QModelIndex()):
-        return self._data.shape[1]
+            if orientation == Qt.Horizontal and 0 <= section < self.columnCount():
+                column = self.sheet.columns[section]
+                return f"{column.name}\n{column.type.value}"
+            if orientation == Qt.Vertical and 0 <= section < self.rowCount():
+                return str(section + 1)
+        if role == Qt.ToolTipRole and orientation == Qt.Horizontal and 0 <= section < self.columnCount():
+            column = self.sheet.columns[section]
+            return f"{column.name} ({column.type.value})\nID: {column.id}"
+        return None
 
     def flags(self, index):
-        return super().flags(index) | Qt.ItemIsEditable
+        if not index.isValid():
+            return Qt.NoItemFlags
+        result = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
+        if self.sheet.columns[index.column()].type == ColumnType.BOOLEAN:
+            result |= Qt.ItemIsUserCheckable
+        return result
+
+    def _column_ref(self, column: int) -> ColumnRef:
+        return ColumnRef(self.project_id, self.sheet_id, self.sheet.columns[column].id)
+
+    def _mark_error(self, index: QModelIndex, message: str) -> None:
+        key = (index.row(), index.column())
+        self._error_cells.add(key)
+        self.dataChanged.emit(index, index, [Qt.BackgroundRole])
+        status_messages.show_error(message)
+
+        def clear_error():
+            self._error_cells.discard(key)
+            try:
+                current = self.index(*key)
+                if current.isValid():
+                    self.dataChanged.emit(current, current, [Qt.BackgroundRole])
+            except RuntimeError:
+                return
+
+        QTimer.singleShot(1500, clear_error)
 
     def setData(self, index, value, role=Qt.EditRole):
-        if role == Qt.EditRole:
-            self._data[index.row(), index.column()] = value
-            self.dataChanged.emit(index, index)
-            self.schedule_database_sync()
-            # print('setData:', value)
-            # print(self._data)
-            return True
-        return False
+        if not index.isValid() or role not in (Qt.EditRole, Qt.CheckStateRole):
+            return False
+        column = self.sheet.columns[index.column()]
+        if role == Qt.CheckStateRole:
+            value = value == Qt.Checked
+        old_value = self.sheet.frame.at[index.row(), column.id]
+        old_type = column.type
+        try:
+            resolved, converted = self.sheet.resolved_edit(column.id, [value])
+        except ValueError as exc:
+            self._mark_error(index, str(exc))
+            return False
+        new_value = converted[0]
+        if _same_value(old_value, new_value) and old_type == resolved:
+            return False
 
-    def addRow(self):
-        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        new_row = np.array([[""] * self._data.shape[1]], dtype=object)
-        self._data = np.vstack([self._data, new_row])
-        self.endInsertRows()
+        ref = self._column_ref(index.column())
 
-    def addColumn(self):
-        self.beginInsertColumns(QModelIndex(), self.columnCount(), self.columnCount())
-        new_col = np.array([[""] * self._data.shape[0]], dtype=object).T
-        self._data = np.hstack([self._data, new_col])
-        self.endInsertColumns()
+        def redo():
+            self.sheet.set_cell(index.row(), column.id, value)
 
-    def clearData(self, indexes):
-        for index in indexes:
-            if index.isValid():
-                self.setData(index, "", Qt.EditRole)
+        def undo():
+            if old_type == ColumnType.AUTO:
+                self.sheet.frame[column.id] = self.sheet.frame[column.id].astype("object")
+            else:
+                self.sheet.frame[column.id] = self.sheet.frame[column.id].astype(PANDAS_DTYPES[old_type])
+            column.type = old_type
+            self.sheet.frame.at[index.row(), column.id] = old_value
 
-    def Individual_sort(self, column, order):
-        self.layoutAboutToBeChanged.emit()
-        # Extract column data
-        col_data = self._data[:, column]
-        # Split non-empty and empty values
-        non_null_data = col_data[col_data != '']
-        null_data = col_data[col_data == '']
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Edit cell",
+            self.repository,
+            self.project_id,
+            redo,
+            undo,
+            TableChangeSet(
+                self.project_id,
+                {ref},
+                metadata_changed=old_type != resolved,
+                reason="cell-edit",
+            ),
+        ))
+        return True
+
+    def _repository_changed(self, changes: TableChangeSet) -> None:
+        if changes.project_id != self.project_id:
+            return
+        if changes.structure_changed:
+            self.beginResetModel()
+            self.endResetModel()
+            return
+        changed_columns = [
+            self.sheet.column_index(ref.column_id)
+            for ref in changes.changed_columns
+            if ref.sheet_id == self.sheet_id and self.repository.has_ref(ref)
+        ]
+        if changed_columns and self.rowCount():
+            first = self.index(0, min(changed_columns))
+            last = self.index(self.rowCount() - 1, max(changed_columns))
+            self.dataChanged.emit(first, last)
+        if changes.metadata_changed:
+            self.headerDataChanged.emit(Qt.Horizontal, 0, max(0, self.columnCount() - 1))
+
+    def clear_indexes(self, indexes: Sequence[QModelIndex]) -> bool:
+        cells = sorted({(index.row(), index.column()) for index in indexes if index.isValid()})
+        if not cells:
+            return False
+        old_values = {
+            (row, self.sheet.columns[column].id): self.sheet.frame.iat[row, column]
+            for row, column in cells
+        }
+        refs = {self._column_ref(column) for _, column in cells}
+
+        def redo():
+            for row, column in cells:
+                schema = self.sheet.columns[column]
+                self.sheet.frame.at[row, schema.id] = pd.NaT if schema.type == ColumnType.DATETIME else pd.NA
+
+        def undo():
+            for (row, column_id), old_value in old_values.items():
+                self.sheet.frame.at[row, column_id] = old_value
+
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Clear cells", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, refs, reason="clear-cells"),
+        ))
+        return True
+
+    def paste_block(self, start_row: int, start_column: int, rows: Sequence[Sequence[Any]]) -> bool:
+        block = [list(row) for row in rows]
+        if not block:
+            return False
+        width = max((len(row) for row in block), default=0)
+        if width == 0:
+            return False
+        for row in block:
+            row.extend([""] * (width - len(row)))
+
+        old_row_count = self.sheet.row_count
+        existing_count = max(0, min(width, len(self.sheet.columns) - start_column))
+        existing_ids = self.sheet.column_ids[start_column:start_column + existing_count]
+        old_types = {column_id: self.sheet.column(column_id).type for column_id in existing_ids}
+        old_values = self.sheet.frame.loc[
+            start_row:min(start_row + len(block) - 1, old_row_count - 1), existing_ids
+        ].copy(deep=True) if existing_ids and start_row < old_row_count else pd.DataFrame(columns=existing_ids)
 
         try:
-            non_null_data = non_null_data.astype(float)
-            non_null_data = np.sort(non_null_data, kind='mergesort')
-        except ValueError:
-            non_null_data = np.sort(non_null_data, kind='mergesort')
+            for offset, column_id in enumerate(existing_ids):
+                self.sheet.resolved_edit(column_id, [row[offset] for row in block])
+        except ValueError as exc:
+            self._mark_error(self.index(start_row, start_column + offset), str(exc))
+            return False
 
-        if order == Qt.DescendingOrder:
-            non_null_data = non_null_data[::-1]
+        new_specs: list[tuple[str, str]] = []
+        for offset in range(existing_count, width):
+            new_specs.append((new_id(), self.sheet.unique_column_name(f"Column {start_column + offset + 1}")))
 
-        # Rebuild the column with sorted non-empty values followed by empty cells
-        sorted_data = np.concatenate((non_null_data, null_data))
-        self._data[:, column] = sorted_data
-        self.layoutChanged.emit()
-        self.schedule_database_sync()
+        def redo():
+            self.sheet.ensure_rows(start_row + len(block))
+            for column_id, name in new_specs:
+                if column_id not in self.sheet.column_ids:
+                    self.sheet.add_column(name=name, column_id=column_id)
+            self.sheet.set_block(start_row, start_column, block)
 
-    def sort(self, column, order=Qt.AscendingOrder):
-        self.layoutAboutToBeChanged.emit()
-        # Extract column data
-        col_data = self._data[:, column]
-        # Split non-empty values and their row indices
-        valid_indices = np.where(col_data != '')[0]
-        valid_data = col_data[valid_indices]
+        def undo():
+            for column_id, old_type in old_types.items():
+                schema = self.sheet.column(column_id)
+                schema.type = old_type
+                self.sheet.frame[column_id] = self.sheet.frame[column_id].astype(
+                    PANDAS_DTYPES.get(old_type, "object")
+                )
+            if not old_values.empty:
+                stop = start_row + len(old_values) - 1
+                self.sheet.frame.loc[start_row:stop, existing_ids] = old_values.to_numpy()
+            for column_id, _name in reversed(new_specs):
+                if column_id in self.sheet.column_ids:
+                    self.sheet.remove_column(column_id)
+            self.sheet.truncate_rows(old_row_count)
 
-        null_data_indices = np.where(col_data == '')[0]
+        def changes():
+            refs = {
+                ColumnRef(self.project_id, self.sheet_id, column_id)
+                for column_id in existing_ids + [column_id for column_id, _ in new_specs]
+            }
+            return TableChangeSet(
+                self.project_id,
+                refs,
+                metadata_changed=bool(new_specs) or any(
+                    self.repository.has_ref(ref) and self.sheet.column(ref.column_id).type != old_types.get(ref.column_id)
+                    for ref in refs
+                ),
+                structure_changed=bool(new_specs) or start_row + len(block) > old_row_count,
+                reason="paste",
+            )
 
-        try:
-            valid_data = valid_data.astype(float)
-            sorted_indices = np.argsort(valid_data, kind='mergesort')
-        except ValueError:
-            sorted_indices = np.argsort(valid_data, kind='mergesort')
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Paste cells", self.repository, self.project_id, redo, undo, changes,
+        ))
+        return True
 
-        if order == Qt.DescendingOrder:
-            sorted_indices = sorted_indices[::-1]
+    def sort_by_column(self, column: int, ascending: bool) -> None:
+        if not 0 <= column < self.columnCount():
+            return
+        column_id = self.sheet.columns[column].id
+        original_order: list[int] = []
 
-        # Merge index arrays to get the final full-row sort order
-        final_indices = np.concatenate((valid_indices[sorted_indices], null_data_indices))
+        def redo():
+            nonlocal original_order
+            original_order = self.sheet.sort_rows(column_id, ascending)
 
-        # Reorder the full table array
-        self._data = self._data[final_indices]
-        self.layoutChanged.emit()
-        self.schedule_database_sync()
+        def undo():
+            inverse = np.argsort(np.asarray(original_order))
+            self.sheet.frame = self.sheet.frame.iloc[inverse].reset_index(drop=True)
 
-    # Database-related operations
-    def schedule_database_sync(self):
-        self._sync_timer.start()
+        refs = {
+            ColumnRef(self.project_id, self.sheet_id, schema.id)
+            for schema in self.sheet.columns
+        }
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Sort rows", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, refs, reason="sort-rows"),
+        ))
 
-    def flush_database_sync(self):
-        if self._sync_timer.isActive():
-            self._sync_timer.stop()
-        self._sync_to_database()
 
-    @staticmethod
-    def _cell_has_value(value) -> bool:
-        return value is not None and value != ""
+class TypedItemDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        model = cast(TableModel, index.model())
+        column_type = model.sheet.columns[index.column()].type
+        if column_type == ColumnType.BOOLEAN:
+            editor = QComboBox(parent)
+            editor.addItems(["true", "false", ""])
+            return editor
+        if column_type == ColumnType.DATETIME:
+            editor = QDateTimeEdit(parent)
+            editor.setCalendarPopup(True)
+            editor.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+            return editor
+        editor = QLineEdit(parent)
+        if column_type == ColumnType.NUMBER:
+            validator = QDoubleValidator(editor)
+            validator.setNotation(QDoubleValidator.ScientificNotation)
+            editor.setValidator(validator)
+        return editor
 
-    def _column_data(self, column: int) -> np.ndarray:
-        col_data = self._data[:, column]
-        non_null_data = col_data[[self._cell_has_value(value) for value in col_data]]
-        try:
-            return non_null_data.astype(float)
-        except ValueError:
-            return non_null_data.astype(str)
+    def setEditorData(self, editor, index):
+        text = str(index.data(Qt.EditRole) or "")
+        if isinstance(editor, QComboBox):
+            editor.setCurrentText(text)
+        elif isinstance(editor, QDateTimeEdit):
+            value = QDateTime.fromString(text, Qt.ISODate)
+            if value.isValid():
+                editor.setDateTime(value)
+        elif isinstance(editor, QLineEdit):
+            editor.setText(text)
 
-    def _sync_to_database(self):
-        # Extract each column's data
-        model_column_names = {str(i + 1) for i in range(self.columnCount())}
-        for i in range(self.columnCount()):
-            non_null_data = self._column_data(i)
-            column_name = str(i + 1)
-            # Check whether the column has data
-            if len(non_null_data) > 0:
-                # Convert and save to the database
-                self.database.update_data(i + 1, non_null_data)
-            elif self.database.has_connections(column_name):
-                self.database.update_data(i + 1, np.array([], dtype=float))
-            elif column_name in self.database.data:
-                self.database.remove_data(column_name)
-
-        for column_name in list(self.database.data.keys()):
-            if column_name not in model_column_names:
-                if self.database.has_connections(column_name):
-                    self.database.update_data(column_name, np.array([], dtype=float))
-                else:
-                    self.database.remove_data(column_name)
-
-    def load_columns(self, columns: dict):
-        numeric_columns = {}
-        for column_name, values in columns.items():
-            try:
-                column_index = int(column_name)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"Invalid column name in project: {column_name}") from exc
-            if column_index < 1:
-                raise ValueError(f"Invalid column index in project: {column_name}")
-            numeric_columns[column_index] = list(values)
-
-        row_count = max([20] + [len(values) for values in numeric_columns.values()])
-        column_count = max([5] + list(numeric_columns.keys()))
-        loaded = np.array([["" for _ in range(column_count)] for _ in range(row_count)], dtype=object)
-
-        for column_index, values in numeric_columns.items():
-            for row_index, value in enumerate(values):
-                loaded[row_index, column_index - 1] = "" if value is None else value
-
-        self.beginResetModel()
-        self._data = loaded
-        self.endResetModel()
-        self.schedule_database_sync()
+    def setModelData(self, editor, model, index):
+        if isinstance(editor, QComboBox):
+            value = editor.currentText()
+        elif isinstance(editor, QDateTimeEdit):
+            value = editor.dateTime().toString(Qt.ISODate)
+        else:
+            value = editor.text()
+        model.setData(index, value, Qt.EditRole)
 
 
 class TableView(QTableView):
-    def __init__(self, database: PyDatabase):
+    def __init__(self, repository: TableRepository, project_id: str, sheet_id: str,
+                 dependency_handler: DependencyHandler | None = None):
         super().__init__()
-
-        model = TableModel(database)
-        self.setModel(model)
-        self.model = cast(TableModel, self.model())
-
+        self.repository = repository
+        self.project_id = project_id
+        self.sheet_id = sheet_id
+        self.dependency_handler = dependency_handler
+        self.table_model = TableModel(repository, project_id, sheet_id, self)
+        self.setModel(self.table_model)
+        self.setItemDelegate(TypedItemDelegate(self))
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
-        self.selectionModel().currentChanged.connect(self.check_need_more_cells)
-        self.initActions()
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.setAlternatingRowColors(True)
+        self.setWordWrap(False)
+        self.setSortingEnabled(False)
 
-        # Header right-click context menu
-        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.horizontalHeader().customContextMenuRequested.connect(self.headerContextMenu)
+        horizontal = self.horizontalHeader()
+        horizontal.setMinimumSectionSize(60)
+        horizontal.setDefaultSectionSize(DEFAULT_COLUMN_WIDTH)
+        horizontal.setSectionResizeMode(QHeaderView.Interactive)
+        horizontal.setSectionsMovable(False)
+        horizontal.setFixedHeight(44)
+        horizontal.setContextMenuPolicy(Qt.CustomContextMenu)
+        horizontal.customContextMenuRequested.connect(self.header_context_menu)
+        horizontal.sectionResized.connect(self._column_resized)
 
-    def check_need_more_cells(self, current, previous):
-        if current.row() == self.model.rowCount() - 1:
-            self.model.addRow()
-        if current.column() == self.model.columnCount() - 1:
-            self.model.addColumn()
+        vertical = self.verticalHeader()
+        vertical.setSectionResizeMode(QHeaderView.Fixed)
+        vertical.setDefaultSectionSize(24)
+        vertical.setContextMenuPolicy(Qt.CustomContextMenu)
+        vertical.customContextMenuRequested.connect(self.row_context_menu)
 
-    def initActions(self):
-        copyAction = QAction("Copy", self)
-        copyAction.setShortcut("Ctrl+C")
-        copyAction.triggered.connect(self.copyItems)
+        self._applying_widths = False
+        self._apply_column_widths()
+        self.repository.transaction_committed.connect(self._repository_changed)
+        self._init_actions()
 
-        pasteAction = QAction("Paste", self)
-        pasteAction.setShortcut("Ctrl+V")
-        pasteAction.triggered.connect(self.pasteItems)
+    @property
+    def sheet(self):
+        return self.repository.sheet(self.project_id, self.sheet_id)
 
-        deleteAction = QAction("Delete", self)
-        deleteAction.setShortcut("Delete")
-        deleteAction.triggered.connect(self.deleteItems)
+    def _init_actions(self):
+        copy_action = QAction("Copy", self)
+        copy_action.setShortcut(QKeySequence.Copy)
+        copy_action.triggered.connect(self.copy_items)
+        paste_action = QAction("Paste", self)
+        paste_action.setShortcut(QKeySequence.Paste)
+        paste_action.triggered.connect(self.paste_items)
+        delete_action = QAction("Clear", self)
+        delete_action.setShortcut(QKeySequence.Delete)
+        delete_action.triggered.connect(self.delete_items)
+        self.addActions([copy_action, paste_action, delete_action])
 
-        self.addAction(copyAction)
-        self.addAction(pasteAction)
-        self.addAction(deleteAction)
+    def _repository_changed(self, changes: TableChangeSet):
+        if changes.project_id == self.project_id and (changes.structure_changed or changes.metadata_changed):
+            QTimer.singleShot(0, self._apply_column_widths)
 
-    def copyItems(self):
+    def _apply_column_widths(self):
+        self._applying_widths = True
+        try:
+            for index, column in enumerate(self.sheet.columns):
+                self.setColumnWidth(index, column.width)
+        finally:
+            self._applying_widths = False
+
+    def _column_resized(self, logical_index: int, _old_size: int, new_size: int):
+        if self._applying_widths or not 0 <= logical_index < len(self.sheet.columns):
+            return
+        column = self.sheet.columns[logical_index]
+        if column.width == new_size:
+            return
+        column.width = max(60, int(new_size))
+
+    def copy_items(self):
         selection = self.selectedIndexes()
-        if selection:
-            rows = sorted(index.row() for index in selection)
-            cols = sorted(index.column() for index in selection)
-            rowcount = rows[-1] - rows[0] + 1
-            colcount = cols[-1] - cols[0] + 1
-            table_contents = ''
-            for r in range(rowcount):
-                if r > 0:
-                    table_contents += '\n'
-                for c in range(colcount):
-                    if c > 0:
-                        table_contents += '\t'
-                    index = self.model.index(rows[0] + r, cols[0] + c)
-                    item = self.model.data(index, Qt.DisplayRole)
-                    if item:
-                        table_contents += item
-            QGuiApplication.clipboard().setText(table_contents)
+        if not selection:
+            return
+        top = min(index.row() for index in selection)
+        bottom = max(index.row() for index in selection)
+        left = min(index.column() for index in selection)
+        right = max(index.column() for index in selection)
+        lines = []
+        for row in range(top, bottom + 1):
+            lines.append("\t".join(
+                str(self.table_model.data(self.table_model.index(row, column), Qt.DisplayRole) or "")
+                for column in range(left, right + 1)
+            ))
+        QGuiApplication.clipboard().setText("\n".join(lines))
 
-    def pasteItems(self):
-        clipboard = QGuiApplication.clipboard().text()
-        if clipboard:
-            startPosition = self.currentIndex()
-            rows = clipboard.split('\n')
-            for i, row in enumerate(rows):
-                columns = row.split('\t')
-                for j, column in enumerate(columns):
-                    rowPosition = startPosition.row() + i
-                    colPosition = startPosition.column() + j
-                    if rowPosition >= self.model.rowCount():
-                        self.model.addRow()
-                    if colPosition >= self.model.columnCount():
-                        self.model.addColumn()
-                    index = self.model.index(rowPosition, colPosition)
-                    self.model.setData(index, column, Qt.EditRole)
+    def paste_items(self):
+        start = self.currentIndex()
+        if not start.isValid():
+            status_messages.show_warning("Select a starting cell before pasting.")
+            return
+        text = QGuiApplication.clipboard().text()
+        if not text:
+            return
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        if normalized.endswith("\n"):
+            normalized = normalized[:-1]
+        rows = [line.split("\t") for line in normalized.split("\n")]
+        if self.table_model.paste_block(start.row(), start.column(), rows):
+            status_messages.show_success(f"Pasted {len(rows)} rows × {max(map(len, rows))} columns.")
 
-    def deleteItems(self):
-        selection = self.selectedIndexes()
-        self.model.clearData(selection)
+    def delete_items(self):
+        self.table_model.clear_indexes(self.selectedIndexes())
 
-    def flush_database_sync(self):
-        self.model.flush_database_sync()
+    def insert_row(self):
+        row = self.currentIndex().row() if self.currentIndex().isValid() else self.sheet.row_count
 
-    def headerContextMenu(self, pos):
-        menu = QMenu()
+        def redo():
+            self.sheet.insert_rows(row, 1)
 
-        Individual_sortAscAction = menu.addAction("单独升序")
-        Individual_sortDescAction = menu.addAction("单独逆序")
-        sortAscAction = menu.addAction("升序")
-        sortDescAction = menu.addAction("逆序")
+        def undo():
+            self.sheet.remove_rows(row, 1)
 
-        action = menu.exec(self.horizontalHeader().mapToGlobal(pos))
-        column = self.horizontalHeader().logicalIndexAt(pos)
-        if action == Individual_sortAscAction:
-            self.model.Individual_sort(column, Qt.AscendingOrder)
-        elif action == Individual_sortDescAction:
-            self.model.Individual_sort(column, Qt.DescendingOrder)
-        elif action == sortAscAction:
-            self.model.sort(column, Qt.AscendingOrder)
-        elif action == sortDescAction:
-            self.model.sort(column, Qt.DescendingOrder)
+        refs = {ColumnRef(self.project_id, self.sheet_id, column.id) for column in self.sheet.columns}
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Insert row", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, refs, structure_changed=True, reason="insert-row"),
+        ))
 
-    def add_excel_data(self, col_data: list, index):
-        """
-        Append a column of data to the table view at the given position.
-        :param col_data: List of values for the column.
-        :param index: Column index where data should be inserted.
-        """
-        # Ensure the model has enough columns for the new data
-        if index >= self.model.columnCount():
-            for i in range(index - self.model.columnCount() + 1):
-                self.model.addColumn()
+    def delete_row(self):
+        if self.sheet.row_count == 0:
+            return
+        row = self.currentIndex().row() if self.currentIndex().isValid() else self.sheet.row_count - 1
+        removed: dict[str, pd.DataFrame] = {}
 
-        # Add each value to the new column
-        for row, data in enumerate(col_data):
-            # Add a row when data exceeds current row count
-            if row >= self.model.rowCount():
-                self.model.addRow()
-            # Resolve the model index for this cell
-            model_index = self.model.index(row, index)
-            # Set the cell value
-            self.model.setData(model_index, data, Qt.EditRole)
+        def redo():
+            removed["rows"] = self.sheet.remove_rows(row, 1)
 
-    def load_columns(self, columns: dict):
-        self.model.load_columns(columns)
+        def undo():
+            self.sheet.restore_rows(row, removed["rows"])
+
+        refs = {ColumnRef(self.project_id, self.sheet_id, column.id) for column in self.sheet.columns}
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Delete row", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, refs, structure_changed=True, reason="delete-row"),
+        ))
+
+    def move_row(self, delta: int):
+        current = self.currentIndex()
+        if not current.isValid():
+            return
+        source = current.row()
+        destination = max(0, min(source + delta, self.sheet.row_count - 1))
+        if source == destination:
+            return
+
+        def redo():
+            self.sheet.move_row(source, destination)
+
+        def undo():
+            self.sheet.move_row(destination, source)
+
+        refs = {ColumnRef(self.project_id, self.sheet_id, column.id) for column in self.sheet.columns}
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Move row", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, refs, reason="move-row"),
+        ))
+        self.setCurrentIndex(self.table_model.index(destination, current.column()))
+
+    def add_column(self):
+        index = self.currentIndex().column() + 1 if self.currentIndex().isValid() else len(self.sheet.columns)
+        column_id = new_id()
+        name = self.sheet.unique_column_name(f"Column {index + 1}")
+
+        def redo():
+            self.sheet.add_column(name=name, index=index, column_id=column_id)
+
+        def undo():
+            self.sheet.remove_column(column_id)
+
+        ref = ColumnRef(self.project_id, self.sheet_id, column_id)
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Add column", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, {ref}, metadata_changed=True,
+                           structure_changed=True, reason="add-column"),
+        ))
+
+    def delete_column(self):
+        current = self.currentIndex()
+        if not current.isValid() or len(self.sheet.columns) <= 1:
+            status_messages.show_warning("A sheet must contain at least one column.")
+            return
+        index = current.column()
+        schema = deepcopy(self.sheet.columns[index])
+        values = self.sheet.frame[schema.id].copy(deep=True)
+        ref = ColumnRef(self.project_id, self.sheet_id, schema.id)
+        dependency_actions = self.dependency_handler([ref], "delete") if self.dependency_handler else None
+        if dependency_actions is False:
+            return
+        if dependency_actions is None:
+            dependency_actions = (lambda: None, lambda: None)
+        dependency_redo, dependency_undo = dependency_actions
+
+        def redo():
+            dependency_redo()
+            self.sheet.remove_column(schema.id)
+
+        def undo():
+            self.sheet.restore_column(index, deepcopy(schema), values.copy(deep=True))
+            dependency_undo()
+
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Delete column", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, {ref}, metadata_changed=True,
+                           structure_changed=True, reason="delete-column"),
+        ))
+
+    def move_column(self, delta: int):
+        current = self.currentIndex()
+        if not current.isValid():
+            return
+        source = current.column()
+        destination = max(0, min(source + delta, len(self.sheet.columns) - 1))
+        if source == destination:
+            return
+
+        def redo():
+            self.sheet.move_column(source, destination)
+
+        def undo():
+            self.sheet.move_column(destination, source)
+
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Move column", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, metadata_changed=True,
+                           structure_changed=True, reason="move-column"),
+        ))
+        self.setCurrentIndex(self.table_model.index(current.row(), destination))
+
+    def rename_column(self):
+        current = self.currentIndex()
+        if not current.isValid():
+            return
+        schema = self.sheet.columns[current.column()]
+        name, ok = QInputDialog.getText(self, "Rename Column", "Column name:", text=schema.name)
+        if not ok:
+            return
+        try:
+            new_name = self.sheet.validate_column_name(name, exclude_id=schema.id)
+        except ValueError as exc:
+            status_messages.show_error(str(exc))
+            return
+        old_name = schema.name
+        if old_name == new_name:
+            return
+
+        def redo():
+            schema.name = new_name
+
+        def undo():
+            schema.name = old_name
+
+        ref = ColumnRef(self.project_id, self.sheet_id, schema.id)
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Rename column", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, {ref}, metadata_changed=True, reason="rename-column"),
+        ))
+
+    def change_column_type(self):
+        current = self.currentIndex()
+        if not current.isValid():
+            return
+        schema = self.sheet.columns[current.column()]
+        choices = [column_type.value for column_type in ColumnType]
+        selected, ok = QInputDialog.getItem(
+            self, "Column Type", "Type:", choices, choices.index(schema.type.value), False
+        )
+        if not ok:
+            return
+        target = ColumnType(selected)
+        if target == schema.type:
+            return
+        try:
+            converted = coerce_series(self.sheet.frame[schema.id], target)
+            resolved = infer_column_type(self.sheet.frame[schema.id]) if target == ColumnType.AUTO else target
+        except ValueError as exc:
+            status_messages.show_error(str(exc))
+            return
+        ref = ColumnRef(self.project_id, self.sheet_id, schema.id)
+        dependency_actions = None
+        if resolved in {ColumnType.TEXT, ColumnType.BOOLEAN, ColumnType.AUTO} and self.dependency_handler:
+            dependency_actions = self.dependency_handler([ref], "type")
+        if dependency_actions is False:
+            return
+        if dependency_actions is None:
+            dependency_actions = (lambda: None, lambda: None)
+        dependency_redo, dependency_undo = dependency_actions
+        old_type = schema.type
+        old_values = self.sheet.frame[schema.id].copy(deep=True)
+
+        def redo():
+            dependency_redo()
+            schema.type = resolved
+            self.sheet.frame[schema.id] = converted.copy(deep=True)
+
+        def undo():
+            schema.type = old_type
+            self.sheet.frame[schema.id] = old_values.copy(deep=True)
+            dependency_undo()
+
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Change column type", self.repository, self.project_id, redo, undo,
+            TableChangeSet(self.project_id, {ref}, metadata_changed=True, reason="column-type"),
+        ))
+
+    def header_context_menu(self, position):
+        column = self.horizontalHeader().logicalIndexAt(position)
+        if column < 0:
+            return
+        self.setCurrentIndex(self.table_model.index(max(0, self.currentIndex().row()), column))
+        menu = QMenu(self)
+        rename = menu.addAction("Rename Column")
+        change_type = menu.addAction("Change Type")
+        menu.addSeparator()
+        add = menu.addAction("Add Column Right")
+        delete = menu.addAction("Delete Column")
+        left = menu.addAction("Move Left")
+        right = menu.addAction("Move Right")
+        menu.addSeparator()
+        ascending = menu.addAction("Sort Rows Ascending")
+        descending = menu.addAction("Sort Rows Descending")
+        action = menu.exec(self.horizontalHeader().mapToGlobal(position))
+        if action == rename:
+            self.rename_column()
+        elif action == change_type:
+            self.change_column_type()
+        elif action == add:
+            self.add_column()
+        elif action == delete:
+            self.delete_column()
+        elif action == left:
+            self.move_column(-1)
+        elif action == right:
+            self.move_column(1)
+        elif action == ascending:
+            self.table_model.sort_by_column(column, True)
+        elif action == descending:
+            self.table_model.sort_by_column(column, False)
+
+    def row_context_menu(self, position):
+        row = self.verticalHeader().logicalIndexAt(position)
+        if row < 0:
+            return
+        column = max(0, self.currentIndex().column())
+        self.setCurrentIndex(self.table_model.index(row, column))
+        menu = QMenu(self)
+        insert = menu.addAction("Insert Row Above")
+        delete = menu.addAction("Delete Row")
+        up = menu.addAction("Move Up")
+        down = menu.addAction("Move Down")
+        action = menu.exec(self.verticalHeader().mapToGlobal(position))
+        if action == insert:
+            self.insert_row()
+        elif action == delete:
+            self.delete_row()
+        elif action == up:
+            self.move_row(-1)
+        elif action == down:
+            self.move_row(1)
 
 
-# Custom QTabWidget
 class SheetTabWidget(QTabWidget):
-    def __init__(self, table_name: str, parent=None):
-        super().__init__(parent)
-        self.table_name = table_name
+    def __init__(self, subtable: "PySubTable"):
+        super().__init__(subtable)
+        self.subtable = subtable
+        self.setTabsClosable(False)
+        tab_bar = self.tabBar()
+        tab_bar.setContextMenuPolicy(Qt.CustomContextMenu)
+        tab_bar.customContextMenuRequested.connect(self._context_menu)
+        self.tabBarDoubleClicked.connect(self.subtable.rename_sheet)
 
-        self.setMouseTracking(True)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.RightButton:
-            pos = event.position().toPoint()
-            pos.setY(pos.y() - self.tabBar().y())
-            clicked_tab_index = self.tabBar().tabAt(pos)
-            if clicked_tab_index != -1:
-                self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
-        super().mousePressEvent(event)
-
-    def show_context_menu(self, position, tab_index):
-        if tab_index < 0 or tab_index == self.count() - 1:
+    def _context_menu(self, position):
+        index = self.tabBar().tabAt(position)
+        if index < 0 or index >= self.count() - 1:
             return
-
-        menu = QMenu()
-        rename_action = menu.addAction("Rename")
-        delete_action = menu.addAction("Delete")
-        action = menu.exec(position)
-
-        if action == rename_action:
-            old_name = self.tabText(tab_index)
-            new_name, ok = QInputDialog.getText(self, "Rename Sheet", "Sheet name:", text=old_name)
-            if not ok:
-                return
-            try:
-                subtable = self.parent()
-                if subtable is not None and hasattr(subtable, "rename_sheet"):
-                    subtable.rename_sheet(old_name, new_name)
-            except Exception as exc:
-                QMessageBox.warning(self, "Rename Sheet", str(exc))
-            return
-
-        if action == delete_action:
-            if self.count() > 2:
-                response = QMessageBox.question(
-                    self,
-                    "Confirm Delete",
-                    "Are you sure you want to delete this sheet?",
-                    QMessageBox.Yes | QMessageBox.No,
-                )
-                if response == QMessageBox.Yes:
-                    sheet_name = self.tabText(tab_index)
-                    widget = self.widget(tab_index)
-                    self.removeTab(tab_index)
-                    PyDatabase.unregister_sheet(self.table_name, sheet_name)
-                    widget.deleteLater()
-            return
+        menu = QMenu(self)
+        rename = menu.addAction("Rename Sheet")
+        delete = menu.addAction("Delete Sheet")
+        action = menu.exec(self.tabBar().mapToGlobal(position))
+        if action == rename:
+            self.subtable.rename_sheet(index)
+        elif action == delete:
+            self.subtable.delete_sheet(index)
 
 
 class PySubTable(QFrame):
-    def __init__(self, table_name: str, pydatabase: PyDatabase, first_sheet_name: str = "Sheet1",
-                 sheet_renamed_callback=None):
+    def __init__(self, repository: TableRepository, project_id: str,
+                 dependency_handler: DependencyHandler | None = None):
         super().__init__()
-
-        self.table_name = validate_project_component_name(table_name, "Project name")
-        self.sheet_renamed_callback = sheet_renamed_callback
-
-        self.setMouseTracking(True)
-
-        first_sheet_name = validate_project_component_name(first_sheet_name, "Sheet name")
-        PyDatabase.register_sheet(self.table_name, first_sheet_name, pydatabase)
-
-        # Use the custom QTabWidget
-        self.tabWidget = SheetTabWidget(self.table_name, self)
+        self.repository = repository
+        self.project_id = project_id
+        self.dependency_handler = dependency_handler
+        self.toolbar = QToolBar(self)
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.tabWidget = SheetTabWidget(self)
         self.tabWidget.setTabPosition(QTabWidget.South)
-        self.tabWidget.addTab(TableView(databases[self.table_name][first_sheet_name]), first_sheet_name)
+        self.tabWidget.tabBarClicked.connect(self._plus_clicked)
+        self._views: dict[str, TableView] = {}
+        self._build_tabs()
+        self._build_toolbar()
 
-        # Create "+" button tab; keep it non-selectable
-        self.plusButton = QPushButton("+")
-        self.plusButton.clicked.connect(self.add_new_sheet)
-        self.tabWidget.addTab(QWidget(), "")
-        self.tabWidget.setTabEnabled(self.tabWidget.count() - 1, False)  # Disable selection for the "+" tab
-        self.tabWidget.tabBar().setTabButton(self.tabWidget.count() - 1, QTabBar.ButtonPosition.RightSide,
-                                             self.plusButton)
-
-        # Connect tab-change signal
-        self.currentSheet = self.tabWidget.currentWidget()
-        self.tabWidget.currentChanged.connect(self.updateCurrentSheet)
-
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.toolbar)
         layout.addWidget(self.tabWidget)
-        self.setLayout(layout)
 
-    def get_table(self, index) -> TableView:
-        tableview = cast(TableView, self.tabWidget.widget(index))
-        return tableview
+    @property
+    def project(self):
+        return self.repository.project(self.project_id)
 
-    def updateCurrentSheet(self):
-        pass
+    def _build_tabs(self):
+        self._dispose_tabs()
+        self._views.clear()
+        for sheet in self.project.sheets.values():
+            view = TableView(self.repository, self.project_id, sheet.id, self.dependency_handler)
+            self._views[sheet.id] = view
+            self.tabWidget.addTab(view, sheet.name)
+        plus = QWidget()
+        self.tabWidget.addTab(plus, "+")
 
-    def _legacy_add_new_sheet(self, sheet_name: str | None = None):
-        # Add a new sheet tab
+    def _dispose_tabs(self):
+        while self.tabWidget.count():
+            widget = self.tabWidget.widget(0)
+            if isinstance(widget, TableView):
+                widget.setModel(None)
+            self.tabWidget.removeTab(0)
+            if widget is not None:
+                widget.deleteLater()
+
+    def _build_toolbar(self):
+        actions = [
+            ("Undo", self.undo), ("Redo", self.redo),
+            ("Rename Sheet", self.rename_current_sheet),
+            ("−Sheet", self.delete_current_sheet),
+            ("+Row", lambda: self.current_view().insert_row()),
+            ("−Row", lambda: self.current_view().delete_row()),
+            ("↑Row", lambda: self.current_view().move_row(-1)),
+            ("↓Row", lambda: self.current_view().move_row(1)),
+            ("+Column", lambda: self.current_view().add_column()),
+            ("−Column", lambda: self.current_view().delete_column()),
+        ]
+        for text, callback in actions:
+            action = self.toolbar.addAction(text)
+            action.triggered.connect(callback)
+
+    def current_view(self) -> TableView:
+        widget = self.tabWidget.currentWidget()
+        if not isinstance(widget, TableView):
+            if not self._views:
+                raise RuntimeError("Project has no sheets.")
+            return next(iter(self._views.values()))
+        return widget
+
+    def get_table(self, index: int) -> TableView:
+        widget = self.tabWidget.widget(index)
+        if not isinstance(widget, TableView):
+            raise IndexError("Sheet index does not refer to a table.")
+        return widget
+
+    def undo(self):
+        self.repository.undo_stack(self.project_id).undo()
+
+    def redo(self):
+        self.repository.undo_stack(self.project_id).redo()
+
+    def current_sheet_index(self) -> int:
+        index = self.tabWidget.currentIndex()
+        if 0 <= index < self.tabWidget.count() - 1:
+            return index
+        return 0
+
+    def rename_current_sheet(self):
+        self.rename_sheet(self.current_sheet_index())
+
+    def delete_current_sheet(self):
+        self.delete_sheet(self.current_sheet_index())
+
+    def _plus_clicked(self, index: int):
+        if index == self.tabWidget.count() - 1:
+            self.add_new_sheet()
+
+    def add_new_sheet(self, sheet_name: str | None = None, sheet=None) -> TableView:
+        if sheet is None:
+            sheet = self.project.add_sheet(sheet_name)
+        else:
+            self.project.add_sheet(sheet=sheet)
+        view = TableView(self.repository, self.project_id, sheet.id, self.dependency_handler)
+        self._views[sheet.id] = view
         index = self.tabWidget.count() - 1
-        new_sheet_name = sheet_name or PyDatabase.next_sheet_name(self.table_name)
-        PyDatabase.register_sheet(self.table_name, new_sheet_name, PyDatabase())
-        table_view = TableView(databases[self.table_name][new_sheet_name])
-        self.tabWidget.insertTab(index, table_view, new_sheet_name)
+        self.tabWidget.insertTab(index, view, sheet.name)
         self.tabWidget.setCurrentIndex(index)
-        return table_view
+        self.repository.record_change(TableChangeSet(
+            self.project_id, metadata_changed=True, structure_changed=True, reason="add-sheet"
+        ))
+        return view
 
-    def set_table_name(self, table_name: str):
-        self.table_name = validate_project_component_name(table_name, "Project name")
-        self.tabWidget.table_name = self.table_name
-
-    def add_new_sheet(self, sheet_name: str | None = None):
-        index = self.tabWidget.count() - 1
-        new_sheet_name = validate_project_component_name(
-            sheet_name or PyDatabase.next_sheet_name(self.table_name),
-            "Sheet name",
-        )
-        if new_sheet_name in databases.get(self.table_name, {}):
-            raise ValueError(f"Sheet already exists: {new_sheet_name}")
-        PyDatabase.register_sheet(self.table_name, new_sheet_name, PyDatabase())
-        table_view = TableView(databases[self.table_name][new_sheet_name])
-        self.tabWidget.insertTab(index, table_view, new_sheet_name)
-        self.tabWidget.setCurrentIndex(index)
-        return table_view
-
-    def rename_sheet(self, old_name: str, new_name: str):
-        new_name = validate_project_component_name(new_name, "Sheet name")
-        if old_name == new_name:
+    def rename_sheet(self, index: int):
+        if index < 0 or index >= self.tabWidget.count() - 1:
             return
-        PyDatabase.rename_sheet(self.table_name, old_name, new_name)
-        for index in range(self.tabWidget.count() - 1):
-            if self.tabWidget.tabText(index) == old_name:
-                self.tabWidget.setTabText(index, new_name)
-                break
-        if self.sheet_renamed_callback is not None:
-            self.sheet_renamed_callback(self.table_name, old_name, new_name)
+        view = self.get_table(index)
+        sheet = self.repository.sheet(self.project_id, view.sheet_id)
+        name, ok = QInputDialog.getText(self, "Rename Sheet", "Sheet name:", text=sheet.name)
+        if not ok:
+            return
+        try:
+            cleaned = validate_component_name(name, "Sheet name")
+        except ValueError as exc:
+            status_messages.show_error(str(exc))
+            return
+        if any(other.id != sheet.id and other.name.casefold() == cleaned.casefold()
+               for other in self.project.sheets.values()):
+            status_messages.show_error(f"Sheet name already exists: {cleaned}")
+            return
+        old_name = sheet.name
+        if old_name == cleaned:
+            return
 
-    def save_all_sheets_to_database(self):
-        for index in range(self.tabWidget.count() - 1):
-            self.get_table(index).flush_database_sync()
+        def set_name(value: str):
+            sheet.name = value
+            for tab_index in range(self.tabWidget.count() - 1):
+                tab_view = self.tabWidget.widget(tab_index)
+                if isinstance(tab_view, TableView) and tab_view.sheet_id == sheet.id:
+                    self.tabWidget.setTabText(tab_index, value)
+                    break
+
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Rename sheet", self.repository, self.project_id,
+            lambda: set_name(cleaned), lambda: set_name(old_name),
+            TableChangeSet(self.project_id, metadata_changed=True, reason="rename-sheet"),
+        ))
+        status_messages.show_success(f"Sheet renamed to {cleaned}.")
+
+    def delete_sheet(self, index: int):
+        if index < 0 or index >= self.tabWidget.count() - 1:
+            return
+        if len(self.project.sheets) <= 1:
+            status_messages.show_warning("A project must contain at least one sheet.")
+            return
+        view = self.get_table(index)
+        sheet = self.repository.sheet(self.project_id, view.sheet_id)
+        refs = [ColumnRef(self.project_id, sheet.id, column.id) for column in sheet.columns]
+        dependency_actions = self.dependency_handler(refs, "delete-sheet") if self.dependency_handler else None
+        if dependency_actions is False:
+            return
+        if dependency_actions is None:
+            dependency_actions = (lambda: None, lambda: None)
+        dependency_redo, dependency_undo = dependency_actions
+        original_index = list(self.project.sheets).index(sheet.id)
+
+        def select_nearest_sheet(preferred: int):
+            if self.project.sheets:
+                self.tabWidget.setCurrentIndex(min(preferred, len(self.project.sheets) - 1))
+
+        def redo():
+            dependency_redo()
+            self.project.sheets.pop(sheet.id, None)
+            self._build_tabs()
+            select_nearest_sheet(original_index)
+
+        def undo():
+            items = list(self.project.sheets.items())
+            items.insert(original_index, (sheet.id, sheet))
+            self.project.sheets.clear()
+            self.project.sheets.update(items)
+            self._build_tabs()
+            self.tabWidget.setCurrentIndex(original_index)
+            dependency_undo()
+
+        self.repository.push(self.project_id, TableMutationCommand(
+            "Delete sheet", self.repository, self.project_id, redo, undo,
+            TableChangeSet(
+                self.project_id, set(refs), metadata_changed=True,
+                structure_changed=True, reason="delete-sheet",
+            ),
+        ))
+        status_messages.show_success(f"Sheet deleted: {sheet.name}.")

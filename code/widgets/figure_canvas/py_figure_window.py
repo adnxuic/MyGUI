@@ -3,10 +3,8 @@ from typing import Any, Optional
 
 from Qt_core import *
 from code import status_messages
-from code.database.py_database import PyDatabase
-from code.database.py_database import validate_project_component_name
+from code.database import ColumnRef, TableRepository, validate_component_name
 from code.database.interpolate_func import interpolate_dict
-from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 
@@ -43,7 +41,7 @@ class FigureTabWidget(QTabWidget):
 
 
 class PyFigureWindow(QFrame):
-    def __init__(self, fig_modify_window=None):
+    def __init__(self, fig_modify_window=None, repository: TableRepository | None = None):
         super().__init__()
 
         self.setObjectName('figure_window')
@@ -51,6 +49,9 @@ class PyFigureWindow(QFrame):
         self.setStyleSheet(qss_file)
 
         self.fig_modify_window = fig_modify_window
+        if repository is None:
+            raise ValueError("PyFigureWindow requires a TableRepository.")
+        self.repository = repository
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
         self.table = None
@@ -85,11 +86,12 @@ class PyFigureWindow(QFrame):
 
     def add_figure(self, width=None, height=None, dpi=None, style=None, canva_name=None,
                    create_table=True, project_path=None):
-        project_name = validate_project_component_name(canva_name or self._default_project_name(), "Project name")
+        project_name = validate_component_name(canva_name or self._default_project_name(), "Project name")
         if self.has_project_name(project_name):
             raise ValueError(f"Project already exists: {project_name}")
         if self.table is not None and create_table:
             self.table.create_project_table(project_name)
+        project = self.repository.project_by_name(project_name)
 
         canva = PyFigureCanvas(
             self,
@@ -97,6 +99,8 @@ class PyFigureWindow(QFrame):
             height=height,
             dpi=dpi,
             style=style,
+            repository=self.repository,
+            project_id=project.id,
             project_name=project_name,
             project_path=project_path,
         )
@@ -116,14 +120,12 @@ class PyFigureWindow(QFrame):
             self.current_fig_modify_widget = None
             if self.table is not None:
                 self.table.switch_to_table(None)
-            PyDataChoiceWidget.set_active_table_name(None)
             return
         self.fig_modify_window.stacklayout.setCurrentIndex(self.tabwindow.currentIndex())
         self.current_fig_modify_widget = self.fig_modify_window.stacklayout.currentWidget()
-        table_name = getattr(self.current_canva, "project_table_name", None)
+        project_id = getattr(self.current_canva, "project_id", None)
         if self.table is not None:
-            self.table.switch_to_table(table_name)
-        PyDataChoiceWidget.set_active_table_name(table_name)
+            self.table.switch_to_table(project_id)
 
     def get_current_canvas_axes_colorselector(self):
         return self.current_canva.current_axes_mod.color_selector
@@ -140,7 +142,6 @@ class PyFigureWindow(QFrame):
         self.current_fig_modify_widget = None
         if hasattr(self.fig_modify_window, "clear_figmod_widgets"):
             self.fig_modify_window.clear_figmod_widgets()
-        PyDataChoiceWidget.set_active_table_name(None)
 
     def remove_project(self, project_name: str):
         for index in range(self.tabwindow.count()):
@@ -169,6 +170,52 @@ class PyFigureWindow(QFrame):
             if hasattr(widget, "cancel_pending_draw"):
                 widget.cancel_pending_draw()
 
+    def prepare_dependency_cascade(self, refs: list[ColumnRef], reason: str):
+        target_refs = set(refs)
+        captured = []
+        total = 0
+        labels = []
+        for index in range(self.tabwindow.count()):
+            canvas = self.tabwindow.widget(index)
+            if not isinstance(canvas, PyFigureCanvas) or canvas.project_id not in {ref.project_id for ref in refs}:
+                continue
+            snapshots = canvas.dependent_records(target_refs)
+            if snapshots:
+                captured.append((canvas, snapshots))
+                total += len(snapshots)
+                labels.extend(snapshot["kind"].title() for snapshot in snapshots)
+        if not captured:
+            if reason == "delete-sheet" and QMessageBox.question(
+                self,
+                "Delete Sheet",
+                "Delete the selected sheet?",
+                QMessageBox.Yes | QMessageBox.No,
+            ) != QMessageBox.Yes:
+                return False
+            return (lambda: None, lambda: None)
+        summary = ", ".join(labels[:8])
+        if len(labels) > 8:
+            summary += f", and {len(labels) - 8} more"
+        action = "change the column type" if reason == "type" else "delete the selected data"
+        response = QMessageBox.question(
+            self,
+            "Dependent Objects",
+            f"This operation will remove {total} dependent objects ({summary}).\n\nContinue and {action}?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if response != QMessageBox.Yes:
+            return False
+
+        def redo():
+            for canvas, snapshots in captured:
+                canvas.remove_data_dependents(snapshots)
+
+        def undo():
+            for canvas, snapshots in captured:
+                canvas.restore_data_dependents(snapshots)
+
+        return redo, undo
+
     def project_snapshot(self) -> list[dict[str, Any]]:
         canvases: list[dict[str, Any]] = []
         for index in range(self.tabwindow.count()):
@@ -193,7 +240,7 @@ class PyFigureWindow(QFrame):
             QMessageBox.warning(self, "Rename Project", str(exc))
 
     def rename_project(self, tab_index: int, new_name: str):
-        new_name = validate_project_component_name(new_name, "Project name")
+        new_name = validate_component_name(new_name, "Project name")
         canvas = self.tabwindow.widget(tab_index)
         if canvas is None:
             raise IndexError(f"Invalid project index: {tab_index}")
@@ -204,25 +251,8 @@ class PyFigureWindow(QFrame):
             raise ValueError(f"Project already exists: {new_name}")
         if self.table is not None:
             self.table.rename_project_table(old_name, new_name)
-        if self.current_canva is canvas:
-            PyDataChoiceWidget.set_active_table_name(new_name)
         canvas.set_project_name(new_name)
         self.tabwindow.setTabText(tab_index, new_name)
-        if self.current_canva is canvas:
-            PyDataChoiceWidget.set_active_table_name(new_name)
-
-    def rename_sheet_references(self, table_name: str, old_sheet_name: str, new_sheet_name: str):
-        for index in range(self.tabwindow.count()):
-            canvas = self.tabwindow.widget(index)
-            if getattr(canvas, "project_table_name", None) == table_name:
-                canvas.rewrite_data_references(
-                    table_name,
-                    table_name,
-                    old_sheet=old_sheet_name,
-                    new_sheet=new_sheet_name,
-                )
-        if self.current_canva is not None:
-            PyDataChoiceWidget.set_active_table_name(self.current_canva.project_table_name)
 
     @staticmethod
     def _select_project_axes(canvas: PyFigureCanvas, record: dict[str, Any]) -> bool:
@@ -234,40 +264,35 @@ class PyFigureWindow(QFrame):
         canvas.set_current_axes_by_index(axes_index)
         return True
 
-    @staticmethod
-    def _project_data_pair(record: dict[str, Any], chart_label: str, require_numeric: bool = False):
-        x_data_name = record.get("x_data_name")
-        y_data_name = record.get("y_data_name")
-        if not PyDatabase.has_data(x_data_name) or not PyDatabase.has_data(y_data_name):
+    def _project_data_pair(self, record: dict[str, Any], chart_label: str, line_mode: bool = False):
+        try:
+            x_ref = ColumnRef.from_dict(record.get("x_ref"))
+            y_ref = ColumnRef.from_dict(record.get("y_ref"))
+        except ValueError as exc:
             status_messages.show_warning(
-                f"{chart_label} skipped during project restore; data source is missing: "
-                f"{x_data_name}, {y_data_name}"
+                f"{chart_label} skipped during project restore; invalid data reference: {exc}"
             )
             return None
-        x_data = PyDatabase.get_data(x_data_name)
-        y_data = PyDatabase.get_data(y_data_name)
-        if len(x_data) == 0 or len(y_data) == 0:
+        if not self.repository.has_ref(x_ref) or not self.repository.has_ref(y_ref):
             status_messages.show_warning(
-                f"{chart_label} skipped during project restore; data source is empty: "
-                f"x={len(x_data)}, y={len(y_data)}"
+                f"{chart_label} skipped during project restore; data source is missing."
             )
             return None
-        if len(x_data) != len(y_data):
+        try:
+            pair = self.repository.line_pair(x_ref, y_ref) if line_mode else self.repository.valid_pair(x_ref, y_ref)
+        except ValueError as exc:
             status_messages.show_warning(
-                f"{chart_label} skipped during project restore; X/Y data length mismatch: "
-                f"x={len(x_data)}, y={len(y_data)}"
+                f"{chart_label} skipped during project restore: {exc}"
             )
             return None
-        if require_numeric:
-            try:
-                x_data = np.asarray(x_data, dtype=float)
-                y_data = np.asarray(y_data, dtype=float)
-            except (TypeError, ValueError):
-                status_messages.show_warning(
-                    f"{chart_label} skipped during project restore; X/Y data must be numeric."
-                )
-                return None
-        return x_data_name, y_data_name, x_data, y_data
+        if not pair.valid_mask.any():
+            status_messages.show_warning(f"{chart_label} skipped during project restore; no valid row pairs.")
+            return None
+        if pair.missing_count:
+            status_messages.show_warning(
+                f"{chart_label}: filtered or masked {pair.missing_count} rows with missing values."
+            )
+        return x_ref, y_ref, pair.x, pair.y
 
     def _populate_canvas_from_snapshot(self, canvas: PyFigureCanvas, figure: dict[str, Any]):
         axes_layouts = figure.get("axes_layouts") or []
@@ -301,10 +326,10 @@ class PyFigureWindow(QFrame):
         for plot in figure.get("plots", []):
             if not self._select_project_axes(canvas, plot):
                 continue
-            data_pair = self._project_data_pair(plot, "Plot")
+            data_pair = self._project_data_pair(plot, "Plot", line_mode=True)
             if data_pair is None:
                 continue
-            x_data_name, y_data_name, x_data, y_data = data_pair
+            x_ref, y_ref, x_data, y_data = data_pair
             canvas.add_plot(
                 x=x_data,
                 y=y_data,
@@ -312,18 +337,19 @@ class PyFigureWindow(QFrame):
                 size=float(plot.get("size", 2.0)),
                 color=plot.get("color", "black"),
                 label=plot.get("label", ""),
-                x_data_name=x_data_name,
-                y_data_name=y_data_name,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                object_id=plot.get("object_id"),
                 record_project=True,
             )
 
         for scatter in figure.get("scatters", []):
             if not self._select_project_axes(canvas, scatter):
                 continue
-            data_pair = self._project_data_pair(scatter, "Scatter", require_numeric=True)
+            data_pair = self._project_data_pair(scatter, "Scatter")
             if data_pair is None:
                 continue
-            x_data_name, y_data_name, x_data, y_data = data_pair
+            x_ref, y_ref, x_data, y_data = data_pair
             canvas.add_scatter(
                 x=x_data,
                 y=y_data,
@@ -331,8 +357,9 @@ class PyFigureWindow(QFrame):
                 color=scatter.get("color", "black"),
                 marker=scatter.get("marker", "o"),
                 label=scatter.get("label", ""),
-                x_data_name=x_data_name,
-                y_data_name=y_data_name,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                object_id=scatter.get("object_id"),
                 record_project=True,
             )
 
@@ -342,15 +369,16 @@ class PyFigureWindow(QFrame):
             method = interpolate.get("method")
             if method not in interpolate_dict:
                 continue
-            data_pair = self._project_data_pair(interpolate, "Interpolation", require_numeric=True)
+            data_pair = self._project_data_pair(interpolate, "Interpolation")
             if data_pair is None:
                 continue
-            x_data_name, y_data_name, x_data, y_data = data_pair
+            x_ref, y_ref, x_data, y_data = data_pair
             canvas.add_interpolate_curve(
                 x=x_data,
                 y=y_data,
-                x_name=x_data_name,
-                y_name=y_data_name,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                object_id=interpolate.get("object_id"),
                 method=method,
                 k=int(interpolate.get("k", 3)),
                 samples=int(interpolate.get("samples", 1000)),
@@ -364,17 +392,18 @@ class PyFigureWindow(QFrame):
         for fit in figure.get("fits", []):
             if not self._select_project_axes(canvas, fit):
                 continue
-            data_pair = self._project_data_pair(fit, "Fit", require_numeric=True)
+            data_pair = self._project_data_pair(fit, "Fit")
             if data_pair is None:
                 continue
-            x_data_name, y_data_name, x_data, y_data = data_pair
+            x_ref, y_ref, x_data, y_data = data_pair
             canvas.add_fit_curve(
                 x=x_data,
                 y=y_data,
                 color=fit.get("color", "black"),
                 label=fit.get("label", "fitting"),
-                x_data_name=x_data_name,
-                y_data_name=y_data_name,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                object_id=fit.get("object_id"),
                 engine=fit.get("engine", "Python"),
                 record_project=True,
                 fit_type=fit.get("fit_type"),

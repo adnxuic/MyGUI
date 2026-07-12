@@ -1,249 +1,204 @@
 import os
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
-_TEST_TMP_DIR = Path(__file__).with_name("_tmp")
-_TEST_TMP_DIR.mkdir(exist_ok=True)
-os.environ["TEMP"] = str(_TEST_TMP_DIR)
-os.environ["TMP"] = str(_TEST_TMP_DIR)
-tempfile.tempdir = str(_TEST_TMP_DIR)
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import openpyxl
 
-from code.excel_io import import_excel_into_table, read_excel_columns
+from Qt_core import QApplication, QMimeData, QUrl
+
+from code.database import ColumnType
+from code.excel_io import (
+    ExcelColumnSpec,
+    ExcelSheetPreview,
+    ExcelSheetSpec,
+    import_excel_into_table,
+    read_excel_workbook,
+)
+from main import MainWindow
 
 
-class FakeModel:
-    def __init__(self):
-        self.save_count = 0
+class DropEventStub:
+    def __init__(self, paths):
+        self._mime_data = QMimeData()
+        self._mime_data.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
+        self.accepted = False
+        self.ignored = False
 
-    def flush_database_sync(self):
-        self.save_count += 1
+    def mimeData(self):
+        return self._mime_data
 
+    def acceptProposedAction(self):
+        self.accepted = True
+        self.ignored = False
 
-class FakeTableView:
-    def __init__(self):
-        self.model = FakeModel()
-        self.columns = {}
-
-    def add_excel_data(self, data_list, index):
-        self.columns[index] = data_list
-
-    def flush_database_sync(self):
-        self.model.flush_database_sync()
-
-
-class FakeSubTable:
-    def __init__(self):
-        self.tables = [FakeTableView()]
-
-    def add_new_sheet(self):
-        self.tables.append(FakeTableView())
-
-    def get_table(self, index):
-        return self.tables[index]
+    def ignore(self):
+        self.ignored = True
+        self.accepted = False
 
 
-class FakeTable:
-    def __init__(self):
-        self.subtable = FakeSubTable()
+class ExcelImportV4Tests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
 
-    def add_new_table(self, is_open=False):
-        self.is_open = is_open
-        return self.subtable
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = Path(self.directory.name) / "WorkbookProject.xlsx"
+        workbook = openpyxl.Workbook()
+        raw = workbook.active
+        raw.title = "Raw"
+        raw.append(["X", "Enabled", "When"])
+        raw.append([1, True, "2026-07-10"])
+        raw.append([None, False, "2026-07-11"])
+        formula = workbook.create_sheet("Formula")
+        formula.append(["Value"])
+        formula.append(["=1+1"])
+        workbook.save(self.path)
+        workbook.close()
+        self.window = MainWindow()
 
+    def tearDown(self):
+        self.window.close()
+        self.app.processEvents()
+        self.directory.cleanup()
 
-@unittest.skip("legacy Excel import tests expected a new table per import")
-class ExcelImportTests(unittest.TestCase):
-    def make_workbook_file(self):
-        temp_dir = Path(__file__).with_name("_tmp")
-        temp_dir.mkdir(exist_ok=True)
-        tempfile.tempdir = str(temp_dir)
-        os.environ["TMP"] = str(temp_dir)
-        os.environ["TEMP"] = str(temp_dir)
+    def test_import_uses_headers_locks_types_and_is_one_undo_step(self):
+        subtable = import_excel_into_table(str(self.path), self.window.table, show_preview=False)
+        project = subtable.project
+        imported = list(project.sheets.values())[0]
 
-        wb = openpyxl.Workbook()
-        ws1 = wb.active
-        ws1.title = "First"
-        ws1.append([1, 10])
-        ws1.append([2, 20])
-        ws2 = wb.create_sheet("Second")
-        ws2.append([3, 30])
-        ws2.append([4, 40])
+        self.assertEqual([column.name for column in imported.columns], ["X", "Enabled", "When"])
+        self.assertEqual(
+            [column.type for column in imported.columns],
+            [ColumnType.NUMBER, ColumnType.BOOLEAN, ColumnType.DATETIME],
+        )
+        self.assertTrue(imported.frame[imported.columns[0].id].isna().iloc[1])
 
-        filename = Path(__file__).with_name("_excel_import_tmp.xlsx")
-        wb.save(filename)
-        wb.close()
-        return filename
+        self.window.repository.undo_stack(project.id).undo()
+        self.assertEqual([sheet.name for sheet in project.sheets.values()], ["Sheet1"])
+        self.window.repository.undo_stack(project.id).redo()
+        self.assertIn("Raw", [sheet.name for sheet in project.sheets.values()])
 
-    def test_read_excel_columns_reads_all_sheets(self):
-        filename = self.make_workbook_file()
+    def test_import_never_evaluates_formulas(self):
+        workbook = read_excel_workbook(str(self.path))
+        formula = next(sheet for sheet in workbook if sheet.name == "Formula")
+        self.assertIsNone(formula.rows[1][0])
+
+    def test_sheet_name_collision_creates_unique_sheet(self):
+        self.window.figure_window.add_figure(
+            width=4, height=3, dpi=100, style="default", canva_name="Project"
+        )
+        project = self.window.repository.project_by_name("Project")
+        project.add_sheet("Raw")
+
+        import_excel_into_table(str(self.path), self.window.table, show_preview=False)
+
+        names = [sheet.name for sheet in project.sheets.values()]
+        self.assertIn("Raw 2", names)
+
+    def test_preview_allows_header_and_type_override(self):
+        sheet = read_excel_workbook(str(self.path))[0]
+        preview = ExcelSheetPreview(sheet)
         try:
-            sheets = read_excel_columns(filename)
-
-            self.assertEqual(sheets, [
-                [[1, 2], [10, 20]],
-                [[3, 4], [30, 40]],
-            ])
+            self.assertEqual(preview.column_name_editor(0).text(), "X")
+            type_combo = preview.column_type_editor(0)
+            type_combo.setCurrentText("text")
+            spec = preview.spec()
+            self.assertEqual(spec.columns[0].type, ColumnType.TEXT)
+            preview.header.setChecked(False)
+            self.assertEqual(preview.column_name_editor(0).text(), "X")
         finally:
-            os.remove(filename)
+            preview.deleteLater()
 
-    def test_import_excel_into_table_applies_columns_and_saves_each_sheet(self):
-        filename = self.make_workbook_file()
+    def test_preview_displays_fields_as_columns_with_row_aligned_samples(self):
+        sheet = read_excel_workbook(str(self.path))[0]
+        preview = ExcelSheetPreview(sheet)
         try:
-            table = FakeTable()
-            subtable = import_excel_into_table(filename, table)
-
-            self.assertTrue(table.is_open)
-            self.assertEqual(subtable.tables[0].columns, {0: [1, 2], 1: [10, 20]})
-            self.assertEqual(subtable.tables[1].columns, {0: [3, 4], 1: [30, 40]})
-            self.assertEqual(subtable.tables[0].model.save_count, 1)
-            self.assertEqual(subtable.tables[1].model.save_count, 1)
+            self.assertEqual(preview.columns.columnCount(), 3)
+            self.assertEqual(preview.columns.horizontalHeaderItem(0).text(), "X")
+            self.assertEqual(preview.columns.horizontalHeaderItem(1).text(), "Enabled")
+            self.assertEqual(preview.columns.horizontalHeaderItem(2).text(), "When")
+            self.assertEqual(preview.columns.verticalHeaderItem(0).text(), "Import")
+            self.assertEqual(preview.columns.verticalHeaderItem(1).text(), "Column Name")
+            self.assertEqual(preview.columns.verticalHeaderItem(2).text(), "Type")
+            self.assertEqual(preview.columns.item(3, 0).text(), "1")
+            self.assertEqual(preview.columns.item(3, 1).text(), "True")
+            self.assertEqual(preview.columns.item(4, 0).text(), "")
+            self.assertEqual(preview.columns.item(4, 1).text(), "False")
         finally:
-            os.remove(filename)
+            preview.deleteLater()
+
+    def test_preview_can_exclude_columns_and_preserves_selection_on_rebuild(self):
+        sheet = read_excel_workbook(str(self.path))[0]
+        preview = ExcelSheetPreview(sheet)
+        try:
+            preview.column_include_checkbox(1).setChecked(False)
+            self.assertFalse(preview.column_name_editor(1).isEnabled())
+            self.assertFalse(preview.column_type_editor(1).isEnabled())
+
+            spec = preview.spec()
+            self.assertEqual([column.name for column in spec.columns], ["X", "When"])
+
+            preview.header.setChecked(False)
+            self.assertFalse(preview.column_include_checkbox(1).isChecked())
+            self.assertEqual(
+                [column.name for column in preview.spec().columns],
+                ["X", "When"],
+            )
+        finally:
+            preview.deleteLater()
+
+    def test_preview_rejects_included_sheet_without_selected_columns(self):
+        sheet = read_excel_workbook(str(self.path))[0]
+        preview = ExcelSheetPreview(sheet)
+        try:
+            for column in range(preview.columns.columnCount()):
+                preview.column_include_checkbox(column).setChecked(False)
+            with self.assertRaisesRegex(ValueError, "at least one column"):
+                preview.spec()
+        finally:
+            preview.deleteLater()
+
+    def test_failed_type_preflight_does_not_create_project(self):
+        invalid = [ExcelSheetSpec("Raw", "Raw", [
+            ExcelColumnSpec("X", ColumnType.NUMBER, ["not-a-number"])
+        ])]
+        with patch("code.excel_io._default_specs", return_value=invalid):
+            with self.assertRaisesRegex(ValueError, "valid number"):
+                import_excel_into_table(str(self.path), self.window.table, show_preview=False)
+        self.assertEqual(self.window.table.table_names(), [])
+
+    def test_excel_drag_is_accepted_and_routes_to_import(self):
+        enter_event = DropEventStub([self.path])
+        self.window.dragEnterEvent(enter_event)
+        self.assertTrue(enter_event.accepted)
+
+        drop_event = DropEventStub([self.path])
+        with patch.object(self.window, "import_excel_file") as importer:
+            self.window.dropEvent(drop_event)
+        self.assertTrue(drop_event.accepted)
+        importer.assert_called_once_with(str(self.path))
+
+    def test_drag_import_creates_project_canvas_and_success_message(self):
+        subtable = self.window.import_excel_file(str(self.path), show_preview=False)
+
+        self.assertIsNotNone(subtable)
+        self.assertEqual(self.window.figure_window.tabwindow.count(), 1)
+        self.assertEqual(
+            self.window.figure_window.current_canva.project_id,
+            subtable.project.id,
+        )
+        self.assertIn("Excel imported", self.window.bottom_bar.message_bar.message_label.text())
+
+    def test_multiple_file_drops_are_rejected(self):
+        multiple_event = DropEventStub([self.path, self.path])
+        self.window.dragEnterEvent(multiple_event)
+        self.assertTrue(multiple_event.ignored)
 
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class FakeTableViewV3:
-    def __init__(self):
-        self.model = FakeModel()
-        self.columns = {}
-
-    def load_columns(self, columns):
-        self.columns = dict(columns)
-
-    def flush_database_sync(self):
-        self.model.flush_database_sync()
-
-
-class FakeSubTableV3:
-    def __init__(self):
-        self.tables = [FakeTableViewV3()]
-        self.tabWidget = type("FakeTabs", (), {"count": lambda _self: len(self.tables) + 1})()
-
-    def add_new_sheet(self):
-        table = FakeTableViewV3()
-        self.tables.append(table)
-        return table
-
-    def get_table(self, index):
-        return self.tables[index]
-
-
-class FakeTableV3:
-    def __init__(self, has_current=True):
-        self.subtable = FakeSubTableV3() if has_current else None
-        self.created_name = None
-
-    def current_subtable(self):
-        return self.subtable
-
-    def create_project_table(self, table_name):
-        self.created_name = table_name
-        self.subtable = FakeSubTableV3()
-        return self.subtable
-
-
-class ExcelImportV3Tests(unittest.TestCase):
-    def make_workbook_file(self, filename="input.xlsx"):
-        temp_dir = Path(__file__).with_name("_tmp")
-        temp_dir.mkdir(exist_ok=True)
-        path = temp_dir / filename
-        with zipfile.ZipFile(path, "w") as workbook:
-            workbook.writestr(
-                "[Content_Types].xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-</Types>""",
-            )
-            workbook.writestr(
-                "_rels/.rels",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>""",
-            )
-            workbook.writestr(
-                "xl/_rels/workbook.xml.rels",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
-  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>""",
-            )
-            workbook.writestr(
-                "xl/workbook.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets>
-    <sheet name="First" sheetId="1" r:id="rId1"/>
-    <sheet name="Second" sheetId="2" r:id="rId2"/>
-  </sheets>
-</workbook>""",
-            )
-            workbook.writestr(
-                "xl/styles.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>
-  <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
-  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
-</styleSheet>""",
-            )
-            workbook.writestr(
-                "xl/worksheets/sheet1.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetData>
-    <row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>10</v></c></row>
-    <row r="2"><c r="A2"><v>2</v></c><c r="B2"><v>20</v></c></row>
-  </sheetData>
-</worksheet>""",
-            )
-            workbook.writestr(
-                "xl/worksheets/sheet2.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetData>
-    <row r="1"><c r="A1"><v>3</v></c><c r="B1"><v>30</v></c></row>
-    <row r="2"><c r="A2"><v>4</v></c><c r="B2"><v>40</v></c></row>
-  </sheetData>
-</worksheet>""",
-            )
-        return path
-
-    def test_import_excel_into_current_project_table(self):
-        filename = self.make_workbook_file()
-        table = FakeTableV3(has_current=True)
-
-        subtable = import_excel_into_table(str(filename), table)
-
-        self.assertIs(subtable, table.subtable)
-        self.assertIsNone(table.created_name)
-        self.assertEqual(subtable.tables[0].columns, {"1": [1, 2], "2": [10, 20]})
-        self.assertEqual(subtable.tables[1].columns, {"1": [3, 4], "2": [30, 40]})
-        self.assertEqual(subtable.tables[0].model.save_count, 1)
-        self.assertEqual(subtable.tables[1].model.save_count, 1)
-
-    def test_import_without_current_table_creates_project_table_from_filename(self):
-        filename = self.make_workbook_file("WorkbookProject.xlsx")
-        table = FakeTableV3(has_current=False)
-
-        import_excel_into_table(str(filename), table)
-
-        self.assertEqual(table.created_name, "WorkbookProject")

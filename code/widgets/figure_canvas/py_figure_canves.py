@@ -1,4 +1,5 @@
 import sys
+from copy import deepcopy
 from typing import Any, Optional
 from Qt_core import *
 
@@ -14,7 +15,8 @@ from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 
 from code import tex_config
 from code import status_messages
-from code.database.py_database import PyDatabase
+from code.database import ColumnRef, TableChangeSet, TableRepository
+from code.database.table_document import new_id
 from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
 from code.database.safe_expression import evaluate_curve_expression
 
@@ -33,8 +35,13 @@ mpl.use("QtAgg")
 
 class PyFigureCanvas(QWidget):
     def __init__(self, parent=None, width=4, height=3, dpi=200, style=None,
+                 repository: TableRepository | None = None, project_id: str | None = None,
                  project_name: str | None = None, project_path: str | None = None):
         super().__init__()
+        if repository is None or project_id is None:
+            raise ValueError("PyFigureCanvas requires a repository and project id.")
+        self.repository = repository
+        self.project_id = project_id
         self.style = style
         self.project_name = project_name or ""
         self.project_table_name = self.project_name
@@ -54,6 +61,8 @@ class PyFigureCanvas(QWidget):
         self.project_interpolates: list[dict[str, Any]] = []
         self.project_fits: list[dict[str, Any]] = []
         self.project_texts: list[dict[str, Any]] = []
+        self._data_objects: dict[str, dict[str, Any]] = {}
+        self.repository.transaction_committed.connect(self._table_changed)
 
         self.canva = FigureCanvasQTAgg(self.fig)
         self.canva.setFixedSize(width * dpi, height * dpi)
@@ -95,7 +104,52 @@ class PyFigureCanvas(QWidget):
 
     def closeEvent(self, event):
         self.cancel_pending_draw()
+        try:
+            self.repository.transaction_committed.disconnect(self._table_changed)
+        except RuntimeError:
+            pass
         super().closeEvent(event)
+
+    def _table_changed(self, changes: TableChangeSet):
+        if changes.project_id != self.project_id:
+            return
+        refreshed = False
+        errors = []
+        collections = {
+            "plot": self.project_plots,
+            "scatter": self.project_scatters,
+            "interpolate": self.project_interpolates,
+            "fit": self.project_fits,
+        }
+        for object_id, entry in list(self._data_objects.items()):
+            if entry.get("record") not in collections.get(entry.get("kind"), []):
+                self._data_objects.pop(object_id, None)
+                continue
+            modify = entry.get("modify")
+            refs = getattr(modify, "refs", set())
+            if modify is None or not refs.intersection(changes.changed_columns):
+                continue
+            refresh = getattr(modify, "refresh_data_pair", None)
+            if callable(refresh):
+                try:
+                    refresh(redraw=False)
+                    refreshed = True
+                except Exception as exc:
+                    errors.append(str(exc))
+        if refreshed:
+            self.fig.canvas.draw_idle()
+        if errors:
+            suffix = f" ({len(errors)} failures)" if len(errors) > 1 else ""
+            status_messages.show_error(f"Chart refresh failed{suffix}: {errors[0]}")
+
+    def _register_data_object(self, object_id: str, kind: str, record: dict[str, Any],
+                              widget, modify=None):
+        self._data_objects[object_id] = {
+            "kind": kind,
+            "record": record,
+            "widget": widget,
+            "modify": modify,
+        }
 
     # Add axes
     def add_axes(self, nrows=1, ncols=1, record_project=True):
@@ -166,17 +220,19 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     # Add line plot
-    def add_plot(self, x, y, style, size, color, label, x_data_name: str, y_data_name: str,
-                 record_project=True):
+    def add_plot(self, x, y, style, size, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
+                 record_project=True, object_id: str | None = None):
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, style, markersize=size, color=color, label=label)
 
         project_record = None
         if record_project:
+            object_id = object_id or new_id()
             project_record = {
+                "object_id": object_id,
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
-                "x_data_name": x_data_name,
-                "y_data_name": y_data_name,
+                "x_ref": x_ref.to_dict(),
+                "y_ref": y_ref.to_dict(),
                 "style": style,
                 "size": float(line.get_markersize()),
                 "color": line.get_color(),
@@ -190,31 +246,38 @@ class PyFigureCanvas(QWidget):
         if all_mod_widget.cahrt_mod_window.boxs.get('plot_box') is None:
             all_mod_widget.add_chart_box('plot_box')
         # Add curve adjustment panel
+        plot_modify = PyPlotModify(
+            self.repository, self.fig, self.current_axes, self.style, line, x_ref, y_ref, label,
+            project_record=project_record, project_collection=self.project_plots,
+        )
         plot_mod_widget = PyPlotModWidget(
-            PyPlotModify(self.fig, self.current_axes, self.style, line, x_data_name, y_data_name, label,
-                         project_record=project_record, project_collection=self.project_plots),
-            x_data_name, y_data_name, color)
+            plot_modify, self.repository, self.project_id, x_ref, y_ref, color
+        )
 
         # Add visualization object
         self.current_axes_mod.add_vis_object(plot_mod_widget.get_colorupdate_func())
 
         plot_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['plot_box']
         plot_box.add_widget(plot_mod_widget, 'plot')
+        if project_record is not None:
+            self._register_data_object(object_id, "plot", project_record, plot_mod_widget, plot_modify)
 
         self.redraw()
 
     # Add scatter plot
-    def add_scatter(self, x, y, size, color, marker, label, x_data_name: str, y_data_name: str,
-                    record_project=True):
+    def add_scatter(self, x, y, size, color, marker, label, x_ref: ColumnRef, y_ref: ColumnRef,
+                    record_project=True, object_id: str | None = None):
         with mpl.style.context(self.style):
             scatter = self.current_axes.scatter(x, y, s=size, c=color, marker=marker, label=label)
 
         project_record = None
         if record_project:
+            object_id = object_id or new_id()
             project_record = {
+                "object_id": object_id,
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
-                "x_data_name": x_data_name,
-                "y_data_name": y_data_name,
+                "x_ref": x_ref.to_dict(),
+                "y_ref": y_ref.to_dict(),
                 "size": float(size),
                 "color": color,
                 "marker": marker,
@@ -229,25 +292,30 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('scatter_box')
 
         # Add scatter adjustment panel
+        scatter_modify = PyScatterModify(
+            self.repository, self.fig, self.current_axes, self.style, scatter, x_ref, y_ref, label,
+            project_record=project_record, project_collection=self.project_scatters,
+        )
         scatter_mod_widget = PyScatterModWidget(
-            PyScatterModify(self.fig, self.current_axes, self.style, scatter, x_data_name, y_data_name, label,
-                            project_record=project_record, project_collection=self.project_scatters),
-            x_data_name, y_data_name, color)
+            scatter_modify, self.repository, self.project_id, x_ref, y_ref, color
+        )
 
         # Add visualization object
         self.current_axes_mod.add_vis_object(scatter_mod_widget.get_colorupdate_func())
 
         scatter_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['scatter_box']
         scatter_box.add_widget(scatter_mod_widget, 'scatter')
+        if project_record is not None:
+            self._register_data_object(object_id, "scatter", project_record, scatter_mod_widget, scatter_modify)
 
         self.redraw()
 
     # Add fit curve
-    def add_fit_curve(self, x, y, color, label, x_data_name: str = "", y_data_name: str = "",
+    def add_fit_curve(self, x, y, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
                       engine: str = "Python", record_project=True, fit_type=None,
                       fit_options=None, fit_result=None, expression: str = "",
                       x_start: float | None = None, x_stop: float | None = None,
-                      style: str = "solid"):
+                      style: str = "solid", object_id: str | None = None):
         if engine not in {"Python", "Matlab"}:
             raise ValueError(f"Unsupported fitting engine: {engine}")
 
@@ -277,10 +345,12 @@ class PyFigureCanvas(QWidget):
 
         project_record = None
         if record_project:
+            object_id = object_id or new_id()
             project_record = {
+                "object_id": object_id,
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
-                "x_data_name": x_data_name,
-                "y_data_name": y_data_name,
+                "x_ref": x_ref.to_dict(),
+                "y_ref": y_ref.to_dict(),
                 "engine": engine,
                 "fit_type": fit_type,
                 "fit_options": fit_options,
@@ -314,8 +384,10 @@ class PyFigureCanvas(QWidget):
                 project_record=project_record,
                 project_collection=self.project_fits,
             ),
-            x_data_name=x_data_name,
-            y_data_name=y_data_name,
+            repository=self.repository,
+            project_id=self.project_id,
+            x_ref=x_ref,
+            y_ref=y_ref,
             engine=engine,
             fit_type=fit_type,
             fit_options=fit_options,
@@ -325,15 +397,17 @@ class PyFigureCanvas(QWidget):
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
         fitting_box.add_widget(fitting_mod_widget, "fitting")
         fitting_box.setCurrentWidget(fitting_mod_widget)
+        if project_record is not None:
+            self._register_data_object(object_id, "fit", project_record, fitting_mod_widget)
 
         self.redraw()
         return line
 
     # Add interpolation curve
-    def add_interpolate_curve(self, x, y, x_name, y_name, method, k=3, label='interpolate',
+    def add_interpolate_curve(self, x, y, x_ref: ColumnRef, y_ref: ColumnRef, method, k=3, label='interpolate',
                               color='black', record_project=True,
                               samples=DEFAULT_INTERPOLATION_SAMPLES,
-                              lam=None, lam_auto=True):
+                              lam=None, lam_auto=True, object_id: str | None = None):
         with mpl.style.context(self.style):
             try:
                 x_new, y_new = interpolate_curve(
@@ -352,10 +426,12 @@ class PyFigureCanvas(QWidget):
 
         project_record = None
         if record_project:
+            object_id = object_id or new_id()
             project_record = {
+                "object_id": object_id,
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
-                "x_data_name": x_name,
-                "y_data_name": y_name,
+                "x_ref": x_ref.to_dict(),
+                "y_ref": y_ref.to_dict(),
                 "method": method,
                 "k": int(k),
                 "samples": int(samples),
@@ -373,18 +449,25 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('interpolate_box')
 
         # Add interpolation curve adjustment panel
+        interpolate_modify = PyInterpolateModify(
+            self.repository, self.fig, self.current_axes, self.style, line, x_ref, y_ref, label,
+            method=method, k=k, samples=samples, lam=lam, lam_auto=lam_auto,
+            project_record=project_record, project_collection=self.project_interpolates,
+        )
         interpolate_mod_widget = PyInterpolateWidget(
-            PyInterpolateModify(self.fig, self.current_axes, self.style, line, x_name, y_name, label,
-                                method=method, k=k, samples=samples, lam=lam, lam_auto=lam_auto,
-                                project_record=project_record,
-                                project_collection=self.project_interpolates), method, k, color,
-            x_data_name=x_name, y_data_name=y_name, samples=samples, lam=lam, lam_auto=lam_auto)
+            interpolate_modify, self.repository, self.project_id, method, k, color,
+            x_ref=x_ref, y_ref=y_ref, samples=samples, lam=lam, lam_auto=lam_auto,
+        )
 
         # Add visualization object
         self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
 
         interpolate_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['interpolate_box']
         interpolate_box.add_widget(interpolate_mod_widget, 'interpolate')
+        if project_record is not None:
+            self._register_data_object(
+                object_id, "interpolate", project_record, interpolate_mod_widget, interpolate_modify
+            )
 
         self.redraw()
         status_messages.show_success("Interpolation curve created.")
@@ -486,48 +569,84 @@ class PyFigureCanvas(QWidget):
             self.fig.savefig(filename, dpi=save_dpi)
 
     @staticmethod
-    def _rewrite_data_name(data_name: str, old_table: str, new_table: str,
-                           old_sheet: str | None = None, new_sheet: str | None = None) -> str:
-        try:
-            table_name, sheet_name, column_name = PyDatabase.split_data_name(data_name)
-        except (KeyError, AttributeError):
-            return data_name
-        if table_name != old_table:
-            return data_name
-        if old_sheet is not None and sheet_name != old_sheet:
-            return data_name
-        return f"{new_table}/{new_sheet or sheet_name}/{column_name}"
+    def _record_refs(record: dict[str, Any]) -> set[ColumnRef]:
+        refs = set()
+        for field in ("x_ref", "y_ref"):
+            try:
+                refs.add(ColumnRef.from_dict(record.get(field)))
+            except ValueError:
+                pass
+        return refs
 
-    def rewrite_data_references(self, old_table: str, new_table: str,
-                                old_sheet: str | None = None, new_sheet: str | None = None):
-        for collection in (self.project_plots, self.project_scatters, self.project_interpolates, self.project_fits):
+    def dependent_records(self, refs: set[ColumnRef]) -> list[dict[str, Any]]:
+        snapshots = []
+        collections = (
+            ("plot", self.project_plots),
+            ("scatter", self.project_scatters),
+            ("interpolate", self.project_interpolates),
+            ("fit", self.project_fits),
+        )
+        for kind, collection in collections:
             for record in collection:
-                for field in ("x_data_name", "y_data_name"):
-                    if field in record:
-                        record[field] = self._rewrite_data_name(
-                            record[field],
-                            old_table,
-                            new_table,
-                            old_sheet=old_sheet,
-                            new_sheet=new_sheet,
-                        )
+                if self._record_refs(record).intersection(refs):
+                    snapshots.append({"kind": kind, "record": deepcopy(record)})
+        return snapshots
 
-        if self.fig_modify_widget is not None:
-            from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
+    def remove_data_dependents(self, snapshots: list[dict[str, Any]]) -> None:
+        for snapshot in snapshots:
+            object_id = snapshot["record"].get("object_id")
+            entry = self._data_objects.pop(object_id, None)
+            if entry is None:
+                continue
+            widget = entry.get("widget")
+            if widget is not None:
+                widget.delete_object()
+                widget.deleteLater()
+        self.fig.canvas.draw_idle()
 
-            for widget in self.fig_modify_widget.findChildren(PyDataChoiceWidget):
-                old_x = widget.get_x_data()
-                old_y = widget.get_y_data()
-                new_x = self._rewrite_data_name(
-                    old_x, old_table, new_table, old_sheet=old_sheet, new_sheet=new_sheet
+    def restore_data_dependents(self, snapshots: list[dict[str, Any]]) -> None:
+        for snapshot in snapshots:
+            kind = snapshot["kind"]
+            record = deepcopy(snapshot["record"])
+            axes_index = int(record.get("axes_index", 0))
+            if not 0 <= axes_index < len(self.fig.axes):
+                continue
+            self.set_current_axes_by_index(axes_index)
+            try:
+                x_ref = ColumnRef.from_dict(record["x_ref"])
+                y_ref = ColumnRef.from_dict(record["y_ref"])
+                pair = self.repository.line_pair(x_ref, y_ref) if kind == "plot" else self.repository.valid_pair(x_ref, y_ref)
+            except (KeyError, ValueError):
+                continue
+            if kind == "plot":
+                self.add_plot(
+                    pair.x, pair.y, record.get("style", "-"), record.get("size", 2.0),
+                    record.get("color", "black"), record.get("label", ""), x_ref, y_ref,
+                    object_id=record.get("object_id"),
                 )
-                new_y = self._rewrite_data_name(
-                    old_y, old_table, new_table, old_sheet=old_sheet, new_sheet=new_sheet
+            elif kind == "scatter":
+                self.add_scatter(
+                    pair.x, pair.y, record.get("size", 20.0), record.get("color", "black"),
+                    record.get("marker", "o"), record.get("label", ""), x_ref, y_ref,
+                    object_id=record.get("object_id"),
                 )
-                if new_x != old_x:
-                    widget.set_x_data(new_x)
-                if new_y != old_y:
-                    widget.set_y_data(new_y)
+            elif kind == "interpolate":
+                self.add_interpolate_curve(
+                    pair.x, pair.y, x_ref, y_ref, record.get("method"),
+                    k=record.get("k", 3), label=record.get("label", "interpolate"),
+                    color=record.get("color", "black"), samples=record.get("samples", 1000),
+                    lam=record.get("lam"), lam_auto=record.get("lam_auto", True),
+                    object_id=record.get("object_id"),
+                )
+            elif kind == "fit":
+                self.add_fit_curve(
+                    pair.x, pair.y, record.get("color", "black"), record.get("label", "fitting"),
+                    x_ref, y_ref, engine=record.get("engine", "Python"),
+                    fit_type=record.get("fit_type"), fit_options=record.get("fit_options"),
+                    fit_result=record.get("fit_result"), expression=record.get("expression", ""),
+                    x_start=record.get("x_start"), x_stop=record.get("x_stop"),
+                    style=record.get("style", "solid"), object_id=record.get("object_id"),
+                )
 
     @staticmethod
     def _json_position(position):
@@ -664,11 +783,8 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     def set_project_name(self, name: str):
-        old_table = self.project_table_name
         self.project_name = name
         self.project_table_name = name
-        if old_table and old_table != name:
-            self.rewrite_data_references(old_table, name)
 
     def project_snapshot(self) -> dict[str, Any]:
         return {

@@ -3,7 +3,6 @@ QFrame#title_bar
 {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgb(55, 65, 81), stop:0.5 rgb(17, 24, 39), stop:1 rgb(0, 0, 0));
     max-height: 120px;
-    max-width: 580px;
     min-height: 120px;
     min-width: 580px;
     border-top-left-radius: 10px; /* 调整半径 */
@@ -188,7 +187,6 @@ QWidget#selector_menu
 {
     background-color: #ffffff;
     max-height: 80px;
-    max-width: 580px;
     min-height: 80px;
     min-width: 580px;
     margin-top: 0px;

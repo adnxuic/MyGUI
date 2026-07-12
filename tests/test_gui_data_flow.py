@@ -1,562 +1,170 @@
 import os
-import tempfile
-import time
 import unittest
-import zipfile
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-_TEST_TMP_DIR = Path(__file__).with_name("_tmp")
-_TEST_TMP_DIR.mkdir(exist_ok=True)
-os.environ["TEMP"] = str(_TEST_TMP_DIR)
-os.environ["TMP"] = str(_TEST_TMP_DIR)
-tempfile.tempdir = str(_TEST_TMP_DIR)
 
 import numpy as np
 
-from code import status_messages
-from Qt_core import QApplication, QGuiApplication, Qt
-from code.database import matlab_adapter
-from code.database.py_database import PyDatabase, databases
-from code.excel_io import import_excel_into_table
-from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import PyFitDialog, PyPlotDialog, PyScatterDialog
+from Qt_core import QApplication, QGuiApplication, QInputDialog, QMessageBox, Qt
+
+from code.database import ColumnRef
 from main import MainWindow
 
 
-@unittest.skip("legacy global-table GUI data flow tests; v3 scopes data to the current project table")
-class GuiDataFlowTests(unittest.TestCase):
+class GuiDataFlowV4Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        PyDatabase.clear()
-        matlab_adapter.set_matlab_enabled(False, notify=False)
         self.window = MainWindow()
 
     def tearDown(self):
         self.window.close()
-        PyDatabase.clear()
-        status_messages.clear_status_handler()
-        matlab_adapter.set_matlab_enabled(False, notify=False)
-        matlab_adapter.clear_matlab_state_listeners()
-
-    def wait_until(self, predicate, timeout=3.0):
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            self.app.processEvents()
-            if predicate():
-                return
-            time.sleep(0.01)
-        self.fail("Timed out waiting for asynchronous GUI update.")
-
-    def make_workbook_file(self):
-        filename = _TEST_TMP_DIR / "gui_data_flow.xlsx"
-        with zipfile.ZipFile(filename, "w") as workbook:
-            workbook.writestr(
-                "[Content_Types].xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-</Types>""",
-            )
-            workbook.writestr(
-                "_rels/.rels",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>""",
-            )
-            workbook.writestr(
-                "xl/_rels/workbook.xml.rels",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>""",
-            )
-            workbook.writestr(
-                "xl/workbook.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets>
-    <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
-  </sheets>
-</workbook>""",
-            )
-            workbook.writestr(
-                "xl/styles.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>
-  <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
-  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
-  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
-  <dxfs count="0"/>
-  <tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/>
-</styleSheet>""",
-            )
-            workbook.writestr(
-                "xl/worksheets/sheet1.xml",
-                """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetData>
-    <row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>10</v></c></row>
-    <row r="2"><c r="A2"><v>2</v></c><c r="B2"><v>20</v></c></row>
-    <row r="3"><c r="A3"><v>3</v></c><c r="B3"><v>30</v></c></row>
-  </sheetData>
-</worksheet>""",
-            )
-        return filename
-
-    def add_canvas_axes(self):
-        self.window.figure_window.add_figure(width=6.4, height=4.8, dpi=100, style="default", canva_name="smoke")
-        canvas = self.window.figure_window.current_canva
-        canvas.add_axes(nrows=1, ncols=1)
-        return canvas
-
-    def test_excel_import_can_create_plot_and_scatter_dialog_charts_then_switch_sources(self):
-        filename = self.make_workbook_file()
-        import_excel_into_table(filename, self.window.table)
-
-        canvas = self.add_canvas_axes()
-        x_name = "Table2/Sheet1/1"
-        y_name = "Table2/Sheet1/2"
-
-        plot_dialog = PyPlotDialog("plot", self.window.figure_window)
-        plot_dialog.x_data_input.setCurrentText(x_name)
-        plot_dialog.y_data_input.setCurrentText(y_name)
-        plot_dialog.accept()
-
-        scatter_dialog = PyScatterDialog("scatter", self.window.figure_window)
-        scatter_dialog.x_data_input.setCurrentText(x_name)
-        scatter_dialog.y_data_input.setCurrentText(y_name)
-        scatter_dialog.accept()
-
-        axes = canvas.current_axes
-        self.assertEqual(len(axes.lines), 1)
-        self.assertEqual(len(axes.collections), 1)
-
-        replacement = PyDatabase()
-        PyDatabase.register_sheet("Replacement", "Sheet1", replacement)
-        replacement.update_data(1, np.array([10.0, 20.0, 30.0]))
-        replacement.update_data(2, np.array([100.0, 200.0, 300.0]))
-        PyDatabase.unregister_table("Table2")
-        self.assertFalse(PyDatabase.has_data(x_name))
-
-        all_mod_widget = canvas.fig_modify_widget.fine_all_mod_widget(axes)
-        plot_widget = all_mod_widget.cahrt_mod_window.boxs["plot_box"].widget(0)
-        scatter_widget = all_mod_widget.cahrt_mod_window.boxs["scatter_box"].widget(0)
-
-        plot_widget.data_choice_widget.update_data()
-        scatter_widget.data_choice_widget.update_data()
-        plot_widget.data_choice_widget.set_x_data("Replacement/Sheet1/1")
-        plot_widget.data_choice_widget.set_y_data("Replacement/Sheet1/2")
-        scatter_widget.data_choice_widget.set_x_data("Replacement/Sheet1/1")
-        scatter_widget.data_choice_widget.set_y_data("Replacement/Sheet1/2")
-        plot_widget.x_data_change()
-        plot_widget.y_data_change()
-        scatter_widget.x_data_change()
-        scatter_widget.y_data_change()
         self.app.processEvents()
 
-        np.testing.assert_allclose(axes.lines[0].get_xdata(), np.array([10.0, 20.0, 30.0]))
-        np.testing.assert_allclose(axes.lines[0].get_ydata(), np.array([100.0, 200.0, 300.0]))
-        np.testing.assert_allclose(axes.collections[0].get_offsets()[:, 0], np.array([10.0, 20.0, 30.0]))
-        np.testing.assert_allclose(axes.collections[0].get_offsets()[:, 1], np.array([100.0, 200.0, 300.0]))
-
-        callbacks = databases["Replacement"]["Sheet1"].data
-        self.assertIn(id(axes.lines[0]), callbacks["1"][1])
-        self.assertIn(id(axes.collections[0]), callbacks["1"][1])
-
-    def test_fit_dialog_creates_fitting_widget_with_selected_data(self):
-        database = PyDatabase()
-        PyDatabase.register_sheet("Data", "Sheet1", database)
-        database.update_data(1, np.array([1.0, 2.0, 3.0]))
-        database.update_data(2, np.array([2.0, 4.0, 6.0]))
-
-        canvas = self.add_canvas_axes()
-        dialog = PyFitDialog("fit", self.window.figure_window)
-        dialog.x_data_input.setCurrentText("Data/Sheet1/1")
-        dialog.y_data_input.setCurrentText("Data/Sheet1/2")
-        dialog.accept()
-        self.app.processEvents()
-
-        axes = canvas.current_axes
-        self.assertEqual(len(axes.lines), 1)
-        all_mod_widget = canvas.fig_modify_widget.fine_all_mod_widget(axes)
-        fitting_box = all_mod_widget.cahrt_mod_window.boxs["fitting_box"]
-        fitting_widget = fitting_box.widget(0)
-        self.assertEqual(fitting_widget.data_choice_widget.get_x_data(), "Data/Sheet1/1")
-        self.assertEqual(fitting_widget.data_choice_widget.get_y_data(), "Data/Sheet1/2")
-        self.assertEqual(fitting_widget.engine, "Python")
-        self.assertFalse(fitting_widget.matlab_button.isEnabled())
-        matlab_adapter.set_matlab_enabled(True)
-        self.app.processEvents()
-        self.assertTrue(fitting_widget.matlab_button.isEnabled())
-
-    def test_python_fit_dialog_creates_fitting_widget_and_updates_curve(self):
-        database = PyDatabase()
-        PyDatabase.register_sheet("Data", "Sheet1", database)
-        x = np.linspace(-2.0, 2.0, 9)
-        y = 2.0 * x ** 2 + 3.0 * x + 1.0
-        database.update_data(1, x)
-        database.update_data(2, y)
-
-        canvas = self.add_canvas_axes()
-        dialog = PyFitDialog("fit", self.window.figure_window)
-        dialog.x_data_input.setCurrentText("Data/Sheet1/1")
-        dialog.y_data_input.setCurrentText("Data/Sheet1/2")
-        dialog.accept()
-        self.app.processEvents()
-
-        axes = canvas.current_axes
-        all_mod_widget = canvas.fig_modify_widget.fine_all_mod_widget(axes)
-        fitting_box = all_mod_widget.cahrt_mod_window.boxs["fitting_box"]
-        fitting_widget = fitting_box.widget(0)
-        self.assertEqual(fitting_widget.engine, "Python")
-
-        fit_dialog = fitting_widget.open_fit_window("Python")
-        self.assertIsNotNone(fit_dialog)
-        try:
-            fit_dialog.fit_options_widget.order_input.setCurrentText("poly2")
-            fit_dialog.fit_button.click()
-            self.wait_until(lambda: fitting_widget.result_model_label.text() == "Model: poly2")
-        finally:
-            fit_dialog.close()
-
-        self.assertEqual(fitting_widget.result_engine_label.text(), "Engine: SciPy")
-        self.assertEqual(len(axes.lines[0].get_xdata()), 1000)
-        np.testing.assert_allclose(
-            axes.lines[0].get_ydata(),
-            2.0 * axes.lines[0].get_xdata() ** 2 + 3.0 * axes.lines[0].get_xdata() + 1.0,
-            atol=1e-8,
+    def add_project(self, name="ProjectA"):
+        self.window.figure_window.add_figure(
+            width=4, height=3, dpi=100, style="default", canva_name=name
         )
+        canvas = self.window.figure_window.current_canva
+        canvas.add_axes()
+        view = self.window.table.current_subtable().get_table(0)
+        model = view.table_model
+        for row, (x, y) in enumerate([(1, 10), (2, 20), (3, 30)]):
+            model.setData(model.index(row, 0), str(x), Qt.EditRole)
+            model.setData(model.index(row, 1), str(y), Qt.EditRole)
+        sheet = model.sheet
+        x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+        return canvas, view, x_ref, y_ref
 
-    def test_multiple_fitting_widgets_keep_selected_data_separate(self):
-        database = PyDatabase()
-        PyDatabase.register_sheet("Data", "Sheet1", database)
-        database.update_data(1, np.array([1.0, 2.0, 3.0]))
-        database.update_data(2, np.array([2.0, 4.0, 6.0]))
-        database.update_data(3, np.array([3.0, 6.0, 9.0]))
+    def test_startup_and_project_switching_use_repository_ids(self):
+        self.assertEqual(self.window.table.table_names(), [])
+        first, *_ = self.add_project("First")
+        second, *_ = self.add_project("Second")
+        self.window.figure_window.tabwindow.setCurrentWidget(first)
+        self.app.processEvents()
+        self.assertEqual(self.window.table.current_project_id, first.project_id)
+        self.window.figure_window.tabwindow.setCurrentWidget(second)
+        self.app.processEvents()
+        self.assertEqual(self.window.table.current_table_name, "Second")
 
-        canvas = self.add_canvas_axes()
-        first_dialog = PyFitDialog("fit", self.window.figure_window)
-        first_dialog.x_data_input.setCurrentText("Data/Sheet1/1")
-        first_dialog.y_data_input.setCurrentText("Data/Sheet1/2")
-        first_dialog.accept()
-
-        second_dialog = PyFitDialog("fit", self.window.figure_window)
-        second_dialog.x_data_input.setCurrentText("Data/Sheet1/1")
-        second_dialog.y_data_input.setCurrentText("Data/Sheet1/3")
-        second_dialog.accept()
+    def test_narrow_window_keeps_canvas_visible_and_table_near_default_width(self):
+        self.window.showNormal()
+        self.window.resize(1170, 800)
         self.app.processEvents()
 
-        axes = canvas.current_axes
-        fitting_box = canvas.fig_modify_widget.fine_all_mod_widget(axes).cahrt_mod_window.boxs["fitting_box"]
-        first_widget = fitting_box.widget(0)
-        second_widget = fitting_box.widget(1)
+        self.assertGreaterEqual(self.window.figure_window.width(), 400)
+        self.assertGreaterEqual(self.window.table.width(), 240)
+        self.assertLessEqual(self.window.table.width(), 460)
+        self.assertGreaterEqual(self.window.fig_control_window.width(), 240)
+        self.assertLessEqual(self.window.fig_control_window.width(), 480)
+        left_width = self.window.left_layout.geometry().width()
+        self.assertEqual(self.window.title_bar.width(), left_width)
+        self.assertEqual(self.window.bottom_bar.width(), left_width)
+        self.assertEqual(self.window.title_bar.selector_style_bar.width(), left_width)
 
-        fitting_box.setCurrentWidget(first_widget)
-        self.app.processEvents()
-        self.assertEqual(first_widget.data_choice_widget.get_y_data(), "Data/Sheet1/2")
+    def test_one_cell_edit_refreshes_plot_and_draws_canvas_once(self):
+        canvas, view, x_ref, y_ref = self.add_project()
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(pair.x, pair.y, "-", 2, "black", "plot", x_ref, y_ref)
+        line = canvas.fig.axes[0].lines[0]
+        canvas.fig.canvas.draw_idle = Mock()
 
-        fitting_box.setCurrentWidget(second_widget)
-        self.app.processEvents()
-        self.assertEqual(second_widget.data_choice_widget.get_y_data(), "Data/Sheet1/3")
+        view.table_model.setData(view.table_model.index(1, 1), "25", Qt.EditRole)
 
-    def test_switching_multiple_canvases_and_axes_updates_current_references(self):
-        self.window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name="first")
-        first_canvas = self.window.figure_window.current_canva
-        first_canvas.add_axes(nrows=1, ncols=1)
-        first_axes = first_canvas.current_axes
+        np.testing.assert_allclose(line.get_ydata()[:3], [10, 25, 30])
+        canvas.fig.canvas.draw_idle.assert_called_once()
 
-        self.window.figure_window.add_figure(width=5, height=4, dpi=80, style="default", canva_name="second")
-        second_canvas = self.window.figure_window.current_canva
-        second_canvas.add_axes(nrows=1, ncols=2)
+    def test_missing_rows_break_lines_and_filter_scatter_pairs(self):
+        canvas, view, x_ref, y_ref = self.add_project()
+        view.table_model.setData(view.table_model.index(1, 0), "", Qt.EditRole)
+        line_pair = self.window.repository.line_pair(x_ref, y_ref)
+        valid_pair = self.window.repository.valid_pair(x_ref, y_ref)
 
-        second_axes_button = None
-        axes_btn_layout = second_canvas.fig_modify_widget.axes_btn_bar_layout
-        for index in range(axes_btn_layout.count()):
-            button = axes_btn_layout.itemAt(index).widget()
-            if button is not None and button.text() == "axe2":
-                second_axes_button = button
-                break
-        self.assertIsNotNone(second_axes_button)
-        second_axes_button.click()
-        self.app.processEvents()
+        self.assertTrue(np.isnan(line_pair.x[1]))
+        np.testing.assert_allclose(valid_pair.x, [1, 3])
+        np.testing.assert_allclose(valid_pair.y, [10, 30])
 
-        self.assertIs(second_canvas.current_axes, second_canvas.fig.axes[1])
-        self.assertIs(second_canvas.current_axes_mod, second_canvas.axes_mods[1])
+        canvas.add_scatter(valid_pair.x, valid_pair.y, 20, "black", "o", "scatter", x_ref, y_ref)
+        offsets = canvas.fig.axes[0].collections[0].get_offsets()
+        self.assertEqual(len(offsets), 2)
 
-        self.window.figure_window.tabwindow.setCurrentIndex(0)
-        self.app.processEvents()
+    def test_column_rename_and_move_do_not_change_refs(self):
+        _canvas, view, x_ref, _y_ref = self.add_project()
+        sheet = view.table_model.sheet
+        sheet.columns[0].name = "Time"
+        sheet.move_column(0, 2)
 
-        self.assertIs(self.window.figure_window.current_canva, first_canvas)
-        self.assertIs(self.window.figure_window.current_fig_modify_widget, first_canvas.fig_modify_widget)
-        self.assertIs(first_canvas.current_axes, first_axes)
+        self.assertTrue(self.window.repository.has_ref(x_ref))
+        self.assertTrue(self.window.repository.ref_label(x_ref).endswith("/Time"))
 
-        self.window.figure_window.tabwindow.setCurrentIndex(1)
-        self.app.processEvents()
+    def test_referenced_column_delete_cascades_and_undo_restores(self):
+        canvas, view, x_ref, y_ref = self.add_project()
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(pair.x, pair.y, "-", 2, "black", "plot", x_ref, y_ref)
+        view.setCurrentIndex(view.table_model.index(0, 0))
 
-        self.assertIs(self.window.figure_window.current_canva, second_canvas)
-        self.assertIs(self.window.figure_window.current_fig_modify_widget, second_canvas.fig_modify_widget)
-        self.assertIs(second_canvas.current_axes, second_canvas.fig.axes[1])
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+            view.delete_column()
+        self.assertEqual(len(canvas.project_plots), 0)
+        self.assertFalse(self.window.repository.has_ref(x_ref))
+
+        self.window.repository.undo_stack(canvas.project_id).undo()
+        self.assertTrue(self.window.repository.has_ref(x_ref))
+        self.assertEqual(len(canvas.project_plots), 1)
+
+    def test_incompatible_type_change_cascades_and_undo_restores(self):
+        canvas, view, x_ref, y_ref = self.add_project()
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(pair.x, pair.y, "-", 2, "black", "plot", x_ref, y_ref)
+        view.setCurrentIndex(view.table_model.index(0, 0))
+
+        with patch.object(QInputDialog, "getItem", return_value=("text", True)), \
+                patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+            view.change_column_type()
+        self.assertEqual(view.table_model.sheet.column(x_ref.column_id).type.value, "text")
+        self.assertEqual(len(canvas.project_plots), 0)
+
+        self.window.repository.undo_stack(canvas.project_id).undo()
+        self.assertEqual(view.table_model.sheet.column(x_ref.column_id).type.value, "number")
+        self.assertEqual(len(canvas.project_plots), 1)
+
+    def test_referenced_sheet_delete_cascades_and_undo_restores(self):
+        canvas, _view, _x_ref, _y_ref = self.add_project()
+        subtable = self.window.table.current_subtable()
+        second = subtable.add_new_sheet("Second")
+        model = second.table_model
+        model.setData(model.index(0, 0), "1", Qt.EditRole)
+        model.setData(model.index(0, 1), "10", Qt.EditRole)
+        x_ref = ColumnRef(canvas.project_id, model.sheet.id, model.sheet.columns[0].id)
+        y_ref = ColumnRef(canvas.project_id, model.sheet.id, model.sheet.columns[1].id)
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(pair.x, pair.y, "-", 2, "black", "sheet plot", x_ref, y_ref)
+
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+            subtable.delete_sheet(1)
+        self.assertFalse(self.window.repository.has_ref(x_ref))
+        self.assertEqual(len(canvas.project_plots), 0)
+
+        self.window.repository.undo_stack(canvas.project_id).undo()
+        self.assertTrue(self.window.repository.has_ref(x_ref))
+        self.assertEqual(subtable.tabWidget.tabText(1), "Second")
+        self.assertEqual(len(canvas.project_plots), 1)
+
+    def test_crlf_paste_is_atomic_and_undoable(self):
+        _canvas, view, _x_ref, _y_ref = self.add_project()
+        view.setCurrentIndex(view.table_model.index(3, 0))
+        QGuiApplication.clipboard().setText("4\t40\r\n5\t50\r\n")
+        view.paste_items()
+
+        self.assertEqual(view.table_model.data(view.table_model.index(4, 1)), "50")
+        self.window.repository.undo_stack(view.project_id).undo()
+        self.assertEqual(view.table_model.data(view.table_model.index(3, 0)), "")
+        self.assertEqual(view.table_model.data(view.table_model.index(4, 1)), "")
 
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class SingleProjectGuiDataFlowTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
-
-    def setUp(self):
-        PyDatabase.clear()
-        self.window = MainWindow()
-
-    def tearDown(self):
-        self.window.close()
-        PyDatabase.clear()
-        status_messages.clear_status_handler()
-
-    def add_project_with_data(self, name: str):
-        self.window.figure_window.add_figure(width=4, height=3, dpi=80, style="default", canva_name=name)
-        canvas = self.window.figure_window.current_canva
-        subtable = self.window.table.current_subtable()
-        table_view = subtable.get_table(0)
-        table_view.model.setData(table_view.model.index(0, 0), "1")
-        table_view.model.setData(table_view.model.index(1, 0), "2")
-        table_view.model.setData(table_view.model.index(0, 1), "10")
-        table_view.model.setData(table_view.model.index(1, 1), "20")
-        self.window.table.save_current_table_to_database()
-        canvas.add_axes(nrows=1, ncols=1)
-        return canvas
-
-    def test_startup_has_no_business_table_until_project_created(self):
-        self.assertEqual(self.window.table.table_names(), [])
-        self.assertIsNone(self.window.table.current_table_name)
-        self.assertEqual(self.window.figure_window.tabwindow.count(), 0)
-
-    def test_creating_and_switching_projects_switches_visible_table(self):
-        first = self.add_project_with_data("First")
-        second = self.add_project_with_data("Second")
-
-        self.assertEqual(self.window.table.table_names(), ["First", "Second"])
-        self.assertEqual(self.window.table.current_table_name, "Second")
-        self.window.figure_window.tabwindow.setCurrentIndex(0)
-        self.app.processEvents()
-
-        self.assertIs(self.window.figure_window.current_canva, first)
-        self.assertEqual(self.window.table.current_table_name, "First")
-
-        self.window.figure_window.tabwindow.setCurrentIndex(1)
-        self.app.processEvents()
-        self.assertIs(self.window.figure_window.current_canva, second)
-        self.assertEqual(self.window.table.current_table_name, "Second")
-
-    def test_project_rename_updates_table_database_and_chart_references(self):
-        canvas = self.add_project_with_data("Before")
-        x_name = "Before/Sheet1/1"
-        y_name = "Before/Sheet1/2"
-        canvas.add_plot(
-            x=PyDatabase.get_data(x_name),
-            y=PyDatabase.get_data(y_name),
-            style="-",
-            size=2.0,
-            color="black",
-            label="plot",
-            x_data_name=x_name,
-            y_data_name=y_name,
-        )
-
-        self.window.figure_window.rename_project(0, "After")
-
-        self.assertEqual(self.window.figure_window.tabwindow.tabText(0), "After")
-        self.assertEqual(self.window.table.table_names(), ["After"])
-        self.assertFalse(PyDatabase.has_data("Before/Sheet1/1"))
-        self.assertTrue(PyDatabase.has_data("After/Sheet1/1"))
-        self.assertEqual(canvas.project_plots[0]["x_data_name"], "After/Sheet1/1")
-
-    def test_sheet_rename_updates_chart_references(self):
-        canvas = self.add_project_with_data("ProjectA")
-        x_name = "ProjectA/Sheet1/1"
-        y_name = "ProjectA/Sheet1/2"
-        canvas.add_scatter(
-            x=PyDatabase.get_data(x_name),
-            y=PyDatabase.get_data(y_name),
-            size=20,
-            color="black",
-            marker="o",
-            label="scatter",
-            x_data_name=x_name,
-            y_data_name=y_name,
-        )
-
-        self.window.table.current_subtable().rename_sheet("Sheet1", "Raw")
-
-        self.assertTrue(PyDatabase.has_data("ProjectA/Raw/1"))
-        self.assertEqual(canvas.project_scatters[0]["x_data_name"], "ProjectA/Raw/1")
-
-    def test_chart_dialog_data_choices_are_scoped_to_current_project_table(self):
-        self.add_project_with_data("First")
-        self.add_project_with_data("Second")
-        self.window.figure_window.tabwindow.setCurrentIndex(0)
-        self.app.processEvents()
-
-        dialog = PyPlotDialog("plot", self.window.figure_window)
-        try:
-            choices = [dialog.x_data_input.itemText(i) for i in range(dialog.x_data_input.count())]
-            self.assertTrue(choices)
-            self.assertTrue(all(choice.startswith("First/") for choice in choices))
-        finally:
-            dialog.close()
-
-    def test_table_edit_auto_syncs_database_and_plot(self):
-        canvas = self.add_project_with_data("ProjectA")
-        x_name = "ProjectA/Sheet1/1"
-        y_name = "ProjectA/Sheet1/2"
-        canvas.add_plot(
-            x=PyDatabase.get_data(x_name),
-            y=PyDatabase.get_data(y_name),
-            style="-",
-            size=2.0,
-            color="black",
-            label="plot",
-            x_data_name=x_name,
-            y_data_name=y_name,
-        )
-        line = canvas.current_axes.lines[0]
-        table_view = self.window.table.current_subtable().get_table(0)
-
-        table_view.model.setData(table_view.model.index(1, 0), "3")
-        self.app.processEvents()
-
-        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 3.0]))
-        np.testing.assert_allclose(line.get_xdata(), np.array([1.0, 3.0]))
-        np.testing.assert_allclose(line.get_ydata(), np.array([10.0, 20.0]))
-
-    def test_table_bulk_operations_auto_sync_database(self):
-        self.add_project_with_data("ProjectA")
-        x_name = "ProjectA/Sheet1/1"
-        y_name = "ProjectA/Sheet1/2"
-        table_view = self.window.table.current_subtable().get_table(0)
-
-        table_view.load_columns({"1": [3, 1, 2], "2": [30, 10, 20]})
-        self.app.processEvents()
-        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([3.0, 1.0, 2.0]))
-        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([30.0, 10.0, 20.0]))
-
-        table_view.model.sort(0, Qt.AscendingOrder)
-        self.app.processEvents()
-        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0]))
-        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([10.0, 20.0, 30.0]))
-
-        table_view.setCurrentIndex(table_view.model.index(3, 0))
-        QGuiApplication.clipboard().setText("4\t40")
-        table_view.pasteItems()
-        self.app.processEvents()
-        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0, 4.0]))
-        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([10.0, 20.0, 30.0, 40.0]))
-
-        table_view.model.clearData([
-            table_view.model.index(3, 0),
-            table_view.model.index(3, 1),
-        ])
-        self.app.processEvents()
-        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0]))
-        np.testing.assert_allclose(PyDatabase.get_data(y_name), np.array([10.0, 20.0, 30.0]))
-
-    def test_plot_keeps_previous_data_when_table_lengths_mismatch_then_recovers(self):
-        canvas = self.add_project_with_data("ProjectA")
-        x_name = "ProjectA/Sheet1/1"
-        y_name = "ProjectA/Sheet1/2"
-        canvas.add_plot(
-            x=PyDatabase.get_data(x_name),
-            y=PyDatabase.get_data(y_name),
-            style="-",
-            size=2.0,
-            color="black",
-            label="plot",
-            x_data_name=x_name,
-            y_data_name=y_name,
-        )
-        line = canvas.current_axes.lines[0]
-        table_view = self.window.table.current_subtable().get_table(0)
-        messages = []
-        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
-
-        table_view.model.setData(table_view.model.index(2, 0), "3")
-        self.app.processEvents()
-
-        np.testing.assert_allclose(PyDatabase.get_data(x_name), np.array([1.0, 2.0, 3.0]))
-        np.testing.assert_allclose(line.get_xdata(), np.array([1.0, 2.0]))
-        np.testing.assert_allclose(line.get_ydata(), np.array([10.0, 20.0]))
-        self.assertTrue(any(level == "warning" and "length mismatch" in message for message, level in messages))
-
-        table_view.model.setData(table_view.model.index(2, 1), "30")
-        self.app.processEvents()
-
-        np.testing.assert_allclose(line.get_xdata(), np.array([1.0, 2.0, 3.0]))
-        np.testing.assert_allclose(line.get_ydata(), np.array([10.0, 20.0, 30.0]))
-
-    def test_project_rename_updates_fit_references(self):
-        canvas = self.add_project_with_data("Before")
-        x_name = "Before/Sheet1/1"
-        y_name = "Before/Sheet1/2"
-        canvas.add_fit_curve(
-            x=PyDatabase.get_data(x_name),
-            y=PyDatabase.get_data(y_name),
-            color="black",
-            label="fit",
-            x_data_name=x_name,
-            y_data_name=y_name,
-            engine="Python",
-        )
-
-        self.window.figure_window.rename_project(0, "After")
-
-        self.assertEqual(canvas.project_fits[0]["x_data_name"], "After/Sheet1/1")
-        self.assertEqual(canvas.project_fits[0]["y_data_name"], "After/Sheet1/2")
-
-    def test_sheet_rename_updates_fit_references(self):
-        canvas = self.add_project_with_data("ProjectA")
-        x_name = "ProjectA/Sheet1/1"
-        y_name = "ProjectA/Sheet1/2"
-        canvas.add_fit_curve(
-            x=PyDatabase.get_data(x_name),
-            y=PyDatabase.get_data(y_name),
-            color="black",
-            label="fit",
-            x_data_name=x_name,
-            y_data_name=y_name,
-            engine="Python",
-        )
-
-        self.window.table.current_subtable().rename_sheet("Sheet1", "Raw")
-
-        self.assertEqual(canvas.project_fits[0]["x_data_name"], "ProjectA/Raw/1")
-        self.assertEqual(canvas.project_fits[0]["y_data_name"], "ProjectA/Raw/2")
-
-    def test_fit_dialog_data_choices_are_scoped_to_current_project_table(self):
-        self.add_project_with_data("First")
-        self.add_project_with_data("Second")
-        self.window.figure_window.tabwindow.setCurrentIndex(0)
-        self.app.processEvents()
-
-        dialog = PyFitDialog("fit", self.window.figure_window)
-        try:
-            choices = [dialog.x_data_input.itemText(i) for i in range(dialog.x_data_input.count())]
-            self.assertTrue(choices)
-            self.assertTrue(all(choice.startswith("First/") for choice in choices))
-        finally:
-            dialog.close()

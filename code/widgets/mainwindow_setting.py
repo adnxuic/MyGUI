@@ -4,6 +4,7 @@ from code.widgets.left_column.py_left_column import PyLeftColumn
 from code.widgets.table.py_table import PyTable
 from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
 from code.widgets.right_column.py_right_column import PyRightColumn
+from code.database import TableRepository
 from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
 from code import status_messages
 
@@ -32,7 +33,8 @@ class MainWindow_Setting(object):
         self.left_layout.addWidget(self.title_bar)
 
         # 左中部分
-        self.table = PyTable()
+        self.repository = TableRepository(parent)
+        self.table = PyTable(self.repository)
         self.table.setMouseTracking(True)
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setMouseTracking(True)

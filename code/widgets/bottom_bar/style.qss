@@ -2,7 +2,6 @@ QFrame#bottom_bar
 {
     background-color: #78797b;
     max-height: 40px;
-    max-width: 580px;
     min-height: 40px;
     min-width: 580px;
     border-bottom-right-radius: 10px;

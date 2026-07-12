@@ -22,8 +22,7 @@ import numpy as np
 from Qt_core import QApplication, QDialog, QPushButton, Qt
 from code import tex_config
 from code import status_messages
-from code.database import matlab_adapter, scipy_fit_adapter
-from code.database.py_database import PyDatabase
+from code.database import ColumnRef, TableRepository, matlab_adapter, scipy_fit_adapter
 from code.database.safe_expression import evaluate_curve_expression
 from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
 from code.widgets.fig_control_window import py_matlab_window as matlab_window_module
@@ -49,13 +48,22 @@ class OptionalDependencyTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def tearDown(self):
-        PyDatabase.clear()
         tex_config.set_tex_enabled(False, notify=False)
         tex_config.clear_tex_state_listeners()
         mpl.rcParams['text.latex.preamble'] = mpl.rcParamsDefault['text.latex.preamble']
         status_messages.clear_status_handler()
         self.close_matlab_log_handlers()
         self.close_tex_log_handlers()
+
+    def make_table_repository(self, with_data=False):
+        repository = TableRepository()
+        project = repository.create_project("Data")
+        sheet = next(iter(project.sheets.values()))
+        if with_data:
+            sheet.set_block(0, 0, [[1, 2], [2, 4], [3, 6]])
+        x_ref = ColumnRef(project.id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(project.id, sheet.id, sheet.columns[1].id)
+        return repository, project, x_ref, y_ref
 
     def close_matlab_log_handlers(self):
         logger = matlab_adapter.logging.getLogger(matlab_adapter.LOGGER_NAME)
@@ -809,7 +817,8 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.update_color = Mock()
                 self.change_legend = Mock()
 
-        widget = PyFitModWidget(FakeCurveModify(), engine="Matlab")
+        repository, project, _x_ref, _y_ref = self.make_table_repository()
+        widget = PyFitModWidget(FakeCurveModify(), repository, project.id, engine="Matlab")
         result = {
             "value_expression": "2.0*x**2+3.0",
             "show_expression": "2.0*x**2+3.0",
@@ -855,7 +864,8 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.update_color = Mock()
                 self.change_legend = Mock()
 
-        widget = PyFitModWidget(FakeCurveModify())
+        repository, project, _x_ref, _y_ref = self.make_table_repository()
+        widget = PyFitModWidget(FakeCurveModify(), repository, project.id)
         dialog = QDialog(widget)
         dialog.fit_button = QPushButton("Fit", dialog)
         dialog.fit_button.setEnabled(False)
@@ -905,18 +915,17 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.update_color = Mock()
                 self.change_legend = Mock()
 
-        database = PyDatabase()
-        PyDatabase.register_sheet("Data", "Sheet1", database)
-        database.update_data(1, np.array([1.0, 2.0, 3.0]))
-        database.update_data(2, np.array([2.0, 4.0, 6.0]))
+        repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
         matlab_adapter.set_matlab_enabled(True, notify=False)
 
         messages = []
         status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
         widget = PyFitModWidget(
             FakeCurveModify(),
-            x_data_name="Data/Sheet1/1",
-            y_data_name="Data/Sheet1/2",
+            repository,
+            project.id,
+            x_ref=x_ref,
+            y_ref=y_ref,
             engine="Matlab",
         )
         try:
@@ -970,18 +979,17 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.update_color = Mock()
                 self.change_legend = Mock()
 
-        database = PyDatabase()
-        PyDatabase.register_sheet("Data", "Sheet1", database)
-        database.update_data(1, np.array([1.0, 2.0, 3.0]))
-        database.update_data(2, np.array([2.0, 4.0, 6.0]))
+        repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
         matlab_adapter.set_matlab_enabled(True, notify=False)
 
         messages = []
         status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
         widget = PyFitModWidget(
             FakeCurveModify(),
-            x_data_name="Data/Sheet1/1",
-            y_data_name="Data/Sheet1/2",
+            repository,
+            project.id,
+            x_ref=x_ref,
+            y_ref=y_ref,
             engine="Matlab",
         )
         try:
