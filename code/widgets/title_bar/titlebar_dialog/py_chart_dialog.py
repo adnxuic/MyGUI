@@ -56,8 +56,8 @@ def _selected_pair(figure_window: PyFigureWindow, x_input: QComboBox, y_input: Q
 
 # Curve creation dialog
 class PyCurveDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
+        super().__init__(parent)
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
@@ -153,8 +153,8 @@ class PyCurveDialog(QDialog):
 
 # Line plot dialog
 class PyPlotDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
+        super().__init__(parent)
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
@@ -254,8 +254,8 @@ class PyPlotDialog(QDialog):
 
 # Scatter plot dialog
 class PyScatterDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
+        super().__init__(parent)
         self.setObjectName("chart_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
@@ -353,8 +353,8 @@ class PyScatterDialog(QDialog):
 
 
 class PyFitDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
+        super().__init__(parent)
         self.setObjectName("fit_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
@@ -429,8 +429,8 @@ class PyFitDialog(QDialog):
 
 
 class PyInterpolationDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
+        super().__init__(parent)
         self.setObjectName("interpolation_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)

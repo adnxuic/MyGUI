@@ -1,73 +1,48 @@
 QFrame#right_column
 {
-    background-color: #021036;
-    max-height: 640px;
-    max-width: 50px;
-    min-height: 440px;
-    min-width: 50px;
+    background-color: {{COLOR_COMMAND_BACKGROUND}};
+    min-width: {{SIZE_ACTIVITY_RAIL}}px;
+    max-width: {{SIZE_ACTIVITY_RAIL}}px;
+    border: 0px;
     padding: 0px;
     margin: 0px;
 }
 
-/* Tex的按钮 */
-QPushButton#tex_button
-{
-    background-color: transparent;
-    border: 0px solid transparent;
-    border-radius: 5px;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 30px;
-    max-width: 50px;
-    min-height: 30px;
-    min-width: 50px;
-    padding: 0px;
-    icon-size: 24px;
-}
-QPushButton#tex_button:checked
-{
-    background-color: #ffffff;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: #000000;
-}
-QPushButton#tex_button:hover
-{
-    background-color: #464a46;
-    border: 1px solid #ffffff;
-    border-radius: 5px;
-    color: #ffffff;
-}
-
-/* Matlab的按钮 */
+QPushButton#tex_button,
 QPushButton#matlab_button
 {
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
     background-color: transparent;
-    border: 0px solid transparent;
-    border-radius: 5px;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 30px;
-    max-width: 50px;
-    min-height: 30px;
-    min-width: 50px;
+    border: 2px solid transparent;
+    border-radius: 0px;
     padding: 0px;
-    icon-size: 24px;
-}
-QPushButton#matlab_button:checked
-{
-    background-color: #ffffff;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: #000000;
-}
-QPushButton#matlab_button:hover
-{
-    background-color: #464a46;
-    border: 1px solid #ffffff;
-    border-radius: 5px;
-    color: #ffffff;
+    icon-size: 22px;
 }
 
+QPushButton#tex_button:hover,
+QPushButton#matlab_button:hover
+{
+    background-color: #1f2937;
+}
+
+QPushButton#tex_button:focus,
+QPushButton#matlab_button:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}
+
+QPushButton#tex_button:checked,
+QPushButton#matlab_button:checked
+{
+    background-color: {{COLOR_SURFACE}};
+    border-color: {{COLOR_SURFACE}};
+}
+
+QPushButton#tex_button:checked:focus,
+QPushButton#matlab_button:checked:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}

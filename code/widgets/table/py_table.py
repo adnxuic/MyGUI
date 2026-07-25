@@ -28,6 +28,9 @@ class PyTable(QFrame):
         self.stack = QStackedWidget(self)
         self.empty_label = QLabel("Create or open a project to edit table data.")
         self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setWordWrap(True)
+        self.empty_label.setMargin(16)
+        self.empty_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.empty_label.setObjectName("empty_table_placeholder")
         self.stack.addWidget(self.empty_label)
 

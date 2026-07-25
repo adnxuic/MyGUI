@@ -7,6 +7,7 @@ from code.database import ColumnRef, TableRepository, validate_component_name
 from code.database.interpolate_func import interpolate_dict
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
+from code.widgets.common_widget.py_empty_state import PyEmptyState
 
 from code.widgets import qss_func
 import matplotlib
@@ -41,6 +42,8 @@ class FigureTabWidget(QTabWidget):
 
 
 class PyFigureWindow(QFrame):
+    requestStyleSelector = Signal()
+
     def __init__(self, fig_modify_window=None, repository: TableRepository | None = None):
         super().__init__()
 
@@ -59,11 +62,34 @@ class PyFigureWindow(QFrame):
         self.current_fig_modify_widget: Optional[PyFigModWidget] = None
 
         self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
+        self.content_stack = QStackedWidget(self)
+
+        self.empty_state = PyEmptyState(
+            "No project",
+            "Choose a style from the command bar to create a project and start charting.",
+            "Show styles",
+            self.content_stack,
+        )
+        self.empty_state.setObjectName("figure_empty_state")
+        self.empty_state_label = self.empty_state.detail_label
+        self.empty_state.primaryRequested.connect(self.requestStyleSelector)
+
         self.tabwindow = FigureTabWidget(self)
         self.tabwindow.currentChanged.connect(self.change_current_canvas)
 
-        self.layout.addWidget(self.tabwindow)
+        self.content_stack.addWidget(self.empty_state)
+        self.content_stack.addWidget(self.tabwindow)
+        self.content_stack.setCurrentWidget(self.empty_state)
+        self.layout.addWidget(self.content_stack)
         self.setLayout(self.layout)
+
+    def _update_empty_state(self):
+        if self.tabwindow.count() == 0:
+            self.content_stack.setCurrentWidget(self.empty_state)
+        else:
+            self.content_stack.setCurrentWidget(self.tabwindow)
 
     def set_table(self, table):
         self.table = table
@@ -113,15 +139,24 @@ class PyFigureWindow(QFrame):
         self.tabwindow.addTab(canva, project_name)
 
         self.tabwindow.setCurrentWidget(canva)
+        self._update_empty_state()
 
     def change_current_canvas(self):
+        self._update_empty_state()
         self.current_canva = self.tabwindow.currentWidget()
         if self.current_canva is None:
             self.current_fig_modify_widget = None
+            if self.fig_modify_window is not None and hasattr(self.fig_modify_window, "empty_state"):
+                self.fig_modify_window.stacklayout.setCurrentWidget(
+                    self.fig_modify_window.empty_state
+                )
             if self.table is not None:
                 self.table.switch_to_table(None)
             return
-        self.fig_modify_window.stacklayout.setCurrentIndex(self.tabwindow.currentIndex())
+        inspector_index = self.tabwindow.currentIndex()
+        if hasattr(self.fig_modify_window, "empty_state"):
+            inspector_index += 1
+        self.fig_modify_window.stacklayout.setCurrentIndex(inspector_index)
         self.current_fig_modify_widget = self.fig_modify_window.stacklayout.currentWidget()
         project_id = getattr(self.current_canva, "project_id", None)
         if self.table is not None:
@@ -140,6 +175,7 @@ class PyFigureWindow(QFrame):
         self.canvas.clear()
         self.current_canva = None
         self.current_fig_modify_widget = None
+        self._update_empty_state()
         if hasattr(self.fig_modify_window, "clear_figmod_widgets"):
             self.fig_modify_window.clear_figmod_widgets()
 
@@ -152,8 +188,9 @@ class PyFigureWindow(QFrame):
             if hasattr(canvas, "cancel_pending_draw"):
                 canvas.cancel_pending_draw()
             canvas.deleteLater()
-            if self.fig_modify_window is not None and index < self.fig_modify_window.stacklayout.count():
-                widget = self.fig_modify_window.stacklayout.widget(index)
+            inspector_index = index + (1 if hasattr(self.fig_modify_window, "empty_state") else 0)
+            if self.fig_modify_window is not None and inspector_index < self.fig_modify_window.stacklayout.count():
+                widget = self.fig_modify_window.stacklayout.widget(inspector_index)
                 self.fig_modify_window.stacklayout.removeWidget(widget)
                 widget.deleteLater()
             self.canvas = {
@@ -447,7 +484,7 @@ class PyFigureWindow(QFrame):
         self.add_figure(
             width=float(size_inches[0]),
             height=float(size_inches[1]),
-            dpi=int(float(figure.get("dpi", 100))),
+            dpi=float(figure.get("dpi", 100)),
             style=figure.get("style") or "default",
             canva_name=project_name,
             create_table=False,

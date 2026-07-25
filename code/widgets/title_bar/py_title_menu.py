@@ -3,6 +3,7 @@ from Qt_core import *
 from code.widgets.table.py_table import PyTable
 from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, StaticSelectButton, DynSelectButton, \
     PullDownButton
+from code.widgets.title_bar.py_action_gallery import ResponsiveActionGallery
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
@@ -108,7 +109,8 @@ class MenuBar(QFrame):
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 4)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(8)
 
         # 创建触发文件菜单的按钮
         self.file_button = MenuButton('file', 'pictures/icons/file.svg', self)
@@ -116,14 +118,16 @@ class MenuBar(QFrame):
         self.layout.addWidget(self.file_button)
 
         # 添加分割线
-        separator = QFrame(self)
-        separator.setFrameShape(QFrame.VLine)  # 设置为垂直线类型
-        separator.setFrameShadow(QFrame.Sunken)  # 给线一个凹陷的外观
-        self.layout.addWidget(separator)
+        self.separator = QFrame(self)
+        self.separator.setObjectName("command_separator")
+        self.separator.setFixedSize(1, 28)
+        self.layout.addWidget(self.separator, alignment=Qt.AlignVCenter)
 
         # 创建触发编辑菜单的按钮
         self.edit_button = QPushButton('edit', self)
         self.edit_button.setObjectName('menu_button')
+        self.edit_button.setToolTip("Edit")
+        self.edit_button.setAccessibleName("Edit")
         self.edit_button.clicked.connect(lambda: self.show_menu(self.edit_menu, self.edit_button))
         self.layout.addWidget(self.edit_button)
 
@@ -357,7 +361,7 @@ class ControlBar(QFrame):
         self.layout.addWidget(button_close)
 
 
-class SelectorStyleMenuBar(QFrame):
+class LegacySelectorStyleMenuBar(QFrame):
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
 
@@ -394,7 +398,7 @@ class SelectorStyleMenuBar(QFrame):
         self.setLayout(self.layout)
 
 
-class SelectorLayoutMenuBar(QFrame):
+class LegacySelectorLayoutMenuBar(QFrame):
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
         # 读取可用的样式
@@ -420,7 +424,7 @@ class SelectorLayoutMenuBar(QFrame):
         self.setLayout(self.layout)
 
 
-class SelectorChartMenuBar(QFrame):
+class LegacySelectorChartMenuBar(QFrame):
     """
     按钮链接的对话框由chart_dialog_dict提供
     """
@@ -443,7 +447,7 @@ class SelectorChartMenuBar(QFrame):
         self.setLayout(self.layout)
 
 
-class SelectorElementMenuBar(QFrame):
+class LegacySelectorElementMenuBar(QFrame):
     def __init__(self, figure_window=None):
         super().__init__()
 
@@ -460,3 +464,76 @@ class SelectorElementMenuBar(QFrame):
                 self.layout.addWidget(button)
 
         self.setLayout(self.layout)
+
+
+# The action-gallery implementations below intentionally replace the legacy
+# fixed-width classes above.  Keeping the old definitions during this focused
+# GUI change avoids mixing dead-code removal into the feature commit.
+class SelectorStyleMenuBar(ResponsiveActionGallery):
+    def __init__(self, figure_window=None, fig_control_window=None):
+        super().__init__()
+        style_json_path = os.path.join(current_path, "available_styles.json")
+        with open(style_json_path, "r", encoding="utf-8") as json_file:
+            self.available_styles_dict = json.load(json_file)
+
+        for style in self.available_styles_dict:
+            self.add_dialog_action(
+                style,
+                f"pictures/icons/style_images/{style}.svg",
+                lambda parent, style=style: PyStyleDialog(
+                    dialog_name=style,
+                    figure_window=figure_window,
+                    parent=parent,
+                ),
+            )
+
+
+class SelectorLayoutMenuBar(ResponsiveActionGallery):
+    def __init__(self, figure_window=None, fig_control_window=None):
+        super().__init__()
+        layout_json_path = os.path.join(current_path, "available_layout.json")
+        with open(layout_json_path, "r", encoding="utf-8") as json_file:
+            self.available_layout_dict = json.load(json_file)
+
+        for layout_name, value in self.available_layout_dict.items():
+            self.add_dialog_action(
+                layout_name,
+                f"pictures/icons/layout_images/{layout_name}.svg",
+                lambda parent, layout_name=layout_name, value=value: PyLayoutDialog(
+                    dialog_name=layout_name,
+                    figure_window=figure_window,
+                    layout=value,
+                    parent=parent,
+                ),
+            )
+
+
+class SelectorChartMenuBar(ResponsiveActionGallery):
+    def __init__(self, figure_window=None):
+        super().__init__()
+        for name, dialog_type in chart_dialog_dict.items():
+            self.add_dialog_action(
+                name,
+                f"pictures/icons/chart_images/{name}.svg",
+                lambda parent, name=name, dialog_type=dialog_type: dialog_type(
+                    name,
+                    figure_window,
+                    parent=parent,
+                ),
+                reuse_dialog=False,
+            )
+
+
+class SelectorElementMenuBar(ResponsiveActionGallery):
+    def __init__(self, figure_window=None):
+        super().__init__()
+        for name, dialog_type in element_dialog_dict.items():
+            self.add_dialog_action(
+                name,
+                f"pictures/icons/element_images/{name}.svg",
+                lambda parent, name=name, dialog_type=dialog_type: dialog_type(
+                    dialog_name=name,
+                    figure_window=figure_window,
+                    parent=parent,
+                ),
+            )

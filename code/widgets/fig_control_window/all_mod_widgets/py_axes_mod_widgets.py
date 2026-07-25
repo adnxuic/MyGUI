@@ -336,7 +336,7 @@ class PyAxeLegendModWidget(QFrame):
 
         # 下拉框选择图例位置
         self.legend_position_combobox = QComboBox()
-        self.legend_position_combobox.setFixedSize(200, 30)
+        self.legend_position_combobox.setMinimumSize(140, 30)
         self.legend_position_combobox.setFont(QFont("Times New Roman", 16))
         self.legend_position_combobox.addItems([
             "best",

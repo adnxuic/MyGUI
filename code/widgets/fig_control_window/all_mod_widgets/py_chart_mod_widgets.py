@@ -38,7 +38,8 @@ class PyCurveModWidget(QFrame):
 
         # Function expression
         self.expression_box = QGroupBox('Expression', self)
-        self.expression_box.setFixedSize(180, 80)
+        self.expression_box.setMinimumHeight(80)
+        self.expression_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.expression_layout = QVBoxLayout()
 
         self.expression_input = QLineEdit(self)
@@ -52,14 +53,14 @@ class PyCurveModWidget(QFrame):
         self.x_start_layout = QHBoxLayout()
         self.x_stop_layout = QHBoxLayout()
         self.x_start_input = QDoubleSpinBox(self)
-        self.x_start_input.setFixedWidth(120)
+        self.x_start_input.setMinimumWidth(90)
         self.x_start_input.setRange(float('-inf'), float('inf'))
         self.x_start_input.setSingleStep(1)
         self.x_start_input.setValue(curve_modify.x_start)
         self.x_start_input.valueChanged.connect(self.x_start_change)
 
         self.x_stop_input = QDoubleSpinBox(self)
-        self.x_stop_input.setFixedWidth(120)
+        self.x_stop_input.setMinimumWidth(90)
         self.x_stop_input.setRange(float('-inf'), float('inf'))
         self.x_stop_input.setSingleStep(1)
         self.x_stop_input.setValue(curve_modify.x_stop)
@@ -351,13 +352,13 @@ class PyFitModWidget(QFrame):
         self.x_start_layout = QHBoxLayout()
         self.x_stop_layout = QHBoxLayout()
         self.x_start_input = QDoubleSpinBox(self)
-        self.x_start_input.setFixedWidth(120)
+        self.x_start_input.setMinimumWidth(90)
         self.x_start_input.setRange(float('-inf'), float('inf'))
         self.x_start_input.setSingleStep(1)
         self.x_start_input.setValue(curve_modify.x_start)
         self.x_start_input.valueChanged.connect(self.x_start_change)
         self.x_stop_input = QDoubleSpinBox(self)
-        self.x_stop_input.setFixedWidth(120)
+        self.x_stop_input.setMinimumWidth(90)
         self.x_stop_input.setRange(float('-inf'), float('inf'))
         self.x_stop_input.setSingleStep(1)
         self.x_stop_input.setValue(curve_modify.x_stop)
@@ -372,7 +373,8 @@ class PyFitModWidget(QFrame):
 
         # Line style
         self.style_box = QGroupBox('Style', self)
-        self.style_box.setFixedSize(180, 80)
+        self.style_box.setMinimumHeight(80)
+        self.style_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.style_layout = QVBoxLayout()
 
         # Line marker

@@ -10,8 +10,8 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
 class PyStyleDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
         self.style = dialog_name
 
         self.setObjectName("style_dialog")
@@ -84,8 +84,8 @@ class PyStyleDialog(QDialog):
 
 
 class PyLayoutDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None, layout=None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window=None, layout=None, parent=None):
+        super().__init__(parent)
         self.setObjectName("layout_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)

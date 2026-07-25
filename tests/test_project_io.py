@@ -54,10 +54,14 @@ class ProjectIoV4Tests(unittest.TestCase):
     def test_v4_roundtrip_preserves_types_missing_rows_and_refs(self):
         canvas, sheet = self.build_project()
         sheet.columns[0].width = 144
+        canvas.canva._set_device_pixel_ratio(2)
+        self.assertEqual(canvas.fig.dpi, 200)
         save_project_snapshot(self.path, self.window.figure_window)
         raw = load_project_file(self.path)
 
         self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
+        self.assertEqual(raw["figure"]["dpi"], 100)
+        self.assertEqual(raw["figure"]["size_inches"], [4, 3])
         columns = raw["table"]["sheets"][0]["columns"]
         self.assertEqual(
             [column["type"] for column in columns],
@@ -75,6 +79,33 @@ class ProjectIoV4Tests(unittest.TestCase):
             self.assertEqual(loaded_sheet.columns[0].width, 144)
             self.assertEqual(len(loaded.figure_window.current_canva.project_plots), 1)
             self.assertEqual(len(loaded.figure_window.current_canva.fig.axes[0].lines), 1)
+            self.assertEqual(loaded.figure_window.current_canva.document_dpi, 100)
+        finally:
+            loaded.close()
+            self.app.processEvents()
+
+    def test_recorded_v4_dpi_is_not_multiplied_on_later_saves(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        raw["figure"]["dpi"] = 175.5
+        raw["figure"]["size_inches"] = [4, 4]
+        self.path.write_text(json.dumps(raw), encoding="utf-8")
+
+        loaded = MainWindow()
+        second_path = Path(self.directory.name) / "project-second-save.mygui.json"
+        try:
+            restore_project_snapshot(self.path, loaded.table, loaded.figure_window)
+            restored = loaded.figure_window.current_canva
+            self.assertEqual(restored.document_dpi, 175.5)
+            restored.canva._set_device_pixel_ratio(2)
+            self.assertEqual(restored.fig.dpi, 351)
+
+            save_project_snapshot(second_path, loaded.figure_window)
+            second = load_project_file(second_path)
+            self.assertEqual(second["schema_version"], 4)
+            self.assertEqual(second["figure"]["dpi"], 175.5)
+            self.assertEqual(second["figure"]["size_inches"], [4, 4])
         finally:
             loaded.close()
             self.app.processEvents()

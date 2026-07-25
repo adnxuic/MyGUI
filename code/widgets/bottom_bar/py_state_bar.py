@@ -32,6 +32,7 @@ class PyStateBar(QFrame):
         super().__init__(parent)
 
         self.setObjectName("state_bar")
+        self.setAccessibleName("Optional integrations status")
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -46,8 +47,10 @@ class PyStateBar(QFrame):
             self._add_indicator(indicator)
 
     def _add_indicator(self, indicator: FeatureIndicator):
-        label = QLabel(f"\u25cf {indicator.label}")
+        label = QLabel()
         label.setObjectName("state_bar_indicator")
+        label.setProperty("featureLabel", indicator.label)
+        label.setTextFormat(Qt.PlainText)
         label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         self.layout.addWidget(label)
         self._labels[indicator.name] = label
@@ -68,7 +71,15 @@ class PyStateBar(QFrame):
 
     @staticmethod
     def _set_label_state(label: QLabel, enabled: bool):
-        label.setProperty("state", "on" if enabled else "off")
+        state = "on" if enabled else "off"
+        state_label = "On" if enabled else "Off"
+        symbol = "\u25cf" if enabled else "\u25cb"
+        feature_label = str(label.property("featureLabel") or "Feature")
+
+        label.setProperty("state", state)
+        label.setText(f"{symbol} {feature_label} {state_label}")
+        label.setAccessibleName(f"{feature_label}: {state_label}")
+        label.setToolTip(f"{feature_label} is {state_label.lower()}")
         label.style().unpolish(label)
         label.style().polish(label)
 

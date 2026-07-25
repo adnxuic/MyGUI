@@ -2,6 +2,7 @@ from Qt_core import *
 from typing import Optional
 
 from code.widgets.qss_func import qss_loader
+from code.widgets.common_widget.py_empty_state import PyEmptyState
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import (
     PyAxesModWindow, PyChartModWindow, PyElementModWindow)
 from code.figuremodify.py_axes_modify import PyAxesModify
@@ -155,7 +156,12 @@ class PyFigModWidget(QFrame):
         self.setLayout(self.layout)
 
         self.axes_count = 0
+        self.no_axes_state = PyEmptyState(
+            "No axes",
+            "Choose a layout from the command bar before adding charts or axes elements.",
+        )
         self.figure_element_mod_widget = PyFigureElementModWidget()
+        self.stacklayout.addWidget(self.no_axes_state)
         self.stacklayout.addWidget(self.figure_element_mod_widget)
 
         figure_btn = QPushButton('figure')
@@ -217,6 +223,12 @@ class PyFigModWindow(QFrame):
         self.stacklayout.setSpacing(0)
         self.stacklayout.setContentsMargins(0, 0, 0, 0)
 
+        self.empty_state = PyEmptyState(
+            "No project",
+            "Choose a style to create a project and open its inspector.",
+        )
+        self.stacklayout.addWidget(self.empty_state)
+
         self.setLayout(self.stacklayout)
 
     def add_figmod_widget(self):
@@ -227,7 +239,10 @@ class PyFigModWindow(QFrame):
         return figmod_widget
 
     def clear_figmod_widgets(self):
-        while self.stacklayout.count():
-            widget = self.stacklayout.widget(0)
+        for index in range(self.stacklayout.count() - 1, -1, -1):
+            widget = self.stacklayout.widget(index)
+            if widget is self.empty_state:
+                continue
             self.stacklayout.removeWidget(widget)
             widget.deleteLater()
+        self.stacklayout.setCurrentWidget(self.empty_state)

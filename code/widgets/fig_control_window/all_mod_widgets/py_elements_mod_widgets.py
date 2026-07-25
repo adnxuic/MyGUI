@@ -45,7 +45,7 @@ class PyTextModWidget(QFrame):
 
         # 下拉菜单和手动输入框
         self.font_input = QComboBox()
-        self.font_input.setFixedWidth(160)
+        self.font_input.setMinimumWidth(120)
         self.font_input.setEditable(True)
         self.font_input.setItemDelegate(FontDelegate(self.font_input))
 
@@ -69,7 +69,7 @@ class PyTextModWidget(QFrame):
         self.font_size_layout = QHBoxLayout()
         self.font_size_layout.setSpacing(0)
         self.font_size_input = QSpinBox(self)
-        self.font_size_input.setFixedWidth(80)
+        self.font_size_input.setMinimumWidth(70)
         self.font_size_input.setMinimum(1)
         self.font_size_input.setMaximum(100)
         self.font_size_input.setValue(int(round(self.text_modify.text.get_fontsize())))

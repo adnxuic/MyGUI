@@ -59,8 +59,7 @@ class PyMatlabWindow(QFrame):
     def _show_connect_button(self):
         self._clear_layout()
         self.matlab_isconnect = QPushButton("Connect Matlab")
-        self.matlab_isconnect.setFixedWidth(150)
-        self.matlab_isconnect.setFixedHeight(30)
+        self.matlab_isconnect.setMinimumSize(120, 30)
         self.matlab_isconnect.clicked.connect(self.matlab_connect_click)
         self.layout.addWidget(self.matlab_isconnect)
         self.layout.addStretch()

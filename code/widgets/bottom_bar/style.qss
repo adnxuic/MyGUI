@@ -1,11 +1,8 @@
 QFrame#bottom_bar
 {
-    background-color: #78797b;
-    max-height: 40px;
-    min-height: 40px;
-    min-width: 580px;
-    border-bottom-right-radius: 10px;
-    border-bottom-left-radius: 10px;
+    background-color: {{COLOR_STATUS_BACKGROUND}};
+    max-height: {{SIZE_BOTTOM_BAR}}px;
+    min-height: {{SIZE_BOTTOM_BAR}}px;
     padding: 0px;
     margin: 0px;
 }
@@ -27,23 +24,36 @@ QFrame#state_bar
 QLabel#bottom_bar_message
 {
     background-color: transparent;
-    color: #f2f2f2;
-    font-size: 12px;
+    color: {{COLOR_TEXT_ON_DARK}};
+}
+
+QLabel#bottom_bar_message[level="success"]
+{
+    color: {{COLOR_SUCCESS}};
+}
+
+QLabel#bottom_bar_message[level="warning"]
+{
+    color: {{COLOR_WARNING}};
+}
+
+QLabel#bottom_bar_message[level="error"]
+{
+    color: {{COLOR_ERROR}};
 }
 
 QLabel#state_bar_indicator
 {
     background-color: transparent;
-    font-size: 12px;
-    color: #ff4d4f;
+    color: {{COLOR_TEXT_MUTED_ON_DARK}};
 }
 
 QLabel#state_bar_indicator[state="on"]
 {
-    color: #22c55e;
+    color: {{COLOR_SUCCESS}};
 }
 
 QLabel#state_bar_indicator[state="off"]
 {
-    color: #ff4d4f;
+    color: {{COLOR_TEXT_MUTED_ON_DARK}};
 }

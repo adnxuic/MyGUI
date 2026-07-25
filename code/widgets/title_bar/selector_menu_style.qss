@@ -1,8 +1,6 @@
 QFrame#style_menu
 {
-    background-color: #ffffff;
-    max-height: 300px;
-    max-width: 580px;
-    min-height: 300px;
-    min-width: 580px;
+    background-color: {{COLOR_SURFACE}};
+    border: 1px solid #d1d5db;
+    border-radius: {{RADIUS_MD}}px;
 }

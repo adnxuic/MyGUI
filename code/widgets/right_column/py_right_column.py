@@ -20,9 +20,12 @@ class PyRightColumn(QFrame):
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
 
         self.tex_button = QPushButton(QIcon("pictures/icons/tex.svg"), "")
         self.tex_button.setObjectName("tex_button")
+        self.tex_button.setToolTip("Show or hide the TeX panel")
+        self.tex_button.setAccessibleName("Toggle TeX panel")
         self.tex_button.setCheckable(True)
         self.tex_button.setChecked(False)
         self.tex_button.toggled.connect(self.tex_show)
@@ -30,6 +33,8 @@ class PyRightColumn(QFrame):
 
         self.matlab_button = QPushButton(QIcon("pictures/icons/matlab.svg"), "")
         self.matlab_button.setObjectName("matlab_button")
+        self.matlab_button.setToolTip("Show or hide the MATLAB panel")
+        self.matlab_button.setAccessibleName("Toggle MATLAB panel")
         self.matlab_button.setCheckable(True)
         self.matlab_button.setChecked(False)
         self.matlab_button.toggled.connect(self.matlab_show)

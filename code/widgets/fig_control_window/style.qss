@@ -1,45 +1,73 @@
-QFrame#fig_control_window
-{
-    max-height: 640px;
-    max-width: 480px;
-    min-height: 440px;
-    min-width: 240px;
-    padding: 0px;
-    margin: 0px;
-}
-
-/* 图片修改窗口 */
-QFrame#fig_modify_window
-{
-    background-color: #F7F8FA;
-    max-height: 640px;
-    max-width: 480px;
-    min-height: 440px;
-    min-width: 240px;
-    padding: 0px;
-    margin: 0px;
-}
-
-/* Tex的窗口 */
-QFrame#tex_window
-{
-    background-color: #EBECF0;
-    max-height: 640px;
-    max-width: 480px;
-    min-height: 640px;
-    min-width: 480px;
-    padding: 0px;
-    margin: 0px;
-}
-
-/* Matlab的窗口 */
+QFrame#fig_control_window,
+QFrame#fig_modify_window,
+QFrame#tex_window,
 QFrame#matlab_window
 {
-    background-color: #EBECF0;
-    max-height: 640px;
-    max-width: 480px;
-    min-height: 620px;
-    min-width: 240px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border: 0px;
     padding: 0px;
     margin: 0px;
+}
+
+QScrollArea#inspector_scroll_area
+{
+    background-color: {{COLOR_SURFACE}};
+    border: 0px;
+}
+
+QScrollArea#inspector_scroll_area > QWidget > QWidget
+{
+    background-color: {{COLOR_SURFACE}};
+}
+
+QFrame#empty_state
+{
+    background-color: {{COLOR_SURFACE}};
+}
+
+QLabel#empty_state_title
+{
+    color: {{COLOR_TEXT_PRIMARY}};
+    font-weight: 600;
+}
+
+QLabel#empty_state_detail
+{
+    color: #4b5563;
+}
+
+QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox
+{
+    min-height: 28px;
+    border: 1px solid #9ca3af;
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus,
+QSpinBox:focus, QDoubleSpinBox:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QPushButton
+{
+    min-height: 30px;
+    border: 1px solid #9ca3af;
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    padding: 0px {{SPACE_SM}}px;
+}
+
+QPushButton:hover
+{
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
 }

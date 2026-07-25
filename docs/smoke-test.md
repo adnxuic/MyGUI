@@ -10,6 +10,21 @@ python main.py
 
 Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX.
 
+## Window and Responsive Layout
+
+1. Confirm the application starts maximized with the native Windows title bar and only one taskbar window.
+2. Confirm the dark command bar and bottom Message/State Bar span the full window width.
+3. Confirm the left workspace and right figure workspace touch through a visible splitter with no desktop showing between them.
+4. Drag both workbench splitters, hide and restore the table, restart the application, and confirm the splitter/table preferences restore.
+5. Use Settings > `Reset workspace layout` and confirm the default proportions return and the Message Bar reports success in green.
+6. With no project, confirm the figure empty state directs the user to Style; create a project and confirm the empty state is replaced by its canvas tab.
+7. Resize a restored window through 960x600, 1280x720, 1366x768, and 1920x1080; confirm the command gallery uses overflow instead of clipping and the canvas remains visible.
+8. Switch repeatedly between the figure inspector, TeX, and MATLAB pages; confirm the main layout does not jump or grow.
+9. On available 100%, 125%, 150%, and 200% displays, confirm text/icons remain clear and menus/dialogs stay on the active screen.
+10. Move the window between monitors with different scaling and verify native maximize/restore, resize, and snap behavior.
+
+For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 480 pixels at every display scale. Save and reopen the project and confirm its recorded DPI remains 100.
+
 ## Core Workflow
 
 1. Create a new project from the style toolbar and enter a unique project name.

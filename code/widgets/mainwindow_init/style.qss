@@ -1,7 +1,25 @@
-QMainWindow
+QMainWindow#MainWindow
 {
-    max-height: 800px;
-    max-width: 1980px;
-    min-height: 600px;
-    min-width: 980px;
+    background-color: {{COLOR_CONTENT_BACKGROUND}};
+    min-height: 520px;
+    min-width: 800px;
+}
+
+QWidget#central_widget,
+QWidget#left_workspace
+{
+    background-color: {{COLOR_CONTENT_BACKGROUND}};
+}
+
+QSplitter#workspace_splitter::handle,
+QSplitter#table_control_splitter::handle
+{
+    background-color: #d1d5db;
+    width: 6px;
+}
+
+QSplitter#workspace_splitter::handle:hover,
+QSplitter#table_control_splitter::handle:hover
+{
+    background-color: {{COLOR_ACCENT}};
 }

@@ -1,60 +1,47 @@
 QFrame#left_column
 {
-    background-color: #F7F8FA;
-    max-height: 640px;
-    max-width: 50px;
-    min-height: 440px;
-    min-width: 50px;
-    padding: 0px;
-    margin: 0px;
-}
-
-QPushButton#table_button
-{
-    background-color: transparent;
+    background-color: #f8fafc;
+    min-width: {{SIZE_ACTIVITY_RAIL}}px;
+    max-width: {{SIZE_ACTIVITY_RAIL}}px;
     border: 0px;
-    border-radius: 0px;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 50px;
-    max-width: 50px;
-    min-height: 50px;
-    min-width: 50px;
     padding: 0px;
     margin: 0px;
-    icon-size: 30px;
-}
-QPushButton#table_button:checked
-{
-    background-color: #0281ff;
-    border-radius: 10px;
-    padding: 0px;
-    margin: 0px;
-    icon-size: 30px;
 }
 
+QPushButton#table_button,
 QPushButton#setting_button
 {
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
     background-color: transparent;
-    border: 0px;
+    border: 2px solid transparent;
     border-radius: 0px;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 50px;
-    max-width: 50px;
-    min-height: 50px;
-    min-width: 50px;
     padding: 0px;
     margin: 0px;
-    icon-size: 30px;
+    icon-size: 24px;
 }
+
+QPushButton#table_button:hover,
 QPushButton#setting_button:hover
 {
-    background-color: #ffffff;
-    border-radius: 10px;
-    padding: 0px;
-    margin: 0px;
-    icon-size: 30px;
+    background-color: #e5e7eb;
+}
+
+QPushButton#table_button:focus,
+QPushButton#setting_button:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}
+
+QPushButton#table_button:checked
+{
+    background-color: {{COLOR_ACCENT}};
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton#table_button:checked:focus
+{
+    border-color: {{COLOR_FOCUS}};
 }

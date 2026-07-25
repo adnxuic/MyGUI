@@ -12,8 +12,8 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
 class PyTextDialog(QDialog):
-    def __init__(self, dialog_name=None, figure_window=None):
-        super().__init__()
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
         self.setObjectName("text_dialog")
         qss_file = qss_func.qss_loader(qss_path)
         self.setStyleSheet(qss_file)
@@ -43,13 +43,13 @@ class PyTextDialog(QDialog):
         # 输入文本的位置, x,y为相对坐标，0-1之间
         self.position_input_layout = QHBoxLayout()
         self.x_input = QDoubleSpinBox()
-        self.x_input.setFixedSize(100, 20)
+        self.x_input.setMinimumWidth(100)
         self.x_input.setRange(-1, 2)
         self.x_input.setSingleStep(0.01)
         self.x_input.setValue(0.5)
 
         self.y_input = QDoubleSpinBox()
-        self.y_input.setFixedSize(100, 20)
+        self.y_input.setMinimumWidth(100)
         self.y_input.setRange(-1, 2)
         self.y_input.setSingleStep(0.01)
         self.y_input.setValue(0.5)

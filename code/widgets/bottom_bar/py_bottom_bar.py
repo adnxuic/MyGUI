@@ -64,5 +64,8 @@ class PyBottomBar(QFrame):
     def show_success(self, message):
         self.message_bar.show_success(message)
 
+    def show_warning(self, message):
+        self.message_bar.show_warning(message)
+
     def clear_message(self):
         self.message_bar.clear_message()

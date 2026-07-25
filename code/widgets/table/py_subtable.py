@@ -752,6 +752,11 @@ class PySubTable(QFrame):
         self.project_id = project_id
         self.dependency_handler = dependency_handler
         self.toolbar = QToolBar(self)
+        self.toolbar.setObjectName("table_toolbar")
+        self.toolbar.setMovable(False)
+        self.toolbar.setFloatable(False)
+        self.toolbar.setMinimumWidth(0)
+        self.toolbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.tabWidget = SheetTabWidget(self)
         self.tabWidget.setTabPosition(QTabWidget.South)
@@ -790,20 +795,31 @@ class PySubTable(QFrame):
                 widget.deleteLater()
 
     def _build_toolbar(self):
-        actions = [
-            ("Undo", self.undo), ("Redo", self.redo),
-            ("Rename Sheet", self.rename_current_sheet),
-            ("−Sheet", self.delete_current_sheet),
-            ("+Row", lambda: self.current_view().insert_row()),
-            ("−Row", lambda: self.current_view().delete_row()),
-            ("↑Row", lambda: self.current_view().move_row(-1)),
-            ("↓Row", lambda: self.current_view().move_row(1)),
-            ("+Column", lambda: self.current_view().add_column()),
-            ("−Column", lambda: self.current_view().delete_column()),
-        ]
-        for text, callback in actions:
-            action = self.toolbar.addAction(text)
-            action.triggered.connect(callback)
+        groups = (
+            (("Undo", self.undo), ("Redo", self.redo)),
+            (
+                ("Rename Sheet", self.rename_current_sheet),
+                ("Delete Sheet", self.delete_current_sheet),
+            ),
+            (
+                ("Add Row", lambda: self.current_view().insert_row()),
+                ("Delete Row", lambda: self.current_view().delete_row()),
+                ("Move Row Up", lambda: self.current_view().move_row(-1)),
+                ("Move Row Down", lambda: self.current_view().move_row(1)),
+            ),
+            (
+                ("Add Column", lambda: self.current_view().add_column()),
+                ("Delete Column", lambda: self.current_view().delete_column()),
+            ),
+        )
+        for group_index, actions in enumerate(groups):
+            if group_index:
+                self.toolbar.addSeparator()
+            for text, callback in actions:
+                action = self.toolbar.addAction(text)
+                action.setToolTip(text)
+                action.setStatusTip(text)
+                action.triggered.connect(callback)
 
     def current_view(self) -> TableView:
         widget = self.tabWidget.currentWidget()

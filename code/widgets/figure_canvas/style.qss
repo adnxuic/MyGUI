@@ -1,8 +1,46 @@
 QFrame#figure_window
 {
-    background-color: #f0f0f0;
-    border: 1px solid #d0d0d0;
-    border-radius: 5px;
-    max-height: 800px;
-    max-width: 1200px;
+    background-color: {{COLOR_CONTENT_BACKGROUND}};
+    border: 1px solid #d1d5db;
+}
+
+QFrame#figure_empty_state
+{
+    background-color: {{COLOR_SURFACE}};
+}
+
+QFrame#figure_empty_state QLabel#empty_state_title
+{
+    color: {{COLOR_TEXT_PRIMARY}};
+    font-weight: 600;
+}
+
+QFrame#figure_empty_state QLabel#empty_state_detail
+{
+    color: #4b5563;
+}
+
+QFrame#figure_empty_state QPushButton#empty_state_primary_button
+{
+    min-height: 32px;
+    padding: 0px {{SPACE_LG}}px;
+    background-color: {{COLOR_ACCENT}};
+    color: {{COLOR_TEXT_ON_DARK}};
+    border: 2px solid transparent;
+    border-radius: {{RADIUS_MD}}px;
+}
+
+QFrame#figure_empty_state QPushButton#empty_state_primary_button:hover
+{
+    background-color: #1d4ed8;
+}
+
+QFrame#figure_empty_state QPushButton#empty_state_primary_button:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}
+
+QTabWidget::pane
+{
+    border: 0px;
 }

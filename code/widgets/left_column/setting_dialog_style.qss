@@ -1,8 +1,33 @@
 QDialog#setting_dialog
 {
-    background-color: #f0f0f0;
-    border: 1px solid #d0d0d0;
-    border-radius: 5px;
-    max-width: 400px;
-    max-height: 300px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border: 1px solid #d1d5db;
+    border-radius: {{RADIUS_MD}}px;
+    min-width: 320px;
+    min-height: 160px;
+}
+
+QLabel#settings_section_title
+{
+    font-weight: 600;
+}
+
+QPushButton
+{
+    min-height: 32px;
+    border: 1px solid #9ca3af;
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    padding: 0px {{SPACE_MD}}px;
+}
+
+QPushButton:hover
+{
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
 }

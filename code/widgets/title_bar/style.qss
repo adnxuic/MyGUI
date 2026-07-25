@@ -1,238 +1,182 @@
-/* 父组件 */
 QFrame#title_bar
 {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgb(55, 65, 81), stop:0.5 rgb(17, 24, 39), stop:1 rgb(0, 0, 0));
-    max-height: 120px;
+    background-color: {{COLOR_COMMAND_BACKGROUND}};
     min-height: 120px;
-    min-width: 580px;
-    border-top-left-radius: 10px; /* 调整半径 */
-    border-top-right-radius: 10px; /* 调整半径 */
+    max-height: 120px;
+    border: 0px;
 }
 
-/* 改变按钮 */
-QPushButton#change_button
-{
-    background-color: transparent;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: transparent;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 36px;
-    max-width: 30px;
-    min-height: 36px;
-    min-width: 30px;
-    icon-size: 28px;
-    margin-top: 0px;
-    margin-left: 2px;
-}
-QPushButton#change_button:checked
-{
-    background-color: #f8faf8; /* 选中状态的背景颜色 */
-    border-color: #ffffff;
-    border-top-left-radius: 10px; 
-    border-bottom-left-radius: 10px;
-    border-top-right-radius: 0px;
-    border-bottom-right-radius: 0px;
-}
-QPushButton#change_button:hover
-{
-    background-color: #464a46; 
-    border: 1px solid #ffffff; 
-    border-radius: 5px;
-    color: #ffffff;
-}
-
-/*选择组件的菜单*/
-QFrame#selector_menu_bar
-{
-    background-color: transparent;
-    max-height: 56px;
-    max-width: 380px;
-    min-height: 56px;
-    min-width: 380px;
-    margin-top: 8px;
-}
-
-/* 选择组件的菜单按钮 */
-QPushButton#select_menu_button
-{
-    background-color: transparent;
-    border: 0px solid transparent;
-    border-radius: 5px;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 50px;
-    max-width: 80px;
-    min-height: 50px;
-    min-width: 80px;
-    margin-bottom: 9px;
-    padding-bottom: 5px;
-    icon-size: 24px;
-}
-QPushButton#select_menu_button:checked
-{
-    background-color: #ffffff;
-    border-radius: 5px;
-    color: #000000;
-}
-QPushButton#select_menu_button:hover
-{
-    background-color: #464a46;
-    border: 1px solid #ffffff;
-    border-radius: 5px;
-    color: #ffffff;
-}
-
-/* 菜单栏 */
+QFrame#selector_menu_bar,
 QFrame#menu_bar
 {
-    background-color: #f8faf8;
-    max-height: 32px;
-    max-width: 380px;
-    min-height: 32px;
-    min-width: 380px;
-    border-color: #ffffff;
-    border-top-right-radius: 10px; 
-    border-bottom-right-radius: 10px;
-    padding-left: 5px;
-    padding-top: 6px;
-    margin-top: 11px;
+    background-color: {{COLOR_COMMAND_BACKGROUND}};
+    min-height: {{SIZE_COMMAND_ROW}}px;
+    max-height: {{SIZE_COMMAND_ROW}}px;
+    border: 0px;
 }
 
-/* 菜单按钮  */
-QPushButton#menu_button
+QFrame#command_separator
 {
-    background-color: transparent;
+    background-color: #94a3b8;
+    min-width: 1px;
+    max-width: 1px;
+    min-height: 28px;
+    max-height: 28px;
     border: 0px;
-    color: #000000;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 24px;
-    max-width: 50px;
-    min-height: 24px;
-    min-width: 50px;
+    margin: 0px;
+}
+
+QPushButton#change_button
+{
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 44px;
+    max-height: 44px;
+    background-color: transparent;
+    border: 2px solid transparent;
     icon-size: 24px;
 }
+
+QPushButton#change_button:hover,
+QPushButton#change_button:focus
+{
+    background-color: #1f2937;
+    border-color: {{COLOR_FOCUS}};
+}
+
+QPushButton#change_button:checked
+{
+    background-color: {{COLOR_SURFACE}};
+}
+
+QPushButton#select_menu_button,
+QPushButton#menu_button
+{
+    min-height: 44px;
+    max-height: 44px;
+    min-width: 72px;
+    padding: 0px {{SPACE_SM}}px;
+    background-color: transparent;
+    border: 2px solid transparent;
+    color: {{COLOR_TEXT_ON_DARK}};
+    font-weight: 600;
+    icon-size: 22px;
+}
+
+QPushButton#select_menu_button:hover,
 QPushButton#menu_button:hover
 {
-    background-color: #a2a8a2;
-    border: 1px solid #464a46;
-    border-radius: 5px;
-    color: #ffffff;
+    background-color: #1f2937;
 }
 
-/*控制栏*/
-QFrame#control_bar
+QPushButton#select_menu_button:focus,
+QPushButton#menu_button:focus
 {
-    background-color: transparent;
-    border: 1px solid #ffffff;
-    max-height: 30px;
-    max-width: 160px;
-    min-height: 30px;
-    min-width: 160px;
-    margin-bottom: 20px;
+    border-color: {{COLOR_FOCUS}};
 }
 
-/* 最小化按钮 */
-QPushButton#minimize_button
+QPushButton#select_menu_button:checked
 {
-    background-color: transparent;
-
-    border-radius: 5px;
-    max-height: 30px;
-    max-width: 30px;
-    min-height: 30px;
-    min-width: 30px;
-    padding: 1px;
-    icon-size: 18px;
-    margin-bottom: 30px;
-}
-QPushButton#minimize_button:hover
-{
-    background-color: #464a46;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: transparent;
-    font-size: 12px;
-    font-weight: bold;
+    background-color: {{COLOR_SURFACE}};
+    border-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 
-/* 关闭按钮 */
-QPushButton#close_button
+QPushButton#select_menu_button:checked:focus
 {
-    background-color: transparent;
-    border-radius: 5px;
-    max-height: 30px;
-    max-width: 30px;
-    min-height: 30px;
-    min-width: 30px;
-    padding: 1px;
-    icon-size: 18px;
-    margin-bottom: 30px;
-}
-QPushButton#close_button:hover
-{
-    background-color: #464a46;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: transparent;
-    font-size: 12px;
-    font-weight: bold;
+    border-color: {{COLOR_FOCUS}};
 }
 
-/* 选择的菜单 */
-QWidget#selector_menu
+QFrame#selector_menu
 {
-    background-color: #ffffff;
-    max-height: 80px;
-    min-height: 80px;
-    min-width: 580px;
-    margin-top: 0px;
+    background-color: {{COLOR_SURFACE}};
+    min-height: {{SIZE_TOOL_GALLERY}}px;
+    max-height: {{SIZE_TOOL_GALLERY}}px;
+    border: 0px;
 }
 
-/* 选择按钮 */
+QToolBar#selector_toolbar
+{
+    background-color: {{COLOR_SURFACE}};
+    border: 0px;
+    border-bottom: 1px solid #d1d5db;
+    spacing: {{SPACE_XS}}px;
+    padding: 2px {{SPACE_XS}}px;
+}
+
+QToolBar#selector_toolbar QToolButton,
 QToolButton#select_button
 {
-    background-color: transparent;
-    border-radius: 5px;
-    color: #000000;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 60px;
-    max-width: 60px;
+    min-width: 64px;
+    max-width: 100px;
     min-height: 60px;
-    min-width: 60px;
-    icon-size: 40px;
-}
-QToolButton#select_button:hover
-{
-    background-color: #c3c4c3;
-    border: 1px solid #ffffff;
+    max-height: 60px;
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: {{RADIUS_MD}}px;
+    color: {{COLOR_TEXT_PRIMARY}};
+    padding: 1px {{SPACE_XS}}px;
 }
 
-/* 下拉按钮 */
+QToolBar#selector_toolbar QToolButton:hover,
+QToolButton#select_button:hover
+{
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+QToolBar#selector_toolbar QToolButton:pressed,
+QToolBar#selector_toolbar QToolButton:checked
+{
+    background-color: #dbeafe;
+    border-color: {{COLOR_ACCENT}};
+}
+
+QToolBar#selector_toolbar QToolButton:focus,
+QToolButton#select_button:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}
+
+QToolBar#selector_toolbar QToolButton:disabled
+{
+    color: #9ca3af;
+}
+
+QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button
+{
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 60px;
+    max-height: 60px;
+    padding: 0px;
+    border: 2px solid transparent;
+    icon-size: 18px;
+}
+
+QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button:hover
+{
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}
+
 QPushButton#pull_down_button
 {
+    min-width: 32px;
+    min-height: 48px;
     background-color: transparent;
-    border: 1px solid #ffffff;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: bold;
-    max-height: 50px;
-    max-width: 30px;
-    min-height: 50px;
-    min-width: 30px;
-    icon-size: 20px;
-    margin-bottom: 10px;
+    border: 2px solid transparent;
+    icon-size: 18px;
 }
-QPushButton#pull_down_button:checked
+
+QPushButton#pull_down_button:hover,
+QPushButton#pull_down_button:focus
 {
-    background-color: #c3c4c3;
-}
-QPushButton#pull_down_button:hover
-{
-    background-color: #c3c4c3;
-    border: 1px solid #ffffff;
+    background-color: #e5e7eb;
+    border-color: {{COLOR_FOCUS}};
 }

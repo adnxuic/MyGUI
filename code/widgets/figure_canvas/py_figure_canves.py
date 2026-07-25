@@ -48,6 +48,10 @@ class PyFigureCanvas(QWidget):
         self.project_path = project_path
         with mpl.style.context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
+        # QtAgg scales ``Figure.dpi`` to the active screen's device pixel
+        # ratio.  Keep the user/project DPI separate so that moving the
+        # window between screens cannot change exports or project files.
+        self._document_dpi = float(self.fig.dpi)
 
         self.fig_modify_widget: Optional[PyFigModWidget] = None
 
@@ -65,7 +69,11 @@ class PyFigureCanvas(QWidget):
         self.repository.transaction_committed.connect(self._table_changed)
 
         self.canva = FigureCanvasQTAgg(self.fig)
-        self.canva.setFixedSize(width * dpi, height * dpi)
+        size_inches = self.fig.get_size_inches()
+        self.canva.setFixedSize(
+            round(float(size_inches[0]) * self._document_dpi),
+            round(float(size_inches[1]) * self._document_dpi),
+        )
 
         # Add scroll area
         self.scroArea = QScrollArea()
@@ -82,6 +90,11 @@ class PyFigureCanvas(QWidget):
         layout.addWidget(self.scroArea)
 
         self.setLayout(layout)
+
+    @property
+    def document_dpi(self) -> float:
+        """The project/export DPI, independent of the screen pixel ratio."""
+        return self._document_dpi
 
     def setFigModifyWidget(self, fig_modify_widget):
         self.fig_modify_widget = fig_modify_widget
@@ -562,7 +575,7 @@ class PyFigureCanvas(QWidget):
 
     def save(self, filename, dpi=None):
         if dpi is None:
-            save_dpi = self.fig.dpi
+            save_dpi = self.document_dpi
         else:
             save_dpi = dpi
         with mpl.style.context(self.style):
@@ -790,7 +803,7 @@ class PyFigureCanvas(QWidget):
         return {
             "name": self.project_name,
             "style": self.style,
-            "dpi": float(self.fig.dpi),
+            "dpi": self.document_dpi,
             "size_inches": [float(value) for value in self.fig.get_size_inches()],
             "axes_count": len(self.fig.axes),
             "axes_layouts": [dict(layout) for layout in self.project_axes_layouts],

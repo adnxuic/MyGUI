@@ -1,5 +1,6 @@
 from Qt_core import *
 from code.widgets import qss_func
+from code.widgets.theme import COLORS
 import os
 
 
@@ -11,6 +12,8 @@ class ChangeButton(QPushButton):
         super().__init__()
         self.setIcon(QIcon("pictures/icons/menu_change.svg"))
         self.setObjectName("change_button")
+        self.setToolTip("Switch command menu")
+        self.setAccessibleName("Switch command menu")
         self.setCheckable(True)
 
         self.clicked.connect(self.change)
@@ -72,13 +75,28 @@ class SelectMenuButton(QPushButton):
 
 class MenuButton(QPushButton):
     def __init__(self, button_name, IconName=None, parent=None):
-        super().__init__()
+        super().__init__(parent)
         self.parent = parent
         self.setObjectName("menu_button")
         self.setText(button_name) # 设置按钮的文字
         self.IconName = IconName
-        self.setIcon(QIcon(IconName))
+        self.setToolTip(button_name.capitalize())
+        self.setAccessibleName(button_name.capitalize())
+        self._set_dark_bar_icon(IconName)
 
+    def _set_dark_bar_icon(self, icon_name):
+        if not icon_name:
+            self.setIcon(QIcon())
+            return
+        pixmap = QPixmap(icon_name)
+        if pixmap.isNull():
+            self.setIcon(QIcon(icon_name))
+            return
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(COLORS["text_on_dark"]))
+        painter.end()
+        self.setIcon(QIcon(pixmap))
 
 
 class StaticSelectButton(QToolButton):
@@ -170,6 +188,8 @@ class PullDownButton(QPushButton):
     def __init__(self):
         super().__init__()
         self.setObjectName("pull_down_button")
+        self.setToolTip("Show more styles")
+        self.setAccessibleName("Show more styles")
         self.setCheckable(True)
         self.setIcon(QIcon("pictures/icons/down.svg"))
 
@@ -201,7 +221,15 @@ class PullDownButton(QPushButton):
             global_position = self.mapToGlobal(button_rect.bottomLeft()) # 获取按钮的全局位置
 
             # 可以调整位置，比如使菜单向右偏移20像素
-            adjusted_position = global_position + QPoint(-500, -8)
+            menu_size = self.connect_menu.sizeHint()
+            screen = QGuiApplication.screenAt(global_position) or QGuiApplication.primaryScreen()
+            available = screen.availableGeometry() if screen is not None else QRect(global_position, menu_size)
+            x_pos = min(max(global_position.x(), available.left()), available.right() - menu_size.width() + 1)
+            y_pos = global_position.y()
+            if y_pos + menu_size.height() > available.bottom():
+                y_pos = self.mapToGlobal(self.rect().topLeft()).y() - menu_size.height()
+            y_pos = min(max(y_pos, available.top()), available.bottom() - menu_size.height() + 1)
+            adjusted_position = QPoint(x_pos, y_pos)
 
             # 显示菜单在计算后的位置
             self.connect_menu.exec(adjusted_position)

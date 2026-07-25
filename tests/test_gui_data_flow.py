@@ -61,10 +61,10 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         self.assertLessEqual(self.window.table.width(), 460)
         self.assertGreaterEqual(self.window.fig_control_window.width(), 240)
         self.assertLessEqual(self.window.fig_control_window.width(), 480)
-        left_width = self.window.left_layout.geometry().width()
-        self.assertEqual(self.window.title_bar.width(), left_width)
-        self.assertEqual(self.window.bottom_bar.width(), left_width)
-        self.assertEqual(self.window.title_bar.selector_style_bar.width(), left_width)
+        shell_width = self.window.central_widget.width()
+        self.assertEqual(self.window.title_bar.width(), shell_width)
+        self.assertEqual(self.window.bottom_bar.width(), shell_width)
+        self.assertEqual(self.window.title_bar.selector_style_bar.width(), shell_width)
 
     def test_one_cell_edit_refreshes_plot_and_draws_canvas_once(self):
         canvas, view, x_ref, y_ref = self.add_project()

@@ -1,31 +1,57 @@
 QFrame#table
 {
-    background-color: #ffffff;
-    max-height: 640px;
-    min-height: 440px;
-    min-width: 240px;
+    background-color: {{COLOR_SURFACE}};
+    min-width: 220px;
     padding: 0px;
     margin: 0px;
 }
 
-QTableView {
-    background-color: #ffffff;
+QTableView
+{
+    background-color: {{COLOR_SURFACE}};
     alternate-background-color: #f8fafc;
     gridline-color: #e5e7eb;
-    selection-background-color: #0281ff;
-    selection-color: #ffffff;
+    selection-background-color: {{COLOR_ACCENT}};
+    selection-color: {{COLOR_TEXT_ON_DARK}};
+    border: 0px;
 }
 
-QHeaderView::section {
+QTableView:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QHeaderView::section
+{
     background-color: #f3f4f6;
+    color: {{COLOR_TEXT_PRIMARY}};
     border: 0px;
     border-right: 1px solid #d1d5db;
     border-bottom: 1px solid #d1d5db;
     padding: 3px;
 }
 
-QToolBar {
+QToolBar#table_toolbar
+{
+    background-color: {{COLOR_SURFACE}};
     border: 0px;
     border-bottom: 1px solid #d1d5db;
     spacing: 2px;
+}
+
+QToolBar#table_toolbar QToolButton
+{
+    border: 2px solid transparent;
+    border-radius: {{RADIUS_SM}}px;
+    padding: 2px {{SPACE_XS}}px;
+}
+
+QToolBar#table_toolbar QToolButton:hover
+{
+    background-color: #e5e7eb;
+}
+
+QToolBar#table_toolbar QToolButton:focus
+{
+    border-color: {{COLOR_FOCUS}};
 }

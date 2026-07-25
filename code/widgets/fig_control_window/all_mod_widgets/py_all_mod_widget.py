@@ -1,5 +1,6 @@
 from Qt_core import *
 from code.widgets import qss_func
+from code.widgets.common_widget.py_empty_state import PyEmptyState
 from code.widgets.fig_control_window.all_mod_widgets.py_axes_mod_widgets import (
     PyCommonModWidget, PyBottomSpineModWidget, PyTopSpineModWidget, PyLeftSpineModWidget, PyRightSpineModWidget,
     PyAxeLegendModWidget
@@ -42,16 +43,35 @@ class PyAxesModWindow(QFrame):
 
         self.legend_mod_widget = PyAxeLegendModWidget(axe, axe_modify)
 
-        self.toolbox.addItem(self.common_mod_widget, "通用")
-        self.toolbox.addItem(self.bottom_spine_mod_widget, "底脊")
-        self.toolbox.addItem(self.top_spine_mod_widget, "顶脊")
-        self.toolbox.addItem(self.left_spine_mod_widget, "左脊")
-        self.toolbox.addItem(self.right_spine_mod_widget, "右脊")
-
-        self.toolbox.addItem(self.legend_mod_widget, "图例")
+        self.scroll_pages = []
+        for widget, title in (
+            (self.common_mod_widget, "通用"),
+            (self.bottom_spine_mod_widget, "底脊"),
+            (self.top_spine_mod_widget, "顶脊"),
+            (self.left_spine_mod_widget, "左脊"),
+            (self.right_spine_mod_widget, "右脊"),
+            (self.legend_mod_widget, "图例"),
+        ):
+            scroll_page = self._scrollable_page(widget)
+            self.scroll_pages.append(scroll_page)
+            self.toolbox.addItem(scroll_page, title)
 
         self.layout.addWidget(self.toolbox)
         self.setLayout(self.layout)
+
+    @staticmethod
+    def _scrollable_page(widget):
+        """Keep long inspector sections usable without resizing the shell."""
+        scroll_page = QScrollArea()
+        scroll_page.setObjectName("inspector_section_scroll_area")
+        scroll_page.setFrameShape(QFrame.NoFrame)
+        scroll_page.setWidgetResizable(True)
+        scroll_page.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_page.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_page.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        scroll_page.setWidget(widget)
+        return scroll_page
 
     def add_legend_mod_widget(self):
         pass
@@ -74,6 +94,11 @@ class PyChartModWindow(QFrame):
 
         self.layout = QVBoxLayout()
         self.stacklayout = QStackedWidget()
+        self.empty_state = PyEmptyState(
+            "No chart selected",
+            "Add or select a chart object to edit its parameters.",
+        )
+        self.stacklayout.addWidget(self.empty_state)
 
         self.layout.addWidget(self.stacklayout)
         self.setLayout(self.layout)
@@ -101,6 +126,11 @@ class PyElementModWindow(QFrame):
 
         self.layout = QVBoxLayout()
         self.stacklayout = QStackedLayout()
+        self.empty_state = PyEmptyState(
+            "No element selected",
+            "Add or select a figure element to edit its parameters.",
+        )
+        self.stacklayout.addWidget(self.empty_state)
 
         self.layout.addLayout(self.stacklayout)
         self.setLayout(self.layout)
