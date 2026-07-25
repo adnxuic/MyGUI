@@ -15,10 +15,11 @@ from code.project_io import (
     restore_project_snapshot,
     save_project_snapshot,
 )
+from code.figuremodify.style_base.color_models import PaletteDefinition
 from main import MainWindow
 
 
-class ProjectIoV4Tests(unittest.TestCase):
+class ProjectIoTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -103,7 +104,7 @@ class ProjectIoV4Tests(unittest.TestCase):
 
             save_project_snapshot(second_path, loaded.figure_window)
             second = load_project_file(second_path)
-            self.assertEqual(second["schema_version"], 4)
+            self.assertEqual(second["schema_version"], PROJECT_SCHEMA_VERSION)
             self.assertEqual(second["figure"]["dpi"], 175.5)
             self.assertEqual(second["figure"]["size_inches"], [4, 4])
         finally:
@@ -115,7 +116,56 @@ class ProjectIoV4Tests(unittest.TestCase):
             "schema": "mygui-project",
             "schema_version": 3,
         }), encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "only schema v4"):
+        with self.assertRaisesRegex(ValueError, "supported versions are v4 and v5"):
+            load_project_file(self.path)
+
+    def test_schema_v4_migrates_to_v5_with_empty_color_cycle(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        raw["schema_version"] = 4
+        raw["figure"]["plots"][0]["color"] = "tab:blue"
+        for axes in raw["figure"]["axes"]:
+            axes.pop("color_cycle", None)
+        for collection in ("curves", "plots", "scatters", "interpolates", "fits"):
+            for record in raw["figure"][collection]:
+                record.pop("color_order", None)
+        self.path.write_text(json.dumps(raw), encoding="utf-8")
+
+        migrated = load_project_file(self.path)
+        self.assertEqual(migrated["schema_version"], 5)
+        self.assertIsNone(migrated["figure"]["axes"][0]["color_cycle"])
+        self.assertEqual(migrated["figure"]["plots"][0]["color_order"], 0)
+        self.assertEqual(migrated["figure"]["plots"][0]["color"], "#1F77B4")
+
+    def test_rgba_and_custom_palette_cursor_roundtrip(self):
+        canvas, _sheet = self.build_project()
+        palette = PaletteDefinition(
+            "custom:project-only", "Project only", ("#11223380", "#ABCDEF"), source="custom"
+        )
+        self.assertTrue(canvas.current_axes_mod.change_all_color(palette))
+        save_project_snapshot(self.path, self.window.figure_window)
+
+        loaded = MainWindow()
+        try:
+            restore_project_snapshot(self.path, loaded.table, loaded.figure_window)
+            restored = loaded.figure_window.current_canva
+            state = restored.current_axes_mod.color_selector
+            self.assertEqual(restored.project_plots[0]["color"], "#11223380")
+            self.assertEqual(state.active_palette.id, "custom:project-only")
+            self.assertEqual(state.active_palette.colors, ("#11223380", "#ABCDEF"))
+            self.assertEqual(state.next_index, 1)
+        finally:
+            loaded.close()
+            self.app.processEvents()
+
+    def test_invalid_color_is_rejected_before_restore(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        raw["figure"]["plots"][0]["color"] = "not-a-color"
+        self.path.write_text(json.dumps(raw), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, r"figure.plots\[0\].color"):
             load_project_file(self.path)
 
     def test_missing_column_reference_is_rejected(self):

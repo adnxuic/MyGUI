@@ -12,6 +12,7 @@ from code import status_messages
 from code.database import ColumnRef, TableRepository
 from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
 from code.database.safe_expression import evaluate_curve_expression
+from code.figuremodify.style_base.color_models import normalize_color
 
 
 def _remove_project_record(project_collection: list[dict[str, Any]] | None,
@@ -31,6 +32,20 @@ def _remove_artist(artist):
         artist.remove()
     except ValueError:
         pass
+
+
+def _refresh_legend(axe: Axes):
+    legend = axe.get_legend()
+    if legend is None:
+        return
+    visible = bool(legend.get_visible())
+    location = getattr(legend, "_loc", "best")
+    legend.remove()
+    try:
+        legend = axe.legend(loc=location)
+    except (TypeError, ValueError):
+        legend = axe.legend(loc="best")
+    legend.set_visible(visible)
 
 
 class PyCurveModify:
@@ -57,10 +72,7 @@ class PyCurveModify:
         self.fig.canvas.draw_idle()
 
     def update_legend(self):
-        legend = self.axe.get_legend()
-        if legend is not None:
-            legend.remove()
-        self.axe.legend()
+        _refresh_legend(self.axe)
 
     def delete_object(self):
         if self._deleted:
@@ -129,11 +141,20 @@ class PyCurveModify:
         self.update_legend()
         self.redraw()
 
-    def update_color(self, color: str):
+    def get_color(self) -> str:
+        return normalize_color(self.line.get_color())
+
+    def is_color_target_active(self) -> bool:
+        return not self._deleted
+
+    def update_color(self, color: str, *, redraw: bool = True, refresh_legend: bool = True):
+        color = normalize_color(color)
         self.line.set_color(color)
-        self.update_project_record(color=self.line.get_color())
-        self.update_legend()
-        self.redraw()
+        self.update_project_record(color=color)
+        if refresh_legend:
+            self.update_legend()
+        if redraw:
+            self.redraw()
 
     def change_legend(self, label: str):
         self.line.set_label(label)
@@ -170,6 +191,12 @@ class _DataModifyBase:
 
     def redraw(self):
         self.fig.canvas.draw_idle()
+
+    def update_legend(self):
+        _refresh_legend(self.axe)
+
+    def is_color_target_active(self) -> bool:
+        return not self._deleted
 
     def _valid_refs(self) -> bool:
         if self.repository.has_ref(self.current_x_ref) and self.repository.has_ref(self.current_y_ref):
@@ -238,19 +265,23 @@ class PyPlotModify(_DataModifyBase):
             self.redraw()
         return bool(pair.valid_mask.any())
 
-    def update_color(self, color: str):
+    def get_color(self) -> str:
+        return normalize_color(self.line.get_color())
+
+    def update_color(self, color: str, *, redraw: bool = True, refresh_legend: bool = True):
+        color = normalize_color(color)
         self.line.set_color(color)
-        self.update_project_record(color=self.line.get_color())
-        self.redraw()
+        self.update_project_record(color=color)
+        if refresh_legend:
+            self.update_legend()
+        if redraw:
+            self.redraw()
 
     def change_legend(self, label: str):
         self.line.set_label(label)
         self.label = label
         self.update_project_record(label=label)
-        legend = self.axe.get_legend()
-        if legend is not None:
-            legend.remove()
-        self.axe.legend()
+        self.update_legend()
         self.redraw()
 
 
@@ -296,19 +327,28 @@ class PyScatterModify(_DataModifyBase):
             self.redraw()
         return bool(pair.x.size)
 
-    def update_color(self, color: str):
-        self.scatter.set_facecolor(color)
+    def get_color(self) -> str:
+        facecolors = self.scatter.get_facecolor()
+        if len(facecolors):
+            return normalize_color(facecolors[0])
+        if self.project_record is not None:
+            return normalize_color(self.project_record.get("color", "#000000"))
+        return "#000000"
+
+    def update_color(self, color: str, *, redraw: bool = True, refresh_legend: bool = True):
+        color = normalize_color(color)
+        self.scatter.set_color(color)
         self.update_project_record(color=color)
-        self.redraw()
+        if refresh_legend:
+            self.update_legend()
+        if redraw:
+            self.redraw()
 
     def change_legend(self, label: str):
         self.scatter.set_label(label)
         self.label = label
         self.update_project_record(label=label)
-        legend = self.axe.get_legend()
-        if legend is not None:
-            legend.remove()
-        self.axe.legend()
+        self.update_legend()
         self.redraw()
 
 
@@ -410,17 +450,21 @@ class PyInterpolateModify(_DataModifyBase):
         self.update_project_record(y_ref=ref.to_dict())
         return self.refresh_data_pair()
 
-    def update_color(self, color: str):
+    def get_color(self) -> str:
+        return normalize_color(self.line.get_color())
+
+    def update_color(self, color: str, *, redraw: bool = True, refresh_legend: bool = True):
+        color = normalize_color(color)
         self.line.set_color(color)
-        self.update_project_record(color=self.line.get_color())
-        self.redraw()
+        self.update_project_record(color=color)
+        if refresh_legend:
+            self.update_legend()
+        if redraw:
+            self.redraw()
 
     def change_legend(self, label: str):
         self.line.set_label(label)
         self.label = label
         self.update_project_record(label=label)
-        legend = self.axe.get_legend()
-        if legend is not None:
-            legend.remove()
-        self.axe.legend()
+        self.update_legend()
         self.redraw()

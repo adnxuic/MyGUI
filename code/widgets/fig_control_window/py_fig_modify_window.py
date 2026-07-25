@@ -6,6 +6,7 @@ from code.widgets.common_widget.py_empty_state import PyEmptyState
 from code.widgets.fig_control_window.all_mod_widgets.py_all_mod_widget import (
     PyAxesModWindow, PyChartModWindow, PyElementModWindow)
 from code.figuremodify.py_axes_modify import PyAxesModify
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
 import os
@@ -20,7 +21,8 @@ class PyAllModWidget(QFrame):
     一个坐标系对应一个
     """
 
-    def __init__(self, axe, axe_modify: PyAxesModify):
+    def __init__(self, axe, axe_modify: PyAxesModify,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         self.setObjectName('all_mod_widget')
@@ -40,7 +42,7 @@ class PyAllModWidget(QFrame):
         self.curve_btn_bar_layout = QHBoxLayout()
         self.element_btn_bar_layout = QHBoxLayout()
 
-        self.axes_mod_window = PyAxesModWindow(axe, axe_modify)
+        self.axes_mod_window = PyAxesModWindow(axe, axe_modify, color_library)
         self.cahrt_mod_window = PyChartModWindow(axe)
         self.element_mod_window = PyElementModWindow(axe)
 
@@ -168,12 +170,13 @@ class PyFigModWidget(QFrame):
         figure_btn.clicked.connect(lambda: self.stacklayout.setCurrentWidget(self.figure_element_mod_widget))
         self.axes_btn_bar_layout.addWidget(figure_btn)
 
-    def add_all_mod_widget(self, axe, axe_modify: PyAxesModify):
+    def add_all_mod_widget(self, axe, axe_modify: PyAxesModify,
+                           color_library: ColorLibrary | None = None):
         """
         添加坐标系中所有元素的修改窗口
         返回按钮以便切换窗口是改变画布的当前坐标系
         """
-        all_mod_widget = PyAllModWidget(axe, axe_modify)
+        all_mod_widget = PyAllModWidget(axe, axe_modify, color_library)
         self.stacklayout.addWidget(all_mod_widget)
         self.stacklayout.setCurrentIndex(self.stacklayout.count() - 1)
 

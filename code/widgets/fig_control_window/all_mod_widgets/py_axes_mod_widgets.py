@@ -2,7 +2,8 @@ from Qt_core import *
 
 from code.widgets import qss_func
 from code.figuremodify.py_axes_modify import PyAxesModify
-from code.figuremodify.style_base.color_base import color_combi_dict
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
+from code.widgets.common_widget.min_widget.py_colorchoice_widgets import choose_palette
 
 from matplotlib.axes import Axes
 
@@ -13,7 +14,8 @@ qss_path = os.path.join(current_path, "axes_mod_style.qss")
 
 
 class PyCommonModWidget(QFrame):
-    def __init__(self, axe: Axes, axe_modify: PyAxesModify):
+    def __init__(self, axe: Axes, axe_modify: PyAxesModify,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         self.setObjectName("common_mod_widget")
@@ -22,24 +24,19 @@ class PyCommonModWidget(QFrame):
 
         self.axe = axe
         self.axe_modify = axe_modify
+        self.color_library = color_library or ColorLibrary(parent=self)
 
         self.layout = QVBoxLayout()
 
-        # 颜色组合的选择
         self.color_layout = QHBoxLayout()
-        self.color_layout.addWidget(QLabel("颜色组合:"))
+        self.color_layout.addWidget(QLabel("Palette:"))
 
-        self.color_combi_button = QPushButton("选择颜色组合")
-        self.color_combi_button.clicked.connect(self.show_color_menu)
-
-        self.color_combi_menu = QMenu()
-        for category, subcategories in color_combi_dict.items():
-            if isinstance(subcategories, dict):
-                submenu = self.color_combi_menu.addMenu(category)
-                for subcategory in subcategories.keys():
-                    self.add_color_action(submenu, category, subcategory)
-            else:
-                self.add_color_action(self.color_combi_menu, category)
+        self.color_combi_button = QPushButton("Apply palette to axes")
+        self.color_combi_button.setAccessibleName("Apply color palette to axes")
+        self.color_combi_button.setToolTip(
+            "Choose a palette and apply it to chart objects in creation order."
+        )
+        self.color_combi_button.clicked.connect(self.choose_and_apply_palette)
 
         self.color_layout.addWidget(self.color_combi_button)
 
@@ -169,32 +166,21 @@ class PyCommonModWidget(QFrame):
         # self.set_y_range()
 
 
-    def show_color_menu(self):
-        self.color_combi_menu.exec(self.color_combi_button.mapToGlobal(self.color_combi_button.rect().bottomLeft()))
+    def choose_and_apply_palette(self):
+        palette = choose_palette(
+            self,
+            self.color_library,
+            self.axe_modify.color_cycle.active_palette,
+        )
+        if palette is not None:
+            object_count = len(self.axe_modify._live_color_targets())
+            if self.axe_modify.change_all_color(palette):
+                self.color_library.record_recent_many(
+                    palette.colors[index % len(palette.colors)]
+                    for index in range(object_count)
+                )
 
-    def add_color_action(self, menu, category, subcategory=None):
-        if category == '单色':
-            action = QAction(category, self)
-            action.triggered.connect(lambda checked, c=category: self.update_combi_color(c))
-        else:
-            # Create a pixmap for the color combination
-            pixmap = QPixmap(100, 20)  # Adjust size as needed
-            painter = QPainter(pixmap)
-            
-            colors = color_combi_dict[category][subcategory]
-            width = pixmap.width() / len(colors)
-            for i, color in enumerate(colors):
-                painter.fillRect(QRectF(i * width, 0, width, pixmap.height()), QColor(color))
-
-            painter.end()
-
-            action = QAction(pixmap, '', self)
-            action.triggered.connect(lambda checked, c=category, s=subcategory: self.update_combi_color(c, s))
-            
-            action.setIconVisibleInMenu(True)
-            
-        menu.addAction(action)
-    
+    # Compatibility entry point used by older callers.
     def update_combi_color(self, category, subcategory=None):
         self.axe_modify.change_all_color(category, subcategory)
 

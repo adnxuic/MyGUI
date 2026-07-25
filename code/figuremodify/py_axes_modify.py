@@ -1,18 +1,30 @@
+from dataclasses import dataclass
 from typing import Union
-import random
+from uuid import uuid4
+import weakref
 
 from Qt_core import *
 
-from code.figuremodify.style_base.color_base import color_combi_dict
-from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorSelector
+from code import status_messages
+from code.figuremodify.style_base.color_models import (
+    all_single_colors,
+    ColorCycleState,
+    PaletteDefinition,
+    builtin_palettes,
+)
 
-import matplotlib as mpl
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-from matplotlib.lines import Line2D
-from matplotlib.collections import PathCollection
 
-from matplotlib.style import use
+
+@dataclass(slots=True)
+class _ColorTarget:
+    token: str
+    order: int
+    set_color: weakref.WeakMethod
+    get_color: weakref.WeakMethod
+    sync_widget: weakref.WeakMethod
+    is_active: weakref.WeakMethod
 
 
 class PyAxesModify:
@@ -22,52 +34,137 @@ class PyAxesModify:
 
         self.axe:Axes = axe
 
-        self.vis_objects = []
-
-        self.color_selector = ColorSelector()
+        self.vis_objects: list[_ColorTarget] = []
+        self.color_selector = ColorCycleState()
 
         self.legend = None
 
     def redraw(self):
-        self.fig.canvas.draw()
+        self.fig.canvas.draw_idle()
 
     def update_legend(self):
-        self.axe.legend().remove()
-        self.axe.legend()
+        legend = self.axe.get_legend()
+        if legend is None:
+            return
+        visible = bool(legend.get_visible())
+        location = getattr(legend, "_loc", "best")
+        legend.remove()
+        try:
+            legend = self.axe.legend(loc=location)
+        except (TypeError, ValueError):
+            legend = self.axe.legend(loc="best")
+        legend.set_visible(visible)
 
-    def add_vis_object(self, vis_object):
-        self.vis_objects.append(vis_object)
+    def register_color_target(self, modifier, widget) -> str:
+        token = str(uuid4())
+        project_record = getattr(modifier, "project_record", None)
+        try:
+            order = int(project_record.get("color_order"))
+        except (AttributeError, TypeError, ValueError):
+            order = len(self.vis_objects)
+        target = _ColorTarget(
+            token=token,
+            order=order,
+            set_color=weakref.WeakMethod(modifier.update_color),
+            get_color=weakref.WeakMethod(modifier.get_color),
+            sync_widget=weakref.WeakMethod(widget.set_color),
+            is_active=weakref.WeakMethod(modifier.is_color_target_active),
+        )
+        self.vis_objects.append(target)
+        return token
 
-    def change_all_color(self, category, subcategory=None):
-        if subcategory is None:
-            colors = color_combi_dict[category]
-        else:
-            colors = color_combi_dict[category][subcategory]
+    def unregister_color_target(self, token: str) -> None:
+        self.vis_objects = [target for target in self.vis_objects if target.token != token]
 
-        if category == "单色":
-            # 在单色的颜色集合中随机选择跟可视化对象数量相同的不同颜色
-            colors = random.sample(color_combi_dict[category], len(self.vis_objects))
-            for vis_object, color in zip(self.vis_objects, colors):
-                vis_object(color)
-        else:
-            # 使用颜色组合中的所有颜色
-            for vis_object, color in zip(self.vis_objects[:len(colors)], colors):
-                vis_object(color)
-            
-            # 如果还有剩余的可视化对象，从单色集合中随机选择不同的颜色
-            if len(self.vis_objects) > len(colors):
-                remaining_objects = self.vis_objects[len(colors):]
-                used_colors = set(colors)
-                for vis_object in remaining_objects:
-                    available_colors = [c for c in color_combi_dict["单色"] if c not in used_colors]
-                    if not available_colors:
-                        available_colors = color_combi_dict["单色"]
-                    color = random.choice(available_colors)
-                    vis_object(color)
-                    used_colors.add(color)
+    def _live_color_targets(self) -> list[tuple[_ColorTarget, callable, callable, callable]]:
+        live = []
+        stale_tokens = set()
+        for target in self.vis_objects:
+            setter = target.set_color()
+            getter = target.get_color()
+            sync_widget = target.sync_widget()
+            active = target.is_active()
+            if None in (setter, getter, sync_widget, active):
+                stale_tokens.add(target.token)
+                continue
+            try:
+                if not active():
+                    stale_tokens.add(target.token)
+                    continue
+            except RuntimeError:
+                stale_tokens.add(target.token)
+                continue
+            live.append((target, setter, getter, sync_widget))
+        if stale_tokens:
+            self.vis_objects = [
+                target for target in self.vis_objects if target.token not in stale_tokens
+            ]
+        live.sort(key=lambda item: item[0].order)
+        return live
 
+    @staticmethod
+    def _resolve_palette(category, subcategory=None) -> PaletteDefinition:
+        if isinstance(category, PaletteDefinition):
+            return category
+        for palette in builtin_palettes():
+            if palette.category == category and (
+                subcategory is None
+                and palette.id == "builtin:all-colors"
+                or subcategory is not None
+                and palette.name == subcategory
+            ):
+                return palette
+        if category == "单色" and subcategory is None:
+            return PaletteDefinition(
+                "legacy:all-single", "全部单色", all_single_colors(), category="单色"
+            )
+        raise ValueError(f"Unknown color palette: {category!r} / {subcategory!r}")
+
+    def change_all_color(self, category, subcategory=None) -> bool:
+        try:
+            palette = self._resolve_palette(category, subcategory)
+        except ValueError as exc:
+            status_messages.show_error(str(exc))
+            return False
+
+        targets = self._live_color_targets()
+        if not targets:
+            status_messages.show_warning("当前坐标轴没有可配色的图表对象。")
+            return False
+
+        snapshots: list[tuple[callable, callable, str]] = []
+        try:
+            for index, (_target, setter, getter, sync_widget) in enumerate(targets):
+                previous = getter()
+                snapshots.append((setter, sync_widget, previous))
+                color = palette.colors[index % len(palette.colors)]
+                setter(color, redraw=False, refresh_legend=False)
+                sync_widget(color, emit=False)
+        except Exception as exc:
+            for setter, sync_widget, previous in reversed(snapshots):
+                try:
+                    setter(previous, redraw=False, refresh_legend=False)
+                    sync_widget(previous, emit=False)
+                except (RuntimeError, ValueError):
+                    pass
+            self.update_legend()
+            self.redraw()
+            status_messages.show_error(f"应用配色失败，已恢复原颜色：{exc}")
+            return False
+
+        self.color_selector.commit_palette_for_count(palette, len(targets))
         self.update_legend()
         self.redraw()
+        status_messages.show_success(
+            f"已将“{palette.display_name}”应用到 {len(targets)} 个图表对象。"
+        )
+        return True
+
+    def color_cycle_snapshot(self):
+        return self.color_selector.to_dict()
+
+    def restore_color_cycle(self, value) -> None:
+        self.color_selector = ColorCycleState.from_dict(value)
 
     def set_visible(self, spine: str, visible: bool):
         self.axe.spines[spine].set_visible(visible)

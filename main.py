@@ -20,6 +20,7 @@ from code.widgets.right_column.py_right_column import PyRightColumn
 from code.widgets.table.py_table import PyTable
 from code.widgets.theme import CONTROL_SIZES
 from code.widgets.title_bar.py_title_bar import PyTitleBar
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
 class MainWindow(QMainWindow):
@@ -56,6 +57,7 @@ class MainWindow(QMainWindow):
         self.left_layout = self.central_widget_layout
 
         self.repository = TableRepository(self)
+        self.color_library = ColorLibrary(self.settings, self)
         self.table = PyTable(self.repository)
         self.table.setMinimumWidth(220)
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -64,6 +66,7 @@ class MainWindow(QMainWindow):
         self.figure_window = PyFigureWindow(
             fig_modify_window=self.fig_control_window.figmod_window,
             repository=self.repository,
+            color_library=self.color_library,
         )
         self.figure_window.setMinimumWidth(self.MIN_CANVAS_WIDTH)
         self.figure_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

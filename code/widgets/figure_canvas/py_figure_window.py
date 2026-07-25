@@ -8,6 +8,7 @@ from code.database.interpolate_func import interpolate_dict
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
 from code.widgets.common_widget.py_empty_state import PyEmptyState
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 from code.widgets import qss_func
 import matplotlib
@@ -44,7 +45,8 @@ class FigureTabWidget(QTabWidget):
 class PyFigureWindow(QFrame):
     requestStyleSelector = Signal()
 
-    def __init__(self, fig_modify_window=None, repository: TableRepository | None = None):
+    def __init__(self, fig_modify_window=None, repository: TableRepository | None = None,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         self.setObjectName('figure_window')
@@ -55,6 +57,7 @@ class PyFigureWindow(QFrame):
         if repository is None:
             raise ValueError("PyFigureWindow requires a TableRepository.")
         self.repository = repository
+        self.color_library = color_library or ColorLibrary(parent=self)
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
         self.table = None
@@ -129,6 +132,7 @@ class PyFigureWindow(QFrame):
             project_id=project.id,
             project_name=project_name,
             project_path=project_path,
+            color_library=self.color_library,
         )
         self.canvas['canva' + str(len(self.canvas) + 1)] = canva
 
@@ -358,6 +362,7 @@ class PyFigureWindow(QFrame):
                 color=curve.get("color", "black"),
                 label=curve.get("label", ""),
                 record_project=True,
+                color_order=curve.get("color_order"),
             )
 
         for plot in figure.get("plots", []):
@@ -377,6 +382,7 @@ class PyFigureWindow(QFrame):
                 x_ref=x_ref,
                 y_ref=y_ref,
                 object_id=plot.get("object_id"),
+                color_order=plot.get("color_order"),
                 record_project=True,
             )
 
@@ -397,6 +403,7 @@ class PyFigureWindow(QFrame):
                 x_ref=x_ref,
                 y_ref=y_ref,
                 object_id=scatter.get("object_id"),
+                color_order=scatter.get("color_order"),
                 record_project=True,
             )
 
@@ -416,6 +423,7 @@ class PyFigureWindow(QFrame):
                 x_ref=x_ref,
                 y_ref=y_ref,
                 object_id=interpolate.get("object_id"),
+                color_order=interpolate.get("color_order"),
                 method=method,
                 k=int(interpolate.get("k", 3)),
                 samples=int(interpolate.get("samples", 1000)),
@@ -441,6 +449,7 @@ class PyFigureWindow(QFrame):
                 x_ref=x_ref,
                 y_ref=y_ref,
                 object_id=fit.get("object_id"),
+                color_order=fit.get("color_order"),
                 engine=fit.get("engine", "Python"),
                 record_project=True,
                 fit_type=fit.get("fit_type"),

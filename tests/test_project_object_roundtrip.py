@@ -13,7 +13,7 @@ from code.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
 
-class ProjectObjectRoundtripV4Tests(unittest.TestCase):
+class ProjectObjectRoundtripTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -43,6 +43,7 @@ class ProjectObjectRoundtripV4Tests(unittest.TestCase):
 
         canvas.add_plot(line_pair.x, line_pair.y, "-", 2, "black", "plot", x_ref, y_ref)
         canvas.add_scatter(valid_pair.x, valid_pair.y, 20, "red", "o", "scatter", x_ref, y_ref)
+        canvas.add_curve("x", 0, 3, "-", "green", "curve")
         linear_method = list(interpolate_dict)[2]
         canvas.add_interpolate_curve(
             valid_pair.x, valid_pair.y, x_ref, y_ref, linear_method, samples=64, label="interpolate"
@@ -78,6 +79,13 @@ class ProjectObjectRoundtripV4Tests(unittest.TestCase):
             self.assertEqual(len(restored.project_scatters), 1)
             self.assertEqual(len(restored.project_interpolates), 1)
             self.assertEqual(len(restored.project_fits), 1)
+            self.assertEqual(restored.project_fits[0]["color"], "#0000FF")
+            restored_order = [
+                target.order
+                for target, _setter, _getter, _sync
+                in restored.current_axes_mod._live_color_targets()
+            ]
+            self.assertEqual(restored_order, [0, 1, 2, 3, 4])
             self.assertEqual(len(restored.project_texts), 2)
         finally:
             loaded.close()

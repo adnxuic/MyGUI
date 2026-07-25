@@ -7,6 +7,7 @@ from code.widgets.fig_control_window.all_mod_widgets.py_axes_mod_widgets import 
 )
 
 from code.figuremodify.py_axes_modify import PyAxesModify
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 import os
 
@@ -21,7 +22,8 @@ class PyAxesModWindow(QFrame):
     One panel per axes.
     """
 
-    def __init__(self, axe, axe_modify: PyAxesModify):
+    def __init__(self, axe, axe_modify: PyAxesModify,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
         self.axe = axe
         self.axe_modify = axe_modify
@@ -35,7 +37,7 @@ class PyAxesModWindow(QFrame):
 
         self.toolbox = QToolBox()
 
-        self.common_mod_widget = PyCommonModWidget(axe, axe_modify)
+        self.common_mod_widget = PyCommonModWidget(axe, axe_modify, color_library)
         self.bottom_spine_mod_widget = PyBottomSpineModWidget(axe, axe_modify)
         self.top_spine_mod_widget = PyTopSpineModWidget()
         self.left_spine_mod_widget = PyLeftSpineModWidget(axe, axe_modify)

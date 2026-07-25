@@ -3,15 +3,17 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from code.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from code.database.interpolate_func import interpolate_dict
+from code.figuremodify.style_base.color_models import ColorCycleState, normalize_color
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 4
+PROJECT_SCHEMA_VERSION = 5
 DATA_SOURCE_COLLECTIONS = ("plots", "scatters", "interpolates", "fits")
 FIGURE_COLLECTIONS = ("curves", *DATA_SOURCE_COLLECTIONS, "texts")
 
@@ -90,19 +92,47 @@ def _validate_axes(figure: dict[str, Any]) -> int:
         index = _coerce_int(axes_record.get("index", -1), "figure.axes[].index")
         if not 0 <= index < axes_count:
             raise ValueError(f"Invalid axes index: {index}")
+        try:
+            cycle = ColorCycleState.from_dict(axes_record.get("color_cycle"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid project field figure.axes[{index}].color_cycle: {exc}"
+            ) from exc
+        axes_record["color_cycle"] = cycle.to_dict()
     return axes_count
+
+
+def _normalize_figure_colors(figure: dict[str, Any]) -> None:
+    for collection in ("curves", "plots", "scatters", "interpolates", "fits"):
+        records = _expect_list(figure.get(collection, []), f"figure.{collection}")
+        for index, raw_record in enumerate(records):
+            record = _expect_dict(raw_record, f"figure.{collection}[{index}]")
+            try:
+                record["color"] = normalize_color(record.get("color", "black"))
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid project field figure.{collection}[{index}].color: "
+                    f"{record.get('color')!r}"
+                ) from exc
 
 
 def _validate_figure(figure_snapshot: Any, available_refs: dict[ColumnRef, ColumnType],
                      project_id: str) -> None:
     figure = _expect_dict(figure_snapshot, "figure")
+    _normalize_figure_colors(figure)
     axes_count = _validate_axes(figure)
     object_ids = set()
+    color_orders = set()
     for collection in FIGURE_COLLECTIONS:
         records = _expect_list(figure.get(collection, []), f"figure.{collection}")
         for index, raw_record in enumerate(records):
             path = f"figure.{collection}[{index}]"
             record = _expect_dict(raw_record, path)
+            if collection != "texts":
+                color_order = _coerce_int(record.get("color_order", -1), f"{path}.color_order")
+                if color_order < 0 or color_order in color_orders:
+                    raise ValueError(f"Invalid or duplicate color order at {path}.")
+                color_orders.add(color_order)
             if collection != "texts" or record.get("scope", "axes") != "figure":
                 axes_index = _coerce_int(record.get("axes_index", 0), f"{path}.axes_index")
                 if not 0 <= axes_index < axes_count:
@@ -125,6 +155,35 @@ def _validate_figure(figure_snapshot: Any, available_refs: dict[ColumnRef, Colum
                 raise ValueError(f"Unknown fitting engine at {path}.")
 
 
+def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    root = _expect_dict(snapshot, "project")
+    if root.get("schema") != PROJECT_SCHEMA_NAME:
+        raise ValueError("Unsupported project file.")
+    version = root.get("schema_version")
+    if version == PROJECT_SCHEMA_VERSION:
+        return root
+    if version != 4:
+        raise ValueError(
+            f"Unsupported project schema version {version!r}; "
+            "supported versions are v4 and v5."
+        )
+    migrated = deepcopy(root)
+    figure = _expect_dict(migrated.get("figure"), "figure")
+    for record in _expect_list(figure.get("axes", []), "figure.axes"):
+        _expect_dict(record, "figure.axes[]").setdefault("color_cycle", None)
+    color_order = 0
+    for collection in ("curves", "plots", "scatters", "interpolates", "fits"):
+        for record in _expect_list(figure.get(collection, []), f"figure.{collection}"):
+            chart_record = _expect_dict(record, f"figure.{collection}[]")
+            chart_record.setdefault("color_order", color_order)
+            saved_order = _coerce_int(
+                chart_record["color_order"], f"figure.{collection}[].color_order"
+            )
+            color_order = max(color_order + 1, saved_order + 1)
+    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
+    return migrated
+
+
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
     root = _expect_dict(snapshot, "project")
     if root.get("schema") != PROJECT_SCHEMA_NAME:
@@ -132,7 +191,8 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
     version = root.get("schema_version")
     if version != PROJECT_SCHEMA_VERSION:
         raise ValueError(
-            f"Unsupported project schema version {version!r}; only schema v{PROJECT_SCHEMA_VERSION} is supported."
+            f"Unsupported project schema version {version!r}; "
+            f"only schema v{PROJECT_SCHEMA_VERSION} is valid after migration."
         )
     project = _expect_dict(root.get("project"), "project")
     project_id = str(project.get("id", "")).strip()
@@ -186,6 +246,7 @@ def save_project_snapshot(filename: str | Path, figure_window=None) -> None:
 def load_project_file(filename: str | Path) -> dict[str, Any]:
     with Path(filename).open("r", encoding="utf-8-sig") as handle:
         snapshot = json.load(handle)
+    snapshot = migrate_project_snapshot(snapshot)
     validate_project_snapshot(snapshot)
     return snapshot
 

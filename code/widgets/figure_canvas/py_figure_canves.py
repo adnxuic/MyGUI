@@ -19,6 +19,8 @@ from code.database import ColumnRef, TableChangeSet, TableRepository
 from code.database.table_document import new_id
 from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
 from code.database.safe_expression import evaluate_curve_expression
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
+from code.figuremodify.style_base.color_models import normalize_color
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -36,8 +38,9 @@ mpl.use("QtAgg")
 class PyFigureCanvas(QWidget):
     def __init__(self, parent=None, width=4, height=3, dpi=200, style=None,
                  repository: TableRepository | None = None, project_id: str | None = None,
-                 project_name: str | None = None, project_path: str | None = None):
-        super().__init__()
+                 project_name: str | None = None, project_path: str | None = None,
+                 color_library: ColorLibrary | None = None):
+        super().__init__(parent)
         if repository is None or project_id is None:
             raise ValueError("PyFigureCanvas requires a repository and project id.")
         self.repository = repository
@@ -46,6 +49,7 @@ class PyFigureCanvas(QWidget):
         self.project_name = project_name or ""
         self.project_table_name = self.project_name
         self.project_path = project_path
+        self.color_library = color_library or ColorLibrary(parent=self)
         with mpl.style.context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
         # QtAgg scales ``Figure.dpi`` to the active screen's device pixel
@@ -65,6 +69,7 @@ class PyFigureCanvas(QWidget):
         self.project_interpolates: list[dict[str, Any]] = []
         self.project_fits: list[dict[str, Any]] = []
         self.project_texts: list[dict[str, Any]] = []
+        self._next_color_order = 0
         self._data_objects: dict[str, dict[str, Any]] = {}
         self.repository.transaction_committed.connect(self._table_changed)
 
@@ -164,6 +169,24 @@ class PyFigureCanvas(QWidget):
             "modify": modify,
         }
 
+    @staticmethod
+    def _register_color_binding(axes_modify: PyAxesModify, modify, widget) -> str:
+        token = axes_modify.register_color_target(modify, widget.color_choice)
+        widget._axes_color_registration = (axes_modify, token)
+        widget.destroyed.connect(
+            lambda *_args, target=axes_modify, registration=token:
+            target.unregister_color_target(registration)
+        )
+        return token
+
+    def _claim_color_order(self, preferred: int | None = None) -> int:
+        if preferred is None:
+            order = self._next_color_order
+        else:
+            order = max(0, int(preferred))
+        self._next_color_order = max(self._next_color_order, order + 1)
+        return order
+
     # Add axes
     def add_axes(self, nrows=1, ncols=1, record_project=True):
         start_index = len(self.fig.axes)
@@ -173,7 +196,9 @@ class PyFigureCanvas(QWidget):
                 axe_mod = PyAxesModify(self.fig, axe, self.style)
                 self.axes_mods.append(axe_mod)
 
-                btn = self.fig_modify_widget.add_all_mod_widget(axe, axe_mod)
+                btn = self.fig_modify_widget.add_all_mod_widget(
+                    axe, axe_mod, self.color_library
+                )
                 btn.clicked.connect(lambda _, axe1=axe, axe_mod1=axe_mod:
                                     self.update_current_axes(axe1, axe_mod1))
 
@@ -192,8 +217,9 @@ class PyFigureCanvas(QWidget):
 
     # Add custom curve
     def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str,
-                  record_project=True):
+                  record_project=True, color_order: int | None = None):
 
+        color = normalize_color(color)
         x = np.linspace(x_start, x_stop, 1000)
         y = evaluate_curve_expression(func_text, x)
         with mpl.style.context(self.style):
@@ -202,12 +228,13 @@ class PyFigureCanvas(QWidget):
         project_record = None
         if record_project:
             project_record = {
+                "color_order": self._claim_color_order(color_order),
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
                 "expression": func_text,
                 "x_start": float(x_start),
                 "x_stop": float(x_stop),
                 "style": line.get_linestyle(),
-                "color": line.get_color(),
+                "color": color,
                 "label": label,
             }
             self.project_curves.append(project_record)
@@ -220,12 +247,14 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('curve_box')
 
         # Add curve adjustment panel
+        curve_modify = PyCurveModify(
+            self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text, label,
+            project_record=project_record, project_collection=self.project_curves,
+        )
         curve_mod_widget = PyCurveModWidget(
-            PyCurveModify(self.fig, self.current_axes, x_start, x_stop, self.style, line, func_text, label,
-                          project_record=project_record, project_collection=self.project_curves), color)
-
-        # Add visualization object
-        self.current_axes_mod.add_vis_object(curve_mod_widget.get_colorupdate_func())
+            curve_modify, color, color_library=self.color_library
+        )
+        self._register_color_binding(self.current_axes_mod, curve_modify, curve_mod_widget)
 
         curve_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['curve_box']
         curve_box.add_widget(curve_mod_widget, 'cuvre')
@@ -234,7 +263,9 @@ class PyFigureCanvas(QWidget):
 
     # Add line plot
     def add_plot(self, x, y, style, size, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
-                 record_project=True, object_id: str | None = None):
+                 record_project=True, object_id: str | None = None,
+                 color_order: int | None = None):
+        color = normalize_color(color)
         with mpl.style.context(self.style):
             line, = self.current_axes.plot(x, y, style, markersize=size, color=color, label=label)
 
@@ -243,12 +274,13 @@ class PyFigureCanvas(QWidget):
             object_id = object_id or new_id()
             project_record = {
                 "object_id": object_id,
+                "color_order": self._claim_color_order(color_order),
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
                 "x_ref": x_ref.to_dict(),
                 "y_ref": y_ref.to_dict(),
                 "style": style,
                 "size": float(line.get_markersize()),
-                "color": line.get_color(),
+                "color": color,
                 "label": label,
             }
             self.project_plots.append(project_record)
@@ -264,11 +296,11 @@ class PyFigureCanvas(QWidget):
             project_record=project_record, project_collection=self.project_plots,
         )
         plot_mod_widget = PyPlotModWidget(
-            plot_modify, self.repository, self.project_id, x_ref, y_ref, color
+            plot_modify, self.repository, self.project_id, x_ref, y_ref, color,
+            color_library=self.color_library,
         )
 
-        # Add visualization object
-        self.current_axes_mod.add_vis_object(plot_mod_widget.get_colorupdate_func())
+        self._register_color_binding(self.current_axes_mod, plot_modify, plot_mod_widget)
 
         plot_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['plot_box']
         plot_box.add_widget(plot_mod_widget, 'plot')
@@ -279,7 +311,9 @@ class PyFigureCanvas(QWidget):
 
     # Add scatter plot
     def add_scatter(self, x, y, size, color, marker, label, x_ref: ColumnRef, y_ref: ColumnRef,
-                    record_project=True, object_id: str | None = None):
+                    record_project=True, object_id: str | None = None,
+                    color_order: int | None = None):
+        color = normalize_color(color)
         with mpl.style.context(self.style):
             scatter = self.current_axes.scatter(x, y, s=size, c=color, marker=marker, label=label)
 
@@ -288,6 +322,7 @@ class PyFigureCanvas(QWidget):
             object_id = object_id or new_id()
             project_record = {
                 "object_id": object_id,
+                "color_order": self._claim_color_order(color_order),
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
                 "x_ref": x_ref.to_dict(),
                 "y_ref": y_ref.to_dict(),
@@ -310,11 +345,11 @@ class PyFigureCanvas(QWidget):
             project_record=project_record, project_collection=self.project_scatters,
         )
         scatter_mod_widget = PyScatterModWidget(
-            scatter_modify, self.repository, self.project_id, x_ref, y_ref, color
+            scatter_modify, self.repository, self.project_id, x_ref, y_ref, color,
+            color_library=self.color_library,
         )
 
-        # Add visualization object
-        self.current_axes_mod.add_vis_object(scatter_mod_widget.get_colorupdate_func())
+        self._register_color_binding(self.current_axes_mod, scatter_modify, scatter_mod_widget)
 
         scatter_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['scatter_box']
         scatter_box.add_widget(scatter_mod_widget, 'scatter')
@@ -328,10 +363,12 @@ class PyFigureCanvas(QWidget):
                       engine: str = "Python", record_project=True, fit_type=None,
                       fit_options=None, fit_result=None, expression: str = "",
                       x_start: float | None = None, x_stop: float | None = None,
-                      style: str = "solid", object_id: str | None = None):
+                      style: str = "solid", object_id: str | None = None,
+                      color_order: int | None = None):
         if engine not in {"Python", "Matlab"}:
             raise ValueError(f"Unsupported fitting engine: {engine}")
 
+        color = normalize_color(color)
         x_array = np.asarray(x, dtype=float)
         y_array = np.asarray(y, dtype=float)
         if x_array.size:
@@ -361,6 +398,7 @@ class PyFigureCanvas(QWidget):
             object_id = object_id or new_id()
             project_record = {
                 "object_id": object_id,
+                "color_order": self._claim_color_order(color_order),
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
                 "x_ref": x_ref.to_dict(),
                 "y_ref": y_ref.to_dict(),
@@ -372,7 +410,7 @@ class PyFigureCanvas(QWidget):
                 "x_start": float(x_start),
                 "x_stop": float(x_stop),
                 "style": line.get_linestyle(),
-                "color": line.get_color(),
+                "color": color,
                 "label": label,
             }
             self.project_fits.append(project_record)
@@ -384,19 +422,20 @@ class PyFigureCanvas(QWidget):
             all_mod_widget.add_chart_box('fitting_box')
 
         # Add fit curve adjustment panel
+        fit_modify = PyCurveModify(
+            self.fig,
+            self.current_axes,
+            x_start,
+            x_stop,
+            self.style,
+            line,
+            expression or "",
+            label,
+            project_record=project_record,
+            project_collection=self.project_fits,
+        )
         fitting_mod_widget = PyFitModWidget(
-            PyCurveModify(
-                self.fig,
-                self.current_axes,
-                x_start,
-                x_stop,
-                self.style,
-                line,
-                expression or "",
-                label,
-                project_record=project_record,
-                project_collection=self.project_fits,
-            ),
+            fit_modify,
             repository=self.repository,
             project_id=self.project_id,
             x_ref=x_ref,
@@ -405,13 +444,15 @@ class PyFigureCanvas(QWidget):
             fit_type=fit_type,
             fit_options=fit_options,
             fit_result=fit_result,
+            color_library=self.color_library,
         )
+        self._register_color_binding(self.current_axes_mod, fit_modify, fitting_mod_widget)
 
         fitting_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['fitting_box']
         fitting_box.add_widget(fitting_mod_widget, "fitting")
         fitting_box.setCurrentWidget(fitting_mod_widget)
         if project_record is not None:
-            self._register_data_object(object_id, "fit", project_record, fitting_mod_widget)
+            self._register_data_object(object_id, "fit", project_record, fitting_mod_widget, fit_modify)
 
         self.redraw()
         return line
@@ -420,7 +461,9 @@ class PyFigureCanvas(QWidget):
     def add_interpolate_curve(self, x, y, x_ref: ColumnRef, y_ref: ColumnRef, method, k=3, label='interpolate',
                               color='black', record_project=True,
                               samples=DEFAULT_INTERPOLATION_SAMPLES,
-                              lam=None, lam_auto=True, object_id: str | None = None):
+                              lam=None, lam_auto=True, object_id: str | None = None,
+                              color_order: int | None = None):
+        color = normalize_color(color)
         with mpl.style.context(self.style):
             try:
                 x_new, y_new = interpolate_curve(
@@ -442,6 +485,7 @@ class PyFigureCanvas(QWidget):
             object_id = object_id or new_id()
             project_record = {
                 "object_id": object_id,
+                "color_order": self._claim_color_order(color_order),
                 "axes_index": int(self.fig.axes.index(self.current_axes)),
                 "x_ref": x_ref.to_dict(),
                 "y_ref": y_ref.to_dict(),
@@ -450,7 +494,7 @@ class PyFigureCanvas(QWidget):
                 "samples": int(samples),
                 "lam": None if lam is None else float(lam),
                 "lam_auto": bool(lam_auto),
-                "color": line.get_color(),
+                "color": color,
                 "label": label,
             }
             self.project_interpolates.append(project_record)
@@ -470,10 +514,10 @@ class PyFigureCanvas(QWidget):
         interpolate_mod_widget = PyInterpolateWidget(
             interpolate_modify, self.repository, self.project_id, method, k, color,
             x_ref=x_ref, y_ref=y_ref, samples=samples, lam=lam, lam_auto=lam_auto,
+            color_library=self.color_library,
         )
 
-        # Add visualization object
-        self.current_axes_mod.add_vis_object(interpolate_mod_widget.get_colorupdate_func())
+        self._register_color_binding(self.current_axes_mod, interpolate_modify, interpolate_mod_widget)
 
         interpolate_box: PyModBox = all_mod_widget.cahrt_mod_window.boxs['interpolate_box']
         interpolate_box.add_widget(interpolate_mod_widget, 'interpolate')
@@ -635,13 +679,13 @@ class PyFigureCanvas(QWidget):
                 self.add_plot(
                     pair.x, pair.y, record.get("style", "-"), record.get("size", 2.0),
                     record.get("color", "black"), record.get("label", ""), x_ref, y_ref,
-                    object_id=record.get("object_id"),
+                    object_id=record.get("object_id"), color_order=record.get("color_order"),
                 )
             elif kind == "scatter":
                 self.add_scatter(
                     pair.x, pair.y, record.get("size", 20.0), record.get("color", "black"),
                     record.get("marker", "o"), record.get("label", ""), x_ref, y_ref,
-                    object_id=record.get("object_id"),
+                    object_id=record.get("object_id"), color_order=record.get("color_order"),
                 )
             elif kind == "interpolate":
                 self.add_interpolate_curve(
@@ -649,7 +693,7 @@ class PyFigureCanvas(QWidget):
                     k=record.get("k", 3), label=record.get("label", "interpolate"),
                     color=record.get("color", "black"), samples=record.get("samples", 1000),
                     lam=record.get("lam"), lam_auto=record.get("lam_auto", True),
-                    object_id=record.get("object_id"),
+                    object_id=record.get("object_id"), color_order=record.get("color_order"),
                 )
             elif kind == "fit":
                 self.add_fit_curve(
@@ -659,6 +703,7 @@ class PyFigureCanvas(QWidget):
                     fit_result=record.get("fit_result"), expression=record.get("expression", ""),
                     x_start=record.get("x_start"), x_stop=record.get("x_stop"),
                     style=record.get("style", "solid"), object_id=record.get("object_id"),
+                    color_order=record.get("color_order"),
                 )
 
     @staticmethod
@@ -710,6 +755,7 @@ class PyFigureCanvas(QWidget):
 
             axes_records.append({
                 "index": int(index),
+                "color_cycle": self.axes_mods[index].color_cycle_snapshot(),
                 "xlim": [float(value) for value in axe.get_xlim()],
                 "ylim": [float(value) for value in axe.get_ylim()],
                 "xlabel": axe.get_xlabel(),
@@ -742,6 +788,7 @@ class PyFigureCanvas(QWidget):
             if axes_index < 0 or axes_index >= len(self.fig.axes):
                 continue
             axe = self.fig.axes[axes_index]
+            self.axes_mods[axes_index].restore_color_cycle(record.get("color_cycle"))
 
             xlim = record.get("xlim")
             if isinstance(xlim, list) and len(xlim) == 2:

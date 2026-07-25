@@ -4,6 +4,7 @@ from code.widgets import qss_func
 from code.figuremodify.py_chart_modify import PyCurveModify, PyScatterModify, PyPlotModify, PyInterpolateModify
 from code.widgets.common_widget.min_widget.py_datachoice_widget import PyDataChoiceWidget
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 from code import status_messages
 from code.database import ColumnRef, TableRepository, matlab_adapter
@@ -25,8 +26,23 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "chart_mod_style.qss")
 
 
+def _unregister_color_target(widget):
+    registration = getattr(widget, "_axes_color_registration", None)
+    if registration is None:
+        return
+    axes_modify, token = registration
+    axes_modify.unregister_color_target(token)
+    widget._axes_color_registration = None
+
+
+def _modifier_color(modifier, fallback: str) -> str:
+    getter = getattr(modifier, "get_color", None)
+    return getter() if callable(getter) else fallback
+
+
 class PyCurveModWidget(QFrame):
-    def __init__(self, curve_modify: PyCurveModify, color: str):
+    def __init__(self, curve_modify: PyCurveModify, color: str,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -78,7 +94,11 @@ class PyCurveModWidget(QFrame):
         self.style_layout = QVBoxLayout()
 
         # Line color
-        self.color_choice = ColorChoiceWidget(color, self.color_change)
+        self.color_choice = ColorChoiceWidget(
+            _modifier_color(curve_modify, color),
+            connect_signal=self.color_change,
+            color_library=color_library,
+        )
         self.style_layout.addWidget(self.color_choice)
 
         # Line marker
@@ -117,6 +137,10 @@ class PyCurveModWidget(QFrame):
     def get_colorupdate_func(self):
         return self.color_choice.updateColor
 
+    def delete_object(self):
+        _unregister_color_target(self)
+        self.curve_modify.delete_object()
+
     def expression_change(self):
         current_expression = self.expression_input.text()
         self.curve_modify.update_expression(current_expression)
@@ -145,7 +169,8 @@ class PyCurveModWidget(QFrame):
 
 class PyPlotModWidget(QFrame):
     def __init__(self, curve_modify: PyPlotModify, repository: TableRepository, project_id: str,
-                 x_ref: ColumnRef, y_ref: ColumnRef, color: str):
+                 x_ref: ColumnRef, y_ref: ColumnRef, color: str,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -163,7 +188,11 @@ class PyPlotModWidget(QFrame):
         self.layout.addWidget(self.data_choice_widget)
 
         # Line color
-        self.color_choice = ColorChoiceWidget(color, self.color_change)
+        self.color_choice = ColorChoiceWidget(
+            _modifier_color(curve_modify, color),
+            connect_signal=self.color_change,
+            color_library=color_library,
+        )
         self.layout.addWidget(self.color_choice)
 
         # Legend
@@ -185,6 +214,7 @@ class PyPlotModWidget(QFrame):
         return self.color_choice.updateColor
 
     def delete_object(self):
+        _unregister_color_target(self)
         self.curve_modify.delete_object()
 
     def x_data_change(self, *_args):
@@ -203,7 +233,8 @@ class PyPlotModWidget(QFrame):
 
 class PyScatterModWidget(QFrame):
     def __init__(self, scatter_modify: PyScatterModify, repository: TableRepository, project_id: str,
-                 x_ref: ColumnRef, y_ref: ColumnRef, color: str):
+                 x_ref: ColumnRef, y_ref: ColumnRef, color: str,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -221,7 +252,11 @@ class PyScatterModWidget(QFrame):
         self.layout.addWidget(self.data_choice_widget)
 
         # Line color
-        self.color_choice = ColorChoiceWidget(color, self.color_change)
+        self.color_choice = ColorChoiceWidget(
+            _modifier_color(scatter_modify, color),
+            connect_signal=self.color_change,
+            color_library=color_library,
+        )
         self.layout.addWidget(self.color_choice)
 
         # Legend
@@ -243,6 +278,7 @@ class PyScatterModWidget(QFrame):
         return self.color_choice.updateColor
 
     def delete_object(self):
+        _unregister_color_target(self)
         self.curve_modify.delete_object()
 
     def x_data_change(self, *_args):
@@ -262,7 +298,8 @@ class PyScatterModWidget(QFrame):
 class PyFitModWidget(QFrame):
     def __init__(self, curve_modify: PyCurveModify, repository: TableRepository, project_id: str,
                  x_ref: ColumnRef | None = None, y_ref: ColumnRef | None = None,
-                 engine: str = "Python", fit_type=None, fit_options=None, fit_result=None):
+                 engine: str = "Python", fit_type=None, fit_options=None, fit_result=None,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         qss_file = qss_func.qss_loader(qss_path)
@@ -398,7 +435,11 @@ class PyFitModWidget(QFrame):
         self.layout.addWidget(self.style_box)
 
         # Line color
-        self.color_choice = ColorChoiceWidget(connect_signal=self.color_change)
+        self.color_choice = ColorChoiceWidget(
+            _modifier_color(curve_modify, "#000000"),
+            connect_signal=self.color_change,
+            color_library=color_library,
+        )
         self.layout.addWidget(self.color_choice)
 
         # Legend
@@ -451,7 +492,11 @@ class PyFitModWidget(QFrame):
             self.matlab_button.setToolTip("Connect MATLAB from the Matlab panel first.")
 
     def delete_object(self):
+        _unregister_color_target(self)
         self.curve_modify.delete_object()
+
+    def get_colorupdate_func(self):
+        return self.color_choice.updateColor
 
     def x_data_change(self, *_args):
         self.x_ref = self.data_choice_widget.get_x_ref()
@@ -778,7 +823,8 @@ class PyInterpolateWidget(QFrame):
                  init_interpolat: str, init_k: int, color: str = "#000000",
                  x_ref: ColumnRef | None = None, y_ref: ColumnRef | None = None,
                  samples: int = DEFAULT_INTERPOLATION_SAMPLES,
-                 lam: float | None = None, lam_auto: bool = True):
+                 lam: float | None = None, lam_auto: bool = True,
+                 color_library: ColorLibrary | None = None):
         super().__init__()
 
         self.modify = curve_modify
@@ -838,7 +884,11 @@ class PyInterpolateWidget(QFrame):
         self.interpolat_box.setLayout(self.interpolat_layout)
         self.layout.addWidget(self.interpolat_box)
 
-        self.color_choice = ColorChoiceWidget(color, self.color_change)
+        self.color_choice = ColorChoiceWidget(
+            _modifier_color(curve_modify, color),
+            connect_signal=self.color_change,
+            color_library=color_library,
+        )
         self.layout.addWidget(self.color_choice)
 
         self.legend_layout = QHBoxLayout()
@@ -866,6 +916,7 @@ class PyInterpolateWidget(QFrame):
         return self.color_choice.updateColor
 
     def delete_object(self):
+        _unregister_color_target(self)
         self.modify.delete_object()
 
     def _current_lambda(self, method: str):

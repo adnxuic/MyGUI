@@ -54,6 +54,19 @@ def _selected_pair(figure_window: PyFigureWindow, x_input: QComboBox, y_input: Q
     return x_ref, y_ref, pair
 
 
+def _new_color_input(figure_window: PyFigureWindow) -> ColorChoiceWidget:
+    return ColorChoiceWidget(
+        colorselector=figure_window.get_current_canvas_axes_colorselector(),
+        color_library=figure_window.color_library,
+        auto_record_recent=False,
+    )
+
+
+def _commit_color_input(figure_window: PyFigureWindow, widget: ColorChoiceWidget) -> None:
+    figure_window.get_current_canvas_axes_colorselector().commit(widget.selection())
+    figure_window.color_library.record_recent(widget.color())
+
+
 # Curve creation dialog
 class PyCurveDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
@@ -101,7 +114,7 @@ class PyCurveDialog(QDialog):
         self.layout.addWidget(self.style_input)
 
         # Color selection and preview
-        self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
+        self.color_input = _new_color_input(figure_window)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
@@ -145,6 +158,7 @@ class PyCurveDialog(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, 'Invalid Expression', str(exc))
             return
+        _commit_color_input(self.figure_window, self.color_input)
         super().accept()
 
     def reject(self):
@@ -190,7 +204,7 @@ class PyPlotDialog(QDialog):
         self.layout.addWidget(self.size_input)
 
         # Color selection and preview
-        self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
+        self.color_input = _new_color_input(figure_window)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
@@ -246,6 +260,7 @@ class PyPlotDialog(QDialog):
                                                   x_ref=x_ref,
                                                   y_ref=y_ref)
 
+        _commit_color_input(self.figure_window, self.color_input)
         super().accept()
 
     def reject(self):
@@ -290,7 +305,7 @@ class PyScatterDialog(QDialog):
         self.layout.addWidget(self.size_input)
 
         # Color selection and preview
-        self.color_input = ColorChoiceWidget(colorselector=figure_window.get_current_canvas_axes_colorselector())
+        self.color_input = _new_color_input(figure_window)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
@@ -346,6 +361,7 @@ class PyScatterDialog(QDialog):
                                                      x_ref=x_ref,
                                                      y_ref=y_ref)
 
+        _commit_color_input(self.figure_window, self.color_input)
         super().accept()
 
     def reject(self):
@@ -380,6 +396,10 @@ class PyFitDialog(QDialog):
         self.y_data_layout.addWidget(self.y_data_input)
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
+
+        self.color_input = _new_color_input(figure_window)
+        self.layout.addWidget(QLabel('Color:'))
+        self.layout.addWidget(self.color_input)
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
@@ -416,12 +436,13 @@ class PyFitDialog(QDialog):
         self.figure_window.current_canva.add_fit_curve(
             x=pair.x,
             y=pair.y,
-            color='black',
+            color=self.color_input.color(),
             label='fitting',
             x_ref=x_ref,
             y_ref=y_ref,
         )
 
+        _commit_color_input(self.figure_window, self.color_input)
         super().accept()
 
     def reject(self):
@@ -456,6 +477,10 @@ class PyInterpolationDialog(QDialog):
         self.y_data_layout.addWidget(self.y_data_input)
         self.layout.addLayout(self.x_data_layout)
         self.layout.addLayout(self.y_data_layout)
+
+        self.color_input = _new_color_input(figure_window)
+        self.layout.addWidget(QLabel('Color:'))
+        self.layout.addWidget(self.color_input)
 
         # Interpolation method selection
         self.method_input = QComboBox(self)
@@ -566,10 +591,12 @@ class PyInterpolationDialog(QDialog):
             samples=self.samples_input.value(),
             lam=lam,
             lam_auto=lam_auto,
+            color=self.color_input.color(),
         )
         if line is None:
             return
 
+        _commit_color_input(self.figure_window, self.color_input)
         super().accept()
 
     def reject(self):

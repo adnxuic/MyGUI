@@ -12,7 +12,7 @@ from code.widgets.title_bar.py_title_menu import MenuBar
 from main import MainWindow
 
 
-class GuiFileFlowV4Tests(unittest.TestCase):
+class GuiFileFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -34,13 +34,13 @@ class GuiFileFlowV4Tests(unittest.TestCase):
         self.app.processEvents()
         self.directory.cleanup()
 
-    def test_save_menu_writes_schema_v4_without_database_flush(self):
+    def test_save_menu_writes_schema_v5_without_database_flush(self):
         target = Path(self.directory.name) / "saved"
         self.menu._save_project_to(str(target))
         saved = Path(str(target) + ".mygui.json")
 
         self.assertTrue(saved.exists())
-        self.assertEqual(load_project_file(saved)["schema_version"], 4)
+        self.assertEqual(load_project_file(saved)["schema_version"], 5)
         self.assertEqual(self.window.figure_window.current_canva.project_path, str(saved))
 
     def test_restored_project_is_added_to_table_and_figure(self):
