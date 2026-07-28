@@ -32,21 +32,31 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 3. Add axes from the layout toolbar.
 4. Import an Excel workbook through the file menu and confirm data lands in the current project table.
 5. Save table data to the in-memory database from the sheet/table workflow if needed.
-6. Create a plot using two saved data columns.
+6. Create a plot using two saved data columns. Confirm the line-style control
+   initially reads `Solid`, selecting `Dashed` creates a dashed line, and the
+   Inspector shows the same style.
 7. Create a scatter chart using two saved data columns.
 8. Create an interpolation curve from saved data, change its method, set `Samples`, and confirm the curve redraws.
 9. Change method-specific interpolation options and confirm the curve redraws.
 10. Change interpolation X/Y data sources from the right-side panel and confirm only current-project data is listed.
 11. Create a SciPy fitting curve, run `poly2`, and confirm the result area shows coefficients and goodness metrics.
-12. Modify axis range, axis labels, label font size, bottom spine state, and legend position.
-13. Add a text element and edit its content, font, size, and position.
-14. Save the current project, open it in a fresh workspace, and confirm plot, scatter, interpolation, fitting result, axes state, and text restore.
-15. Right-click the canvas tab, rename the project, and confirm existing charts and fitting data references still redraw.
-16. Right-click the sheet tab, rename the sheet, and confirm existing charts and fitting data references still redraw.
-17. Create a second project and confirm switching canvas tabs switches the visible table.
-18. Open a second different project and confirm it coexists with the current project.
-19. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
-20. Enter invalid interpolation input such as duplicate X values and confirm the Message Bar shows a red error while the app stays open.
+12. Switch between Function Curve, Data Plot, Fit Curve, and Interpolation. Confirm each Inspector uses the same Basic, Marker, and Advanced line appearance fields in the same order, including line style and marker fields for Interpolation.
+13. In Fit Curve, confirm Data Source, Fit Operations, Fit Result, Display Range, and Appearance are separate sections. Changing X/Y must request a manual refit rather than silently recomputing.
+14. Edit Title, X Label, Y Label, and free Text. Confirm they show the same Content, Typography, Rotation and Alignment, Position, and Rendering sections; only free Text offers deletion.
+15. Open Legend with no plotted handles, then with plotted handles. Switch between a preset and a custom coordinate location, change columns and frame properties, and confirm rebuilding the legend keeps its title, font size, location, columns, and frame state.
+16. Add a curve that expands the canvas range and confirm the Common Inspector
+    updates immediately. Then modify axis range, axis labels, label font size,
+    bottom spine state, and legend position; the Bottom Spine action must
+    replace the previous Message Bar text with one green success message.
+17. Narrow the Inspector until vertical scrolling is required. Visit all six Axes pages and confirm controls remain reachable without expanding the main window.
+18. Add a text element and edit its content, font, size, and position.
+19. Save the current project, open it in a fresh workspace, and confirm plot, scatter, interpolation, fitting result, axes state, text, and Inspector values restore.
+20. Right-click the canvas tab, rename the project, and confirm existing charts and fitting data references still redraw.
+21. Right-click the sheet tab, rename the sheet, and confirm existing charts and fitting data references still redraw.
+22. Create a second project and confirm switching canvas tabs switches the visible table.
+23. Open a second different project and confirm it coexists with the current project.
+24. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
+25. Enter invalid expression, data reference, color, range, and interpolation values. Confirm each failed operation restores the last valid control and artist state and reports exactly one red Message Bar error.
 
 ## Optional Local Integrations
 

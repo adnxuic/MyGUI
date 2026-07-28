@@ -11,6 +11,7 @@ MyGUI uses one native desktop window with a full-width application command bar, 
 - The activity rails are 44 logical pixels wide. The bottom Message/State Bar is 28 logical pixels high.
 - The table activity button hides or restores the table without collapsing the inspector or figure workspace.
 - Inspector sections remain independently scrollable when a restored or narrow window cannot show the complete form. TeX and MATLAB pages use the same bounded-scroll behavior, so switching tools does not resize the shell.
+- Component editing uses one profile-driven Inspector shell. Line charts share the same appearance groups; Text, Title, and Axis Labels share the same text sections; Legend keeps its Controller-specific layout and frame sections.
 
 ## Persisted application settings
 
@@ -31,6 +32,8 @@ These settings are application preferences. They are not written to `.mygui.json
 - Empty inspector states explain when a project, axes, or editable object is required.
 - Style, Layout, Chart, and Element use action toolbars. Qt moves actions that do not fit into the toolbar overflow menu.
 - Style, Layout, Text, and Settings dialogs are created on first use, parented to the main window, and reused. Chart dialogs are recreated so their data choices reflect the current project.
+- The Axes Inspector keeps the existing navigation as six scrollable pages: General, X/Y Axis, Spines, Ticks/Grid, Title/Labels, and Legend. Every region binds its semantic Controller directly.
+- Chart creation dialogs reuse controller-free line appearance, data reference, and interpolation-option inputs. Accepting a dialog still delegates component creation to the active canvas.
 
 ## Figure DPI
 

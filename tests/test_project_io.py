@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -15,6 +16,8 @@ from code.project_io import (
     restore_project_snapshot,
     save_project_snapshot,
 )
+from code.figuremodify.components import ComponentKind, ComponentRole
+from code.figuremodify.components.serialization import v6_figure_to_legacy
 from code.figuremodify.style_base.color_models import PaletteDefinition
 from main import MainWindow
 
@@ -52,7 +55,15 @@ class ProjectIoTests(unittest.TestCase):
         canvas.add_plot(pair.x, pair.y, "-", 2, "black", "plot", x_ref, y_ref)
         return canvas, sheet
 
-    def test_v4_roundtrip_preserves_types_missing_rows_and_refs(self):
+    @staticmethod
+    def component(snapshot, role):
+        return next(
+            component
+            for component in snapshot["figure"]["components"]
+            if component["role"] == role
+        )
+
+    def test_v6_roundtrip_preserves_types_missing_rows_and_refs(self):
         canvas, sheet = self.build_project()
         sheet.columns[0].width = 144
         canvas.canva._set_device_pixel_ratio(2)
@@ -61,8 +72,9 @@ class ProjectIoTests(unittest.TestCase):
         raw = load_project_file(self.path)
 
         self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-        self.assertEqual(raw["figure"]["dpi"], 100)
-        self.assertEqual(raw["figure"]["size_inches"], [4, 3])
+        self.assertEqual(set(raw["figure"]), {"root_component_id", "components"})
+        self.assertEqual(self.component(raw, "figure")["properties"]["dpi"], 100)
+        self.assertEqual(self.component(raw, "figure")["properties"]["size_inches"], [4, 3])
         columns = raw["table"]["sheets"][0]["columns"]
         self.assertEqual(
             [column["type"] for column in columns],
@@ -70,7 +82,10 @@ class ProjectIoTests(unittest.TestCase):
         )
         self.assertIsNone(columns[0]["values"][1])
         self.assertEqual(columns[0]["width"], 144)
-        self.assertEqual(raw["figure"]["plots"][0]["x_ref"]["column_id"], sheet.columns[0].id)
+        self.assertEqual(
+            self.component(raw, "data_plot")["data"]["x_ref"]["column_id"],
+            sheet.columns[0].id,
+        )
 
         loaded = MainWindow()
         try:
@@ -78,7 +93,14 @@ class ProjectIoTests(unittest.TestCase):
             loaded_sheet = loaded.table.current_subtable().get_table(0).table_model.sheet
             self.assertEqual(loaded_sheet.columns[2].type, ColumnType.DATETIME)
             self.assertEqual(loaded_sheet.columns[0].width, 144)
-            self.assertEqual(len(loaded.figure_window.current_canva.project_plots), 1)
+            self.assertEqual(
+                len(
+                    loaded.figure_window.current_canva.component_registry.query(
+                        role=ComponentRole.DATA_PLOT
+                    )
+                ),
+                1,
+            )
             self.assertEqual(len(loaded.figure_window.current_canva.fig.axes[0].lines), 1)
             self.assertEqual(loaded.figure_window.current_canva.document_dpi, 100)
         finally:
@@ -89,8 +111,9 @@ class ProjectIoTests(unittest.TestCase):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
-        raw["figure"]["dpi"] = 175.5
-        raw["figure"]["size_inches"] = [4, 4]
+        figure_root = self.component(raw, "figure")
+        figure_root["properties"]["dpi"] = 175.5
+        figure_root["properties"]["size_inches"] = [4, 4]
         self.path.write_text(json.dumps(raw), encoding="utf-8")
 
         loaded = MainWindow()
@@ -105,8 +128,9 @@ class ProjectIoTests(unittest.TestCase):
             save_project_snapshot(second_path, loaded.figure_window)
             second = load_project_file(second_path)
             self.assertEqual(second["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(second["figure"]["dpi"], 175.5)
-            self.assertEqual(second["figure"]["size_inches"], [4, 4])
+            second_root = self.component(second, "figure")
+            self.assertEqual(second_root["properties"]["dpi"], 175.5)
+            self.assertEqual(second_root["properties"]["size_inches"], [4, 4])
         finally:
             loaded.close()
             self.app.processEvents()
@@ -116,13 +140,14 @@ class ProjectIoTests(unittest.TestCase):
             "schema": "mygui-project",
             "schema_version": 3,
         }), encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "supported versions are v4 and v5"):
+        with self.assertRaisesRegex(ValueError, "supported versions are v4, v5, and v6"):
             load_project_file(self.path)
 
-    def test_schema_v4_migrates_to_v5_with_empty_color_cycle(self):
+    def test_schema_v4_migrates_through_v5_to_v6(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
+        raw["figure"] = v6_figure_to_legacy(raw["figure"])
         raw["schema_version"] = 4
         raw["figure"]["plots"][0]["color"] = "tab:blue"
         for axes in raw["figure"]["axes"]:
@@ -133,25 +158,38 @@ class ProjectIoTests(unittest.TestCase):
         self.path.write_text(json.dumps(raw), encoding="utf-8")
 
         migrated = load_project_file(self.path)
-        self.assertEqual(migrated["schema_version"], 5)
-        self.assertIsNone(migrated["figure"]["axes"][0]["color_cycle"])
-        self.assertEqual(migrated["figure"]["plots"][0]["color_order"], 0)
-        self.assertEqual(migrated["figure"]["plots"][0]["color"], "#1F77B4")
+        migrated_legacy = v6_figure_to_legacy(migrated["figure"])
+        self.assertEqual(migrated["schema_version"], 6)
+        self.assertIsNone(migrated_legacy["axes"][0]["color_cycle"])
+        self.assertEqual(migrated_legacy["plots"][0]["color_order"], 0)
+        self.assertEqual(migrated_legacy["plots"][0]["color"], "#1F77B4")
 
     def test_rgba_and_custom_palette_cursor_roundtrip(self):
         canvas, _sheet = self.build_project()
         palette = PaletteDefinition(
             "custom:project-only", "Project only", ("#11223380", "#ABCDEF"), source="custom"
         )
-        self.assertTrue(canvas.current_axes_mod.change_all_color(palette))
+        result = canvas.axes_commands.apply_palette(
+            canvas.current_axes_component_id,
+            palette,
+        )
+        self.assertTrue(result.ok)
         save_project_snapshot(self.path, self.window.figure_window)
 
         loaded = MainWindow()
         try:
             restore_project_snapshot(self.path, loaded.table, loaded.figure_window)
             restored = loaded.figure_window.current_canva
-            state = restored.current_axes_mod.color_selector
-            self.assertEqual(restored.project_plots[0]["color"], "#11223380")
+            state = restored.axes_commands.cycle_state(
+                restored.current_axes_component_id
+            )
+            plot = restored.component_registry.query(
+                role=ComponentRole.DATA_PLOT
+            )[0]
+            self.assertEqual(
+                plot.state.properties["color"],
+                "#11223380",
+            )
             self.assertEqual(state.active_palette.id, "custom:project-only")
             self.assertEqual(state.active_palette.colors, ("#11223380", "#ABCDEF"))
             self.assertEqual(state.next_index, 1)
@@ -163,16 +201,16 @@ class ProjectIoTests(unittest.TestCase):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
-        raw["figure"]["plots"][0]["color"] = "not-a-color"
+        self.component(raw, "data_plot")["properties"]["color"] = "not-a-color"
         self.path.write_text(json.dumps(raw), encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, r"figure.plots\[0\].color"):
+        with self.assertRaisesRegex(ValueError, r"properties.color"):
             load_project_file(self.path)
 
     def test_missing_column_reference_is_rejected(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
-        raw["figure"]["plots"][0]["x_ref"]["column_id"] = "missing"
+        self.component(raw, "data_plot")["data"]["x_ref"]["column_id"] = "missing"
         self.path.write_text(json.dumps(raw), encoding="utf-8")
 
         with self.assertRaisesRegex(ValueError, "Invalid data reference"):
@@ -183,11 +221,54 @@ class ProjectIoTests(unittest.TestCase):
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         text_column_id = raw["table"]["sheets"][0]["columns"][1]["id"]
-        raw["figure"]["plots"][0]["y_ref"]["column_id"] = text_column_id
+        self.component(raw, "data_plot")["data"]["y_ref"]["column_id"] = text_column_id
         self.path.write_text(json.dumps(raw), encoding="utf-8")
 
         with self.assertRaisesRegex(ValueError, "Incompatible column type"):
             load_project_file(self.path)
+
+    def test_replace_failure_preserves_existing_project_file(self):
+        self.build_project()
+        self.path.write_text("existing project", encoding="utf-8")
+
+        with mock.patch(
+            "code.project_io.os.replace",
+            side_effect=PermissionError("destination is locked"),
+        ):
+            with self.assertRaises(PermissionError):
+                save_project_snapshot(self.path, self.window.figure_window)
+
+        self.assertEqual(
+            self.path.read_text(encoding="utf-8"),
+            "existing project",
+        )
+        self.assertEqual(list(self.path.parent.glob("*.tmp")), [])
+
+    def test_restore_failure_detaches_table_views_before_repository_rollback(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        loaded = MainWindow()
+        try:
+            with mock.patch.object(
+                loaded.figure_window,
+                "load_project_figure_snapshot",
+                side_effect=RuntimeError("simulated figure restore failure"),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "simulated figure restore failure",
+                ):
+                    restore_project_snapshot(
+                        self.path,
+                        loaded.table,
+                        loaded.figure_window,
+                    )
+            self.app.processEvents()
+            self.assertEqual(loaded.repository.projects, {})
+            self.assertEqual(loaded.table.table_names(), [])
+        finally:
+            loaded.close()
+            self.app.processEvents()
 
 
 if __name__ == "__main__":

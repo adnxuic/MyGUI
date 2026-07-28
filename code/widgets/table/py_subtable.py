@@ -789,10 +789,22 @@ class PySubTable(QFrame):
         while self.tabWidget.count():
             widget = self.tabWidget.widget(0)
             if isinstance(widget, TableView):
+                try:
+                    self.repository.transaction_committed.disconnect(
+                        widget._repository_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
                 widget.setModel(None)
             self.tabWidget.removeTab(0)
             if widget is not None:
                 widget.deleteLater()
+
+    def dispose(self) -> None:
+        """Detach repository listeners before the project is removed."""
+
+        self._dispose_tabs()
+        self._views.clear()
 
     def _build_toolbar(self):
         groups = (

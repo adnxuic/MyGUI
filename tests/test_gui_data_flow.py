@@ -9,6 +9,7 @@ import numpy as np
 from Qt_core import QApplication, QGuiApplication, QInputDialog, QMessageBox, Qt
 
 from code.database import ColumnRef
+from code.figuremodify.components import ComponentRole
 from main import MainWindow
 
 
@@ -109,12 +110,18 @@ class GuiDataFlowV4Tests(unittest.TestCase):
 
         with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
             view.delete_column()
-        self.assertEqual(len(canvas.project_plots), 0)
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            0,
+        )
         self.assertFalse(self.window.repository.has_ref(x_ref))
 
         self.window.repository.undo_stack(canvas.project_id).undo()
         self.assertTrue(self.window.repository.has_ref(x_ref))
-        self.assertEqual(len(canvas.project_plots), 1)
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            1,
+        )
 
     def test_incompatible_type_change_cascades_and_undo_restores(self):
         canvas, view, x_ref, y_ref = self.add_project()
@@ -126,11 +133,17 @@ class GuiDataFlowV4Tests(unittest.TestCase):
                 patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
             view.change_column_type()
         self.assertEqual(view.table_model.sheet.column(x_ref.column_id).type.value, "text")
-        self.assertEqual(len(canvas.project_plots), 0)
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            0,
+        )
 
         self.window.repository.undo_stack(canvas.project_id).undo()
         self.assertEqual(view.table_model.sheet.column(x_ref.column_id).type.value, "number")
-        self.assertEqual(len(canvas.project_plots), 1)
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            1,
+        )
 
     def test_referenced_sheet_delete_cascades_and_undo_restores(self):
         canvas, _view, _x_ref, _y_ref = self.add_project()
@@ -147,12 +160,18 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
             subtable.delete_sheet(1)
         self.assertFalse(self.window.repository.has_ref(x_ref))
-        self.assertEqual(len(canvas.project_plots), 0)
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            0,
+        )
 
         self.window.repository.undo_stack(canvas.project_id).undo()
         self.assertTrue(self.window.repository.has_ref(x_ref))
         self.assertEqual(subtable.tabWidget.tabText(1), "Second")
-        self.assertEqual(len(canvas.project_plots), 1)
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            1,
+        )
 
     def test_crlf_paste_is_atomic_and_undoable(self):
         _canvas, view, _x_ref, _y_ref = self.add_project()

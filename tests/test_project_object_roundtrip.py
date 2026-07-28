@@ -9,6 +9,7 @@ from Qt_core import QApplication
 
 from code.database import ColumnRef
 from code.database.interpolate_func import interpolate_dict
+from code.figuremodify.components import ComponentRole
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
@@ -28,7 +29,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         self.app.processEvents()
         self.directory.cleanup()
 
-    def test_data_objects_and_text_roundtrip_with_stable_ids(self):
+    def test_data_components_and_text_roundtrip_with_stable_ids(self):
         self.window.figure_window.add_figure(
             width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
         )
@@ -53,14 +54,19 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             fit_type="poly2", expression="x**2", x_start=0, x_stop=3,
             fit_result={"formula": "x**2", "coefficients": [], "goodness": {}},
         )
-        canvas.add_text(0.25, 0.75, "axes text", "DejaVu Sans", 12, record_project=True)
-        canvas.add_global_text(0.5, 0.5, "figure text", "DejaVu Sans", 14, record_project=True)
+        canvas.add_text(0.25, 0.75, "axes text", "DejaVu Sans", 12)
+        canvas.add_global_text(0.5, 0.5, "figure text", "DejaVu Sans", 14)
 
+        data_roles = {
+            ComponentRole.DATA_PLOT,
+            ComponentRole.SCATTER,
+            ComponentRole.INTERPOLATION,
+            ComponentRole.FIT_CURVE,
+        }
         object_ids = {
-            record["object_id"]
-            for collection in (canvas.project_plots, canvas.project_scatters,
-                               canvas.project_interpolates, canvas.project_fits)
-            for record in collection
+            controller.component_id
+            for controller in canvas.component_registry.query()
+            if controller.state.role in data_roles
         }
         save_project_snapshot(self.path, self.window.figure_window)
 
@@ -69,24 +75,42 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             restore_project_snapshot(self.path, loaded.table, loaded.figure_window)
             restored = loaded.figure_window.current_canva
             restored_ids = {
-                record["object_id"]
-                for collection in (restored.project_plots, restored.project_scatters,
-                                   restored.project_interpolates, restored.project_fits)
-                for record in collection
+                controller.component_id
+                for controller in restored.component_registry.query()
+                if controller.state.role in data_roles
             }
             self.assertEqual(restored_ids, object_ids)
-            self.assertEqual(len(restored.project_plots), 1)
-            self.assertEqual(len(restored.project_scatters), 1)
-            self.assertEqual(len(restored.project_interpolates), 1)
-            self.assertEqual(len(restored.project_fits), 1)
-            self.assertEqual(restored.project_fits[0]["color"], "#0000FF")
+            for role in data_roles:
+                self.assertEqual(
+                    len(
+                        restored.component_registry.query(role=role)
+                    ),
+                    1,
+                )
+            fit = restored.component_registry.query(
+                role=ComponentRole.FIT_CURVE
+            )[0]
+            self.assertEqual(
+                fit.state.properties["color"].casefold(),
+                "#0000ff",
+            )
             restored_order = [
-                target.order
-                for target, _setter, _getter, _sync
-                in restored.current_axes_mod._live_color_targets()
+                controller.state.order
+                for controller in restored.component_registry.query(
+                    capabilities={"color", "data"},
+                    parent_id=restored.current_axes_component_id,
+                    recursive=True,
+                )
             ]
             self.assertEqual(restored_order, [0, 1, 2, 3, 4])
-            self.assertEqual(len(restored.project_texts), 2)
+            self.assertEqual(
+                len(
+                    restored.component_registry.query(
+                        role=ComponentRole.TEXT
+                    )
+                ),
+                2,
+            )
         finally:
             loaded.close()
             self.app.processEvents()

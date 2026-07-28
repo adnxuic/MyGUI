@@ -8,14 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from code.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.style_base.color_models import ColorCycleState, normalize_color
+from code.figuremodify.components.serialization import (
+    legacy_figure_to_v6,
+    normalize_v6_figure,
+    validate_v6_figure,
+)
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 5
-DATA_SOURCE_COLLECTIONS = ("plots", "scatters", "interpolates", "fits")
-FIGURE_COLLECTIONS = ("curves", *DATA_SOURCE_COLLECTIONS, "texts")
+PROJECT_SCHEMA_VERSION = 6
 
 
 def export_database_snapshot(filename: str | Path, repository: TableRepository,
@@ -46,13 +47,6 @@ def _coerce_int(value: Any, path: str) -> int:
         raise ValueError(f"Invalid project field {path}: expected integer.") from exc
 
 
-def _coerce_float(value: Any, path: str) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid project field {path}: expected number.") from exc
-
-
 def _validate_table(table_snapshot: Any, project_id: str,
                     project_name: str) -> dict[ColumnRef, ColumnType]:
     table = _expect_dict(table_snapshot, "table")
@@ -79,96 +73,11 @@ def _validate_table(table_snapshot: Any, project_id: str,
     return refs
 
 
-def _validate_axes(figure: dict[str, Any]) -> int:
-    axes_count = _coerce_int(figure.get("axes_count", 0), "figure.axes_count")
-    if axes_count < 0:
-        raise ValueError("figure.axes_count must not be negative.")
-    size = _expect_list(figure.get("size_inches", []), "figure.size_inches")
-    if len(size) != 2 or any(_coerce_float(value, "figure.size_inches") <= 0 for value in size):
-        raise ValueError("figure.size_inches must contain two positive numbers.")
-    _coerce_float(figure.get("dpi", 100), "figure.dpi")
-    for record in _expect_list(figure.get("axes", []), "figure.axes"):
-        axes_record = _expect_dict(record, "figure.axes[]")
-        index = _coerce_int(axes_record.get("index", -1), "figure.axes[].index")
-        if not 0 <= index < axes_count:
-            raise ValueError(f"Invalid axes index: {index}")
-        try:
-            cycle = ColorCycleState.from_dict(axes_record.get("color_cycle"))
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"Invalid project field figure.axes[{index}].color_cycle: {exc}"
-            ) from exc
-        axes_record["color_cycle"] = cycle.to_dict()
-    return axes_count
-
-
-def _normalize_figure_colors(figure: dict[str, Any]) -> None:
-    for collection in ("curves", "plots", "scatters", "interpolates", "fits"):
-        records = _expect_list(figure.get(collection, []), f"figure.{collection}")
-        for index, raw_record in enumerate(records):
-            record = _expect_dict(raw_record, f"figure.{collection}[{index}]")
-            try:
-                record["color"] = normalize_color(record.get("color", "black"))
-            except ValueError as exc:
-                raise ValueError(
-                    f"Invalid project field figure.{collection}[{index}].color: "
-                    f"{record.get('color')!r}"
-                ) from exc
-
-
-def _validate_figure(figure_snapshot: Any, available_refs: dict[ColumnRef, ColumnType],
-                     project_id: str) -> None:
-    figure = _expect_dict(figure_snapshot, "figure")
-    _normalize_figure_colors(figure)
-    axes_count = _validate_axes(figure)
-    object_ids = set()
-    color_orders = set()
-    for collection in FIGURE_COLLECTIONS:
-        records = _expect_list(figure.get(collection, []), f"figure.{collection}")
-        for index, raw_record in enumerate(records):
-            path = f"figure.{collection}[{index}]"
-            record = _expect_dict(raw_record, path)
-            if collection != "texts":
-                color_order = _coerce_int(record.get("color_order", -1), f"{path}.color_order")
-                if color_order < 0 or color_order in color_orders:
-                    raise ValueError(f"Invalid or duplicate color order at {path}.")
-                color_orders.add(color_order)
-            if collection != "texts" or record.get("scope", "axes") != "figure":
-                axes_index = _coerce_int(record.get("axes_index", 0), f"{path}.axes_index")
-                if not 0 <= axes_index < axes_count:
-                    raise ValueError(f"Invalid project field {path}.axes_index: {axes_index}")
-            if collection in DATA_SOURCE_COLLECTIONS:
-                object_id = str(record.get("object_id", "")).strip()
-                if not object_id or object_id in object_ids:
-                    raise ValueError(f"Invalid or duplicate object id at {path}.")
-                object_ids.add(object_id)
-                for field in ("x_ref", "y_ref"):
-                    ref = ColumnRef.from_dict(record.get(field))
-                    if ref.project_id != project_id or ref not in available_refs:
-                        raise ValueError(f"Invalid data reference at {path}.{field}.")
-                    allowed = {ColumnType.NUMBER, ColumnType.DATETIME} if field == "x_ref" else {ColumnType.NUMBER}
-                    if available_refs[ref] not in allowed:
-                        raise ValueError(f"Incompatible column type at {path}.{field}.")
-            if collection == "interpolates" and record.get("method") not in interpolate_dict:
-                raise ValueError(f"Unknown interpolation method at {path}.")
-            if collection == "fits" and record.get("engine", "Python") not in {"Python", "Matlab"}:
-                raise ValueError(f"Unknown fitting engine at {path}.")
-
-
-def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
-    root = _expect_dict(snapshot, "project")
-    if root.get("schema") != PROJECT_SCHEMA_NAME:
-        raise ValueError("Unsupported project file.")
-    version = root.get("schema_version")
-    if version == PROJECT_SCHEMA_VERSION:
-        return root
-    if version != 4:
-        raise ValueError(
-            f"Unsupported project schema version {version!r}; "
-            "supported versions are v4 and v5."
-        )
-    migrated = deepcopy(root)
-    figure = _expect_dict(migrated.get("figure"), "figure")
+def migrate_v4_to_v5(snapshot: dict[str, Any]) -> dict[str, Any]:
+    root = deepcopy(_expect_dict(snapshot, "project"))
+    if root.get("schema") != PROJECT_SCHEMA_NAME or root.get("schema_version") != 4:
+        raise ValueError("migrate_v4_to_v5 requires a schema v4 project.")
+    figure = _expect_dict(root.get("figure"), "figure")
     for record in _expect_list(figure.get("axes", []), "figure.axes"):
         _expect_dict(record, "figure.axes[]").setdefault("color_cycle", None)
     color_order = 0
@@ -180,8 +89,45 @@ def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
                 chart_record["color_order"], f"figure.{collection}[].color_order"
             )
             color_order = max(color_order + 1, saved_order + 1)
-    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
-    return migrated
+    root["schema_version"] = 5
+    return root
+
+
+def migrate_v5_to_v6(snapshot: dict[str, Any]) -> dict[str, Any]:
+    root = deepcopy(_expect_dict(snapshot, "project"))
+    if root.get("schema") != PROJECT_SCHEMA_NAME or root.get("schema_version") != 5:
+        raise ValueError("migrate_v5_to_v6 requires a schema v5 project.")
+    project = _expect_dict(root.get("project"), "project")
+    project_id = str(project.get("id", "")).strip()
+    if not project_id:
+        raise ValueError("Project id must not be empty.")
+    root["figure"] = legacy_figure_to_v6(
+        _expect_dict(root.get("figure"), "figure"),
+        project_id,
+    )
+    root["schema_version"] = 6
+    return root
+
+
+def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    root = deepcopy(_expect_dict(snapshot, "project"))
+    if root.get("schema") != PROJECT_SCHEMA_NAME:
+        raise ValueError("Unsupported project file.")
+    version = root.get("schema_version")
+    if version == 4:
+        root = migrate_v4_to_v5(root)
+        version = 5
+    if version == 5:
+        return migrate_v5_to_v6(root)
+    if version == PROJECT_SCHEMA_VERSION:
+        root["figure"] = normalize_v6_figure(
+            _expect_dict(root.get("figure"), "figure")
+        )
+        return root
+    raise ValueError(
+        f"Unsupported project schema version {version!r}; "
+        "supported versions are v4, v5, and v6."
+    )
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
@@ -200,7 +146,7 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
         raise ValueError("Project id must not be empty.")
     project_name = validate_component_name(project.get("name", ""), "Project name")
     refs = _validate_table(root.get("table"), project_id, project_name)
-    _validate_figure(root.get("figure"), refs, project_id)
+    validate_v6_figure(root.get("figure"), refs, project_id, project_name)
 
 
 def project_snapshot(figure_window=None) -> dict[str, Any]:
@@ -208,12 +154,13 @@ def project_snapshot(figure_window=None) -> dict[str, Any]:
         raise ValueError("No current project canvas to save.")
     canvas = figure_window.current_canva
     project = figure_window.repository.project(canvas.project_id)
+    figure = normalize_v6_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
         "project": {"id": project.id, "name": project.name},
         "table": project.to_snapshot(),
-        "figure": canvas.project_snapshot(),
+        "figure": figure,
     }
     validate_project_snapshot(snapshot)
     return snapshot
@@ -230,11 +177,8 @@ def save_project_snapshot(filename: str | Path, figure_window=None) -> None:
         ) as handle:
             json.dump(snapshot, handle, ensure_ascii=False, indent=2)
             temp_name = handle.name
-        try:
-            os.replace(temp_name, path)
-            temp_name = None
-        except PermissionError:
-            path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temp_name, path)
+        temp_name = None
     finally:
         if temp_name and os.path.exists(temp_name):
             try:
@@ -270,7 +214,9 @@ def restore_project_snapshot(filename: str | Path, table=None, figure_window=Non
         table_loaded = True
         if figure_window is not None:
             figure_window.load_project_figure_snapshot(
-                snapshot["figure"], project_name, project_path=str(Path(filename))
+                snapshot["figure"],
+                project_name,
+                project_path=str(Path(filename)),
             )
         return snapshot
     except Exception:

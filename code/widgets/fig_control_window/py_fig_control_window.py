@@ -3,7 +3,9 @@ import os
 from Qt_core import *
 
 from code.widgets import qss_func
-from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWindow
+from code.widgets.fig_control_window.figure_inspector import (
+    FigureInspectorHost,
+)
 from code.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 from code.widgets.fig_control_window.py_tex_window import PyTexWindow
 
@@ -22,14 +24,18 @@ class PyFigControlWindow(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.matlab_window = PyMatlabWindow()
-        self.figmod_window = PyFigModWindow()
+        self.figure_inspector_host = FigureInspectorHost()
         self.tex_window = PyTexWindow()
 
         self.layout = QStackedLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
         self.scroll_areas = []
-        for page in (self.figmod_window, self.tex_window, self.matlab_window):
+        for page in (
+            self.figure_inspector_host,
+            self.tex_window,
+            self.matlab_window,
+        ):
             scroll_area = self._scroll_page(page)
             self.scroll_areas.append(scroll_area)
             self.layout.addWidget(scroll_area)

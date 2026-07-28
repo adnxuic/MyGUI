@@ -2,35 +2,21 @@ from Qt_core import *
 
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
+from code.widgets.fig_control_window.component_editors import (
+    DataReferenceInput,
+    InterpolationOptionsInput,
+    LineAppearanceInput,
+)
 from code.widgets import qss_func
 
-from code.database import ColumnRef, ColumnType
+from code.database import ColumnRef
+from code.figuremodify.components import DataPlotController
 from code import status_messages
-from code.database.interpolate_func import (
-    DEFAULT_INTERPOLATION_SAMPLES,
-    MAX_INTERPOLATION_SAMPLES,
-    MIN_INTERPOLATION_SAMPLES,
-    interpolate_dict,
-    interpolation_uses_lambda,
-    interpolation_uses_order,
-)
 
 import os
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
-
-
-def _add_current_table_data_names(x_input: QComboBox, y_input: QComboBox,
-                                  figure_window: PyFigureWindow | None):
-    if figure_window is None or figure_window.current_canva is None:
-        return
-    project_id = figure_window.current_canva.project_id
-    repository = figure_window.repository
-    for ref in repository.iter_column_refs(project_id, {ColumnType.NUMBER, ColumnType.DATETIME}):
-        x_input.addItem(repository.ref_label(ref), ref)
-    for ref in repository.iter_column_refs(project_id, {ColumnType.NUMBER}):
-        y_input.addItem(repository.ref_label(ref), ref)
 
 
 def _selected_ref(combo: QComboBox) -> ColumnRef | None:
@@ -62,9 +48,35 @@ def _new_color_input(figure_window: PyFigureWindow) -> ColorChoiceWidget:
     )
 
 
+def _new_data_reference_input(
+    figure_window: PyFigureWindow,
+    parent=None,
+) -> DataReferenceInput:
+    canvas = figure_window.current_canva
+    return DataReferenceInput(
+        figure_window.repository,
+        canvas.project_id if canvas is not None else None,
+        parent=parent,
+    )
+
+
+def _new_line_appearance_input(
+    figure_window: PyFigureWindow,
+    *,
+    parent=None,
+    **kwargs,
+) -> LineAppearanceInput:
+    return LineAppearanceInput(
+        colorselector=figure_window.get_current_canvas_axes_colorselector(),
+        color_library=figure_window.color_library,
+        parent=parent,
+        **kwargs,
+    )
+
+
 def _commit_color_input(figure_window: PyFigureWindow, widget: ColorChoiceWidget) -> None:
-    figure_window.get_current_canvas_axes_colorselector().commit(widget.selection())
-    figure_window.color_library.record_recent(widget.color())
+    if figure_window.commit_current_canvas_color(widget.selection()):
+        figure_window.color_library.record_recent(widget.color())
 
 
 # Curve creation dialog
@@ -107,22 +119,17 @@ class PyCurveDialog(QDialog):
         self.layout.addWidget(self.x_range_label)
         self.layout.addLayout(self.x_range_layout)
 
-        # Line style selection
-        self.style_input = QComboBox(self)
-        self.style_input.addItems(['-', '--', '-.', ':'])
-        self.layout.addWidget(QLabel('Line Style:'))
-        self.layout.addWidget(self.style_input)
-
-        # Color selection and preview
-        self.color_input = _new_color_input(figure_window)
-        self.layout.addWidget(QLabel('Color:'))
-        self.layout.addWidget(self.color_input)
-
-        # Legend label input
-        self.label_input = QLineEdit(self)
-        self.label_input.setText('x')
-        self.layout.addWidget(QLabel('Label:'))
-        self.layout.addWidget(self.label_input)
+        self.appearance_input = _new_line_appearance_input(
+            figure_window,
+            parent=self,
+            label="x",
+            style="-",
+            show_linewidth=False,
+        )
+        self.style_input = self.appearance_input.style_input
+        self.color_input = self.appearance_input.color_input
+        self.label_input = self.appearance_input.label_input
+        self.layout.addWidget(self.appearance_input)
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
@@ -152,8 +159,8 @@ class PyCurveDialog(QDialog):
             self.figure_window.current_canva.add_curve(func_text=self.expression_edit.text(),
                                                        x_start=self.x_start_input.value(),
                                                        x_stop=self.x_stop_input.value(),
-                                                       style=self.style_input.currentText(),
-                                                       color=self.color_input.get_color(),
+                                                       style=self.appearance_input.style(),
+                                                       color=self.color_input.color(),
                                                        label=self.label_input.text())
         except ValueError as exc:
             QMessageBox.warning(self, 'Invalid Expression', str(exc))
@@ -180,45 +187,31 @@ class PyPlotDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # Data selection
-        self.x_data_input = QComboBox(self)
-        self.x_data_layout = QHBoxLayout()
-        self.y_data_input = QComboBox(self)
-        self.y_data_layout = QHBoxLayout()
+        self.data_reference_input = _new_data_reference_input(
+            self.figure_window,
+            parent=self,
+        )
+        self.x_data_input = self.data_reference_input.x_data_input
+        self.y_data_input = self.data_reference_input.y_data_input
+        self.x_data_layout = self.data_reference_input.x_layout
+        self.y_data_layout = self.data_reference_input.y_layout
+        self.layout.addWidget(self.data_reference_input)
 
-        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
-
-        self.x_data_layout.addWidget(QLabel('X Data:'))
-        self.x_data_layout.addWidget(self.x_data_input)
-        self.y_data_layout.addWidget(QLabel('Y Data:'))
-        self.y_data_layout.addWidget(self.y_data_input)
-        self.layout.addLayout(self.x_data_layout)
-        self.layout.addLayout(self.y_data_layout)
-
-        # Size selection
-        self.size_input = QDoubleSpinBox(self)
-        self.size_input.setRange(0.1, 10)
+        self.appearance_input = _new_line_appearance_input(
+            figure_window,
+            parent=self,
+            label="plot",
+            style=DataPlotController.default_properties()["linestyle"],
+            linewidth=2.0,
+        )
+        self.line_style_editor = self.appearance_input.line_style_editor
+        self.style_input = self.appearance_input.style_input
+        self.size_input = self.appearance_input.linewidth_input
+        self.size_input.setRange(0.1, 10.0)
         self.size_input.setSingleStep(0.1)
-        self.size_input.setValue(2)
-        self.layout.addWidget(QLabel('Size:'))
-        self.layout.addWidget(self.size_input)
-
-        # Color selection and preview
-        self.color_input = _new_color_input(figure_window)
-        self.layout.addWidget(QLabel('Color:'))
-        self.layout.addWidget(self.color_input)
-
-        # Line style selection
-        self.style_input = QComboBox(self)
-        self.style_input.addItems(['-', '--', '-.', ':'])
-        self.layout.addWidget(QLabel('Line Style:'))
-        self.layout.addWidget(self.style_input)
-
-        # Legend label input
-        self.label_input = QLineEdit(self)
-        self.label_input.setText('plot')
-        self.layout.addWidget(QLabel('Label:'))
-        self.layout.addWidget(self.label_input)
+        self.color_input = self.appearance_input.color_input
+        self.label_input = self.appearance_input.label_input
+        self.layout.addWidget(self.appearance_input)
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
@@ -253,9 +246,9 @@ class PyPlotDialog(QDialog):
             return
 
         self.figure_window.current_canva.add_plot(x=pair.x, y=pair.y,
-                                                  style=self.style_input.currentText(),
+                                                  style=self.line_style_editor.style(),
                                                   size=self.size_input.value(),
-                                                  color=self.color_input.get_color(),
+                                                  color=self.color_input.color(),
                                                   label=self.label_input.text(),
                                                   x_ref=x_ref,
                                                   y_ref=y_ref)
@@ -282,20 +275,15 @@ class PyScatterDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # Data selection
-        self.x_data_input = QComboBox(self)
-        self.x_data_layout = QHBoxLayout()
-        self.y_data_input = QComboBox(self)
-        self.y_data_layout = QHBoxLayout()
-
-        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
-
-        self.x_data_layout.addWidget(QLabel('X Data:'))
-        self.x_data_layout.addWidget(self.x_data_input)
-        self.y_data_layout.addWidget(QLabel('Y Data:'))
-        self.y_data_layout.addWidget(self.y_data_input)
-        self.layout.addLayout(self.x_data_layout)
-        self.layout.addLayout(self.y_data_layout)
+        self.data_reference_input = _new_data_reference_input(
+            self.figure_window,
+            parent=self,
+        )
+        self.x_data_input = self.data_reference_input.x_data_input
+        self.y_data_input = self.data_reference_input.y_data_input
+        self.x_data_layout = self.data_reference_input.x_layout
+        self.y_data_layout = self.data_reference_input.y_layout
+        self.layout.addWidget(self.data_reference_input)
 
         # Size selection
         self.size_input = QSpinBox(self)
@@ -355,7 +343,7 @@ class PyScatterDialog(QDialog):
 
         self.figure_window.current_canva.add_scatter(x=pair.x, y=pair.y,
                                                      size=self.size_input.value(),
-                                                     color=self.color_input.get_color(),
+                                                     color=self.color_input.color(),
                                                      marker=self.style_input.currentText(),
                                                      label=self.label_input.text(),
                                                      x_ref=x_ref,
@@ -382,24 +370,25 @@ class PyFitDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # Data selection
-        self.x_data_input = QComboBox(self)
-        self.x_data_layout = QHBoxLayout()
-        self.y_data_input = QComboBox(self)
-        self.y_data_layout = QHBoxLayout()
+        self.data_reference_input = _new_data_reference_input(
+            self.figure_window,
+            parent=self,
+        )
+        self.x_data_input = self.data_reference_input.x_data_input
+        self.y_data_input = self.data_reference_input.y_data_input
+        self.x_data_layout = self.data_reference_input.x_layout
+        self.y_data_layout = self.data_reference_input.y_layout
+        self.layout.addWidget(self.data_reference_input)
 
-        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
-
-        self.x_data_layout.addWidget(QLabel('X Data:'))
-        self.x_data_layout.addWidget(self.x_data_input)
-        self.y_data_layout.addWidget(QLabel('Y Data:'))
-        self.y_data_layout.addWidget(self.y_data_input)
-        self.layout.addLayout(self.x_data_layout)
-        self.layout.addLayout(self.y_data_layout)
-
-        self.color_input = _new_color_input(figure_window)
-        self.layout.addWidget(QLabel('Color:'))
-        self.layout.addWidget(self.color_input)
+        self.appearance_input = _new_line_appearance_input(
+            figure_window,
+            parent=self,
+            show_label=False,
+            show_style=False,
+            show_linewidth=False,
+        )
+        self.color_input = self.appearance_input.color_input
+        self.layout.addWidget(self.appearance_input)
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
@@ -463,70 +452,35 @@ class PyInterpolationDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        # Data selection
-        self.x_data_input = QComboBox(self)
-        self.x_data_layout = QHBoxLayout()
-        self.y_data_input = QComboBox(self)
-        self.y_data_layout = QHBoxLayout()
+        self.data_reference_input = _new_data_reference_input(
+            self.figure_window,
+            parent=self,
+        )
+        self.x_data_input = self.data_reference_input.x_data_input
+        self.y_data_input = self.data_reference_input.y_data_input
+        self.x_data_layout = self.data_reference_input.x_layout
+        self.y_data_layout = self.data_reference_input.y_layout
+        self.layout.addWidget(self.data_reference_input)
 
-        _add_current_table_data_names(self.x_data_input, self.y_data_input, self.figure_window)
+        self.appearance_input = _new_line_appearance_input(
+            figure_window,
+            parent=self,
+            show_label=False,
+            show_style=False,
+            show_linewidth=False,
+        )
+        self.color_input = self.appearance_input.color_input
+        self.layout.addWidget(self.appearance_input)
 
-        self.x_data_layout.addWidget(QLabel('X Data:'))
-        self.x_data_layout.addWidget(self.x_data_input)
-        self.y_data_layout.addWidget(QLabel('Y Data:'))
-        self.y_data_layout.addWidget(self.y_data_input)
-        self.layout.addLayout(self.x_data_layout)
-        self.layout.addLayout(self.y_data_layout)
-
-        self.color_input = _new_color_input(figure_window)
-        self.layout.addWidget(QLabel('Color:'))
-        self.layout.addWidget(self.color_input)
-
-        # Interpolation method selection
-        self.method_input = QComboBox(self)
-        self.method_input.addItems(interpolate_dict.keys())
-        self.layout.addWidget(QLabel('Interpolation Method:'))
-        self.layout.addWidget(self.method_input)
-
-        self.samples_layout = QHBoxLayout()
-        self.samples_input = QSpinBox()
-        self.samples_input.setRange(MIN_INTERPOLATION_SAMPLES, MAX_INTERPOLATION_SAMPLES)
-        self.samples_input.setValue(DEFAULT_INTERPOLATION_SAMPLES)
-        self.samples_layout.addWidget(QLabel('Samples:'))
-        self.samples_layout.addWidget(self.samples_input)
-        self.layout.addLayout(self.samples_layout)
-
-        self.k_widget = QFrame()
-        self.k_input = QSpinBox()
-        self.k_input.setRange(1, 5)
-        self.k_input.setValue(3)
-        self.k_layout = QHBoxLayout()
-        self.k_layout.addWidget(QLabel('阶数k:'))
-        self.k_layout.addWidget(self.k_input)
-        self.k_widget.setLayout(self.k_layout)
-        self.layout.addWidget(self.k_widget)
-
-        self.lambda_widget = QFrame()
-        self.lambda_layout = QVBoxLayout()
-        self.lambda_auto_input = QCheckBox("Auto lambda")
-        self.lambda_auto_input.setChecked(True)
-        self.lambda_value_input = QDoubleSpinBox()
-        self.lambda_value_input.setRange(0.0, 1e12)
-        self.lambda_value_input.setDecimals(6)
-        self.lambda_value_input.setSingleStep(0.1)
-        self.lambda_value_input.setValue(1.0)
-        self.lambda_value_input.setEnabled(False)
-        self.lambda_layout.addWidget(self.lambda_auto_input)
-        self.lambda_row = QHBoxLayout()
-        self.lambda_row.addWidget(QLabel('Lambda:'))
-        self.lambda_row.addWidget(self.lambda_value_input)
-        self.lambda_layout.addLayout(self.lambda_row)
-        self.lambda_widget.setLayout(self.lambda_layout)
-        self.layout.addWidget(self.lambda_widget)
-
-        self.method_input.currentTextChanged.connect(self.change_method)
-        self.lambda_auto_input.toggled.connect(self.lambda_auto_changed)
-        self.change_method()
+        self.options_input = InterpolationOptionsInput(parent=self)
+        self.method_input = self.options_input.method_input
+        self.samples_input = self.options_input.samples_input
+        self.k_widget = self.options_input.k_widget
+        self.k_input = self.options_input.k_input
+        self.lambda_widget = self.options_input.lambda_widget
+        self.lambda_auto_input = self.options_input.lambda_auto_input
+        self.lambda_value_input = self.options_input.lambda_value_input
+        self.layout.addWidget(self.options_input)
 
         # OK and Cancel buttons
         self.button_bar = QFrame()
@@ -546,19 +500,14 @@ class PyInterpolationDialog(QDialog):
         self.setLayout(self.layout)
 
     def change_method(self):
-        current_method = self.method_input.currentText()
-        self.k_widget.setVisible(interpolation_uses_order(current_method))
-        self.lambda_widget.setVisible(interpolation_uses_lambda(current_method))
+        self.options_input.update_option_visibility()
 
     def lambda_auto_changed(self, checked: bool):
         self.lambda_value_input.setEnabled(not checked)
 
     def _lambda_options(self, method: str):
-        if not interpolation_uses_lambda(method):
-            return None, True
-        if self.lambda_auto_input.isChecked():
-            return None, True
-        return self.lambda_value_input.value(), False
+        del method
+        return self.options_input.lambda_options()
 
     def accept(self):
         # Warn if current canvas is empty
@@ -579,18 +528,13 @@ class PyInterpolationDialog(QDialog):
             status_messages.show_error(str(exc))
             return
 
-        method = self.method_input.currentText()
-        lam, lam_auto = self._lambda_options(method)
+        options = self.options_input.options()
         line = self.figure_window.current_canva.add_interpolate_curve(
             x=pair.x,
             y=pair.y,
             x_ref=x_ref,
             y_ref=y_ref,
-            method=method,
-            k=self.k_input.value(),
-            samples=self.samples_input.value(),
-            lam=lam,
-            lam_auto=lam_auto,
+            **options,
             color=self.color_input.color(),
         )
         if line is None:

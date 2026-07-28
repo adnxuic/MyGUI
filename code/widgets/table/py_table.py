@@ -117,6 +117,7 @@ class PyTable(QFrame):
         subtable = self._subtables.pop(project_id, None)
         if subtable is not None:
             self.stack.removeWidget(subtable)
+            subtable.dispose()
             subtable.deleteLater()
         self.repository.remove_project(project_id)
         if self._current_project_id == project_id:
@@ -125,6 +126,7 @@ class PyTable(QFrame):
     def clear_tables(self):
         for subtable in self._subtables.values():
             self.stack.removeWidget(subtable)
+            subtable.dispose()
             subtable.deleteLater()
         self._subtables.clear()
         self.repository.clear()

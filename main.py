@@ -64,7 +64,9 @@ class MainWindow(QMainWindow):
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.figure_window = PyFigureWindow(
-            fig_modify_window=self.fig_control_window.figmod_window,
+            figure_inspector_host=(
+                self.fig_control_window.figure_inspector_host
+            ),
             repository=self.repository,
             color_library=self.color_library,
         )

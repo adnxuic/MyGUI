@@ -34,13 +34,13 @@ class GuiFileFlowTests(unittest.TestCase):
         self.app.processEvents()
         self.directory.cleanup()
 
-    def test_save_menu_writes_schema_v5_without_database_flush(self):
+    def test_save_menu_writes_schema_v6_without_database_flush(self):
         target = Path(self.directory.name) / "saved"
         self.menu._save_project_to(str(target))
         saved = Path(str(target) + ".mygui.json")
 
         self.assertTrue(saved.exists())
-        self.assertEqual(load_project_file(saved)["schema_version"], 5)
+        self.assertEqual(load_project_file(saved)["schema_version"], 6)
         self.assertEqual(self.window.figure_window.current_canva.project_path, str(saved))
 
     def test_restored_project_is_added_to_table_and_figure(self):

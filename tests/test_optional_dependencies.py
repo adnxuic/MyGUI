@@ -24,11 +24,24 @@ from code import tex_config
 from code import status_messages
 from code.database import ColumnRef, TableRepository, matlab_adapter, scipy_fit_adapter
 from code.database.safe_expression import evaluate_curve_expression
-from code.figuremodify.py_text_modify import PyTextModify, TextRenderError
+from code.figuremodify.component_services import FitService, TextRenderService
+from code.figuremodify.components import (
+    ComponentKind,
+    ComponentRegistry,
+    ComponentRole,
+    ComponentState,
+    FitCurveController,
+    TextController,
+)
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
+from code.widgets.fig_control_window.component_editors import (
+    ComponentEditorManager,
+    EditorRegistry,
+    MessagePresenter,
+    register_production_profiles,
+)
 from code.widgets.fig_control_window import py_matlab_window as matlab_window_module
 from code.widgets.fig_control_window import py_fit_options_window as fit_options_module
-from code.widgets.fig_control_window.all_mod_widgets.py_chart_mod_widgets import PyFitModWidget
-from code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets import PyTextModWidget
 from code.widgets.fig_control_window.py_fit_options_window import PyMatlabFitOptionsWidget
 from code.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 from code.widgets.fig_control_window.py_tex_window import PyTexWindow
@@ -40,6 +53,90 @@ def load_module_from_file(module_name: str, path: Path):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def make_text_controller(figure, text_artist):
+    registry = ComponentRegistry()
+    controller = TextController(
+        ComponentState(
+            id="text",
+            kind=ComponentKind.TEXT,
+            role=ComponentRole.TEXT,
+            order=0,
+            selector={"object_id": "text", "scope": "figure"},
+            properties={},
+        )
+    )
+    registry.register(controller, target=text_artist, require_parent=False)
+    service = TextRenderService(registry)
+    editor_registry = EditorRegistry()
+    register_production_profiles(editor_registry)
+    manager = ComponentEditorManager(registry, editor_registry)
+    context = SimpleNamespace(
+        registry=registry,
+        text_rendering=service,
+        messages=MessagePresenter(),
+        color_library=ColorLibrary(),
+        editor_manager=manager,
+    )
+    return controller, service, context
+
+
+def make_fit_editor(
+    repository,
+    project_id,
+    x_ref,
+    y_ref,
+    *,
+    engine="Python",
+    fit_result=None,
+):
+    figure = Figure()
+    FigureCanvasAgg(figure)
+    axes = figure.subplots()
+    line, = axes.plot([0.0, 1.0], [0.0, 1.0], label="fit")
+    registry = ComponentRegistry()
+    controller = FitCurveController(
+        ComponentState(
+            id="fit",
+            kind=ComponentKind.LINE,
+            role=ComponentRole.FIT_CURVE,
+            order=0,
+            selector={"object_id": "fit"},
+            properties={"label": "fit"},
+            data={
+                "x_ref": x_ref.to_dict(),
+                "y_ref": y_ref.to_dict(),
+                "engine": engine,
+                "fit_type": None,
+                "fit_options": None,
+                "fit_result": fit_result,
+                "expression": "",
+                "x_start": 0.0,
+                "x_stop": 1.0,
+            },
+        )
+    )
+    registry.register(controller, target=line, require_parent=False)
+    library = ColorLibrary()
+    context = SimpleNamespace(
+        repository=repository,
+        registry=registry,
+        fitting=FitService(repository, registry),
+        messages=MessagePresenter(),
+        color_library=library,
+    )
+    editor_registry = EditorRegistry()
+    register_production_profiles(editor_registry)
+    context.editor_manager = ComponentEditorManager(
+        registry,
+        editor_registry,
+    )
+    widget = context.editor_manager.create(
+        controller,
+        context=context,
+    )
+    return widget, widget.section("actions").domain, controller, line
 
 
 class OptionalDependencyTests(unittest.TestCase):
@@ -300,33 +397,35 @@ class OptionalDependencyTests(unittest.TestCase):
         finally:
             window.close()
 
-    def test_tex_text_render_failure_restores_previous_text_and_project_record(self):
+    def test_tex_text_render_failure_restores_previous_controller_state(self):
         figure = Figure()
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "safe")
-        project_record = {"text": "safe"}
-        modifier = PyTextModify(figure, text=text, project_record=project_record)
+        controller, service, _context = make_text_controller(figure, text)
 
         with patch.object(tex_config, "_LOG_TO_FILE", False), \
                 patch.object(tex_config, "_LOG_TO_STDERR", False), \
                 self.assertLogs(tex_config.LOGGER_NAME, level="WARNING") as logs:
             with patch.object(
-                modifier,
-                "redraw",
-                side_effect=[RuntimeError("latex failed"), None],
+                figure.canvas,
+                "draw",
+                side_effect=RuntimeError("latex failed"),
             ):
-                with self.assertRaisesRegex(TextRenderError, "keeping last valid text"):
-                    modifier.set_text_content("$\\int$" + chr(0xFFE5))
+                result = service.apply(
+                    controller,
+                    {"text": "$\\int$" + chr(0xFFE5)},
+                )
 
+        self.assertFalse(result.ok)
         self.assertEqual(text.get_text(), "safe")
-        self.assertEqual(project_record["text"], "safe")
-        self.assertIn("TeX text render failed", "\n".join(logs.output))
+        self.assertEqual(controller.state.properties["text"], "safe")
+        self.assertIn("Text render failed", "\n".join(logs.output))
 
-    def test_text_redraw_reports_missing_glyph_warning_to_status_bar(self):
+    def test_text_render_reports_missing_glyph_warning_to_message_bar(self):
         figure = Figure()
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "safe")
-        modifier = PyTextModify(figure, text=text)
+        controller, service, context = make_text_controller(figure, text)
         status_events = []
 
         def draw_warning():
@@ -343,145 +442,99 @@ class OptionalDependencyTests(unittest.TestCase):
                 patch.object(tex_config, "_LOG_TO_STDERR", False), \
                 self.assertLogs(tex_config.LOGGER_NAME, level="WARNING") as logs:
             with patch.object(figure.canvas, "draw", side_effect=draw_warning):
-                modifier.redraw()
+                result = service.apply(
+                    controller,
+                    {"text": "plain"},
+                )
+                context.messages.present(result)
 
-        self.assertEqual(status_events[-1][1], "error")
+        self.assertEqual(status_events[-1][1], "warning")
         self.assertIn("U+FFE5", status_events[-1][0])
         self.assertIn("Matplotlib text glyph warning", "\n".join(logs.output))
 
-    def test_text_widget_reports_status_and_keeps_editor_when_tex_render_fails(self):
-        class FakeText:
-            def __init__(self):
-                self.value = "safe"
-
-            def get_fontfamily(self):
-                return ["DejaVu Sans"]
-
-            def get_fontsize(self):
-                return 12
-
-            def get_text(self):
-                return self.value
-
-            def get_position(self):
-                return (0.5, 0.5)
-
-        class FakeTextModify:
-            def __init__(self):
-                self.text = FakeText()
-
-            def set_text_font(self, _font):
-                pass
-
-            def set_text_fontsize(self, _size):
-                pass
-
-            def set_text_content(self, _content):
-                raise TextRenderError("Text render failed; keeping last valid text.")
-
-            def get_text_usetex(self):
-                return False
-
-            def set_text_usetex(self, _use_tex):
-                pass
-
-            def set_xy_position(self, _x, _y):
-                pass
-
-        widget = PyTextModWidget(FakeTextModify())
+    def test_text_widget_reports_status_and_rolls_back_editor_when_tex_render_fails(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "safe")
+        controller, _service, context = make_text_controller(figure, text)
+        widget = context.editor_manager.create(controller, context=context)
+        content = widget.section("content")
         status_events = []
         bad_text = "$\\int$" + chr(0xFFE5)
         try:
             status_messages.set_status_handler(
                 lambda message, level: status_events.append((message, level))
             )
-            widget.text_content.blockSignals(True)
-            widget.text_content.setPlainText(bad_text)
-            widget.text_content.blockSignals(False)
+            content.text_content.blockSignals(True)
+            content.text_content.setPlainText(bad_text)
+            content.text_content.blockSignals(False)
 
-            with patch(
-                "code.widgets.fig_control_window.all_mod_widgets.py_elements_mod_widgets.QMessageBox.warning"
-            ) as warning:
-                widget.set_text_content()
+            with patch.object(
+                figure.canvas,
+                "draw",
+                side_effect=RuntimeError("latex failed"),
+            ):
+                content.set_text_content()
 
-            warning.assert_not_called()
-            self.assertEqual(widget.text_content.toPlainText(), bad_text)
-            self.assertEqual(status_events[-1], ("Text render failed; keeping last valid text.", "error"))
+            self.assertEqual(content.text_content.toPlainText(), "safe")
+            self.assertEqual(content._text_binding.delay_ms, 250)
+            self.assertEqual(status_events[-1][1], "error")
+            self.assertIn("keeping the last valid text", status_events[-1][0])
         finally:
             widget.close()
+            context.editor_manager.close()
 
     def test_text_widget_keeps_glyph_status_when_successful_render_warns(self):
-        class FakeText:
-            def __init__(self):
-                self.value = "safe"
-
-            def get_fontfamily(self):
-                return ["DejaVu Sans"]
-
-            def get_fontsize(self):
-                return 12
-
-            def get_text(self):
-                return self.value
-
-            def get_position(self):
-                return (0.5, 0.5)
-
-        class FakeTextModify:
-            def __init__(self):
-                self.text = FakeText()
-                self.last_render_warning = None
-
-            def set_text_font(self, _font):
-                pass
-
-            def set_text_fontsize(self, _size):
-                pass
-
-            def set_text_content(self, content):
-                self.text.value = content
-                self.last_render_warning = "Current font is missing glyph U+FFE5."
-                status_messages.show_error(self.last_render_warning)
-
-            def get_text_usetex(self):
-                return False
-
-            def set_text_usetex(self, _use_tex):
-                pass
-
-            def set_xy_position(self, _x, _y):
-                pass
-
-        widget = PyTextModWidget(FakeTextModify())
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "safe")
+        controller, _service, context = make_text_controller(figure, text)
+        widget = context.editor_manager.create(controller, context=context)
+        content = widget.section("content")
         status_events = []
+
+        def draw_warning():
+            warnings.warn(
+                "Glyph 65509 missing from font(s) DejaVu Sans.",
+                UserWarning,
+            )
+
         try:
             status_messages.set_status_handler(
                 lambda message, level: status_events.append((message, level))
             )
-            widget.text_content.blockSignals(True)
-            widget.text_content.setPlainText("plain")
-            widget.text_content.blockSignals(False)
+            content.text_content.blockSignals(True)
+            content.text_content.setPlainText("plain")
+            content.text_content.blockSignals(False)
 
-            widget.set_text_content()
+            with patch.object(
+                figure.canvas,
+                "draw",
+                side_effect=draw_warning,
+            ):
+                content.set_text_content()
 
-            self.assertEqual(status_events[-1], ("Current font is missing glyph U+FFE5.", "error"))
+            self.assertEqual(status_events[-1][1], "warning")
+            self.assertIn("U+FFE5", status_events[-1][0])
         finally:
             widget.close()
+            context.editor_manager.close()
 
     def test_text_widget_tex_button_disabled_when_global_tex_is_off(self):
         tex_config.set_tex_enabled(False, notify=False)
         figure = Figure()
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "plain")
-        modifier = PyTextModify(figure, text=text, project_record={"text": "plain", "usetex": False})
-
-        widget = PyTextModWidget(modifier)
+        controller, _service, context = make_text_controller(figure, text)
+        widget = context.editor_manager.create(controller, context=context)
+        render = widget.section("render")
         try:
-            self.assertFalse(widget.tex_render.isEnabled())
-            self.assertFalse(widget.tex_render.isChecked())
+            self.assertFalse(render.tex_render.isEnabled())
+            self.assertFalse(render.tex_render.isChecked())
             self.assertFalse(text.get_usetex())
         finally:
             widget.close()
+            context.editor_manager.close()
 
     def test_text_widget_tex_button_toggles_individual_text_rendering(self):
         tex_config.set_tex_enabled(False, notify=False)
@@ -489,32 +542,33 @@ class OptionalDependencyTests(unittest.TestCase):
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "plain")
         tex_config.set_tex_enabled(True, notify=False)
-        project_record = {"text": "plain", "usetex": False}
-        modifier = PyTextModify(figure, text=text, project_record=project_record)
+        controller, _service, context = make_text_controller(figure, text)
         status_events = []
 
-        widget = PyTextModWidget(modifier)
+        widget = context.editor_manager.create(controller, context=context)
+        render = widget.section("render")
         try:
             status_messages.set_status_handler(
                 lambda message, level: status_events.append((message, level))
             )
-            self.assertTrue(widget.tex_render.isEnabled())
-            self.assertFalse(widget.tex_render.isChecked())
+            self.assertTrue(render.tex_render.isEnabled())
+            self.assertFalse(render.tex_render.isChecked())
 
-            with patch.object(modifier, "redraw"):
-                widget.tex_render.setChecked(True)
+            with patch.object(figure.canvas, "draw"):
+                render.tex_render.setChecked(True)
 
             self.assertTrue(text.get_usetex())
-            self.assertTrue(project_record["usetex"])
+            self.assertTrue(controller.state.properties["usetex"])
             self.assertEqual(status_events[-1], ("Text TeX rendering enabled.", "success"))
 
-            with patch.object(modifier, "redraw"):
-                widget.tex_render.setChecked(False)
+            with patch.object(figure.canvas, "draw"):
+                render.tex_render.setChecked(False)
 
             self.assertFalse(text.get_usetex())
-            self.assertFalse(project_record["usetex"])
+            self.assertFalse(controller.state.properties["usetex"])
         finally:
             widget.close()
+            context.editor_manager.close()
 
     def test_global_tex_disable_unchecks_and_disables_text_tex_button(self):
         tex_config.set_tex_enabled(True, notify=False)
@@ -522,23 +576,25 @@ class OptionalDependencyTests(unittest.TestCase):
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "plain")
         text.set_usetex(True)
-        project_record = {"text": "plain", "usetex": True}
-        modifier = PyTextModify(figure, text=text, project_record=project_record)
+        controller, _service, context = make_text_controller(figure, text)
+        controller.set_property("usetex", True)
 
-        widget = PyTextModWidget(modifier)
+        widget = context.editor_manager.create(controller, context=context)
+        render = widget.section("render")
         try:
-            self.assertTrue(widget.tex_render.isEnabled())
-            self.assertTrue(widget.tex_render.isChecked())
+            self.assertTrue(render.tex_render.isEnabled())
+            self.assertTrue(render.tex_render.isChecked())
 
-            with patch.object(modifier, "redraw"):
+            with patch.object(figure.canvas, "draw"):
                 tex_config.set_tex_enabled(False)
 
-            self.assertFalse(widget.tex_render.isEnabled())
-            self.assertFalse(widget.tex_render.isChecked())
+            self.assertFalse(render.tex_render.isEnabled())
+            self.assertFalse(render.tex_render.isChecked())
             self.assertFalse(text.get_usetex())
-            self.assertFalse(project_record["usetex"])
+            self.assertFalse(controller.state.properties["usetex"])
         finally:
             widget.close()
+            context.editor_manager.close()
 
     def test_new_text_defaults_to_tex_when_global_tex_is_enabled(self):
         from main import MainWindow
@@ -550,7 +606,7 @@ class OptionalDependencyTests(unittest.TestCase):
             canvas.add_axes(nrows=1, ncols=1)
             tex_config.set_tex_enabled(True, notify=False)
 
-            with patch.object(PyTextModify, "redraw"), patch.object(canvas, "redraw"):
+            with patch.object(canvas.fig.canvas, "draw"), patch.object(canvas, "redraw"):
                 canvas.add_text(
                     x=0.2,
                     y=0.8,
@@ -560,13 +616,23 @@ class OptionalDependencyTests(unittest.TestCase):
                 )
 
             text_artist = canvas.current_axes.texts[-1]
-            all_mod_widget = canvas.fig_modify_widget.fine_all_mod_widget(canvas.current_axes)
-            text_widget = all_mod_widget.element_mod_window.boxs["text_box"].widget(0)
+            axes_inspector = canvas.figure_inspector.find_axes_inspector(
+                canvas.current_axes
+            )
+            text_widget = axes_inspector.ensure_component_toolbox(
+                ComponentKind.TEXT,
+                ComponentRole.TEXT,
+                "text",
+            ).widget(0)
+            controller = canvas.component_registry.get(
+                text_artist.get_gid()
+            )
 
             self.assertTrue(text_artist.get_usetex())
-            self.assertTrue(canvas.project_texts[-1]["usetex"])
-            self.assertTrue(text_widget.tex_render.isEnabled())
-            self.assertTrue(text_widget.tex_render.isChecked())
+            self.assertTrue(controller.state.properties["usetex"])
+            render = text_widget.section("render")
+            self.assertTrue(render.tex_render.isEnabled())
+            self.assertTrue(render.tex_render.isChecked())
         finally:
             window.close()
 
@@ -797,28 +863,15 @@ class OptionalDependencyTests(unittest.TestCase):
             finally:
                 fit_window.close()
 
-    def test_matlab_fit_mod_widget_displays_structured_fit_result(self):
-        class FakeLine:
-            def get_linestyle(self):
-                return "solid"
-
-        class FakeCurveModify:
-            def __init__(self):
-                self.expression = ""
-                self.x_start = 0.0
-                self.x_stop = 1.0
-                self.line = FakeLine()
-                self.label = "fit"
-                self.update_all = Mock()
-                self.update_expression = Mock()
-                self.update_x_start = Mock()
-                self.update_x_stop = Mock()
-                self.update_style = Mock()
-                self.update_color = Mock()
-                self.change_legend = Mock()
-
-        repository, project, _x_ref, _y_ref = self.make_table_repository()
-        widget = PyFitModWidget(FakeCurveModify(), repository, project.id, engine="Matlab")
+    def test_matlab_fit_section_displays_structured_fit_result(self):
+        repository, project, x_ref, y_ref = self.make_table_repository()
+        widget, fit, controller, line = make_fit_editor(
+            repository,
+            project.id,
+            x_ref,
+            y_ref,
+            engine="Matlab",
+        )
         result = {
             "value_expression": "2.0*x**2+3.0",
             "show_expression": "2.0*x**2+3.0",
@@ -832,46 +885,73 @@ class OptionalDependencyTests(unittest.TestCase):
             "confidence_level": 0.95,
         }
         try:
-            widget.update_curve(result, 1.0, 3.0)
+            fit.update_curve(result, 1.0, 3.0)
 
-            self.assertEqual(widget.expression_input.toPlainText(), "2.0*x**2+3.0")
-            self.assertEqual(widget.result_model_label.text(), "Model: poly1")
-            self.assertEqual(widget.result_formula_input.toPlainText(), "a*x^2+b")
-            self.assertEqual(widget.result_coeff_table.item(0, 0).text(), "a")
-            self.assertEqual(widget.result_coeff_table.item(0, 1).text(), "2.0000")
-            self.assertEqual(widget.result_goodness_table.item(1, 1).text(), "0.9000")
-            widget.curve_modify.update_all.assert_called_once_with(1.0, 3.0, "2.0*x**2+3.0")
+            self.assertEqual(fit.expression_input.toPlainText(), "2.0*x**2+3.0")
+            self.assertEqual(fit.result_model_label.text(), "Model: poly1")
+            self.assertEqual(fit.result_formula_input.toPlainText(), "a*x^2+b")
+            self.assertEqual(fit.result_coeff_table.item(0, 0).text(), "a")
+            self.assertEqual(fit.result_coeff_table.item(0, 1).text(), "2.0000")
+            self.assertEqual(fit.result_goodness_table.item(1, 1).text(), "0.9000")
+            self.assertEqual(
+                controller.state.data["expression"],
+                "2.0*x**2+3.0",
+            )
+            self.assertEqual(controller.state.data["x_start"], 1.0)
+            self.assertEqual(controller.state.data["x_stop"], 3.0)
+            self.assertEqual(len(line.get_xdata()), 1000)
         finally:
             widget.close()
+            fit.context.editor_manager.close()
+
+    def test_fit_inspector_dispose_cancels_request_and_closes_dialog(self):
+        repository, project, x_ref, y_ref = self.make_table_repository(
+            with_data=True
+        )
+        widget, fit, controller, _line = make_fit_editor(
+            repository,
+            project.id,
+            x_ref,
+            y_ref,
+        )
+        request_id = fit.context.fitting.next_request(
+            controller.component_id
+        )
+        dialog = fit.open_fit_window("Python")
+        self.assertIsNotNone(dialog)
+        self.assertTrue(dialog.isVisible())
+
+        fit.context.editor_manager.close()
+        fit.context.editor_manager.close()
+
+        self.assertTrue(widget._disposed)
+        self.assertTrue(fit._disposed)
+        self.assertFalse(dialog.isVisible())
+        self.assertFalse(
+            fit.context.fitting.request_is_current(
+                controller.component_id,
+                request_id,
+            )
+        )
+        widget.close()
 
     def test_stale_fit_result_restores_dialog_button_without_updating_curve(self):
-        class FakeLine:
-            def get_linestyle(self):
-                return "solid"
-
-        class FakeCurveModify:
-            def __init__(self):
-                self.expression = ""
-                self.x_start = 0.0
-                self.x_stop = 1.0
-                self.line = FakeLine()
-                self.label = "fit"
-                self.update_all = Mock()
-                self.update_expression = Mock()
-                self.update_x_start = Mock()
-                self.update_x_stop = Mock()
-                self.update_style = Mock()
-                self.update_color = Mock()
-                self.change_legend = Mock()
-
-        repository, project, _x_ref, _y_ref = self.make_table_repository()
-        widget = PyFitModWidget(FakeCurveModify(), repository, project.id)
+        repository, project, x_ref, y_ref = self.make_table_repository()
+        widget, fit, controller, _line = make_fit_editor(
+            repository,
+            project.id,
+            x_ref,
+            y_ref,
+        )
         dialog = QDialog(widget)
         dialog.fit_button = QPushButton("Fit", dialog)
         dialog.fit_button.setEnabled(False)
         dialog.fit_button.setText("Fitting...")
-        dialog._fit_request_id = 1
-        widget._fit_request_id = 2
+        request_id = fit.context.fitting.next_request(
+            controller.component_id
+        )
+        dialog._fit_request_id = request_id
+        fit.context.fitting.next_request(controller.component_id)
         result = {
             "value_expression": "x",
             "show_expression": "x",
@@ -882,50 +962,45 @@ class OptionalDependencyTests(unittest.TestCase):
             "engine": "Python",
         }
         try:
-            widget._fit_dialog_succeeded(lambda: dialog, 1, result, 0.0, 1.0, "Python")
+            fit._fit_dialog_succeeded(
+                lambda: dialog,
+                request_id,
+                result,
+                0.0,
+                1.0,
+                "Python",
+            )
 
             self.assertTrue(dialog.fit_button.isEnabled())
             self.assertEqual(dialog.fit_button.text(), "Fit")
-            self.assertEqual(widget.result_model_label.text(), "Model: -")
-            widget.curve_modify.update_all.assert_not_called()
+            self.assertEqual(fit.result_model_label.text(), "Model: -")
+            self.assertEqual(controller.state.data["expression"], "")
 
-            widget._fit_dialog_succeeded(lambda: None, 2, result, 0.0, 1.0, "Python")
-            widget.curve_modify.update_all.assert_not_called()
+            fit._fit_dialog_succeeded(
+                lambda: None,
+                request_id + 1,
+                result,
+                0.0,
+                1.0,
+                "Python",
+            )
+            self.assertEqual(controller.state.data["expression"], "")
         finally:
             dialog.close()
             widget.close()
+            fit.context.editor_manager.close()
 
     def test_matlab_fitting_failure_only_warns(self):
-        class FakeLine:
-            def get_linestyle(self):
-                return "solid"
-
-        class FakeCurveModify:
-            def __init__(self):
-                self.expression = ""
-                self.x_start = 0.0
-                self.x_stop = 1.0
-                self.line = FakeLine()
-                self.label = "fit"
-                self.update_all = Mock()
-                self.update_expression = Mock()
-                self.update_x_start = Mock()
-                self.update_x_stop = Mock()
-                self.update_style = Mock()
-                self.update_color = Mock()
-                self.change_legend = Mock()
-
         repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
         matlab_adapter.set_matlab_enabled(True, notify=False)
 
         messages = []
         status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
-        widget = PyFitModWidget(
-            FakeCurveModify(),
+        widget, fit, _controller, _line = make_fit_editor(
             repository,
             project.id,
-            x_ref=x_ref,
-            y_ref=y_ref,
+            x_ref,
+            y_ref,
             engine="Matlab",
         )
         try:
@@ -941,13 +1016,13 @@ class OptionalDependencyTests(unittest.TestCase):
                     "fit_curve_isolated",
                     side_effect=RuntimeError("MATLAB fitting failed: fit failed"),
                 ):
-                    dialog = widget.open_fit_window("Matlab")
+                    dialog = fit.open_fit_window("Matlab")
                     self.assertIsNotNone(dialog)
                     dialog.fit_options_widget.order_input.setCurrentText("poly1")
                     dialog.fit_button.click()
                     self.wait_until(lambda: any(level == "error" for _, level in messages))
 
-            self.assertEqual(widget.result_model_label.text(), "Model: -")
+            self.assertEqual(fit.result_model_label.text(), "Model: -")
             self.assertTrue(dialog.fit_button.isEnabled())
             self.assertIn(("MATLAB fitting failed: fit failed", "error"), messages)
 
@@ -957,39 +1032,20 @@ class OptionalDependencyTests(unittest.TestCase):
             if "dialog" in locals() and dialog is not None:
                 dialog.close()
             widget.close()
+            fit.context.editor_manager.close()
             matlab_adapter.set_matlab_enabled(False, notify=False)
 
     def test_matlab_invalid_fit_parameters_warns_without_calling_matlab(self):
-        class FakeLine:
-            def get_linestyle(self):
-                return "solid"
-
-        class FakeCurveModify:
-            def __init__(self):
-                self.expression = ""
-                self.x_start = 0.0
-                self.x_stop = 1.0
-                self.line = FakeLine()
-                self.label = "fit"
-                self.update_all = Mock()
-                self.update_expression = Mock()
-                self.update_x_start = Mock()
-                self.update_x_stop = Mock()
-                self.update_style = Mock()
-                self.update_color = Mock()
-                self.change_legend = Mock()
-
         repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
         matlab_adapter.set_matlab_enabled(True, notify=False)
 
         messages = []
         status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
-        widget = PyFitModWidget(
-            FakeCurveModify(),
+        widget, fit, _controller, _line = make_fit_editor(
             repository,
             project.id,
-            x_ref=x_ref,
-            y_ref=y_ref,
+            x_ref,
+            y_ref,
             engine="Matlab",
         )
         try:
@@ -998,8 +1054,11 @@ class OptionalDependencyTests(unittest.TestCase):
                 "get_func_info_isolated",
                 return_value=matlab_adapter.fallback_func_info("poly1"),
             ), patch.object(matlab_adapter, "fit_curve_isolated") as fit_curve_isolated:
-                dialog = widget.open_fit_window("Matlab")
+                dialog = fit.open_fit_window("Matlab")
                 self.assertIsNotNone(dialog)
+                self.wait_until(
+                    lambda: dialog.fit_options_widget.order_input.isEnabled()
+                )
                 dialog.fit_options_widget.advanced_option.setChecked(True)
                 dialog.fit_options_widget.coefficient_table.item(0, 1).setText("bad")
                 dialog.fit_button.click()
@@ -1011,6 +1070,7 @@ class OptionalDependencyTests(unittest.TestCase):
             if "dialog" in locals() and dialog is not None:
                 dialog.close()
             widget.close()
+            fit.context.editor_manager.close()
             matlab_adapter.set_matlab_enabled(False, notify=False)
 
     def test_adapter_get_func_exp_releases_runtime_on_success_and_failure(self):

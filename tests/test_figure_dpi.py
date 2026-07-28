@@ -52,14 +52,19 @@ PROBE = textwrap.dedent(
         default_size = struct.unpack(">II", default_bytes[16:24])
         explicit_size = struct.unpack(">II", explicit_bytes[16:24])
 
-    snapshot = canvas.project_snapshot()
+    snapshot = canvas.component_snapshot()
+    root = next(
+        component
+        for component in snapshot["components"]
+        if component["id"] == snapshot["root_component_id"]
+    )
     result = {
         "device_pixel_ratio": float(canvas.canva.device_pixel_ratio),
         "runtime_dpi": float(canvas.fig.dpi),
         "document_dpi": canvas.document_dpi,
         "size_inches": [float(value) for value in canvas.fig.get_size_inches()],
-        "snapshot_dpi": snapshot["dpi"],
-        "snapshot_size_inches": snapshot["size_inches"],
+        "snapshot_dpi": root["properties"]["dpi"],
+        "snapshot_size_inches": root["properties"]["size_inches"],
         "default_size": list(default_size),
         "explicit_size": list(explicit_size),
         "readonly": readonly,

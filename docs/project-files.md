@@ -1,47 +1,165 @@
 # MyGUI Project Files
 
-Project files use JSON schema version 5. A file contains one project, its typed Table document, and one matplotlib canvas. Schema-v4 files migrate in memory to v5 with an empty color-cycle state and are written as v5 on their next save.
+MyGUI project files use JSON schema version 6. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading returns v6 in memory, and every subsequent save writes v6.
 
-## Root fields
+## Root structure
 
-- `schema`: always `mygui-project`.
-- `schema_version`: always `5` after loading or saving.
-- `project`: stable project `id` and editable `name`.
-- `table`: project table document.
-- `figure`: canvas, axes, chart, fitting, interpolation, and text records.
+```json
+{
+  "schema": "mygui-project",
+  "schema_version": 6,
+  "project": {"id": "project-id", "name": "Project name"},
+  "table": {},
+  "figure": {
+    "root_component_id": "figure-component-id",
+    "components": []
+  }
+}
+```
 
-Window geometry, splitter sizes, table visibility, command selection, and optional-integration runtime state are application preferences. They are not project fields and opening a project does not change them.
+- `schema` is always `mygui-project`.
+- `schema_version` is always `6` after migration, loading, or saving.
+- `project.id` is stable and must match `table.id`.
+- `project.name` is editable and must match `table.name`.
+- `table` is the typed table document.
+- `figure` contains only `root_component_id` and `components`; legacy axes/chart arrays are not written alongside the tree.
 
-## Table fields
+Window geometry, splitter sizes, table visibility, command selection, and optional-integration runtime state are application preferences rather than project fields.
 
-`table.id` and `table.name` match the project. `table.sheets` is an ordered array. Each Sheet stores:
+## Table document
+
+`table.sheets` is an ordered array. Each Sheet stores:
 
 - `id`: stable UUID.
-- `name`: unique display name.
-- `row_count`: logical number of stored rows.
-- `columns`: ordered typed columns documented in `table-driven-chart-refresh.md`.
+- `name`: case-insensitively unique display name.
+- `row_count`: logical row count.
+- `columns`: ordered typed columns.
 
-Missing cells are JSON `null`; number, text, Boolean, and ISO 8601 date/time values retain their types.
+Each column stores `id`, `name`, `type`, `width`, and `values`. Missing cells are JSON `null`; number, text, Boolean, and ISO 8601 date/time values retain their types. See `table-driven-chart-refresh.md` for the table and reference model.
 
-## Data-source fields
+## Component record
 
-Plot, Scatter, Interpolation, and Fit records contain a stable `object_id` plus `x_ref` and `y_ref` objects. Each reference contains `project_id`, `sheet_id`, and `column_id`. Every referenced column must exist in the same project.
+Every entry in `figure.components` has exactly these fields:
 
-Curve, Plot, Scatter, Interpolation, and Fit records also contain `color_order`, a non-negative unique integer used to restore cross-type creation order. Their `color` fields are validated before the project mutates application state and normalized to uppercase `#RRGGBB` or `#RRGGBBAA`.
+```json
+{
+  "id": "stable-component-id",
+  "kind": "line",
+  "role": "data_plot",
+  "parent_id": "axes-component-id",
+  "order": 3,
+  "selector": {"object_id": "stable-component-id"},
+  "properties": {},
+  "data": {}
+}
+```
 
-## Axes color-cycle fields
+- `id`: non-empty stable identifier, unique in the Figure.
+- `kind`: controlled component family.
+- `role`: controlled specialization valid for the selected `kind`.
+- `parent_id`: parent component ID, or JSON `null` only for the Figure root.
+- `order`: non-negative sibling/runtime ordering value. Chart component orders are unique across Line and Scatter records so color sequencing remains stable.
+- `selector`: semantic identity used to resolve dynamic Matplotlib objects. Examples are `{"index": 0}` for an Axes, `{"axis": "x", "level": "major"}` for an axis group, and `{"object_id": "..."}` for a stable artist.
+- `properties`: visual and editable state using Controller property names.
+- `data`: non-visual, role-specific source data.
 
-Each `figure.axes[]` record contains `color_cycle`. It is `null` when no palette is active. Otherwise it contains:
+The controlled kind/role combinations are:
 
-- `palette.id`: stable built-in or custom palette identifier.
-- `palette.name`, `palette.category`, and `palette.source`: display and provenance metadata.
-- `palette.colors`: the complete ordered normalized color snapshot.
-- `next_index`: the next palette position, from zero through `colors.length - 1`.
+| Kind | Roles |
+| --- | --- |
+| `figure` | `figure` |
+| `axes` | `axes` |
+| `axis` | `x_axis`, `y_axis` |
+| `spine` | `spine` |
+| `tick_group` | `major_tick`, `minor_tick` |
+| `tick_label_group` | `major_tick_label`, `minor_tick_label` |
+| `grid` | `grid` |
+| `text` | `title`, `x_label`, `y_label`, `text` |
+| `legend` | `legend` |
+| `line` | `line`, `function_curve`, `data_plot`, `fit_curve`, `interpolation` |
+| `scatter` | `scatter` |
 
-The embedded snapshot keeps a project's palette usable when its custom application-library entry has been changed or deleted.
+## Figure hierarchy and fixed components
 
-## Figure size and DPI
+`figure.root_component_id` identifies the sole parentless `figure/figure` record. Its properties include `name`, `style`, `size_inches`, `dpi`, `facecolor`, `edgecolor`, `frameon`, and `constrained_layout`.
 
-`figure.size_inches` stores the document width and height in inches. `figure.dpi` stores the document/export DPI. Display scaling and the active screen's device pixel ratio do not change these fields. A default figure export uses `figure.dpi`; an explicit export DPI only changes that export.
+Each `axes/axes` child stores:
 
-Project writes use a temporary file followed by replacement, with a direct-write fallback for Windows permission behavior. The loader migrates v4 when needed, then validates the complete v5 structure, data references, colors, and palette cursor before mutating the application.
+- `properties.position`: `[left, bottom, width, height]`.
+- `properties.xlim` and `properties.ylim`: two-number ranges.
+- `properties.xscale` and `properties.yscale`: Matplotlib scale names.
+- `properties.aspect`, `facecolor`, `visible`, and `autoscale_on`.
+- `properties.color_cycle`: JSON `null` or a complete color-cycle snapshot.
+- `data.subplot`: `layout_group`, positive `nrows`/`ncols`, and one-based `slot`.
+
+Every Axes contains fixed semantic children:
+
+- one X Axis and one Y Axis;
+- left, right, bottom, and top Spines;
+- Major and Minor Tick groups for both axes;
+- one Tick Label group for each Tick group;
+- Major and Minor Grid groups for both axes;
+- Title, X Label, Y Label, and Legend components.
+
+Tick, Tick Label, Grid, and Legend targets may be recreated by Matplotlib. Their selectors identify the semantic group rather than a transient artist instance.
+
+## Artist properties and role data
+
+Line visual properties use Controller names: `label`, `color`, `linestyle`, `linewidth`, `marker`, `markersize`, `markerfacecolor`, `markeredgecolor`, `markeredgewidth`, `alpha`, `visible`, and `zorder`.
+
+Scatter visual properties use `label`, `color`, `edgecolor`, `size`, `marker`, `linewidth`, `alpha`, `visible`, and `zorder`.
+
+Role-specific `data` fields are:
+
+| Role | Data fields |
+| --- | --- |
+| `line` | finite, equal-length `x` and `y` arrays |
+| `function_curve` | `expression`, `x_start`, `x_stop` |
+| `data_plot` | `x_ref`, `y_ref` |
+| `scatter` | `x_ref`, `y_ref` |
+| `interpolation` | `x_ref`, `y_ref`, `method`, `k`, `samples`, `lam`, `lam_auto` |
+| `fit_curve` | `x_ref`, `y_ref`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
+
+Free Text, Title, and Axis Label records share Text properties: `text`, `position`, `color`, `fontsize`, `fontfamily`, `fontweight`, `fontstyle`, `rotation`, horizontal/vertical alignment, `usetex`, `alpha`, and `visible`.
+
+Legend properties use `location`, `ncols`, `fontsize`, frame colors/state, `framealpha`, `title`, and `visible`.
+
+## Data references, colors, and palette cursor
+
+`x_ref` and `y_ref` contain `project_id`, `sheet_id`, and `column_id`. The reference must resolve inside the same project. X accepts Number or Datetime columns; Y accepts Number columns.
+
+Color properties are normalized to uppercase `#RRGGBB` or `#RRGGBBAA`. An Axes color-cycle snapshot is JSON `null` when no palette is active; otherwise it stores:
+
+- `palette.id`, `name`, `category`, and `source`;
+- the complete ordered `palette.colors` snapshot;
+- `next_index`, the next palette position.
+
+Embedding the palette keeps a project reproducible if a custom application palette later changes or is deleted.
+
+## Stable IDs and migration
+
+Existing Plot, Scatter, Fit, and Interpolation `object_id` values are retained. Curve and Text IDs are also retained when present. Older records without IDs receive deterministic UUID5 values derived from the project ID and their legacy semantic path; repeating the same migration therefore produces identical IDs.
+
+- v4 is migrated to v5 first, adding missing color-cycle and color-order state.
+- v5 is then converted to the v6 component tree.
+- v6 is normalized and validated directly.
+- v1-v3 and unknown versions are rejected.
+
+Migration functions operate on deep copies and do not modify the supplied dictionary.
+
+After validation, restore materializes Figure, Axes/layout groups, fixed semantic
+children, chart/Text artists, and Legend directly from the v6 tree. It does not
+create legacy chart arrays or Modifier records as an intermediate runtime
+format. The Registry tree is subsequently the source for every save.
+
+## Validation and writes
+
+Before Table or Figure application state changes, the loader validates:
+
+- exactly one Figure root matching `root_component_id`;
+- unique component IDs, known kind/role pairs, existing parents, an acyclic connected hierarchy, and unique semantic selectors;
+- required fixed Axes children and valid subplot groups;
+- property/data JSON types, finite numbers, normalized colors, and unique chart order values;
+- data references, compatible column types, interpolation methods, and fitting engines.
+
+Project writes use a temporary file followed by atomic replacement. If the operating system blocks replacement, saving fails and leaves the previous project file unchanged. `size_inches` and `dpi` remain document/export values; display device-pixel ratio does not alter them.

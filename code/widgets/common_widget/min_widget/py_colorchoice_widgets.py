@@ -825,27 +825,6 @@ class ColorChoiceWidget(QFrame):
     def selection(self) -> ColorSelection:
         return self._selection
 
-    def updateColor(self, color, category=None, subcategory=None, index=0):
-        selection = ColorSelection(color)
-        if category is not None:
-            for palette in self.color_library.palettes():
-                if palette.category == category and (
-                    subcategory is None or palette.name == subcategory
-                ):
-                    try:
-                        selection = ColorSelection(color, palette, int(index))
-                    except ValueError:
-                        pass
-                    break
-        return self.set_selection(
-            selection,
-            emit=True,
-            record_recent=self.auto_record_recent,
-        )
-
-    def get_color(self):
-        return self.color()
-
 
 def choose_palette(
     parent,

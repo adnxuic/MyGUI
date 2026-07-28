@@ -7,7 +7,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from Qt_core import QApplication, QDialog, QObject, QSettings, Qt
 
-from code.widgets.fig_control_window.py_fig_modify_window import PyFigModWidget
+from code.widgets.fig_control_window.figure_inspector import (
+    FigureInspectorPanel,
+)
 from code.widgets.theme import CONTROL_SIZES
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
@@ -198,10 +200,10 @@ class GuiLayoutTests(unittest.TestCase):
         self._show(window)
         try:
             figure_window = window.figure_window
-            inspector = window.fig_control_window.figmod_window
+            inspector = window.fig_control_window.figure_inspector_host
             self.assertTrue(window.table.empty_label.wordWrap())
             self.assertIs(figure_window.content_stack.currentWidget(), figure_window.empty_state)
-            self.assertIs(inspector.stacklayout.currentWidget(), inspector.empty_state)
+            self.assertIsNone(inspector.current_figure_inspector())
             window.title_bar.change_button.setChecked(True)
             figure_window.empty_state.primary_button.click()
             self.app.processEvents()
@@ -218,23 +220,26 @@ class GuiLayoutTests(unittest.TestCase):
             )
             self.app.processEvents()
             self.assertIs(figure_window.content_stack.currentWidget(), figure_window.tabwindow)
-            self.assertIsInstance(inspector.stacklayout.currentWidget(), PyFigModWidget)
+            self.assertIsInstance(
+                inspector.current_figure_inspector(),
+                FigureInspectorPanel,
+            )
             self.assertIs(
-                figure_window.current_fig_modify_widget.stacklayout.currentWidget(),
-                figure_window.current_fig_modify_widget.no_axes_state,
+                figure_window.current_figure_inspector.current_panel(),
+                figure_window.current_figure_inspector.no_axes_state,
             )
 
             figure_window.current_canva.add_axes()
             self.app.processEvents()
             self.assertIsNot(
-                figure_window.current_fig_modify_widget.stacklayout.currentWidget(),
-                figure_window.current_fig_modify_widget.no_axes_state,
+                figure_window.current_figure_inspector.current_panel(),
+                figure_window.current_figure_inspector.no_axes_state,
             )
-            axes_widget = figure_window.current_fig_modify_widget.fine_all_mod_widget(
+            axes_widget = figure_window.current_figure_inspector.find_axes_inspector(
                 figure_window.current_canva.current_axes
             )
             self.assertIsNotNone(axes_widget)
-            section_scroll_areas = axes_widget.axes_mod_window.scroll_pages
+            section_scroll_areas = axes_widget.semantic_panel.section_pages
             self.assertEqual(len(section_scroll_areas), 6)
             self.assertTrue(all(area.widgetResizable() for area in section_scroll_areas))
             self.assertGreater(
@@ -245,7 +250,51 @@ class GuiLayoutTests(unittest.TestCase):
             figure_window.clear_figures()
             self.app.processEvents()
             self.assertIs(figure_window.content_stack.currentWidget(), figure_window.empty_state)
-            self.assertIs(inspector.stacklayout.currentWidget(), inspector.empty_state)
+            self.assertIsNone(inspector.current_figure_inspector())
+        finally:
+            self._close(window)
+
+    def test_figure_inspector_host_tracks_project_removal_by_tab_index(self):
+        window = MainWindow()
+        self._show(window)
+        try:
+            figure_window = window.figure_window
+            host = window.fig_control_window.figure_inspector_host
+            figure_window.add_figure(
+                width=4,
+                height=3,
+                dpi=100,
+                style="default",
+                canva_name="First",
+            )
+            first_inspector = host.current_figure_inspector()
+            figure_window.add_figure(
+                width=4,
+                height=3,
+                dpi=100,
+                style="default",
+                canva_name="Second",
+            )
+            second_inspector = host.current_figure_inspector()
+            self.assertIsNot(first_inspector, second_inspector)
+
+            figure_window.tabwindow.setCurrentIndex(0)
+            self.app.processEvents()
+            self.assertIs(host.current_figure_inspector(), first_inspector)
+
+            figure_window.remove_project("First")
+            self.app.processEvents()
+            self.assertEqual(figure_window.tabwindow.count(), 1)
+            self.assertIs(
+                figure_window.current_figure_inspector,
+                second_inspector,
+            )
+            self.assertIs(host.current_figure_inspector(), second_inspector)
+
+            figure_window.remove_project("Second")
+            self.app.processEvents()
+            self.assertEqual(figure_window.tabwindow.count(), 0)
+            self.assertIsNone(host.current_figure_inspector())
         finally:
             self._close(window)
 

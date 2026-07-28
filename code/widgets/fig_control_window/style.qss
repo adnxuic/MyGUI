@@ -1,5 +1,5 @@
 QFrame#fig_control_window,
-QFrame#fig_modify_window,
+QFrame#figure_inspector_host,
 QFrame#tex_window,
 QFrame#matlab_window
 {
