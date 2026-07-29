@@ -15,7 +15,13 @@ from code.figuremodify.components import (
 from code.figuremodify.style_base.color_models import PaletteDefinition, builtin_palettes
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
     PyCurveDialog,
+    PyFitDialog,
+    PyInterpolationDialog,
     PyPlotDialog,
+    PyScatterDialog,
+)
+from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+    PyTextDialog,
 )
 from main import MainWindow
 
@@ -138,6 +144,9 @@ class ColorIntegrationTests(unittest.TestCase):
             "color_cycle",
             state.to_dict(),
         )
+        self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        ).set_property("style", "dark_background")
 
         cancelled = PyCurveDialog("Curve", self.window.figure_window)
         self.assertEqual(cancelled.color_input.color(), "#FF0000")
@@ -170,6 +179,40 @@ class ColorIntegrationTests(unittest.TestCase):
         self.assertEqual(self.window.color_library.recent_colors, ["#FF0000"])
         created.close()
         created.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_style_cycle_cancel_and_failure_leave_axes_state_null(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "ggplot").ok)
+        axes_id = self.canvas.current_axes_component_id
+
+        cancelled = PyCurveDialog("Curve", self.window.figure_window)
+        self.assertEqual(cancelled.color_input.color(), "#E24A33")
+        cancelled.reject()
+        self.assertIsNone(
+            self.canvas.axes_commands.cycle_state(
+                axes_id
+            ).active_palette
+        )
+
+        failed = PyCurveDialog("Curve", self.window.figure_window)
+        failed.expression_edit.setText("__import__('os')")
+        with patch(
+            "code.widgets.title_bar.titlebar_dialog."
+            "py_chart_dialog.QMessageBox.warning"
+        ):
+            failed.accept()
+        self.assertIsNone(
+            self.canvas.axes_commands.cycle_state(
+                axes_id
+            ).active_palette
+        )
+
+        cancelled.deleteLater()
+        failed.close()
+        failed.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_plot_dialog_uses_readable_controller_default_and_canonical_values(self):
@@ -227,6 +270,299 @@ class ColorIntegrationTests(unittest.TestCase):
         default_dialog.deleteLater()
         dashed_dialog.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_creation_dialog_defaults_follow_current_figure_style(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "fivethirtyeight").ok)
+
+        curve = PyCurveDialog("Curve", self.window.figure_window)
+        plot = PyPlotDialog("Plot", self.window.figure_window)
+        scatter = PyScatterDialog("Scatter", self.window.figure_window)
+        fit = PyFitDialog("Fit", self.window.figure_window)
+        interpolation = PyInterpolationDialog(
+            "Interpolation",
+            self.window.figure_window,
+        )
+        text = PyTextDialog("Text", self.window.figure_window)
+        dialogs = (curve, plot, scatter, fit, interpolation, text)
+        try:
+            for dialog in (curve, plot, scatter, fit, interpolation):
+                self.assertEqual(dialog.color_input.color(), "#008FD5")
+            self.assertEqual(curve.appearance_input.style(), "-")
+            self.assertEqual(plot.appearance_input.linewidth(), 4.0)
+            self.assertEqual(scatter.style_input.currentText(), "o")
+            self.assertEqual(scatter.size_input.value(), 36.0)
+            self.assertEqual(text.font_input.currentText(), "sans-serif")
+            self.assertEqual(text.font_size_input.value(), 14.0)
+
+            self.assertTrue(
+                root.set_property("style", "seaborn-v0_8-poster").ok
+            )
+            poster = PyScatterDialog(
+                "Scatter",
+                self.window.figure_window,
+            )
+            try:
+                self.assertAlmostEqual(
+                    poster.size_input.value(),
+                    125.44,
+                    places=2,
+                )
+            finally:
+                poster.close()
+                poster.deleteLater()
+        finally:
+            for dialog in dialogs:
+                dialog.close()
+                dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_five_chart_dialogs_advance_style_cycle_and_sync_linewidth(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "fivethirtyeight").ok)
+
+        dialog_factories = (
+            lambda: PyCurveDialog("Curve", self.window.figure_window),
+            lambda: PyPlotDialog("Plot", self.window.figure_window),
+            lambda: PyScatterDialog("Scatter", self.window.figure_window),
+            lambda: PyFitDialog("Fit", self.window.figure_window),
+            lambda: PyInterpolationDialog(
+                "Interpolation", self.window.figure_window
+            ),
+        )
+        dialogs = []
+        try:
+            for factory in dialog_factories:
+                dialog = factory()
+                dialogs.append(dialog)
+                dialog.accept()
+
+            axes_id = self.canvas.current_axes_component_id
+            controllers = self.canvas.component_registry.query(
+                capabilities={"color", "data"},
+                parent_id=axes_id,
+                recursive=True,
+            )
+            defaults = self.canvas.component_creation_defaults()
+            self.assertEqual(
+                [
+                    item.state.properties["color"].casefold()
+                    for item in controllers
+                ],
+                [
+                    color.casefold()
+                    for color in defaults.chart_palette.colors[:5]
+                ],
+            )
+            cycle = self.canvas.axes_commands.cycle_state(axes_id)
+            self.assertEqual(
+                cycle.active_palette.source,
+                "matplotlib-style",
+            )
+            self.assertEqual(cycle.next_index, 5)
+
+            plot = self.canvas.component_registry.query(
+                role=ComponentRole.DATA_PLOT
+            )[0]
+            self.assertEqual(plot.state.properties["linewidth"], 4.0)
+            self.assertEqual(plot.state.properties["markersize"], 6.0)
+            self.assertEqual(plot.resolve_target().get_linewidth(), 4.0)
+            editor = self.canvas.component_editor_manager.editor(
+                plot.component_id
+            )
+            self.assertEqual(
+                editor.section("appearance")
+                .editor("linewidth")
+                .value(),
+                4.0,
+            )
+            scatter = self.canvas.component_registry.query(
+                role=ComponentRole.SCATTER
+            )[0]
+            self.assertEqual(
+                scatter.state.properties["linewidth"],
+                defaults.scatter.linewidth,
+            )
+            self.assertEqual(
+                scatter.state.properties["size"],
+                defaults.scatter.size,
+            )
+        finally:
+            for dialog in dialogs:
+                dialog.close()
+                dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_single_custom_color_does_not_advance_style_cycle(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "ggplot").ok)
+        dialog = PyCurveDialog("Curve", self.window.figure_window)
+        try:
+            dialog.color_input.set_color("#123456")
+            dialog.accept()
+            cycle = self.canvas.axes_commands.cycle_state(
+                self.canvas.current_axes_component_id
+            )
+            self.assertEqual(
+                cycle.active_palette.source,
+                "matplotlib-style",
+            )
+            self.assertEqual(cycle.next_index, 0)
+
+            next_dialog = PyCurveDialog(
+                "Curve",
+                self.window.figure_window,
+            )
+            try:
+                self.assertEqual(
+                    next_dialog.color_input.color(),
+                    "#E24A33",
+                )
+            finally:
+                next_dialog.close()
+                next_dialog.deleteLater()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_style_change_replaces_only_automatic_palette_for_new_charts(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "ggplot").ok)
+        first_dialog = PyCurveDialog(
+            "Curve",
+            self.window.figure_window,
+        )
+        second_dialog = None
+        try:
+            first_dialog.accept()
+            first = self.canvas.component_registry.query(
+                role=ComponentRole.FUNCTION_CURVE
+            )[0]
+            first_color = first.state.properties["color"]
+
+            self.assertTrue(
+                root.set_property("style", "dark_background").ok
+            )
+            second_dialog = PyCurveDialog(
+                "Curve",
+                self.window.figure_window,
+            )
+            self.assertEqual(
+                second_dialog.color_input.color(),
+                "#FEFFB3",
+            )
+            second_dialog.accept()
+
+            curves = self.canvas.component_registry.query(
+                role=ComponentRole.FUNCTION_CURVE
+            )
+            self.assertEqual(curves[0].state.properties["color"], first_color)
+            self.assertEqual(
+                curves[1].state.properties["color"].casefold(),
+                "#feffb3",
+            )
+            cycle = self.canvas.axes_commands.cycle_state(
+                self.canvas.current_axes_component_id
+            )
+            self.assertEqual(
+                cycle.active_palette,
+                self.canvas.component_creation_defaults().chart_palette,
+            )
+            self.assertEqual(cycle.next_index, 2)
+        finally:
+            first_dialog.close()
+            first_dialog.deleteLater()
+            if second_dialog is not None:
+                second_dialog.close()
+                second_dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_style_color_cycles_are_independent_per_axes(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "default").ok)
+        first_axes_id = self.canvas.current_axes_component_id
+        first_dialog = PyCurveDialog(
+            "Curve",
+            self.window.figure_window,
+        )
+        second_dialog = None
+        next_first_dialog = None
+        try:
+            first_dialog.accept()
+            self.canvas.add_axes()
+            second_axes_id = self.canvas.current_axes_component_id
+            second_dialog = PyCurveDialog(
+                "Curve",
+                self.window.figure_window,
+            )
+            self.assertEqual(second_dialog.color_input.color(), "#1F77B4")
+            second_dialog.accept()
+
+            self.canvas.set_current_axes_by_index(0)
+            next_first_dialog = PyCurveDialog(
+                "Curve",
+                self.window.figure_window,
+            )
+            self.assertEqual(
+                next_first_dialog.color_input.color(),
+                "#FF7F0E",
+            )
+            self.assertEqual(
+                self.canvas.axes_commands.cycle_state(
+                    first_axes_id
+                ).next_index,
+                1,
+            )
+            self.assertEqual(
+                self.canvas.axes_commands.cycle_state(
+                    second_axes_id
+                ).next_index,
+                1,
+            )
+        finally:
+            first_dialog.close()
+            first_dialog.deleteLater()
+            for dialog in (second_dialog, next_first_dialog):
+                if dialog is not None:
+                    dialog.close()
+                    dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_dark_background_text_inherits_style_and_syncs_state(self):
+        root = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        self.assertTrue(root.set_property("style", "dark_background").ok)
+        dialog = PyTextDialog("Text", self.window.figure_window)
+        try:
+            dialog.text_edit.setText("styled")
+            dialog.accept()
+            controller = self.canvas.component_registry.query(
+                role=ComponentRole.TEXT
+            )[0]
+            self.assertEqual(
+                controller.state.properties["color"].casefold(),
+                "#ffffff",
+            )
+            self.assertEqual(
+                controller.resolve_target().get_color(),
+                "white",
+            )
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_batch_failure_rolls_back_artist_and_widget_colors(self):
         self.canvas.add_curve(

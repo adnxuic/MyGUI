@@ -193,6 +193,82 @@ class ProjectIoTests(unittest.TestCase):
             self.assertEqual(state.active_palette.id, "custom:project-only")
             self.assertEqual(state.active_palette.colors, ("#11223380", "#ABCDEF"))
             self.assertEqual(state.next_index, 1)
+            status = restored.axes_commands.palette_status(
+                restored.current_axes_component_id
+            )
+            self.assertFalse(status.uses_style_default)
+            self.assertEqual(status.palette.name, "Project only")
+        finally:
+            loaded.close()
+            self.app.processEvents()
+
+    def test_style_palette_cursor_roundtrip_and_null_cycle_fallback(self):
+        canvas, _sheet = self.build_project()
+        root = canvas.component_registry.get(canvas.root_component_id)
+        self.assertTrue(root.set_property("style", "ggplot").ok)
+        self.assertIsNone(
+            canvas.axes_commands.cycle_state(
+                canvas.current_axes_component_id
+            ).active_palette
+        )
+
+        preview = canvas.creation_color_cycle()
+        selection = preview.peek()
+        self.assertEqual(selection.color, "#348ABD")
+        canvas.add_curve(
+            "x",
+            0.0,
+            1.0,
+            "-",
+            selection.color,
+            "curve",
+        )
+        result = canvas.axes_commands.commit_color_selection(
+            canvas.current_axes_component_id,
+            selection,
+            preview_cycle=preview,
+        )
+        self.assertTrue(result.ok)
+        save_project_snapshot(self.path, self.window.figure_window)
+        saved = load_project_file(self.path)
+        self.assertEqual(saved["schema_version"], PROJECT_SCHEMA_VERSION)
+
+        loaded = MainWindow()
+        try:
+            restore_project_snapshot(
+                self.path,
+                loaded.table,
+                loaded.figure_window,
+            )
+            restored = loaded.figure_window.current_canva
+            restored_root = restored.component_registry.get(
+                restored.root_component_id
+            )
+            self.assertEqual(
+                restored_root.state.properties["style"],
+                "ggplot",
+            )
+            cycle = restored.axes_commands.cycle_state(
+                restored.current_axes_component_id
+            )
+            self.assertEqual(
+                cycle.active_palette.source,
+                "matplotlib-style",
+            )
+            self.assertEqual(cycle.next_index, 2)
+            self.assertEqual(
+                restored.creation_color_cycle().peek().color,
+                "#988ED5",
+            )
+            status = restored.axes_commands.palette_status(
+                restored.current_axes_component_id
+            )
+            self.assertTrue(status.uses_style_default)
+            self.assertEqual(status.figure_style, "ggplot")
+            self.assertEqual(
+                status.palette.colors,
+                cycle.active_palette.colors,
+            )
         finally:
             loaded.close()
             self.app.processEvents()

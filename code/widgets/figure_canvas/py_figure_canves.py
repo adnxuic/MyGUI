@@ -57,7 +57,14 @@ from code.database.table_document import new_id
 from code.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
 from code.database.safe_expression import evaluate_curve_expression
 from code.widgets.common_widget.min_widget.color_library import ColorLibrary
-from code.figuremodify.style_base.color_models import normalize_color
+from code.figuremodify.style_base.color_models import (
+    ColorCycleState,
+    normalize_color,
+)
+from code.figuremodify.style_base.creation_defaults import (
+    ComponentCreationDefaults,
+    resolve_component_creation_defaults,
+)
 
 import matplotlib as mpl
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -66,7 +73,7 @@ from matplotlib.backends.backend_qtagg import (
 )
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-from matplotlib.style import use
+from matplotlib import style as mpl_style
 
 import numpy as np
 mpl.use("QtAgg")
@@ -98,7 +105,7 @@ class PyFigureCanvas(QWidget):
             if isinstance(component_tree, dict)
             else None
         )
-        with mpl.style.context(style):
+        with mpl_style.context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
         # QtAgg scales ``Figure.dpi`` to the active screen's device pixel
         # ratio.  Keep the user/project DPI separate so that moving the
@@ -303,6 +310,24 @@ class PyFigureCanvas(QWidget):
             return str(state.properties["style"] or "default")
         except Exception:
             return str(self.style or "default")
+
+    def component_creation_defaults(self) -> ComponentCreationDefaults:
+        """Resolve creation defaults from the current Figure style."""
+
+        return resolve_component_creation_defaults(self.component_style)
+
+    def creation_color_cycle(self) -> ColorCycleState:
+        """Preview the active user palette or current style color cycle."""
+
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before choosing a chart color.")
+        defaults = self.component_creation_defaults()
+        return self.axes_commands.preview_color_cycle(
+            axes_id,
+            defaults.chart_palette,
+            self._claim_color_order(),
+        )
 
     def _component_id(self, semantic_path: str) -> str:
         return self._component_id_overrides.get(
@@ -516,7 +541,8 @@ class PyFigureCanvas(QWidget):
             properties=properties,
             data=data,
         )
-        controller = controller_type(state)
+        controller = controller_type(state, target=artist)
+        controller.sync_from_target()
         self.component_registry.register(controller, target=artist)
         artist.set_gid(component_id)
         self.component_registry.request_update(
@@ -552,7 +578,8 @@ class PyFigureCanvas(QWidget):
                 "visible": bool(text_artist.get_visible()),
             },
         )
-        controller = TextController(state)
+        controller = TextController(state, target=text_artist)
+        controller.sync_from_target()
         self.component_registry.register(controller, target=text_artist)
         text_artist.set_gid(component_id)
         return controller
@@ -761,7 +788,7 @@ class PyFigureCanvas(QWidget):
                 raise ValueError("Subplot slots are invalid.")
         first_axes = None
         first_controller = None
-        with mpl.style.context(self.component_style):
+        with mpl_style.context(self.component_style):
             for i, slot in enumerate(subplot_slots):
                 axe = self.fig.add_subplot(nrows, ncols, slot)
                 axes_index = start_index + i
@@ -803,7 +830,7 @@ class PyFigureCanvas(QWidget):
         object_id = object_id or new_id()
         x = np.linspace(x_start, x_stop, 1000)
         y = evaluate_curve_expression(func_text, x)
-        with mpl.style.context(self.component_style):
+        with mpl_style.context(self.component_style):
             line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
         component_order = self._claim_color_order(color_order)
         controller = self._register_chart_controller(
@@ -842,7 +869,7 @@ class PyFigureCanvas(QWidget):
 
         color = normalize_color(color)
         object_id = object_id or new_id()
-        with mpl.style.context(self.component_style):
+        with mpl_style.context(self.component_style):
             line, = self.current_axes.plot(
                 np.asarray(x),
                 np.asarray(y),
@@ -873,13 +900,22 @@ class PyFigureCanvas(QWidget):
     # Add line plot
     def add_plot(self, x, y, style, size, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
                  object_id: str | None = None,
-                 color_order: int | None = None):
+                 color_order: int | None = None,
+                 *, linewidth: float | None = None):
         """Add plot."""
 
         color = normalize_color(color)
         object_id = object_id or new_id()
-        with mpl.style.context(self.component_style):
-            line, = self.current_axes.plot(x, y, style, markersize=size, color=color, label=label)
+        plot_kwargs = {
+            "linestyle": style,
+            "markersize": size,
+            "color": color,
+            "label": label,
+        }
+        if linewidth is not None:
+            plot_kwargs["linewidth"] = float(linewidth)
+        with mpl_style.context(self.component_style):
+            line, = self.current_axes.plot(x, y, **plot_kwargs)
         component_order = self._claim_color_order(color_order)
         controller = self._register_chart_controller(
             DataPlotController,
@@ -910,7 +946,7 @@ class PyFigureCanvas(QWidget):
 
         color = normalize_color(color)
         object_id = object_id or new_id()
-        with mpl.style.context(self.component_style):
+        with mpl_style.context(self.component_style):
             scatter = self.current_axes.scatter(x, y, s=size, c=color, marker=marker, label=label)
         component_order = self._claim_color_order(color_order)
         controller = self._register_chart_controller(
@@ -940,7 +976,7 @@ class PyFigureCanvas(QWidget):
                       engine: str = "Python", fit_type=None,
                       fit_options=None, fit_result=None, expression: str = "",
                       x_start: float | None = None, x_stop: float | None = None,
-                      style: str = "solid", object_id: str | None = None,
+                      style: str | None = None, object_id: str | None = None,
                       color_order: int | None = None):
         """Add fit curve."""
 
@@ -970,8 +1006,11 @@ class PyFigureCanvas(QWidget):
                 status_messages.show_error("Saved fit expression could not be restored; showing source data.")
                 expression = ""
 
-        with mpl.style.context(self.component_style):
-            line, = self.current_axes.plot(line_x, line_y, ls=style, color=color, label=label)
+        plot_kwargs = {"color": color, "label": label}
+        if style is not None:
+            plot_kwargs["linestyle"] = style
+        with mpl_style.context(self.component_style):
+            line, = self.current_axes.plot(line_x, line_y, **plot_kwargs)
         component_order = self._claim_color_order(color_order)
         controller = self._register_chart_controller(
             FitCurveController,
@@ -1012,7 +1051,7 @@ class PyFigureCanvas(QWidget):
         """Add interpolate curve."""
 
         color = normalize_color(color)
-        with mpl.style.context(self.component_style):
+        with mpl_style.context(self.component_style):
             x_values = np.asarray(x)
             y_values = np.asarray(y)
             if allow_empty and (x_values.size == 0 or y_values.size == 0):
@@ -1081,21 +1120,22 @@ class PyFigureCanvas(QWidget):
             return tex_config.is_tex_enabled()
         return bool(usetex) and tex_config.is_tex_enabled()
 
-    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
+    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: float,
                  usetex: bool | None = None,
                  object_id: str | None = None):
         """Add text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
-        text_artist = self.current_axes.text(
-            x,
-            y,
-            text,
-            family=fontfamily,
-            fontsize=fontsize,
-            transform=self.current_axes.transAxes,
-            usetex=False,
-        )
+        with mpl_style.context(self.component_style):
+            text_artist = self.current_axes.text(
+                x,
+                y,
+                text,
+                family=fontfamily,
+                fontsize=fontsize,
+                transform=self.current_axes.transAxes,
+                usetex=False,
+            )
         object_id = object_id or new_id()
         parent_id = self.current_axes_component_id
         controller = self._register_text_controller(
@@ -1118,20 +1158,21 @@ class PyFigureCanvas(QWidget):
         self.redraw()
         return text_artist
 
-    def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
+    def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: float,
                         usetex: bool | None = None,
                         object_id: str | None = None):
         """Add global text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
-        text_artist = self.fig.text(
-            x,
-            y,
-            text,
-            family=fontfamily,
-            fontsize=fontsize,
-            usetex=False,
-        )
+        with mpl_style.context(self.component_style):
+            text_artist = self.fig.text(
+                x,
+                y,
+                text,
+                family=fontfamily,
+                fontsize=fontsize,
+                usetex=False,
+            )
         object_id = object_id or new_id()
         controller = self._register_text_controller(
             object_id,
@@ -1162,7 +1203,7 @@ class PyFigureCanvas(QWidget):
             save_dpi = self.document_dpi
         else:
             save_dpi = dpi
-        with mpl.style.context(self.component_style):
+        with mpl_style.context(self.component_style):
             self.fig.savefig(filename, dpi=save_dpi)
 
     def dependent_records(self, refs: set[ColumnRef]) -> list[ComponentState]:

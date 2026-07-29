@@ -58,6 +58,31 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 24. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
 25. Enter invalid expression, data reference, color, range, and interpolation values. Confirm each failed operation restores the last valid control and artist state and reports exactly one red Message Bar error.
 
+## Matplotlib Style Creation Defaults
+
+1. Create a `fivethirtyeight` project and add Axes. Open Curve, Plot, Scatter,
+   Fit, and Interpolation dialogs; confirm their first color is `#008FD5` and
+   the Plot line width is `4`.
+2. Create charts successfully one at a time and confirm their default colors
+   advance through the style cycle. Cancel a dialog and confirm the next color
+   is unchanged.
+3. Create a `seaborn-v0_8-poster` project and confirm the Scatter size is
+   `125.44`, including its decimal value and range.
+4. Create a `dark_background` project, add free Text, and confirm the new text
+   is white. Switch back to another canvas and reopen Text; confirm its font
+   and size follow that canvas rather than the previous dialog.
+5. Open the Axes Palette section and confirm it shows `Style default`, the
+   Figure style name, and its color strip. Switch to a named built-in or
+   custom palette and confirm the name and colors are shown and applied to
+   existing and later charts. Cancel the chooser and confirm the source rolls
+   back.
+6. Switch the Palette source back to `Style default` and confirm the current
+   Figure style colors are reapplied. Change the Figure style in the
+   Inspector and confirm existing artists do not change until this explicit
+   Palette switch, while later Style-default creations use the new style.
+7. Save and reopen the project. Confirm existing component properties, Figure
+   style, active palette source, and next color position are restored.
+
 ## Optional Local Integrations
 
 These checks depend on local system setup and should not block baseline GUI maintenance.

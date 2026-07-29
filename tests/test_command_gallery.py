@@ -16,6 +16,9 @@ from code.widgets.title_bar.py_title_menu import (
     SelectorStyleMenuBar,
 )
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog
+from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+    PyTextDialog,
+)
 
 
 class CommandGalleryTests(unittest.TestCase):
@@ -60,6 +63,22 @@ class CommandGalleryTests(unittest.TestCase):
             self.assertIs(action.dialog, first_dialog)
             self.assertIs(first_dialog.parentWidget(), host)
             self.assertEqual(execute.call_count, 2)
+        finally:
+            host.close()
+            self.app.processEvents()
+
+    def test_text_creation_dialog_is_rebuilt_for_each_trigger(self):
+        host = QMainWindow()
+        bar = SelectorElementMenuBar()
+        host.setCentralWidget(bar)
+        action = bar.action_dict["Text"]
+        try:
+            with patch.object(PyTextDialog, "exec", return_value=0) as execute:
+                action.trigger()
+                action.trigger()
+
+            self.assertEqual(execute.call_count, 2)
+            self.assertIsNone(action.dialog)
         finally:
             host.close()
             self.app.processEvents()

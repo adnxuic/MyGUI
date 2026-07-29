@@ -81,7 +81,7 @@ The controlled kind/role combinations are:
 
 ## Figure hierarchy and fixed components
 
-`figure.root_component_id` identifies the sole parentless `figure/figure` record. Its properties include `name`, `style`, `size_inches`, `dpi`, `facecolor`, `edgecolor`, `frameon`, and `constrained_layout`.
+`figure.root_component_id` identifies the sole parentless `figure/figure` record. Its properties include `name`, `style`, `size_inches`, `dpi`, `facecolor`, `edgecolor`, `frameon`, and `constrained_layout`. The saved `style` supplies defaults only for components created later; every existing component restores from its concrete saved properties.
 
 Each `axes/axes` child stores:
 
@@ -134,7 +134,13 @@ Color properties are normalized to uppercase `#RRGGBB` or `#RRGGBBAA`. An Axes c
 - the complete ordered `palette.colors` snapshot;
 - `next_index`, the next palette position.
 
-Embedding the palette keeps a project reproducible if a custom application palette later changes or is deleted.
+Embedding the palette keeps a project reproducible if a custom application palette later changes or is deleted. A palette derived from `axes.prop_cycle` uses `source: "matplotlib-style"` and is stored after the first successful palette-backed chart creation. Older or untouched Axes may retain `color_cycle: null`; their next creation position is derived from the next persisted chart order.
+
+The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
+`Style default`. Any other palette source is `User-selected`; the embedded
+palette name is displayed even when its application-level custom palette has
+later been renamed or deleted. Switching sources updates this existing
+snapshot only and does not change schema v6.
 
 ## Stable IDs and migration
 

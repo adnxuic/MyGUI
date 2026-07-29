@@ -8,11 +8,14 @@ from code.widgets.fig_control_window.component_editors import (
     DataReferenceInput,
     InterpolationOptionsInput,
     LineAppearanceInput,
+    ScatterStyleEditor,
 )
 from code.widgets import qss_func
 
 from code.database import ColumnRef
-from code.figuremodify.components import DataPlotController
+from code.figuremodify.style_base.creation_defaults import (
+    resolve_component_creation_defaults,
+)
 from code import status_messages
 
 import os
@@ -50,6 +53,13 @@ def _new_color_input(figure_window: PyFigureWindow) -> ColorChoiceWidget:
     )
 
 
+def _creation_defaults(figure_window: PyFigureWindow):
+    canvas = getattr(figure_window, "current_canva", None)
+    if canvas is None:
+        return resolve_component_creation_defaults("default")
+    return canvas.component_creation_defaults()
+
+
 def _new_data_reference_input(
     figure_window: PyFigureWindow,
     parent=None,
@@ -77,7 +87,10 @@ def _new_line_appearance_input(
 
 
 def _commit_color_input(figure_window: PyFigureWindow, widget: ColorChoiceWidget) -> None:
-    if figure_window.commit_current_canvas_color(widget.selection()):
+    if figure_window.commit_current_canvas_color(
+        widget.selection(),
+        preview_cycle=widget.colorselector,
+    ):
         figure_window.color_library.record_recent(widget.color())
 
 
@@ -95,6 +108,7 @@ class PyCurveDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/chart_images/curve.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
+        self.creation_defaults = _creation_defaults(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -127,7 +141,8 @@ class PyCurveDialog(QDialog):
             figure_window,
             parent=self,
             label="x",
-            style="-",
+            style=self.creation_defaults.line.linestyle,
+            linewidth=self.creation_defaults.line.linewidth,
             show_linewidth=False,
         )
         self.style_input = self.appearance_input.style_input
@@ -194,6 +209,7 @@ class PyPlotDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/chart_images/plot.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
+        self.creation_defaults = _creation_defaults(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -211,14 +227,17 @@ class PyPlotDialog(QDialog):
             figure_window,
             parent=self,
             label="plot",
-            style=DataPlotController.default_properties()["linestyle"],
-            linewidth=2.0,
+            style=self.creation_defaults.line.linestyle,
+            linewidth=self.creation_defaults.line.linewidth,
         )
         self.line_style_editor = self.appearance_input.line_style_editor
         self.style_input = self.appearance_input.style_input
-        self.size_input = self.appearance_input.linewidth_input
-        self.size_input.setRange(0.1, 10.0)
-        self.size_input.setSingleStep(0.1)
+        self.linewidth_input = self.appearance_input.linewidth_input
+        # Compatibility name retained for tests and callers that inspected
+        # the former dialog field directly.
+        self.size_input = self.linewidth_input
+        self.linewidth_input.setRange(0.0, 1_000_000.0)
+        self.linewidth_input.setSingleStep(0.1)
         self.color_input = self.appearance_input.color_input
         self.label_input = self.appearance_input.label_input
         self.layout.addWidget(self.appearance_input)
@@ -259,11 +278,12 @@ class PyPlotDialog(QDialog):
 
         self.figure_window.current_canva.add_plot(x=pair.x, y=pair.y,
                                                   style=self.line_style_editor.style(),
-                                                  size=self.size_input.value(),
+                                                  size=self.creation_defaults.line.markersize,
                                                   color=self.color_input.color(),
                                                   label=self.label_input.text(),
                                                   x_ref=x_ref,
-                                                  y_ref=y_ref)
+                                                  y_ref=y_ref,
+                                                  linewidth=self.linewidth_input.value())
 
         _commit_color_input(self.figure_window, self.color_input)
         super().accept()
@@ -288,6 +308,7 @@ class PyScatterDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/chart_images/scatter.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
+        self.creation_defaults = _creation_defaults(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -301,23 +322,19 @@ class PyScatterDialog(QDialog):
         self.y_data_layout = self.data_reference_input.y_layout
         self.layout.addWidget(self.data_reference_input)
 
-        # Size selection
-        self.size_input = QSpinBox(self)
-        self.size_input.setRange(0, 100)
-        self.size_input.setValue(20)
-        self.layout.addWidget(QLabel('Size:'))
-        self.layout.addWidget(self.size_input)
+        self.scatter_style_editor = ScatterStyleEditor(
+            marker=self.creation_defaults.scatter.marker,
+            size=self.creation_defaults.scatter.size,
+            parent=self,
+        )
+        self.size_input = self.scatter_style_editor.size_input
+        self.style_input = self.scatter_style_editor.marker_input
+        self.layout.addWidget(self.scatter_style_editor)
 
         # Color selection and preview
         self.color_input = _new_color_input(figure_window)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
-
-        # Scatter marker selection
-        self.style_input = QComboBox(self)
-        self.style_input.addItems(['o', 's', 'D', 'x', '+'])
-        self.layout.addWidget(QLabel('Marker Style:'))
-        self.layout.addWidget(self.style_input)
 
         # Legend label input
         self.label_input = QLineEdit(self)
@@ -389,6 +406,7 @@ class PyFitDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/chart_images/fit.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
+        self.creation_defaults = _creation_defaults(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -405,6 +423,8 @@ class PyFitDialog(QDialog):
         self.appearance_input = _new_line_appearance_input(
             figure_window,
             parent=self,
+            style=self.creation_defaults.line.linestyle,
+            linewidth=self.creation_defaults.line.linewidth,
             show_label=False,
             show_style=False,
             show_linewidth=False,
@@ -477,6 +497,7 @@ class PyInterpolationDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/chart_images/interpolation.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
+        self.creation_defaults = _creation_defaults(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -493,6 +514,8 @@ class PyInterpolationDialog(QDialog):
         self.appearance_input = _new_line_appearance_input(
             figure_window,
             parent=self,
+            style=self.creation_defaults.line.linestyle,
+            linewidth=self.creation_defaults.line.linewidth,
             show_label=False,
             show_style=False,
             show_linewidth=False,

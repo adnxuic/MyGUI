@@ -5,6 +5,9 @@ from Qt_core import *
 from matplotlib import font_manager
 
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from code.figuremodify.style_base.creation_defaults import (
+    resolve_component_creation_defaults,
+)
 
 from code.widgets import qss_func
 import os
@@ -26,6 +29,12 @@ class PyTextDialog(QDialog):
         self.setWindowIcon(QIcon("pictures/icons/element_images/Text.svg"))
 
         self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+        self.creation_defaults = (
+            canvas.component_creation_defaults()
+            if canvas is not None
+            else resolve_component_creation_defaults("default")
+        )
 
         self.layout = QVBoxLayout()
 
@@ -91,14 +100,19 @@ class PyTextDialog(QDialog):
         for font in font_list:
             self.font_input.addItem(font)
 
-        self.font_input.setCurrentText('Times New Roman')
+        self.font_input.setCurrentText(
+            self.creation_defaults.text.fontfamily
+        )
         self.layout.addWidget(self.font_input)
 
         # 选择输入文本的字体大小
-        self.font_size_input = QSpinBox(self)
-        self.font_size_input.setMinimum(1)
-        self.font_size_input.setMaximum(100)
-        self.font_size_input.setValue(20)
+        self.font_size_input = QDoubleSpinBox(self)
+        self.font_size_input.setRange(1.0, 1000.0)
+        self.font_size_input.setDecimals(2)
+        self.font_size_input.setSingleStep(0.5)
+        self.font_size_input.setValue(
+            self.creation_defaults.text.fontsize
+        )
         self.layout.addWidget(QLabel('Font Size:'))
         self.layout.addWidget(self.font_size_input)
 

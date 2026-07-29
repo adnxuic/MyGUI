@@ -1,6 +1,7 @@
 import os
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -28,6 +29,7 @@ from code.figuremodify.components import (
     ScatterController,
     register_figure_components,
 )
+from code.figuremodify.style_base.color_models import PaletteDefinition
 from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 from code.widgets.fig_control_window.component_editors import (
@@ -576,6 +578,128 @@ class ComponentEditorTests(unittest.TestCase):
         try:
             color = editor.section("appearance").editor("color")
             self.assertIs(color.color_library, library)
+        finally:
+            editor.close()
+            context.editor_manager.close()
+
+    def test_axes_palette_section_shows_and_switches_palette_source(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        line, = axes.plot([0.0, 1.0], [0.0, 1.0], label="curve")
+        registry = register_figure_components(figure)
+        axes_controller = next(
+            controller
+            for controller in registry
+            if controller.state.role is ComponentRole.AXES
+        )
+        figure_controller = registry.get(
+            axes_controller.state.parent_id
+        )
+        library = ColorLibrary()
+        context = _editor_context(registry, TableRepository(), library)
+        editor = context.editor_manager.create(
+            axes_controller,
+            context=context,
+        )
+        section = editor.section("palette")
+        custom = PaletteDefinition(
+            "custom:test",
+            "Lab colors",
+            tuple(f"#{index:06X}" for index in range(1, 13)),
+            category="Custom",
+            source="custom",
+        )
+        try:
+            self.assertEqual(section.source_input.currentData(), "style")
+            self.assertIn(
+                "Style default · default",
+                section.current_palette_label.text(),
+            )
+            initial_status = context.axes_commands.palette_status(
+                axes_controller.component_id
+            )
+            self.assertEqual(
+                section.palette_preview.colors(),
+                initial_status.palette.colors,
+            )
+            self.assertFalse(section.button.isEnabled())
+
+            with patch(
+                "code.widgets.fig_control_window.component_editors."
+                "sections.choose_palette",
+                return_value=None,
+            ):
+                section.source_input.setCurrentIndex(
+                    section.source_input.findData("user")
+                )
+            self.assertEqual(section.source_input.currentData(), "style")
+            self.assertFalse(section.button.isEnabled())
+
+            with patch(
+                "code.widgets.fig_control_window.component_editors."
+                "sections.choose_palette",
+                return_value=custom,
+            ):
+                section.source_input.setCurrentIndex(
+                    section.source_input.findData("user")
+                )
+
+            self.assertEqual(section.source_input.currentData(), "user")
+            self.assertTrue(section.button.isEnabled())
+            self.assertEqual(
+                section.current_palette_label.text(),
+                "Custom palette · Lab colors",
+            )
+            self.assertEqual(
+                section.palette_preview.colors(),
+                custom.colors,
+            )
+            self.assertGreater(
+                section.palette_preview.heightForWidth(140),
+                section.palette_preview.heightForWidth(800),
+            )
+            self.assertEqual(
+                section.palette_preview.row_count_for_width(800),
+                1,
+            )
+            self.assertEqual(line.get_color(), custom.colors[0])
+            self.assertEqual(
+                context.axes_commands.cycle_state(
+                    axes_controller.component_id
+                ).active_palette,
+                custom,
+            )
+
+            figure_controller.set_property(
+                "style",
+                "fivethirtyeight",
+            )
+            self.assertEqual(section.source_input.currentData(), "user")
+            self.assertIn(
+                "Lab colors",
+                section.current_palette_label.text(),
+            )
+
+            section.source_input.setCurrentIndex(
+                section.source_input.findData("style")
+            )
+            style_status = context.axes_commands.palette_status(
+                axes_controller.component_id
+            )
+            self.assertTrue(style_status.uses_style_default)
+            self.assertEqual(
+                section.current_palette_label.text(),
+                "Style default · fivethirtyeight",
+            )
+            self.assertEqual(
+                section.palette_preview.colors(),
+                style_status.palette.colors,
+            )
+            self.assertEqual(
+                line.get_color().casefold(),
+                style_status.palette.colors[0].casefold(),
+            )
         finally:
             editor.close()
             context.editor_manager.close()

@@ -8,7 +8,7 @@ Controller mutation API without becoming a second state store.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import re
 import warnings
 from collections.abc import Callable, Iterable
@@ -45,6 +45,10 @@ from code.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
     PaletteDefinition,
+)
+from code.figuremodify.style_base.creation_defaults import (
+    MATPLOTLIB_STYLE_PALETTE_SOURCE,
+    resolve_style_palette,
 )
 
 
@@ -90,6 +94,21 @@ def _warning(message: str) -> ComponentNotice:
 
 def _column_ref(value: ColumnRef | dict[str, Any]) -> ColumnRef:
     return value if isinstance(value, ColumnRef) else ColumnRef.from_dict(value)
+
+
+@dataclass(frozen=True, slots=True)
+class AxesPaletteStatus:
+    """Describe the effective palette source displayed for one Axes."""
+
+    mode: str
+    palette: PaletteDefinition
+    figure_style: str
+
+    @property
+    def uses_style_default(self) -> bool:
+        """Return whether the current palette follows the Figure style."""
+
+        return self.mode == "style"
 
 
 class AxesCommandService:
@@ -247,21 +266,85 @@ class AxesCommandService:
         value = self._axes(axes_id).state.properties.get("color_cycle")
         return ColorCycleState.from_dict(value)
 
+    def _figure_style(self, axes_id: str) -> str:
+        axes_state = self._axes(axes_id).state
+        figure_id = axes_state.parent_id
+        if figure_id is None:
+            raise ValueError("Axes is not attached to a Figure component.")
+        figure_state = self.registry.get(figure_id).state
+        if figure_state.kind is not ComponentKind.FIGURE:
+            raise ValueError("Axes parent is not a Figure component.")
+        return str(
+            figure_state.properties.get("style", "default")
+        )
+
+    def style_palette(self, axes_id: str) -> PaletteDefinition:
+        """Resolve the current Figure style palette for an Axes."""
+
+        return resolve_style_palette(self._figure_style(axes_id))
+
+    def palette_status(self, axes_id: str) -> AxesPaletteStatus:
+        """Return the effective Style-default or user-selected palette."""
+
+        figure_style = self._figure_style(axes_id)
+        style_palette = self.style_palette(axes_id)
+        active = self.cycle_state(axes_id).active_palette
+        if (
+            active is not None
+            and active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE
+        ):
+            return AxesPaletteStatus(
+                "user",
+                active,
+                figure_style,
+            )
+        return AxesPaletteStatus(
+            "style",
+            style_palette,
+            figure_style,
+        )
+
     def peek_color(self, axes_id: str) -> ColorSelection:
         """Preview the next chart color without advancing the cycle."""
 
         return self.cycle_state(axes_id).peek()
 
+    def preview_color_cycle(
+        self,
+        axes_id: str,
+        fallback_palette: PaletteDefinition,
+        fallback_index: int,
+    ) -> ColorCycleState:
+        """Return the user cycle or a non-mutating style-cycle preview."""
+
+        cycle = self.cycle_state(axes_id)
+        active = cycle.active_palette
+        if active is not None and (
+            active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE
+            or active.id == fallback_palette.id
+        ):
+            return cycle
+        return ColorCycleState(
+            fallback_palette,
+            max(0, int(fallback_index)) % len(fallback_palette.colors),
+        )
+
     def commit_color_selection(
         self,
         axes_id: str,
         selection: ColorSelection,
+        *,
+        preview_cycle: ColorCycleState | None = None,
     ) -> ComponentChange:
         """Commit a previewed color after component creation succeeds."""
 
         # Preview and commit are deliberately separate: cancelled or failed
         # chart creation must not consume a color from the axes sequence.
-        cycle = self.cycle_state(axes_id)
+        cycle = (
+            ColorCycleState.from_dict(preview_cycle.to_dict())
+            if preview_cycle is not None
+            else self.cycle_state(axes_id)
+        )
         cycle.commit(selection)
         return self._axes(axes_id).set_property(
             "color_cycle",
@@ -280,18 +363,6 @@ class AxesCommandService:
             parent_id=axes_id,
             recursive=True,
         )
-        if not controllers:
-            return ComponentBatchChange(
-                (),
-                True,
-                notices=(
-                    _warning(
-                        "The current axes has no color-capable chart "
-                        "components."
-                    ),
-                ),
-                message="No color-capable components.",
-            )
         cycle = ColorCycleState()
         cycle.commit_palette_for_count(palette, len(controllers))
         mutations = [
@@ -311,7 +382,19 @@ class AxesCommandService:
                 properties={"color_cycle": cycle.to_dict()},
             )
         )
-        return self.registry.apply_transaction(mutations)
+        result = self.registry.apply_transaction(mutations)
+        if controllers or not result.ok:
+            return result
+        return replace(
+            result,
+            notices=(
+                _warning(
+                    "Palette selected for future charts; the current "
+                    "axes has no chart components to recolor."
+                ),
+            ),
+            message="Palette selected for future charts.",
+        )
 
 
 class FunctionCurveService:

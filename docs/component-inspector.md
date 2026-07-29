@@ -82,7 +82,7 @@ The Axes editor keeps the existing navigation and provides six scrollable pages:
 5. Title/Labels: Title, X Label, and Y Label Text Controllers.
 6. Legend: the semantic Legend Controller.
 
-Every page binds Controller properties; the UI does not directly mutate Matplotlib artists.
+Every page binds Controller properties; the UI does not directly mutate Matplotlib artists. The General page's Palette section derives its current label and color strip from the Axes `color_cycle` and Figure `style`. Its source selector applies either the current Style default or a named user-selected palette through `AxesCommandService`.
 
 Closing an Inspector or its Manager disposes each Section exactly once.
 Repository, TeX, MATLAB, and asynchronous fitting callbacks are detached or
@@ -96,6 +96,6 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 - `DataReferenceInput`: project-scoped X/Y column choices with signal-safe programmatic synchronization.
 - `InterpolationOptionsInput`: method, sample count, order `k`, and automatic or explicit smoothing lambda.
 
-Color inputs preview the current `ColorCycleState`. The cycle and recent-color list are committed only after component creation succeeds.
+Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
 The project format remains schema v6. Inspector profiles, section expansion, and Qt widgets are never serialized, and the Legend profile introduces no new persistent fields.

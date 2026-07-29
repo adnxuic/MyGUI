@@ -6,6 +6,7 @@ from matplotlib.figure import Figure
 
 from code.database import ColumnRef, TableRepository
 from code.figuremodify.component_services import (
+    AxesCommandService,
     ChartDataService,
     ComponentDependencyService,
 )
@@ -18,7 +19,9 @@ from code.figuremodify.components import (
     ComponentState,
     DataPlotController,
     FitCurveController,
+    register_figure_components,
 )
+from code.figuremodify.style_base.color_models import PaletteDefinition
 
 
 def _ref(project_id, sheet_id, column_id):
@@ -176,6 +179,38 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertEqual(first.state.properties["color"], "#010101")
         self.assertEqual(second.state.properties["color"], "#020202")
         self.assertEqual(events, [])
+
+    def test_empty_axes_can_select_palette_for_future_charts(self):
+        registry = register_figure_components(self.figure)
+        axes_controller = next(
+            controller
+            for controller in registry
+            if controller.state.kind is ComponentKind.AXES
+        )
+        service = AxesCommandService(registry)
+        palette = PaletteDefinition(
+            "custom:future",
+            "Future",
+            ("#112233", "#445566"),
+            source="custom",
+        )
+
+        result = service.apply_palette(
+            axes_controller.component_id,
+            palette,
+        )
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.notices)
+        self.assertEqual(
+            service.cycle_state(
+                axes_controller.component_id
+            ).active_palette,
+            palette,
+        )
+        status = service.palette_status(axes_controller.component_id)
+        self.assertFalse(status.uses_style_default)
+        self.assertEqual(status.palette, palette)
 
     def test_table_refresh_skips_manual_fit_and_keeps_empty_plot_controller(self):
         pair = self.repository.line_pair(self.x_ref, self.y_ref)

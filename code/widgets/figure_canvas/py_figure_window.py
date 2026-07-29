@@ -193,11 +193,14 @@ class PyFigureWindow(QFrame):
         canvas = self.current_canva
         if canvas is None or canvas.current_axes_component_id is None:
             raise ValueError("Select an axes before choosing a chart color.")
-        return canvas.axes_commands.cycle_state(
-            canvas.current_axes_component_id
-        )
+        return canvas.creation_color_cycle()
 
-    def commit_current_canvas_color(self, selection) -> bool:
+    def commit_current_canvas_color(
+        self,
+        selection,
+        *,
+        preview_cycle=None,
+    ) -> bool:
         """Commit current canvas color."""
 
         canvas = self.current_canva
@@ -206,6 +209,7 @@ class PyFigureWindow(QFrame):
         result = canvas.axes_commands.commit_color_selection(
             canvas.current_axes_component_id,
             selection,
+            preview_cycle=preview_cycle,
         )
         return canvas.message_presenter.present(result)
 

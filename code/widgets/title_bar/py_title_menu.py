@@ -588,4 +588,5 @@ class SelectorElementMenuBar(ResponsiveActionGallery):
                     figure_window=figure_window,
                     parent=parent,
                 ),
+                reuse_dialog=False,
             )
