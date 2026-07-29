@@ -1,3 +1,5 @@
+"""Display persistent application state in the bottom bar."""
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,6 +28,8 @@ class FeatureIndicator:
 class PyStateBar(QFrame):
     # Emitted from any thread when a listener fires; delivered to the GUI
     # thread (queued when cross-thread) so labels are only touched there.
+    """Provide the py state bar Qt widget."""
+
     state_changed = Signal(str, bool)
 
     def __init__(self, indicators=(), parent=None):
@@ -84,6 +88,8 @@ class PyStateBar(QFrame):
         label.style().polish(label)
 
     def cleanup(self):
+        """Release resources and detach registered callbacks."""
+
         for indicator, listener in self._listeners:
             indicator.unregister_listener(listener)
         self._listeners.clear()

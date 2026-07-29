@@ -1,3 +1,5 @@
+"""Present a typed table document through Qt's model/view widgets."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -45,6 +47,8 @@ def _same_value(left: Any, right: Any) -> bool:
 
 
 class TableModel(QAbstractTableModel):
+    """Expose table data through Qt's model API."""
+
     def __init__(self, repository: TableRepository, project_id: str, sheet_id: str, parent=None):
         super().__init__(parent)
         self.repository = repository
@@ -55,15 +59,23 @@ class TableModel(QAbstractTableModel):
 
     @property
     def sheet(self):
+        """Return the sheet."""
+
         return self.repository.sheet(self.project_id, self.sheet_id)
 
     def rowCount(self, parent=QModelIndex()):
+        """Return the number of rows exposed by the Qt model."""
+
         return 0 if parent.isValid() else self.sheet.row_count
 
     def columnCount(self, parent=QModelIndex()):
+        """Return the number of columns exposed by the Qt model."""
+
         return 0 if parent.isValid() else len(self.sheet.columns)
 
     def data(self, index, role=Qt.DisplayRole):
+        """Return data for the requested Qt model role."""
+
         if not index.isValid() or not 0 <= index.row() < self.rowCount() or not 0 <= index.column() < self.columnCount():
             return None
         column = self.sheet.columns[index.column()]
@@ -90,6 +102,8 @@ class TableModel(QAbstractTableModel):
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
+        """Return display data for a Qt table header."""
+
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal and 0 <= section < self.columnCount():
                 column = self.sheet.columns[section]
@@ -102,6 +116,8 @@ class TableModel(QAbstractTableModel):
         return None
 
     def flags(self, index):
+        """Return the Qt item flags for the requested model index."""
+
         if not index.isValid():
             return Qt.NoItemFlags
         result = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
@@ -130,6 +146,8 @@ class TableModel(QAbstractTableModel):
         QTimer.singleShot(1500, clear_error)
 
     def setData(self, index, value, role=Qt.EditRole):
+        """Apply an edit from Qt's model/view API."""
+
         if not index.isValid() or role not in (Qt.EditRole, Qt.CheckStateRole):
             return False
         column = self.sheet.columns[index.column()]
@@ -194,6 +212,8 @@ class TableModel(QAbstractTableModel):
             self.headerDataChanged.emit(Qt.Horizontal, 0, max(0, self.columnCount() - 1))
 
     def clear_indexes(self, indexes: Sequence[QModelIndex]) -> bool:
+        """Clear indexes."""
+
         cells = sorted({(index.row(), index.column()) for index in indexes if index.isValid()})
         if not cells:
             return False
@@ -219,6 +239,8 @@ class TableModel(QAbstractTableModel):
         return True
 
     def paste_block(self, start_row: int, start_column: int, rows: Sequence[Sequence[Any]]) -> bool:
+        """Paste block."""
+
         block = [list(row) for row in rows]
         if not block:
             return False
@@ -291,6 +313,8 @@ class TableModel(QAbstractTableModel):
         return True
 
     def sort_by_column(self, column: int, ascending: bool) -> None:
+        """Sort by column."""
+
         if not 0 <= column < self.columnCount():
             return
         column_id = self.sheet.columns[column].id
@@ -315,7 +339,11 @@ class TableModel(QAbstractTableModel):
 
 
 class TypedItemDelegate(QStyledItemDelegate):
+    """Render and edit typed item values in Qt item views."""
+
     def createEditor(self, parent, option, index):
+        """Create the typed Qt editor for a table cell."""
+
         model = cast(TableModel, index.model())
         column_type = model.sheet.columns[index.column()].type
         if column_type == ColumnType.BOOLEAN:
@@ -335,6 +363,8 @@ class TypedItemDelegate(QStyledItemDelegate):
         return editor
 
     def setEditorData(self, editor, index):
+        """Set editor data."""
+
         text = str(index.data(Qt.EditRole) or "")
         if isinstance(editor, QComboBox):
             editor.setCurrentText(text)
@@ -346,6 +376,8 @@ class TypedItemDelegate(QStyledItemDelegate):
             editor.setText(text)
 
     def setModelData(self, editor, model, index):
+        """Set model data."""
+
         if isinstance(editor, QComboBox):
             value = editor.currentText()
         elif isinstance(editor, QDateTimeEdit):
@@ -356,6 +388,8 @@ class TypedItemDelegate(QStyledItemDelegate):
 
 
 class TableView(QTableView):
+    """Provide the table view Qt widget."""
+
     def __init__(self, repository: TableRepository, project_id: str, sheet_id: str,
                  dependency_handler: DependencyHandler | None = None):
         super().__init__()
@@ -395,6 +429,8 @@ class TableView(QTableView):
 
     @property
     def sheet(self):
+        """Return the sheet."""
+
         return self.repository.sheet(self.project_id, self.sheet_id)
 
     def _init_actions(self):
@@ -430,6 +466,8 @@ class TableView(QTableView):
         column.width = max(60, int(new_size))
 
     def copy_items(self):
+        """Copy items."""
+
         selection = self.selectedIndexes()
         if not selection:
             return
@@ -446,6 +484,8 @@ class TableView(QTableView):
         QGuiApplication.clipboard().setText("\n".join(lines))
 
     def paste_items(self):
+        """Paste items."""
+
         start = self.currentIndex()
         if not start.isValid():
             status_messages.show_warning("Select a starting cell before pasting.")
@@ -461,9 +501,13 @@ class TableView(QTableView):
             status_messages.show_success(f"Pasted {len(rows)} rows × {max(map(len, rows))} columns.")
 
     def delete_items(self):
+        """Delete items."""
+
         self.table_model.clear_indexes(self.selectedIndexes())
 
     def insert_row(self):
+        """Insert row."""
+
         row = self.currentIndex().row() if self.currentIndex().isValid() else self.sheet.row_count
 
         def redo():
@@ -479,6 +523,8 @@ class TableView(QTableView):
         ))
 
     def delete_row(self):
+        """Delete row."""
+
         if self.sheet.row_count == 0:
             return
         row = self.currentIndex().row() if self.currentIndex().isValid() else self.sheet.row_count - 1
@@ -497,6 +543,8 @@ class TableView(QTableView):
         ))
 
     def move_row(self, delta: int):
+        """Move row."""
+
         current = self.currentIndex()
         if not current.isValid():
             return
@@ -519,6 +567,8 @@ class TableView(QTableView):
         self.setCurrentIndex(self.table_model.index(destination, current.column()))
 
     def add_column(self):
+        """Add column."""
+
         index = self.currentIndex().column() + 1 if self.currentIndex().isValid() else len(self.sheet.columns)
         column_id = new_id()
         name = self.sheet.unique_column_name(f"Column {index + 1}")
@@ -537,6 +587,8 @@ class TableView(QTableView):
         ))
 
     def delete_column(self):
+        """Delete column."""
+
         current = self.currentIndex()
         if not current.isValid() or len(self.sheet.columns) <= 1:
             status_messages.show_warning("A sheet must contain at least one column.")
@@ -567,6 +619,8 @@ class TableView(QTableView):
         ))
 
     def move_column(self, delta: int):
+        """Move column."""
+
         current = self.currentIndex()
         if not current.isValid():
             return
@@ -589,6 +643,8 @@ class TableView(QTableView):
         self.setCurrentIndex(self.table_model.index(current.row(), destination))
 
     def rename_column(self):
+        """Rename column."""
+
         current = self.currentIndex()
         if not current.isValid():
             return
@@ -618,6 +674,8 @@ class TableView(QTableView):
         ))
 
     def change_column_type(self):
+        """Change column type."""
+
         current = self.currentIndex()
         if not current.isValid():
             return
@@ -665,6 +723,8 @@ class TableView(QTableView):
         ))
 
     def header_context_menu(self, position):
+        """Open the column-header context menu."""
+
         column = self.horizontalHeader().logicalIndexAt(position)
         if column < 0:
             return
@@ -699,6 +759,8 @@ class TableView(QTableView):
             self.table_model.sort_by_column(column, False)
 
     def row_context_menu(self, position):
+        """Open the row-header context menu."""
+
         row = self.verticalHeader().logicalIndexAt(position)
         if row < 0:
             return
@@ -721,6 +783,8 @@ class TableView(QTableView):
 
 
 class SheetTabWidget(QTabWidget):
+    """Provide the sheet tab widget Qt widget."""
+
     def __init__(self, subtable: "PySubTable"):
         super().__init__(subtable)
         self.subtable = subtable
@@ -745,6 +809,8 @@ class SheetTabWidget(QTabWidget):
 
 
 class PySubTable(QFrame):
+    """Provide the py sub table Qt widget."""
+
     def __init__(self, repository: TableRepository, project_id: str,
                  dependency_handler: DependencyHandler | None = None):
         super().__init__()
@@ -773,6 +839,8 @@ class PySubTable(QFrame):
 
     @property
     def project(self):
+        """Return the project."""
+
         return self.repository.project(self.project_id)
 
     def _build_tabs(self):
@@ -834,6 +902,8 @@ class PySubTable(QFrame):
                 action.triggered.connect(callback)
 
     def current_view(self) -> TableView:
+        """Return the current view."""
+
         widget = self.tabWidget.currentWidget()
         if not isinstance(widget, TableView):
             if not self._views:
@@ -842,27 +912,39 @@ class PySubTable(QFrame):
         return widget
 
     def get_table(self, index: int) -> TableView:
+        """Return table."""
+
         widget = self.tabWidget.widget(index)
         if not isinstance(widget, TableView):
             raise IndexError("Sheet index does not refer to a table.")
         return widget
 
     def undo(self):
+        """Reverse this table mutation."""
+
         self.repository.undo_stack(self.project_id).undo()
 
     def redo(self):
+        """Reapply this table mutation."""
+
         self.repository.undo_stack(self.project_id).redo()
 
     def current_sheet_index(self) -> int:
+        """Return the current sheet index."""
+
         index = self.tabWidget.currentIndex()
         if 0 <= index < self.tabWidget.count() - 1:
             return index
         return 0
 
     def rename_current_sheet(self):
+        """Rename current sheet."""
+
         self.rename_sheet(self.current_sheet_index())
 
     def delete_current_sheet(self):
+        """Delete current sheet."""
+
         self.delete_sheet(self.current_sheet_index())
 
     def _plus_clicked(self, index: int):
@@ -870,6 +952,8 @@ class PySubTable(QFrame):
             self.add_new_sheet()
 
     def add_new_sheet(self, sheet_name: str | None = None, sheet=None) -> TableView:
+        """Add new sheet."""
+
         if sheet is None:
             sheet = self.project.add_sheet(sheet_name)
         else:
@@ -885,6 +969,8 @@ class PySubTable(QFrame):
         return view
 
     def rename_sheet(self, index: int):
+        """Rename sheet."""
+
         if index < 0 or index >= self.tabWidget.count() - 1:
             return
         view = self.get_table(index)
@@ -921,6 +1007,8 @@ class PySubTable(QFrame):
         status_messages.show_success(f"Sheet renamed to {cleaned}.")
 
     def delete_sheet(self, index: int):
+        """Delete sheet."""
+
         if index < 0 or index >= self.tabWidget.count() - 1:
             return
         if len(self.project.sheets) <= 1:

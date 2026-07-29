@@ -1,3 +1,5 @@
+"""Host table and figure views in the right column."""
+
 from Qt_core import *
 from code.widgets import qss_func
 
@@ -8,6 +10,8 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyRightColumn(QFrame):
+    """Provide the py right column Qt widget."""
+
     def __init__(self, fig_control_layout = None):
         super().__init__()
 
@@ -41,6 +45,8 @@ class PyRightColumn(QFrame):
         self.layout.addWidget(self.matlab_button)
 
     def tex_show(self, checked):
+        """Open the optional TeX integration settings."""
+
         if checked:
             if self.matlab_button.isChecked():
                 self.matlab_button.setChecked(False)
@@ -49,6 +55,8 @@ class PyRightColumn(QFrame):
             self.fig_control_layout.setCurrentIndex(0)
 
     def matlab_show(self, checked):
+        """Open the optional MATLAB integration settings."""
+
         if checked:
             if self.tex_button.isChecked():
                 self.tex_button.setChecked(False)

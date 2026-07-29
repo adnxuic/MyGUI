@@ -1,3 +1,5 @@
+"""Configure and connect the optional MATLAB integration."""
+
 from Qt_core import *
 
 from code.widgets.qss_func import qss_loader
@@ -14,6 +16,8 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
+    """Start matlab task."""
+
     return start_background_task(
         owner,
         func,
@@ -27,6 +31,8 @@ def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
 
 
 class PyMatlabWindow(QFrame):
+    """Provide the py matlab window Qt widget."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -78,6 +84,8 @@ class PyMatlabWindow(QFrame):
         self.layout.addStretch()
 
     def matlab_connect_click(self):
+        """Start or stop the optional MATLAB connection."""
+
         self._connect_request_id += 1
         request_id = self._connect_request_id
         started_at = time.monotonic()
@@ -129,5 +137,7 @@ class PyMatlabWindow(QFrame):
         QMessageBox.warning(self, "Connect Matlab", message)
 
     def reset_to_connect_button(self):
+        """Reset to connect button."""
+
         matlab_adapter.set_matlab_enabled(False)
         self._show_connect_button()

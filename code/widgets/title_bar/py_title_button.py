@@ -1,3 +1,5 @@
+"""Provide reusable title-bar button variants."""
+
 from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.theme import COLORS
@@ -8,6 +10,8 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
 
 class ChangeButton(QPushButton):
+    """Provide the change button Qt widget."""
+
     def __init__(self, button_name):
         super().__init__()
         self.setIcon(QIcon("pictures/icons/menu_change.svg"))
@@ -22,6 +26,8 @@ class ChangeButton(QPushButton):
 
 
     def change(self):
+        """Emit the button's configured action."""
+
         if self.rotated:
             angle = 0
             color = QColor(255, 255, 255)
@@ -46,6 +52,8 @@ class ChangeButton(QPushButton):
 
 
 class SelectMenuButton(QPushButton):
+    """Provide the select menu button Qt widget."""
+
     def __init__(self, button_name, IconName=None):
         super().__init__()
         self.setObjectName("select_menu_button")
@@ -57,6 +65,8 @@ class SelectMenuButton(QPushButton):
         self.toggled.connect(self.the_button_was_toggled)
 
     def the_button_was_toggled(self, checked):
+        """Synchronize the button appearance after its checked state changes."""
+
         if not checked:
             color = QColor(255, 255, 255)
         else:
@@ -74,6 +84,8 @@ class SelectMenuButton(QPushButton):
 
 
 class MenuButton(QPushButton):
+    """Provide the menu button Qt widget."""
+
     def __init__(self, button_name, IconName=None, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -100,6 +112,8 @@ class MenuButton(QPushButton):
 
 
 class StaticSelectButton(QToolButton):
+    """Provide the static select button Qt widget."""
+
     def __init__(self, button_name, icon_name=None, tooltip_text=None, tooltip_text_image_path=None, dialog=None):
         super().__init__()
         self.setText(button_name)
@@ -121,25 +135,35 @@ class StaticSelectButton(QToolButton):
         self.clicked.connect(self.connect_dialog)
 
     def enterEvent(self, event):
+        """Update hover state when the pointer enters the widget."""
+
         self.timer.stop()  # 停止定时器
         self.timer.start()  # 重新启动定时器
         super().enterEvent(event)
 
     def leaveEvent(self, event):
+        """Update hover state when the pointer leaves the widget."""
+
         self.timer.stop()  # 鼠标离开时停止定时器
         QToolTip.hideText()  # 隐藏工具提示
         super().leaveEvent(event)
 
     def showTooltip(self):
         # 定时器触发后显示工具提示
+        """Show tooltip."""
+
         QToolTip.showText(self.mapToGlobal(QPoint(0, 0)), self.toolTip(), self)
 
     # 链接对话框
     def connect_dialog(self):
+        """Connect dialog."""
+
         self.dialog.exec()
 
 
 class DynSelectButton(QToolButton):
+    """Provide the dyn select button Qt widget."""
+
     def __init__(self, button_name, icon_name=None, tooltip_text=None, tooltip_text_image_path=None, dialog=None, figure_window=None):
         super().__init__()
         self.setText(button_name)
@@ -165,26 +189,36 @@ class DynSelectButton(QToolButton):
         self.clicked.connect(self.connect_dialog)
 
     def enterEvent(self, event):
+        """Update hover state when the pointer enters the widget."""
+
         self.timer.stop()  # 停止定时器
         self.timer.start()  # 重新启动定时器
         super().enterEvent(event)
 
     def leaveEvent(self, event):
+        """Update hover state when the pointer leaves the widget."""
+
         self.timer.stop()  # 鼠标离开时停止定时器
         QToolTip.hideText()  # 隐藏工具提示
         super().leaveEvent(event)
 
     def showTooltip(self):
         # 定时器触发后显示工具提示
+        """Show tooltip."""
+
         QToolTip.showText(self.mapToGlobal(QPoint(0, 0)), self.toolTip(), self)
 
     # 链接对话框
     def connect_dialog(self):
+        """Connect dialog."""
+
         dialog = self.dialog(self.dialog_name, self.figure_window)
         dialog.exec()
 
 
 class PullDownButton(QPushButton):
+    """Provide the pull down button Qt widget."""
+
     def __init__(self):
         super().__init__()
         self.setObjectName("pull_down_button")
@@ -198,9 +232,13 @@ class PullDownButton(QPushButton):
 
     # 连接菜单
     def connect_menu(self, connect_menu):
+        """Connect menu."""
+
         self.connect_menu = connect_menu
 
     def the_button_was_toggled(self, checked):
+        """Synchronize the button appearance after its checked state changes."""
+
         if not checked:
             angle = 0
         else:
@@ -215,6 +253,8 @@ class PullDownButton(QPushButton):
 
     # 显示菜单
     def toggle_menu(self, checked):
+        """Toggle menu."""
+
         if checked:  # 如果按钮被设置为按下状态
 
             button_rect = self.rect() # 获取按钮的位置和尺寸

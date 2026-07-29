@@ -1,3 +1,5 @@
+"""Import Excel workbooks and preview their sheets before creating tables."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,11 +20,15 @@ EXCEL_PREVIEW_ROWS = 8
 
 
 def is_supported_excel_workbook(file_name: str | Path) -> bool:
+    """Return whether supported excel workbook."""
+
     path = Path(file_name)
     return path.is_file() and path.suffix.casefold() in EXCEL_WORKBOOK_SUFFIXES
 
 
 def validate_excel_workbook(file_name: str | Path) -> Path:
+    """Validate excel workbook."""
+
     path = Path(file_name)
     if path.suffix.casefold() not in EXCEL_WORKBOOK_SUFFIXES:
         raise ValueError("Only .xlsx and .xlsm Excel workbooks are supported.")
@@ -33,12 +39,16 @@ def validate_excel_workbook(file_name: str | Path) -> Path:
 
 @dataclass
 class ExcelSheetData:
+    """Represent the application's excel sheet data."""
+
     name: str
     rows: list[list[Any]]
 
 
 @dataclass
 class ExcelColumnSpec:
+    """Describe excel column spec values shared across application layers."""
+
     name: str
     type: ColumnType
     values: list[Any]
@@ -46,12 +56,16 @@ class ExcelColumnSpec:
 
 @dataclass
 class ExcelSheetSpec:
+    """Describe excel sheet spec values shared across application layers."""
+
     source_name: str
     target_name: str
     columns: list[ExcelColumnSpec]
 
 
 def read_excel_workbook(file_name: str) -> list[ExcelSheetData]:
+    """Read excel workbook."""
+
     path = validate_excel_workbook(file_name)
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
@@ -76,6 +90,8 @@ def _default_column_name(rows: list[list[Any]], column: int, use_header: bool) -
 
 
 class ExcelSheetPreview(QWidget):
+    """Provide the excel sheet preview Qt widget."""
+
     INCLUDE_ROW = 0
     NAME_ROW = 1
     TYPE_ROW = 2
@@ -111,6 +127,8 @@ class ExcelSheetPreview(QWidget):
         self.rebuild()
 
     def rebuild(self):
+        """Rebuild the control from the latest available application state."""
+
         max_columns = max((len(row) for row in self.sheet.rows), default=0)
         previous_names = []
         previous_included = [checkbox.isChecked() for checkbox in self._column_include_boxes]
@@ -205,12 +223,18 @@ class ExcelSheetPreview(QWidget):
             item.setText(text.strip() or f"Column {column + 1}")
 
     def column_name_editor(self, column: int) -> QLineEdit:
+        """Return the column name editor."""
+
         return cast(QLineEdit, self.columns.cellWidget(self.NAME_ROW, column))
 
     def column_type_editor(self, column: int) -> QComboBox:
+        """Return the column type editor."""
+
         return cast(QComboBox, self.columns.cellWidget(self.TYPE_ROW, column))
 
     def column_include_checkbox(self, column: int) -> QCheckBox:
+        """Return the column include checkbox."""
+
         return self._column_include_boxes[column]
 
     def _set_column_included(self, column: int, included: bool):
@@ -230,6 +254,8 @@ class ExcelSheetPreview(QWidget):
                 item.setBackground(QColor("#e5e7eb"))
 
     def spec(self) -> ExcelSheetSpec | None:
+        """Return the current spec."""
+
         if not self.include.isChecked():
             return None
         target_name = validate_component_name(self.target_name.text(), "Sheet name")
@@ -253,6 +279,8 @@ class ExcelSheetPreview(QWidget):
 
 
 class ExcelImportDialog(QDialog):
+    """Provide the excel import dialog Qt widget."""
+
     def __init__(self, sheets: list[ExcelSheetData], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Import Excel")
@@ -282,6 +310,8 @@ class ExcelImportDialog(QDialog):
         self.accept()
 
     def specs(self) -> list[ExcelSheetSpec]:
+        """Return the current specs."""
+
         result = []
         target_names = set()
         for page in self.pages:
@@ -306,6 +336,8 @@ def _default_specs(sheets: list[ExcelSheetData]) -> list[ExcelSheetSpec]:
 
 
 def import_excel_into_table(file_name: str, table, parent=None, show_preview: bool = True):
+    """Import excel into table."""
+
     sheets = read_excel_workbook(file_name)
     if not sheets:
         raise ValueError("The workbook contains no sheets.")

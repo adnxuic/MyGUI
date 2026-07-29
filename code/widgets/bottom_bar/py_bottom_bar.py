@@ -1,3 +1,5 @@
+"""Compose the application's message and state bars."""
+
 from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.bottom_bar.py_message_bar import PyMessageBar
@@ -36,6 +38,8 @@ def _feature_indicators():
 
 
 class PyBottomBar(QFrame):
+    """Provide the py bottom bar Qt widget."""
+
     def __init__(self):
         super().__init__()
 
@@ -56,16 +60,26 @@ class PyBottomBar(QFrame):
         self.destroyed.connect(self.state_bar.cleanup)
 
     def show_message(self, message, level="info"):
+        """Show message."""
+
         self.message_bar.show_message(message, level)
 
     def show_error(self, message):
+        """Show error."""
+
         self.message_bar.show_error(message)
 
     def show_success(self, message):
+        """Show success."""
+
         self.message_bar.show_success(message)
 
     def show_warning(self, message):
+        """Show warning."""
+
         self.message_bar.show_warning(message)
 
     def clear_message(self):
+        """Clear the current Message Bar text and reset its level."""
+
         self.message_bar.clear_message()

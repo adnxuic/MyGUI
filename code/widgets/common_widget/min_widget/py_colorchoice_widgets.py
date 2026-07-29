@@ -1,3 +1,5 @@
+"""Provide reusable color and palette selection widgets."""
+
 from __future__ import annotations
 
 from typing import Iterable
@@ -17,6 +19,8 @@ from code.widgets.theme import COLORS
 
 
 def color_to_qcolor(value) -> QColor:
+    """Return the color to qcolor."""
+
     color = normalize_color(value)
     red = int(color[1:3], 16)
     green = int(color[3:5], 16)
@@ -26,6 +30,8 @@ def color_to_qcolor(value) -> QColor:
 
 
 def qcolor_to_color(value: QColor) -> str:
+    """Return the qcolor to color."""
+
     if not isinstance(value, QColor) or not value.isValid():
         raise ValueError("Invalid Qt color.")
     color = f"#{value.red():02X}{value.green():02X}{value.blue():02X}"
@@ -35,6 +41,8 @@ def qcolor_to_color(value: QColor) -> str:
 
 
 def color_rgba_text(value) -> str:
+    """Return the color rgba text."""
+
     color = color_to_qcolor(value)
     opacity = round(color.alphaF() * 100)
     return (
@@ -56,6 +64,8 @@ def _paint_checkerboard(painter: QPainter, rect: QRect, cell_size: int = 6) -> N
 
 
 class ColorSwatch(QWidget):
+    """Provide the color swatch Qt widget."""
+
     def __init__(self, color="#000000", parent=None):
         super().__init__(parent)
         self._color = normalize_color(color)
@@ -64,9 +74,13 @@ class ColorSwatch(QWidget):
         self._sync_accessibility()
 
     def color(self) -> str:
+        """Return the selected color."""
+
         return self._color
 
     def set_color(self, color) -> None:
+        """Set color."""
+
         self._color = normalize_color(color)
         self._sync_accessibility()
         self.update()
@@ -77,6 +91,8 @@ class ColorSwatch(QWidget):
         self.setToolTip(text)
 
     def paintEvent(self, _event):
+        """Paint the widget's custom appearance."""
+
         painter = QPainter(self)
         rect = self.rect().adjusted(1, 1, -1, -1)
         _paint_checkerboard(painter, rect)
@@ -86,28 +102,40 @@ class ColorSwatch(QWidget):
         painter.drawRect(rect)
 
     def focusInEvent(self, event):
+        """Update editing state when the widget gains focus."""
+
         self.update()
         super().focusInEvent(event)
 
     def focusOutEvent(self, event):
+        """Commit pending input when the widget loses focus."""
+
         self.update()
         super().focusOutEvent(event)
 
 
 class ColorGridModel(QAbstractListModel):
+    """Expose color grid data through Qt's model API."""
+
     def __init__(self, selections: Iterable[ColorSelection] = (), parent=None):
         super().__init__(parent)
         self.selections = list(selections)
 
     def set_selections(self, selections: Iterable[ColorSelection]) -> None:
+        """Set selections."""
+
         self.beginResetModel()
         self.selections = list(selections)
         self.endResetModel()
 
     def rowCount(self, _parent=QModelIndex()):
+        """Return the number of rows exposed by the Qt model."""
+
         return len(self.selections)
 
     def data(self, index, role=Qt.DisplayRole):
+        """Return data for the requested Qt model role."""
+
         if not index.isValid() or not 0 <= index.row() < len(self.selections):
             return None
         selection = self.selections[index.row()]
@@ -123,20 +151,28 @@ class ColorGridModel(QAbstractListModel):
 
 
 class PaletteListModel(QAbstractListModel):
+    """Expose palette list data through Qt's model API."""
+
     def __init__(self, palettes: Iterable[PaletteDefinition] = (), library=None, parent=None):
         super().__init__(parent)
         self.palettes = list(palettes)
         self.library = library
 
     def set_palettes(self, palettes: Iterable[PaletteDefinition]) -> None:
+        """Set palettes."""
+
         self.beginResetModel()
         self.palettes = list(palettes)
         self.endResetModel()
 
     def rowCount(self, _parent=QModelIndex()):
+        """Return the number of rows exposed by the Qt model."""
+
         return len(self.palettes)
 
     def data(self, index, role=Qt.DisplayRole):
+        """Return data for the requested Qt model role."""
+
         if not index.isValid() or not 0 <= index.row() < len(self.palettes):
             return None
         palette = self.palettes[index.row()]
@@ -153,10 +189,16 @@ class PaletteListModel(QAbstractListModel):
 
 
 class ColorGridDelegate(QStyledItemDelegate):
+    """Render and edit color grid values in Qt item views."""
+
     def sizeHint(self, _option, _index):
+        """Return the preferred size used by Qt layout and item views."""
+
         return QSize(82, 58)
 
     def paint(self, painter, option, index):
+        """Paint the item represented by the Qt delegate index."""
+
         selection = index.data(Qt.UserRole)
         if not isinstance(selection, ColorSelection):
             return
@@ -184,10 +226,16 @@ class ColorGridDelegate(QStyledItemDelegate):
 
 
 class PaletteDelegate(QStyledItemDelegate):
+    """Render and edit palette values in Qt item views."""
+
     def sizeHint(self, _option, _index):
+        """Return the preferred size used by Qt layout and item views."""
+
         return QSize(420, 54)
 
     def paint(self, painter, option, index):
+        """Paint the item represented by the Qt delegate index."""
+
         palette = index.data(Qt.UserRole)
         if not isinstance(palette, PaletteDefinition):
             return
@@ -228,6 +276,8 @@ def _configure_color_view(view: QListView) -> None:
 
 
 class CustomPaletteDialog(QDialog):
+    """Provide the custom palette dialog Qt widget."""
+
     def __init__(self, library: ColorLibrary, palette: PaletteDefinition | None = None, parent=None):
         super().__init__(parent)
         self.library = library
@@ -296,6 +346,8 @@ class CustomPaletteDialog(QDialog):
         return qcolor_to_color(selected) if selected.isValid() else None
 
     def add_color(self):
+        """Add color."""
+
         if self.color_list.count() >= 12:
             status_messages.show_warning("自定义配色最多包含 12 个颜色。")
             return
@@ -304,6 +356,8 @@ class CustomPaletteDialog(QDialog):
             self._append_color(color)
 
     def edit_color(self):
+        """Open the editor for a custom palette color."""
+
         item = self.color_list.currentItem()
         if item is None:
             return
@@ -314,11 +368,15 @@ class CustomPaletteDialog(QDialog):
             item.setToolTip(color_rgba_text(color))
 
     def remove_color(self):
+        """Remove color."""
+
         row = self.color_list.currentRow()
         if row >= 0:
             self.color_list.takeItem(row)
 
     def move_color(self, offset: int):
+        """Move color."""
+
         row = self.color_list.currentRow()
         target = row + int(offset)
         if row < 0 or not 0 <= target < self.color_list.count():
@@ -350,6 +408,8 @@ class CustomPaletteDialog(QDialog):
 
 
 class ColorPickerDialog(QDialog):
+    """Provide the color picker dialog Qt widget."""
+
     COLOR_MODE = "color"
     PALETTE_MODE = "palette"
 
@@ -694,9 +754,13 @@ class ColorPickerDialog(QDialog):
         self.accept()
 
     def selection(self) -> ColorSelection:
+        """Return the current color selection."""
+
         return self._selection
 
     def selected_palette(self) -> PaletteDefinition | None:
+        """Return the selected palette."""
+
         return self._selected_palette
 
 
@@ -704,10 +768,14 @@ class ColorSelector(ColorCycleState):
     """Compatibility name for the former per-axes selector."""
 
     def get_color(self):
+        """Return color."""
+
         return self.peek().color
 
 
 class ColorChoiceWidget(QFrame):
+    """Provide the color choice widget Qt widget."""
+
     colorChanged = Signal(str)
 
     def __init__(
@@ -776,6 +844,8 @@ class ColorChoiceWidget(QFrame):
         self.color_library.toggle_favorite_color(self._selection.color)
 
     def showColorDialog(self):
+        """Show color dialog."""
+
         dialog = ColorPickerDialog(
             self.color_library,
             self._selection,
@@ -796,6 +866,8 @@ class ColorChoiceWidget(QFrame):
         emit: bool = False,
         record_recent: bool = False,
     ) -> bool:
+        """Set selection."""
+
         if not isinstance(selection, ColorSelection):
             raise TypeError("selection must be a ColorSelection.")
         changed = selection.color != self._selection.color
@@ -808,6 +880,8 @@ class ColorChoiceWidget(QFrame):
         return changed
 
     def set_color(self, color, *, emit: bool = False, record_recent: bool = False) -> bool:
+        """Set color."""
+
         try:
             selection = ColorSelection(color)
         except ValueError as exc:
@@ -820,9 +894,13 @@ class ColorChoiceWidget(QFrame):
         )
 
     def color(self) -> str:
+        """Return the selected color."""
+
         return self._selection.color
 
     def selection(self) -> ColorSelection:
+        """Return the current color selection."""
+
         return self._selection
 
 
@@ -831,6 +909,8 @@ def choose_palette(
     color_library: ColorLibrary,
     initial_palette: PaletteDefinition | None = None,
 ) -> PaletteDefinition | None:
+    """Choose palette."""
+
     selection = None
     if initial_palette is not None:
         selection = ColorSelection(initial_palette.colors[0], initial_palette, 0)

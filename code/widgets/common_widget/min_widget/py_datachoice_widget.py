@@ -1,3 +1,5 @@
+"""Select project table columns for chart data references."""
+
 from __future__ import annotations
 
 from Qt_core import *
@@ -6,6 +8,8 @@ from code.database import ColumnRef, ColumnType, TableChangeSet, TableRepository
 
 
 class PyDataChoiceWidget(QFrame):
+    """Provide the py data choice widget Qt widget."""
+
     def __init__(self, repository: TableRepository, project_id: str):
         super().__init__()
         self.repository = repository
@@ -36,6 +40,8 @@ class PyDataChoiceWidget(QFrame):
         return value if isinstance(value, ColumnRef) else None
 
     def update_data(self):
+        """Update data."""
+
         current_x = self.get_x_ref()
         current_y = self.get_y_ref()
         numeric = {ColumnType.NUMBER, ColumnType.DATETIME}
@@ -54,9 +60,13 @@ class PyDataChoiceWidget(QFrame):
         del blocker
 
     def get_x_ref(self) -> ColumnRef | None:
+        """Return x ref."""
+
         return self._current_ref(self.x_data_input)
 
     def get_y_ref(self) -> ColumnRef | None:
+        """Return y ref."""
+
         return self._current_ref(self.y_data_input)
 
     @staticmethod
@@ -71,11 +81,17 @@ class PyDataChoiceWidget(QFrame):
         combo.setCurrentIndex(-1)
 
     def set_x_ref(self, ref: ColumnRef | None):
+        """Set x ref."""
+
         self._set_ref(self.x_data_input, ref)
 
     def set_y_ref(self, ref: ColumnRef | None):
+        """Set y ref."""
+
         self._set_ref(self.y_data_input, ref)
 
     def refs_connect(self, x_callback, y_callback):
+        """Refresh selectors after their data-reference source changes."""
+
         self.x_data_input.currentIndexChanged.connect(x_callback)
         self.y_data_input.currentIndexChanged.connect(y_callback)

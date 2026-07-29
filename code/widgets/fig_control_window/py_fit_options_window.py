@@ -1,3 +1,5 @@
+"""Collect and apply MATLAB or SciPy curve-fitting options."""
+
 from Qt_core import *
 
 from code.database import matlab_adapter, scipy_fit_adapter
@@ -8,6 +10,8 @@ import time
 
 
 def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
+    """Start matlab task."""
+
     return start_background_task(
         owner,
         func,
@@ -91,18 +95,28 @@ class _FitOptionsWidgetBase(QFrame):
 
     @classmethod
     def fit_type_groups(cls):
+        """Fit type groups using the selected model and options."""
+
         raise NotImplementedError
 
     def fallback_fit_info(self, fit_type: str):
+        """Handle the fallback fit info action."""
+
         raise NotImplementedError
 
     def default_method(self, fit_type: str):
+        """Return the default method."""
+
         raise NotImplementedError
 
     def default_fit_options(self, fit_type: str, coefficients):
+        """Return the default fit options."""
+
         raise NotImplementedError
 
     def loading_expression_text(self):
+        """Handle the loading expression text action."""
+
         return f"Loading {self.engine_label} expression..."
 
     def _has_start_point(self, method: str) -> bool:
@@ -191,6 +205,8 @@ class _FitOptionsWidgetBase(QFrame):
         return values[:length]
 
     def load_expression(self, text):
+        """Load expression."""
+
         raise NotImplementedError
 
     def _set_coefficients(self, coefficients):
@@ -219,6 +235,8 @@ class _FitOptionsWidgetBase(QFrame):
                 self.coefficient_table.setItem(i, 2, QTableWidgetItem(self._option_float_text(upper_values[i], "inf")))
 
     def expression_change(self, text):
+        """Apply the expression change emitted by the corresponding control."""
+
         self.load_expression(text)
 
     def _parse_float_text(self, text, field_name):
@@ -254,6 +272,8 @@ class _FitOptionsWidgetBase(QFrame):
         return None
 
     def get_coef_limit(self):
+        """Return coef limit."""
+
         self.coeff_up_limit.clear()
         self.coeff_down_limit.clear()
         self.start_point.clear()
@@ -280,6 +300,8 @@ class _FitOptionsWidgetBase(QFrame):
                 raise ValueError("StartPoint must be either fully specified or left fully blank.")
 
     def fit_parameters(self):
+        """Fit parameters using the selected model and options."""
+
         fit_type_order = self.order_input.currentText()
         if not fit_type_order:
             raise ValueError(f"Please select a {self.engine_label} fit type first.")
@@ -293,10 +315,14 @@ class _FitOptionsWidgetBase(QFrame):
         raise NotImplementedError
 
     def fit_curve(self, x, y):
+        """Fit curve using the selected model and options."""
+
         raise NotImplementedError
 
 
 class PyMatlabFitOptionsWidget(_FitOptionsWidgetBase):
+    """Provide the py matlab fit options widget Qt widget."""
+
     engine = "Matlab"
     engine_label = "Matlab"
 
@@ -305,15 +331,23 @@ class PyMatlabFitOptionsWidget(_FitOptionsWidgetBase):
 
     @classmethod
     def fit_type_groups(cls):
+        """Fit type groups using the selected model and options."""
+
         return matlab_adapter.FIT_TYPES
 
     def fallback_fit_info(self, fit_type: str):
+        """Return fit metadata when an optional backend is unavailable."""
+
         return matlab_adapter.fallback_func_info(fit_type)
 
     def default_method(self, fit_type: str):
+        """Return the default method."""
+
         return matlab_adapter.fit_method_for_name(fit_type)
 
     def default_fit_options(self, fit_type: str, coefficients):
+        """Return the default fit options."""
+
         return matlab_adapter.default_fit_options(fit_type, list(coefficients))
 
     def _add_engine_option_widgets(self, method: str):
@@ -346,6 +380,8 @@ class PyMatlabFitOptionsWidget(_FitOptionsWidgetBase):
                 self._add_option_row(name, self._line_option(self.option_metadata.get(name, default)))
 
     def load_expression(self, text):
+        """Load expression."""
+
         self._expression_request_id += 1
         request_id = self._expression_request_id
         started_at = time.monotonic()
@@ -438,6 +474,8 @@ class PyMatlabFitOptionsWidget(_FitOptionsWidgetBase):
         return fit_type_order, fit_options
 
     def fit_curve(self, x, y):
+        """Fit curve using the selected model and options."""
+
         fit_type_order, fit_options = self.fit_parameters()
         return matlab_adapter.fit_curve_isolated(
             x,
@@ -448,6 +486,8 @@ class PyMatlabFitOptionsWidget(_FitOptionsWidgetBase):
 
 
 class PyScipyFitOptionsWidget(_FitOptionsWidgetBase):
+    """Provide the py scipy fit options widget Qt widget."""
+
     engine = "Python"
     engine_label = "SciPy"
 
@@ -456,15 +496,23 @@ class PyScipyFitOptionsWidget(_FitOptionsWidgetBase):
 
     @classmethod
     def fit_type_groups(cls):
+        """Fit type groups using the selected model and options."""
+
         return scipy_fit_adapter.FIT_TYPES
 
     def fallback_fit_info(self, fit_type: str):
+        """Return fit metadata when an optional backend is unavailable."""
+
         return scipy_fit_adapter.get_func_info(fit_type)
 
     def default_method(self, fit_type: str):
+        """Return the default method."""
+
         return scipy_fit_adapter.default_fit_options(fit_type)["Method"]
 
     def default_fit_options(self, fit_type: str, coefficients):
+        """Return the default fit options."""
+
         return scipy_fit_adapter.default_fit_options(fit_type)
 
     def _add_engine_option_widgets(self, method: str):
@@ -499,6 +547,8 @@ class PyScipyFitOptionsWidget(_FitOptionsWidgetBase):
             self._add_option_row(name, self._line_option(self.option_metadata.get(name, default)))
 
     def load_expression(self, text):
+        """Load expression."""
+
         self._apply_fit_info(scipy_fit_adapter.get_func_info(text))
         self.order_input.setEnabled(True)
 
@@ -560,6 +610,8 @@ class PyScipyFitOptionsWidget(_FitOptionsWidgetBase):
         return fit_type_order, fit_options
 
     def fit_curve(self, x, y):
+        """Fit curve using the selected model and options."""
+
         fit_type_order, fit_options = self.fit_parameters()
         return scipy_fit_adapter.fit_curve(
             x,

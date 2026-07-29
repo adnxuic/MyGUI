@@ -1,3 +1,5 @@
+"""Configure the optional TeX rendering integration."""
+
 from Qt_core import *
 from code.widgets.qss_func import qss_loader
 from code import tex_config
@@ -13,6 +15,8 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyTexWindow(QFrame):
+    """Provide the py tex window Qt widget."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -52,6 +56,8 @@ class PyTexWindow(QFrame):
         self.setLayout(self.layout)
 
     def use_latex_engine(self, state):
+        """Apply the selected TeX engine setting."""
+
         checked = state == Qt.Checked or state == Qt.CheckState.Checked
         logger = tex_config.tex_logger()
         if not checked:
@@ -103,6 +109,8 @@ class PyTexWindow(QFrame):
         status_messages.show_error(message)
 
     def update_preamble(self):
+        """Update preamble."""
+
         preamble = tex_config.normalize_preamble(self.preamble_input.toPlainText())
         preamble_line_count = len(preamble.splitlines()) if preamble else 0
         started_at = time.monotonic()

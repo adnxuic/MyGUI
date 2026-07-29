@@ -1,3 +1,5 @@
+"""Display compact title-bar actions with overflow handling."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -30,6 +32,8 @@ class LazyDialogAction(QAction):
 
     @property
     def dialog(self) -> QDialog | None:
+        """Return the dialog."""
+
         return self._dialog
 
     def _dialog_parent(self) -> QWidget | None:
@@ -39,6 +43,8 @@ class LazyDialogAction(QAction):
         return None
 
     def show_dialog(self, _checked: bool = False):
+        """Show dialog."""
+
         dialog = self._dialog
         if dialog is None:
             dialog = self._dialog_factory(self._dialog_parent())
@@ -82,10 +88,14 @@ class ResponsiveActionGallery(QFrame):
         layout.addWidget(self.toolbar)
 
     def showEvent(self, event):
+        """Refresh the widget when Qt makes it visible."""
+
         super().showEvent(event)
         self._schedule_overflow_reservation()
 
     def resizeEvent(self, event):
+        """Reflow child controls after the widget is resized."""
+
         super().resizeEvent(event)
         self._schedule_overflow_reservation()
 
@@ -126,6 +136,8 @@ class ResponsiveActionGallery(QFrame):
         *,
         reuse_dialog: bool = True,
     ) -> LazyDialogAction:
+        """Add dialog action."""
+
         action = LazyDialogAction(
             name,
             icon_path,

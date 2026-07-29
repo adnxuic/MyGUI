@@ -108,6 +108,8 @@ def _refresh_legend(axes: Axes) -> None:
 
 
 def update_subject_for(target: Any) -> Axes | Figure | None:
+    """Update subject for."""
+
     if isinstance(target, Axes):
         return target
     if isinstance(target, Figure):
@@ -124,6 +126,8 @@ def update_subject_for(target: Any) -> Axes | Figure | None:
 def apply_update_impacts(
     subject: Axes | Figure | None, impacts: UpdateImpact
 ) -> None:
+    """Apply update impacts."""
+
     if subject is None or impacts == UpdateImpact.NONE:
         return
     figure: Figure
@@ -188,22 +192,32 @@ class ComponentController(Generic[T]):
 
     @property
     def component_id(self) -> str:
+        """Return the stable component identifier."""
+
         return self._state.id
 
     @property
     def state(self) -> ComponentState:
+        """Return an independent copy of the component state."""
+
         return self._state.clone()
 
     @property
     def deleted(self) -> bool:
+        """Return whether this Controller has been deleted."""
+
         return self._deleted
 
     @classmethod
     def property_specs(cls) -> dict[str, PropertySpec]:
+        """Return property specifications keyed by persistent field name."""
+
         return {spec.key: spec for spec in cls.PROPERTY_SPECS}
 
     @classmethod
     def default_properties(cls) -> dict[str, Any]:
+        """Return the default properties."""
+
         return {
             spec.key: deepcopy(spec.default)
             for spec in cls.PROPERTY_SPECS
@@ -212,6 +226,8 @@ class ComponentController(Generic[T]):
 
     @classmethod
     def capabilities(cls) -> frozenset[str]:
+        """Return the capabilities."""
+
         return cls.CAPABILITIES | frozenset(cls.property_specs())
 
     def attach(
@@ -219,10 +235,14 @@ class ComponentController(Generic[T]):
         registry: ComponentRegistry,
         locator: ComponentLocator,
     ) -> None:
+        """Attach the controller to its registry and target locator."""
+
         self._registry = registry
         self._locator = locator
 
     def resolve_target(self) -> T:
+        """Resolve the live Matplotlib target for a component."""
+
         if self._deleted:
             raise ComponentDeletedError(
                 f"Component {self.component_id!r} has been deleted."
@@ -230,6 +250,8 @@ class ComponentController(Generic[T]):
         return self._locator.require(self._state)
 
     def read_state(self, *, strict: bool = False) -> ComponentState:
+        """Read state."""
+
         target = self.resolve_target()
         properties = deepcopy(self._state.properties)
         for spec in self.PROPERTY_SPECS:
@@ -245,6 +267,8 @@ class ComponentController(Generic[T]):
         return self._state.clone(properties=properties)
 
     def snapshot(self) -> ComponentState:
+        """Return a serializable snapshot of the current state."""
+
         return self.read_state()
 
     def sync_from_target(self, *, strict: bool = False) -> ComponentState:
@@ -428,6 +452,8 @@ class ComponentController(Generic[T]):
         return change
 
     def set_property(self, key: str, value: Any) -> ComponentChange:
+        """Set property."""
+
         before = self._safe_snapshot()
         if self._deleted:
             return self._rejected(
@@ -500,6 +526,8 @@ class ComponentController(Generic[T]):
         return change
 
     def apply_state(self, state: ComponentState) -> ComponentChange:
+        """Apply state."""
+
         before = self._safe_snapshot()
         target: T | None = None
         applied: list[tuple[PropertySpec, Any]] = []
@@ -594,9 +622,13 @@ class ComponentController(Generic[T]):
         return change
 
     def restore(self, snapshot: ComponentState) -> ComponentChange:
+        """Restore the previously captured state."""
+
         return self.apply_state(snapshot)
 
     def delete(self) -> ComponentChange:
+        """Remove the component through its controller."""
+
         before = self._safe_snapshot()
         if self._deleted:
             return ComponentChange(

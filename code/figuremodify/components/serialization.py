@@ -1,3 +1,5 @@
+"""Convert, normalize, and validate persisted Figure component trees."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +23,8 @@ COLOR_PROPERTIES = {"color", "facecolor", "edgecolor", "markerfacecolor", "marke
 
 
 def deterministic_component_id(project_id: str, legacy_path: str) -> str:
+    """Build a stable component ID for migrated legacy state."""
+
     project_key = str(project_id).strip()
     path_key = str(legacy_path).strip().replace("\\", "/")
     if not project_key:
@@ -436,6 +440,8 @@ def legacy_figure_to_v6(
     figure_snapshot: dict[str, Any],
     project_id: str,
 ) -> dict[str, Any]:
+    """Migrate a legacy Figure snapshot to the schema-v6 component tree."""
+
     legacy = deepcopy(_expect_dict(figure_snapshot, "figure"))
     if set(legacy) == {"root_component_id", "components"}:
         return normalize_v6_figure(legacy)
@@ -718,6 +724,8 @@ def legacy_figure_to_v6(
 
 
 def normalize_v6_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize v6 figure."""
+
     figure = deepcopy(_expect_dict(figure_snapshot, "figure"))
     components = _expect_list(figure.get("components"), "figure.components")
     for index, raw in enumerate(components):
@@ -1368,6 +1376,8 @@ def validate_v6_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
+    """Validate v6 figure."""
+
     figure = _expect_dict(figure_snapshot, "figure")
     if set(figure) != {"root_component_id", "components"}:
         raise ValueError(
@@ -1485,6 +1495,8 @@ def _component_children(
 
 
 def v6_figure_to_legacy(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Convert a schema-v6 component tree for legacy consumers."""
+
     figure = deepcopy(_expect_dict(figure_snapshot, "figure"))
     components = [
         _component_state_dict(raw, f"figure.components[{index}]")

@@ -1,3 +1,5 @@
+"""Start MyGUI and compose its top-level Qt workspace."""
+
 import sys
 from pathlib import Path
 
@@ -24,6 +26,8 @@ from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
 class MainWindow(QMainWindow):
+    """Coordinate the application's table, Figure, and Inspector workspaces."""
+
     WORKSPACE_SETTINGS_GROUP = "workspaceLayout"
     WORKSPACE_SETTINGS_VERSION = 1
     DEFAULT_OUTER_SPLITTER_SIZES = (45, 55)
@@ -44,6 +48,8 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
     def setup_ui(self):
+        """Build the main window and connect its shared application services."""
+
         self.setObjectName("MainWindow")
         self.setStyleSheet(mainwindow_qss)
 
@@ -281,6 +287,8 @@ class MainWindow(QMainWindow):
         self._apply_default_workspace_sizes()
 
     def showEvent(self, event):
+        """Restore persisted workspace geometry the first time the window opens."""
+
         super().showEvent(event)
         QTimer.singleShot(0, self._apply_default_workspace_sizes)
 
@@ -296,6 +304,8 @@ class MainWindow(QMainWindow):
         ]
 
     def dragEnterEvent(self, event):
+        """Accept supported workbook and text files dragged onto the window."""
+
         paths = self._local_drop_paths(event)
         if len(paths) == 1 and paths[0].is_file():
             event.acceptProposedAction()
@@ -307,6 +317,8 @@ class MainWindow(QMainWindow):
             )
 
     def import_excel_file(self, file_name: str, show_preview: bool = True):
+        """Import an Excel workbook into the table workspace."""
+
         subtable = import_excel_into_workspace(
             file_name,
             self.table,
@@ -319,6 +331,8 @@ class MainWindow(QMainWindow):
         return subtable
 
     def import_text_file(self, file_name: str, show_preview: bool = True):
+        """Import a delimited text file into the table workspace."""
+
         subtable = import_text_into_workspace(
             file_name,
             self.table,
@@ -331,6 +345,8 @@ class MainWindow(QMainWindow):
         return subtable
 
     def dropEvent(self, event):
+        """Import the first supported local file from a Qt drop event."""
+
         paths = self._local_drop_paths(event)
         if len(paths) != 1 or not paths[0].is_file():
             event.ignore()
@@ -349,6 +365,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Import Data", str(exc))
 
     def closeEvent(self, event):
+        """Persist layout state and release global callbacks before closing."""
+
         self._save_workspace_layout()
         if hasattr(self, "bottom_bar"):
             status_messages.clear_status_handler(self.bottom_bar.show_message)

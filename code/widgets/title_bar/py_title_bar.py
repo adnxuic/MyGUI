@@ -1,3 +1,5 @@
+"""Compose the custom application title bar."""
+
 import os
 
 from Qt_core import *
@@ -85,6 +87,8 @@ class PyTitleBar(QFrame):
         self.layout.addLayout(self.stacklayout_bottom)
 
     def the_button_was_toggled(self, checked):
+        """Synchronize the button appearance after its checked state changes."""
+
         self.stacklayout_top.setCurrentIndex(1 if checked else 0)
 
     def show_style_selector(self):

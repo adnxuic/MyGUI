@@ -1,3 +1,5 @@
+"""Edit general application settings."""
+
 import os
 
 from Qt_core import *
@@ -11,6 +13,8 @@ qss_path = os.path.join(current_path, "setting_dialog_style.qss")
 
 
 class PySettingDialog(QDialog):
+    """Provide the py setting dialog Qt widget."""
+
     def __init__(self, parent=None, reset_layout_callback=None):
         super().__init__(parent)
         self._reset_layout_callback = reset_layout_callback
@@ -35,10 +39,14 @@ class PySettingDialog(QDialog):
         layout.addWidget(buttons)
 
     def set_reset_layout_callback(self, callback):
+        """Set reset layout callback."""
+
         self._reset_layout_callback = callback
         self.reset_layout_button.setEnabled(callback is not None)
 
     def reset_workspace_layout(self):
+        """Reset workspace layout."""
+
         if self._reset_layout_callback is None:
             return
         self._reset_layout_callback()

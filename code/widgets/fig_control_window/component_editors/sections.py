@@ -1,3 +1,5 @@
+"""Implement reusable appearance and text editor sections."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
@@ -101,12 +103,18 @@ class DataReferenceSection(QWidget, EditorSection):
         return True
 
     def x_data_change(self, *_args) -> bool:
+        """Apply the x data change emitted by the corresponding control."""
+
         return self._apply("x")
 
     def y_data_change(self, *_args) -> bool:
+        """Apply the y data change emitted by the corresponding control."""
+
         return self._apply("y")
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         data = self.controller.read_state().data
         self.data_choice_widget.set_refs(
             ColumnRef.from_dict(data["x_ref"]),
@@ -114,6 +122,8 @@ class DataReferenceSection(QWidget, EditorSection):
         )
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         self.data_choice_widget.dispose()
 
 
@@ -160,10 +170,14 @@ class PropertySection(ComponentEditorBase, EditorSection):
         return super()._success_message(key, label)
 
     def flush_text(self, key: str) -> bool:
+        """Commit pending text after the edit-coalescing delay."""
+
         binding = self._text_bindings.get(key)
         return True if binding is None else binding.flush()
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         for binding in self._text_bindings.values():
             binding.cancel()
 
@@ -220,6 +234,8 @@ class LineAppearanceSection(QWidget, EditorSection):
         self.layout.addWidget(self.toolbox)
 
     def editor(self, key: str):
+        """Return the editor widget used for the property."""
+
         for section in (self._base, self._marker, self._advanced):
             try:
                 return section.editor(key)
@@ -228,29 +244,39 @@ class LineAppearanceSection(QWidget, EditorSection):
         raise KeyError(key)
 
     def editors(self):
+        """Return the available editors."""
+
         result = {}
         for section in (self._base, self._marker, self._advanced):
             result.update(section.editors())
         return result
 
     def flush_text(self, key: str) -> bool:
+        """Commit pending text after the edit-coalescing delay."""
+
         for section in (self._base, self._marker, self._advanced):
             if key in section.editors():
                 return section.flush_text(key)
         raise KeyError(key)
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         self._base.sync_from_controller()
         self._marker.sync_from_controller()
         self._advanced.sync_from_controller()
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         self._base.dispose()
         self._marker.dispose()
         self._advanced.dispose()
 
 
 class ScatterAppearanceSection(QWidget, EditorSection):
+    """Provide the scatter appearance section Qt widget."""
+
     BASIC_KEYS = (
         "label",
         "visible",
@@ -287,6 +313,8 @@ class ScatterAppearanceSection(QWidget, EditorSection):
         self.layout.addWidget(self.toolbox)
 
     def editor(self, key: str):
+        """Return the editor widget used for the property."""
+
         for section in (self._base, self._advanced):
             try:
                 return section.editor(key)
@@ -295,27 +323,37 @@ class ScatterAppearanceSection(QWidget, EditorSection):
         raise KeyError(key)
 
     def editors(self):
+        """Return the available editors."""
+
         result = {}
         result.update(self._base.editors())
         result.update(self._advanced.editors())
         return result
 
     def flush_text(self, key: str) -> bool:
+        """Commit pending text after the edit-coalescing delay."""
+
         for section in (self._base, self._advanced):
             if key in section.editors():
                 return section.flush_text(key)
         raise KeyError(key)
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         self._base.sync_from_controller()
         self._advanced.sync_from_controller()
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         self._base.dispose()
         self._advanced.dispose()
 
 
 class TextContentSection(QWidget, EditorSection):
+    """Provide the text content section Qt widget."""
+
     def __init__(
         self,
         controller,
@@ -361,17 +399,25 @@ class TextContentSection(QWidget, EditorSection):
         )
 
     def set_text_content(self):
+        """Set text content."""
+
         return self._text_binding.flush()
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         value = self.controller.read_state().properties[self.property_key]
         self._text_binding.set_text(str(value))
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         self._text_binding.cancel()
 
 
 class TextTypographySection(PropertySection):
+    """Edit the text typography properties of a component."""
+
     DEFAULT_KEYS = (
         "fontfamily",
         "fontsize",
@@ -403,13 +449,19 @@ class TextTypographySection(PropertySection):
             self.font_size_input = self.editor("fontsize")
 
     def set_text_font(self, font: str):
+        """Set text font."""
+
         return self.apply_property("fontfamily", str(font))
 
     def set_text_fontsize(self, size):
+        """Set text fontsize."""
+
         return self.apply_property("fontsize", float(size))
 
 
 class TextTransformSection(PropertySection):
+    """Edit the text transform properties of a component."""
+
     KEYS = (
         "rotation",
         "horizontalalignment",
@@ -427,6 +479,8 @@ class TextTransformSection(PropertySection):
 
 
 class TextPositionSection(PropertySection):
+    """Edit the text position properties of a component."""
+
     KEYS = ("position", "visible")
 
     def __init__(self, controller, *, context, apply_properties, parent=None):
@@ -441,6 +495,8 @@ class TextPositionSection(PropertySection):
         self.text_x_pos, self.text_y_pos = position.inputs
 
     def set_xy_position(self, *_args):
+        """Set xy position."""
+
         return self.apply_property(
             "position",
             (self.text_x_pos.value(), self.text_y_pos.value()),
@@ -448,6 +504,8 @@ class TextPositionSection(PropertySection):
 
 
 class TextRenderSection(QWidget, EditorSection):
+    """Provide the text render section Qt widget."""
+
     def __init__(self, controller, *, context, parent=None):
         super().__init__(parent)
         self.controller = controller
@@ -495,6 +553,8 @@ class TextRenderSection(QWidget, EditorSection):
         self._sync_tex_button()
 
     def set_tex_render(self, state):
+        """Set tex render."""
+
         if self._disposed:
             return False
         checked = (
@@ -525,9 +585,13 @@ class TextRenderSection(QWidget, EditorSection):
         return True
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         self._sync_tex_button()
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         if self._disposed:
             return
         self._disposed = True
@@ -535,6 +599,8 @@ class TextRenderSection(QWidget, EditorSection):
 
 
 class LegendLocationSection(QWidget, EditorSection):
+    """Provide the legend location section Qt widget."""
+
     PRESETS = (
         "best",
         "upper right",
@@ -629,6 +695,8 @@ class LegendLocationSection(QWidget, EditorSection):
         )
 
     def set_legend_position(self, *_args):
+        """Set legend position."""
+
         custom = self._custom_selected()
         self.legend_x_pos.setEnabled(custom)
         self.legend_y_pos.setEnabled(custom)
@@ -640,6 +708,8 @@ class LegendLocationSection(QWidget, EditorSection):
         )
 
     def set_legend_xy_position(self, *_args):
+        """Set legend xy position."""
+
         if not self._custom_selected():
             return True
         return self._apply(
@@ -648,6 +718,8 @@ class LegendLocationSection(QWidget, EditorSection):
         )
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         properties = self.controller.read_state().properties
         controls = (
             self.visible_input,
@@ -683,6 +755,8 @@ class LegendLocationSection(QWidget, EditorSection):
 
 
 class PaletteSection(QWidget, EditorSection):
+    """Provide the palette section Qt widget."""
+
     def __init__(self, controller, *, context, parent=None):
         super().__init__(parent)
         self.controller = controller
@@ -696,6 +770,8 @@ class PaletteSection(QWidget, EditorSection):
         self.layout.addWidget(self.button)
 
     def choose_and_apply_palette(self):
+        """Choose and apply palette."""
+
         cycle = self.context.axes_commands.cycle_state(
             self.controller.component_id
         )

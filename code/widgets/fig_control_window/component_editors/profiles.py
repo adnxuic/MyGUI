@@ -1,3 +1,5 @@
+"""Register the production editor profiles for Figure component roles."""
+
 from __future__ import annotations
 
 from code.figuremodify.components import ComponentKind, ComponentRole

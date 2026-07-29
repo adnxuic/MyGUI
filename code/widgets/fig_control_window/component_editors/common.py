@@ -1,3 +1,5 @@
+"""Share component-editor widgets, status helpers, and data-reference logic."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
@@ -84,11 +86,15 @@ def modification_succeeded(result: Any) -> bool:
 
 
 def modification_message(result: Any) -> str:
+    """Return a user-facing message for a component change."""
+
     message = getattr(result, "message", "")
     return str(message) if message else ""
 
 
 def modification_status(result: Any) -> str:
+    """Map a component change to a Message Bar status level."""
+
     return _result_status_text(result)
 
 
@@ -125,6 +131,8 @@ class DebouncedTextBinding(QObject):
 
     @property
     def last_valid_text(self) -> str:
+        """Return the last valid text."""
+
         return self._last_valid_text
 
     def _text(self) -> str:
@@ -144,9 +152,13 @@ class DebouncedTextBinding(QObject):
         self._timer.start()
 
     def cancel(self) -> None:
+        """Close the dialog without applying pending changes."""
+
         self._timer.stop()
 
     def set_text(self, text: str, *, accepted: bool = True) -> None:
+        """Set text."""
+
         self.cancel()
         text = str(text)
         self._set_editor_text(text)
@@ -154,10 +166,14 @@ class DebouncedTextBinding(QObject):
             self._last_valid_text = text
 
     def rollback(self) -> None:
+        """Restore the last valid control value after a failed update."""
+
         self.cancel()
         self._set_editor_text(self._last_valid_text)
 
     def flush(self) -> bool:
+        """Commit the control's pending coalesced value."""
+
         self.cancel()
         candidate = self._text()
         if candidate == self._last_valid_text:
@@ -244,10 +260,14 @@ class LineStyleEditor(QWidget):
         self.styleChanged.emit(self.style())
 
     def style(self) -> str:
+        """Return the selected style."""
+
         value = self.style_combo.currentData()
         return normalize_line_style(value)
 
     def set_style(self, style: str) -> None:
+        """Set style."""
+
         canonical = normalize_line_style(style)
         index = self.style_combo.findData(canonical)
         if index < 0:
@@ -257,9 +277,13 @@ class LineStyleEditor(QWidget):
         del blocker
 
     def size(self) -> float:
+        """Return the selected size."""
+
         return float(self.size_input.value())
 
     def set_size(self, size: float) -> None:
+        """Set size."""
+
         blocker = QSignalBlocker(self.size_input)
         self.size_input.setValue(float(size))
         del blocker
@@ -302,9 +326,13 @@ class RangeEditor(QWidget):
         self.rangeChanged.emit(*self.values())
 
     def values(self) -> tuple[float, float]:
+        """Return the current collection of values."""
+
         return float(self.minimum_input.value()), float(self.maximum_input.value())
 
     def set_range(self, minimum: float, maximum: float) -> None:
+        """Set range."""
+
         lower_blocker = QSignalBlocker(self.minimum_input)
         upper_blocker = QSignalBlocker(self.maximum_input)
         self.minimum_input.setValue(float(minimum))
@@ -343,11 +371,15 @@ class NullableDoubleEditor(QWidget):
         self.value_input.valueChanged.connect(self._value_changed)
 
     def value(self) -> float | None:
+        """Return the current control value."""
+
         if not self.use_value_input.isChecked():
             return None
         return float(self.value_input.value())
 
     def set_value(self, value: float | None, *, emit: bool = False) -> None:
+        """Set value."""
+
         use_blocker = QSignalBlocker(self.use_value_input)
         value_blocker = QSignalBlocker(self.value_input)
         enabled = value is not None
@@ -420,6 +452,8 @@ class NumericTupleEditor(QWidget):
             self.use_value_input.toggled.connect(self._use_value_changed)
 
     def value(self):
+        """Return the current control value."""
+
         if (
             self.use_value_input is not None
             and not self.use_value_input.isChecked()
@@ -428,6 +462,8 @@ class NumericTupleEditor(QWidget):
         return tuple(float(editor.value()) for editor in self.inputs)
 
     def set_value(self, value, *, emit: bool = False) -> None:
+        """Set value."""
+
         enabled = value is not None or not self.nullable
         values = (
             tuple(float(item) for item in value)
@@ -493,12 +529,16 @@ class SpinePositionEditor(QWidget):
         self.value_input.valueChanged.connect(self._changed)
 
     def value(self):
+        """Return the current control value."""
+
         kind = str(self.kind_input.currentData())
         if kind in {"center", "zero"}:
             return kind
         return kind, float(self.value_input.value())
 
     def set_value(self, value, *, emit: bool = False) -> None:
+        """Set value."""
+
         if isinstance(value, str):
             kind, number = value, 0.0
         elif isinstance(value, (tuple, list)) and len(value) == 2:
@@ -564,12 +604,18 @@ class ScatterStyleEditor(QWidget):
         self.size_input.valueChanged.connect(self.sizeChanged)
 
     def marker(self) -> str:
+        """Return the selected marker."""
+
         return self.marker_input.currentText()
 
     def size(self) -> float:
+        """Return the selected size."""
+
         return float(self.size_input.value())
 
     def set_marker(self, marker: str) -> None:
+        """Set marker."""
+
         marker = str(marker)
         if self.marker_input.findText(marker) < 0:
             self.marker_input.addItem(marker)
@@ -578,6 +624,8 @@ class ScatterStyleEditor(QWidget):
         del blocker
 
     def set_size(self, size: float) -> None:
+        """Set size."""
+
         blocker = QSignalBlocker(self.size_input)
         self.size_input.setValue(float(size))
         del blocker

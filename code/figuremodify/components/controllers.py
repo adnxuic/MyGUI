@@ -156,6 +156,8 @@ LINESTYLE_ALIASES = {
 
 
 def normalize_linestyle(value: Any) -> str:
+    """Normalize linestyle."""
+
     if not isinstance(value, str):
         raise ComponentValidationError("Line style must be a string.")
     normalized = LINESTYLE_ALIASES.get(value.strip().lower(), value)
@@ -310,10 +312,14 @@ def _level(state: ComponentState) -> str:
 
 
 class ContainerController(ComponentController[Any]):
+    """Coordinate state changes for container components."""
+
     CAPABILITIES = frozenset({"container"})
 
 
 class FigureController(ContainerController):
+    """Coordinate state changes for figure components."""
+
     KIND = ComponentKind.FIGURE
     ROLES = frozenset({ComponentRole.FIGURE})
     PROPERTY_SPECS = (
@@ -417,6 +423,8 @@ class FigureController(ContainerController):
 
 
 class AxesController(ContainerController):
+    """Coordinate state changes for axes components."""
+
     KIND = ComponentKind.AXES
     ROLES = frozenset({ComponentRole.AXES})
     PROPERTY_SPECS = (
@@ -537,6 +545,8 @@ class AxesController(ContainerController):
 
 
 class AxisComponentController(ComponentController[Any]):
+    """Coordinate state changes for axis component components."""
+
     CAPABILITIES = frozenset({"axis_component"})
 
     def _validate_candidate(self, state: ComponentState) -> None:
@@ -549,6 +559,8 @@ class AxisComponentController(ComponentController[Any]):
 
 
 class AxisController(AxisComponentController):
+    """Coordinate state changes for axis components."""
+
     KIND = ComponentKind.AXIS
     ROLES = frozenset({ComponentRole.X_AXIS, ComponentRole.Y_AXIS})
     PROPERTY_SPECS = (
@@ -662,20 +674,28 @@ class AxisController(AxisComponentController):
 
 
 class XAxisController(AxisController):
+    """Coordinate state changes for xaxis components."""
+
     ROLES = frozenset({ComponentRole.X_AXIS})
 
 
 class YAxisController(AxisController):
+    """Coordinate state changes for yaxis components."""
+
     ROLES = frozenset({ComponentRole.Y_AXIS})
 
     @classmethod
     def default_properties(cls) -> dict[str, Any]:
+        """Return the default properties."""
+
         properties = super().default_properties()
         properties["label_position"] = "left"
         return properties
 
 
 class SpineController(AxisComponentController):
+    """Coordinate state changes for spine components."""
+
     KIND = ComponentKind.SPINE
     ROLES = frozenset({ComponentRole.SPINE})
     PROPERTY_SPECS = (
@@ -766,6 +786,8 @@ class SpineController(AxisComponentController):
 
 
 class TickGroupController(AxisComponentController):
+    """Coordinate state changes for tick group components."""
+
     KIND = ComponentKind.TICK_GROUP
     ROLES = frozenset(
         {ComponentRole.MAJOR_TICK, ComponentRole.MINOR_TICK}
@@ -885,6 +907,8 @@ class TickGroupController(AxisComponentController):
 
 
 class TickLabelGroupController(AxisComponentController):
+    """Coordinate state changes for tick label group components."""
+
     KIND = ComponentKind.TICK_LABEL_GROUP
     ROLES = frozenset(
         {
@@ -1021,6 +1045,8 @@ class TickLabelGroupController(AxisComponentController):
 
 
 class GridController(AxisComponentController):
+    """Coordinate state changes for grid components."""
+
     KIND = ComponentKind.GRID
     ROLES = frozenset({ComponentRole.GRID})
     PROPERTY_SPECS = (
@@ -1103,6 +1129,8 @@ class GridController(AxisComponentController):
 
 
 class TextController(ComponentController[Text]):
+    """Coordinate state changes for text components."""
+
     KIND = ComponentKind.TEXT
     ROLES = frozenset(
         {
@@ -1197,9 +1225,13 @@ class TextController(ComponentController[Text]):
 
 
 class TitleController(TextController):
+    """Coordinate state changes for title components."""
+
     ROLES = frozenset({ComponentRole.TITLE})
 
     def delete(self) -> ComponentChange:
+        """Remove the component through its controller."""
+
         return self.set_property("visible", False)
 
     def _write_property(
@@ -1211,16 +1243,22 @@ class TitleController(TextController):
 
 
 class AxisLabelController(TextController):
+    """Coordinate state changes for axis label components."""
+
     ROLES = frozenset({ComponentRole.X_LABEL, ComponentRole.Y_LABEL})
 
     def _validate_candidate(self, state: ComponentState) -> None:
         _axis_name(state)
 
     def delete(self) -> ComponentChange:
+        """Remove the component through its controller."""
+
         return self.set_property("visible", False)
 
 
 class LegendController(ComponentController[Legend]):
+    """Coordinate state changes for legend components."""
+
     KIND = ComponentKind.LEGEND
     ROLES = frozenset({ComponentRole.LEGEND})
     PROPERTY_SPECS = (
@@ -1287,6 +1325,8 @@ class LegendController(ComponentController[Legend]):
         super().__init__(state, **kwargs)
 
     def read_state(self, *, strict: bool = False) -> ComponentState:
+        """Read state."""
+
         try:
             return super().read_state(strict=strict)
         except ComponentNotFoundError:
@@ -1295,6 +1335,8 @@ class LegendController(ComponentController[Legend]):
             return self.state
 
     def delete(self) -> ComponentChange:
+        """Remove the component through its controller."""
+
         state = self.state
         properties = dict(state.properties)
         properties["visible"] = False
@@ -1447,6 +1489,8 @@ class LegendController(ComponentController[Legend]):
 
 
 class LineController(ComponentController[Line2D]):
+    """Coordinate state changes for line components."""
+
     KIND = ComponentKind.LINE
     ROLES = frozenset(
         {
@@ -1809,6 +1853,8 @@ class LineController(ComponentController[Line2D]):
         *,
         drawable: XYData,
     ) -> ComponentChange:
+        """Apply role data."""
+
         return self.apply_mutation(
             ComponentMutation(
                 self.component_id,
@@ -1824,6 +1870,8 @@ class LineController(ComponentController[Line2D]):
         *,
         persist: bool = False,
     ) -> ComponentChange:
+        """Set xy data."""
+
         x_values = np.asarray(x)
         y_values = np.asarray(y)
         data = deepcopy(self._state.data)
@@ -1867,6 +1915,8 @@ class LineController(ComponentController[Line2D]):
 
 
 class FunctionCurveController(LineController):
+    """Coordinate state changes for function curve components."""
+
     ROLES = frozenset({ComponentRole.FUNCTION_CURVE})
     CAPABILITIES = LineController.CAPABILITIES | frozenset(
         {"function_curve"}
@@ -1874,6 +1924,8 @@ class FunctionCurveController(LineController):
 
 
 class DataPlotController(LineController):
+    """Coordinate state changes for data plot components."""
+
     ROLES = frozenset({ComponentRole.DATA_PLOT})
     CAPABILITIES = LineController.CAPABILITIES | frozenset(
         {"data_reference", "auto_refresh"}
@@ -1881,6 +1933,8 @@ class DataPlotController(LineController):
 
 
 class FitCurveController(LineController):
+    """Coordinate state changes for fit curve components."""
+
     ROLES = frozenset({ComponentRole.FIT_CURVE})
     CAPABILITIES = LineController.CAPABILITIES | frozenset(
         {"data_reference", "manual_refresh", "fit"}
@@ -1888,6 +1942,8 @@ class FitCurveController(LineController):
 
 
 class InterpolationController(LineController):
+    """Coordinate state changes for interpolation components."""
+
     ROLES = frozenset({ComponentRole.INTERPOLATION})
     CAPABILITIES = LineController.CAPABILITIES | frozenset(
         {"data_reference", "auto_refresh", "interpolation"}
@@ -1895,10 +1951,14 @@ class InterpolationController(LineController):
 
 
 class CollectionController(ComponentController[Any]):
+    """Coordinate state changes for collection components."""
+
     CAPABILITIES = frozenset({"collection"})
 
 
 class ScatterController(CollectionController):
+    """Coordinate state changes for scatter components."""
+
     KIND = ComponentKind.SCATTER
     ROLES = frozenset({ComponentRole.SCATTER})
     PROPERTY_SPECS = (
@@ -2181,6 +2241,8 @@ class ScatterController(CollectionController):
         *,
         drawable: XYData,
     ) -> ComponentChange:
+        """Apply role data."""
+
         return self.apply_mutation(
             ComponentMutation(
                 self.component_id,
@@ -2196,6 +2258,8 @@ class ScatterController(CollectionController):
         *,
         persist: bool = False,
     ) -> ComponentChange:
+        """Set xy data."""
+
         x_values = np.asarray(x)
         y_values = np.asarray(y)
         data = deepcopy(self._state.data)
@@ -2289,6 +2353,8 @@ CONTROLLER_TYPES: dict[
 def controller_type_for(
     state: ComponentState,
 ) -> type[ComponentController[Any]]:
+    """Return the Controller class registered for the component state."""
+
     try:
         return CONTROLLER_TYPES[(state.kind, state.role)]
     except KeyError as exc:
@@ -2305,6 +2371,8 @@ def create_controller(
     locator: Any | None = None,
     registry: Any | None = None,
 ) -> ComponentController[Any]:
+    """Create controller."""
+
     return controller_type_for(state)(
         state,
         target=target,

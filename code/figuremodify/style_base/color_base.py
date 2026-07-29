@@ -1,3 +1,5 @@
+"""Store the legacy color names used by older UI controls."""
+
 # 颜色搭配来源于网络：https://liuzhaoze.github.io/posts/%E8%AE%BA%E6%96%87%E7%BB%98%E5%9B%BE%E9%85%8D%E8%89%B2/
 
 two_color_combi_dict = {

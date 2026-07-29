@@ -1,3 +1,5 @@
+"""Expose the database package."""
+
 from .table_document import (
     ColumnRef,
     ColumnSchema,

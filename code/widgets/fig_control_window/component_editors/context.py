@@ -171,6 +171,8 @@ class MessagePresenter:
             )
 
     def present(self, result, *, success: str = "") -> bool:
+        """Show this Inspector and synchronize it from controller state."""
+
         if isinstance(result, ComponentBatchChange):
             ok = result.ok
             changes = result.changes
@@ -239,6 +241,8 @@ class MessagePresenter:
         return True
 
     def close(self) -> None:
+        """Close the editor context and detach its callbacks."""
+
         self._detach_registry()
 
 
@@ -263,6 +267,8 @@ class ComponentEditorManager:
         parent=None,
         remover: Callable | None = None,
     ):
+        """Create and return a new instance."""
+
         if self._closed:
             raise RuntimeError("ComponentEditorManager is closed.")
         component_id = (
@@ -322,6 +328,8 @@ class ComponentEditorManager:
                 self._editors.pop(component_id, None)
 
     def editor(self, component_id: str):
+        """Return the editor widget used for the property."""
+
         registrations = self._editors.get(component_id, [])
         for editor_ref, _remover in registrations:
             editor = editor_ref()
@@ -371,6 +379,8 @@ class ComponentEditorManager:
                     sync()
 
     def close(self) -> None:
+        """Close the editor context and detach its callbacks."""
+
         if self._closed:
             return
         self._closed = True
@@ -393,6 +403,8 @@ class ComponentEditorManager:
 
 @dataclass(slots=True)
 class EditorContext:
+    """Represent the application's editor context."""
+
     registry: ComponentRegistry
     color_library: ColorLibrary
     messages: MessagePresenter
@@ -407,4 +419,6 @@ class EditorContext:
 
     @property
     def repository(self):
+        """Return the repository."""
+
         return self.chart_data.repository

@@ -1,3 +1,5 @@
+"""Provide legacy helpers for invoking MATLAB curve fitting."""
+
 
 # 多项式:1到9次
 poly = [

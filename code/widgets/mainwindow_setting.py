@@ -1,3 +1,5 @@
+"""Apply persisted geometry and layout settings to the main window."""
+
 from code.widgets.mainwindow_init import mainwindow_qss
 from code.widgets.title_bar.py_title_bar import PyTitleBar
 from code.widgets.left_column.py_left_column import PyLeftColumn
@@ -11,7 +13,11 @@ from code import status_messages
 from Qt_core import *
 
 class MainWindow_Setting(object):
+    """Apply main window settings to the application window."""
+
     def setup_ui(self, parent):
+
+        """Set up ui."""
 
         if not parent.objectName():
             parent.setObjectName("MainWindow")
@@ -69,6 +75,8 @@ class MainWindow_Setting(object):
 
 
     def mouseMoveEvent(self, event):
+        """Handle pointer movement for the widget."""
+
         x_pos = event.position().toPoint().x()
         if self.is_in_draggable_area(x_pos):
             self.table.setCursor(Qt.SizeHorCursor)  # Change cursor to horizontal resize
@@ -80,6 +88,8 @@ class MainWindow_Setting(object):
 
     def is_in_draggable_area(self, x):
         # 扩大可拖动边界的宽度
+        """Return whether in draggable area."""
+
         boundary_width = 50  # 可根据需要调整
         left_boundary = self.table.geometry().right() - boundary_width
         right_boundary = self.fig_control_window.geometry().left() + boundary_width

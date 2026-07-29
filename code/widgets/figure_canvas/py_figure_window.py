@@ -1,3 +1,5 @@
+"""Manage the tabbed collection of application figures."""
+
 from typing import Any, Optional
 
 from Qt_core import *
@@ -22,11 +24,15 @@ matplotlib.use("QtAgg")
 
 
 class FigureTabWidget(QTabWidget):
+    """Provide the figure tab widget Qt widget."""
+
     def __init__(self, figure_window, parent=None):
         super().__init__(parent)
         self.figure_window = figure_window
 
     def mousePressEvent(self, event):
+        """Handle pointer presses for the widget."""
+
         if event.button() == Qt.RightButton:
             clicked_tab_index = self.tabBar().tabAt(event.position().toPoint())
             if clicked_tab_index != -1:
@@ -34,6 +40,8 @@ class FigureTabWidget(QTabWidget):
         super().mousePressEvent(event)
 
     def show_context_menu(self, position, tab_index):
+        """Show context menu."""
+
         menu = QMenu(self)
         rename_action = menu.addAction("Rename")
         action = menu.exec(position)
@@ -42,6 +50,8 @@ class FigureTabWidget(QTabWidget):
 
 
 class PyFigureWindow(QFrame):
+    """Provide the py figure window Qt widget."""
+
     requestStyleSelector = Signal()
 
     def __init__(
@@ -98,6 +108,8 @@ class PyFigureWindow(QFrame):
             self.content_stack.setCurrentWidget(self.tabwindow)
 
     def set_table(self, table):
+        """Set table."""
+
         self.table = table
         if hasattr(table, "set_figure_window"):
             table.set_figure_window(self)
@@ -110,6 +122,8 @@ class PyFigureWindow(QFrame):
         return f"Project{index}"
 
     def has_project_name(self, name: str) -> bool:
+        """Return whether this object has project name."""
+
         for index in range(self.tabwindow.count()):
             canvas = self.tabwindow.widget(index)
             if getattr(canvas, "project_name", None) == name:
@@ -118,6 +132,8 @@ class PyFigureWindow(QFrame):
 
     def add_figure(self, width=None, height=None, dpi=None, style=None, canva_name=None,
                    create_table=True, project_path=None, component_tree=None):
+        """Add figure."""
+
         project_name = validate_component_name(canva_name or self._default_project_name(), "Project name")
         if self.has_project_name(project_name):
             raise ValueError(f"Project already exists: {project_name}")
@@ -151,6 +167,8 @@ class PyFigureWindow(QFrame):
         self._update_empty_state()
 
     def change_current_canvas(self):
+        """Change current canvas."""
+
         self._update_empty_state()
         self.current_canva = self.tabwindow.currentWidget()
         if self.current_canva is None:
@@ -170,6 +188,8 @@ class PyFigureWindow(QFrame):
             self.table.switch_to_table(project_id)
 
     def get_current_canvas_axes_colorselector(self):
+        """Return current canvas axes colorselector."""
+
         canvas = self.current_canva
         if canvas is None or canvas.current_axes_component_id is None:
             raise ValueError("Select an axes before choosing a chart color.")
@@ -178,6 +198,8 @@ class PyFigureWindow(QFrame):
         )
 
     def commit_current_canvas_color(self, selection) -> bool:
+        """Commit current canvas color."""
+
         canvas = self.current_canva
         if canvas is None or canvas.current_axes_component_id is None:
             raise ValueError("Select an axes before committing a chart color.")
@@ -188,6 +210,8 @@ class PyFigureWindow(QFrame):
         return canvas.message_presenter.present(result)
 
     def clear_figures(self):
+        """Clear figures."""
+
         while self.tabwindow.count():
             widget = self.tabwindow.widget(0)
             self.tabwindow.removeTab(0)
@@ -202,6 +226,8 @@ class PyFigureWindow(QFrame):
             self.figure_inspector_host.clear_figure_inspectors()
 
     def remove_project(self, project_name: str):
+        """Remove project."""
+
         for index in range(self.tabwindow.count()):
             canvas = self.tabwindow.widget(index)
             if getattr(canvas, "project_name", None) != project_name:
@@ -221,12 +247,16 @@ class PyFigureWindow(QFrame):
             return
 
     def cancel_pending_draws(self):
+        """Cancel pending draws."""
+
         for index in range(self.tabwindow.count()):
             widget = self.tabwindow.widget(index)
             if hasattr(widget, "cancel_pending_draw"):
                 widget.cancel_pending_draw()
 
     def prepare_dependency_cascade(self, refs: list[ColumnRef], reason: str):
+        """Capture dependent components before deleting table data."""
+
         target_refs = set(refs)
         captured = []
         total = 0
@@ -276,6 +306,8 @@ class PyFigureWindow(QFrame):
         return redo, undo
 
     def rename_project_from_tab(self, tab_index: int):
+        """Rename project from tab."""
+
         if tab_index < 0 or tab_index >= self.tabwindow.count():
             return
         old_name = self.tabwindow.tabText(tab_index)
@@ -288,6 +320,8 @@ class PyFigureWindow(QFrame):
             QMessageBox.warning(self, "Rename Project", str(exc))
 
     def rename_project(self, tab_index: int, new_name: str):
+        """Rename project."""
+
         new_name = validate_component_name(new_name, "Project name")
         canvas = self.tabwindow.widget(tab_index)
         if canvas is None:
@@ -308,6 +342,8 @@ class PyFigureWindow(QFrame):
         project_name: str,
         project_path: str | None = None,
     ):
+        """Load project figure snapshot."""
+
         root_id = figure["root_component_id"]
         root = next(
             component
@@ -332,6 +368,8 @@ class PyFigureWindow(QFrame):
         return canvas
 
     def load_figure_snapshot(self, figures: list[dict[str, Any]]):
+        """Load figure snapshot."""
+
         self.clear_figures()
         for figure in figures:
             root_id = figure["root_component_id"]

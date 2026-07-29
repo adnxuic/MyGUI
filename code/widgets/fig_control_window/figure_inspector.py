@@ -1,3 +1,5 @@
+"""Arrange Figure and Axes inspectors using the production container hierarchy."""
+
 from __future__ import annotations
 
 import os
@@ -69,6 +71,8 @@ class AxesInspectorPanel(QFrame):
         self.setLayout(self.main_layout)
 
     def show_semantic_inspector(self) -> None:
+        """Show semantic inspector."""
+
         self._show_category(0)
 
     def ensure_component_toolbox(
@@ -77,6 +81,8 @@ class AxesInspectorPanel(QFrame):
         key,
         label: str,
     ) -> InspectorToolBox:
+        """Ensure component toolbox exists and return it."""
+
         if kind in {ComponentKind.LINE, ComponentKind.SCATTER}:
             return self._ensure_toolbox(
                 category_index=1,
@@ -139,6 +145,8 @@ class AxesInspectorPanel(QFrame):
 
 
 class FigureElementInspectorPanel(QFrame):
+    """Provide the figure element inspector panel Qt widget."""
+
     def __init__(self):
         super().__init__()
         self.main_layout = QVBoxLayout()
@@ -152,6 +160,8 @@ class FigureElementInspectorPanel(QFrame):
         self.setLayout(self.main_layout)
 
     def ensure_toolbox(self, key, label: str) -> InspectorToolBox:
+        """Ensure toolbox exists and return it."""
+
         toolbox = self._element_stack.toolbox(key)
         if toolbox is not None:
             return toolbox
@@ -203,6 +213,8 @@ class FigureInspectorPanel(QFrame):
         context: EditorContext,
         color_library: ColorLibrary | None = None,
     ):
+        """Add axes inspector."""
+
         axes_inspector = AxesInspectorPanel(
             axes_controller,
             context,
@@ -223,10 +235,14 @@ class FigureInspectorPanel(QFrame):
         self,
         axes_inspector: AxesInspectorPanel,
     ) -> None:
+        """Show axes inspector."""
+
         self._inspector_stack.setCurrentWidget(axes_inspector)
         axes_inspector.show_semantic_inspector()
 
     def find_axes_inspector(self, axes) -> Optional[AxesInspectorPanel]:
+        """Find axes inspector matching the supplied identity."""
+
         for index in range(self._inspector_stack.count()):
             widget = self._inspector_stack.widget(index)
             if (
@@ -237,6 +253,8 @@ class FigureInspectorPanel(QFrame):
         return None
 
     def show_figure_elements(self) -> None:
+        """Show figure elements."""
+
         self._inspector_stack.setCurrentWidget(
             self._figure_elements_panel
         )
@@ -246,9 +264,13 @@ class FigureInspectorPanel(QFrame):
         key,
         label: str,
     ) -> InspectorToolBox:
+        """Ensure figure element toolbox exists and return it."""
+
         return self._figure_elements_panel.ensure_toolbox(key, label)
 
     def current_panel(self):
+        """Return the current panel."""
+
         return self._inspector_stack.currentWidget()
 
 
@@ -272,6 +294,8 @@ class FigureInspectorHost(QFrame):
         self.setLayout(self._figure_stack)
 
     def add_figure_inspector(self) -> FigureInspectorPanel:
+        """Add figure inspector."""
+
         figure_inspector = FigureInspectorPanel()
         self._figure_stack.addWidget(figure_inspector)
         self._figure_stack.setCurrentWidget(figure_inspector)
@@ -281,6 +305,8 @@ class FigureInspectorHost(QFrame):
         self,
         project_index: int,
     ) -> Optional[FigureInspectorPanel]:
+        """Show figure inspector."""
+
         figure_inspector = self._figure_inspector_at(project_index)
         if figure_inspector is None:
             self.show_empty_state()
@@ -289,12 +315,16 @@ class FigureInspectorHost(QFrame):
         return figure_inspector
 
     def current_figure_inspector(self) -> Optional[FigureInspectorPanel]:
+        """Return the current figure inspector."""
+
         widget = self._figure_stack.currentWidget()
         if isinstance(widget, FigureInspectorPanel):
             return widget
         return None
 
     def remove_figure_inspector(self, project_index: int) -> bool:
+        """Remove figure inspector."""
+
         figure_inspector = self._figure_inspector_at(project_index)
         if figure_inspector is None:
             return False
@@ -305,9 +335,13 @@ class FigureInspectorHost(QFrame):
         return True
 
     def show_empty_state(self) -> None:
+        """Show empty state."""
+
         self._figure_stack.setCurrentWidget(self.empty_state)
 
     def clear_figure_inspectors(self) -> None:
+        """Clear figure inspectors."""
+
         for index in range(self._figure_stack.count() - 1, 0, -1):
             widget = self._figure_stack.widget(index)
             self._figure_stack.removeWidget(widget)

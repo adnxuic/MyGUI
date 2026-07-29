@@ -1,3 +1,5 @@
+"""Provide project actions and integration shortcuts in the left column."""
+
 from Qt_core import *
 from code.widgets import qss_func
 from code.widgets.left_column.py_setting_dialog import PySettingDialog
@@ -21,6 +23,8 @@ def _tinted_icon(icon_path, color):
 
 
 class PyLeftColumn(QFrame):
+    """Provide the py left column Qt widget."""
+
     def __init__(self, table, fig_control_window):
         super().__init__()
         self.table = table
@@ -64,6 +68,8 @@ class PyLeftColumn(QFrame):
 
 
     def the_button_was_toggled(self, checked):
+        """Synchronize the button appearance after its checked state changes."""
+
         self.table.setVisible(checked)
 
         self._update_table_icon(checked)
@@ -73,6 +79,8 @@ class PyLeftColumn(QFrame):
         self.table_button.setIcon(_tinted_icon("pictures/icons/tables.svg", color))
 
     def show_setting_dialog(self):
+        """Show setting dialog."""
+
         if self.setting_dialog is None:
             self.setting_dialog = PySettingDialog(
                 parent=self.window(),
@@ -81,6 +89,8 @@ class PyLeftColumn(QFrame):
         self.setting_dialog.exec()
 
     def set_reset_layout_callback(self, callback):
+        """Set reset layout callback."""
+
         self._reset_layout_callback = callback
         if self.setting_dialog is not None:
             self.setting_dialog.set_reset_layout_callback(callback)

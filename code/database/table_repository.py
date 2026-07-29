@@ -1,3 +1,5 @@
+"""Coordinate table projects, undoable mutations, and data-reference lookup."""
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -20,6 +22,8 @@ from code.database.table_document import (
 
 @dataclass
 class TableChangeSet:
+    """Describe table change set values shared across application layers."""
+
     project_id: str
     changed_columns: set[ColumnRef] = field(default_factory=set)
     metadata_changed: bool = False
@@ -27,6 +31,8 @@ class TableChangeSet:
     reason: str = "edit"
 
     def merge(self, other: "TableChangeSet") -> None:
+        """Merge another change set into this one without duplicating IDs."""
+
         if self.project_id != other.project_id:
             raise ValueError("Cannot merge changes from different projects.")
         self.changed_columns.update(other.changed_columns)
@@ -38,6 +44,8 @@ class TableChangeSet:
 
 @dataclass(frozen=True)
 class AlignedPair:
+    """Represent the application's aligned pair."""
+
     x: np.ndarray
     y: np.ndarray
     valid_mask: np.ndarray
@@ -45,6 +53,8 @@ class AlignedPair:
 
 
 class TableMutationCommand(QUndoCommand):
+    """Represent the application's table mutation command."""
+
     def __init__(self, text: str, repository: "TableRepository", project_id: str,
                  redo_action: Callable[[], None], undo_action: Callable[[], None],
                  changes: Callable[[], TableChangeSet] | TableChangeSet):
@@ -59,17 +69,23 @@ class TableMutationCommand(QUndoCommand):
         return self.changes() if callable(self.changes) else self.changes
 
     def redo(self) -> None:
+        """Reapply this table mutation."""
+
         with self.repository.transaction(self.project_id):
             self.redo_action()
             self.repository.record_change(self._change_set())
 
     def undo(self) -> None:
+        """Reverse this table mutation."""
+
         with self.repository.transaction(self.project_id):
             self.undo_action()
             self.repository.record_change(self._change_set())
 
 
 class TableRepository(QObject):
+    """Own and query table application state."""
+
     transaction_committed = Signal(object)
 
     def __init__(self, parent: QObject | None = None):
@@ -80,6 +96,8 @@ class TableRepository(QObject):
         self._pending: dict[str, TableChangeSet] = {}
 
     def clear(self) -> None:
+        """Remove all owned entries and detach their callbacks."""
+
         project_ids = list(self.projects)
         self.projects.clear()
         self._undo_stacks.clear()
@@ -93,6 +111,8 @@ class TableRepository(QObject):
 
     def create_project(self, name: str, first_sheet_name: str = "Sheet1",
                        project_id: str | None = None) -> ProjectTableDocument:
+        """Create project."""
+
         cleaned = str(name).strip()
         if not cleaned:
             raise ValueError("Project name must not be empty.")
@@ -105,6 +125,8 @@ class TableRepository(QObject):
         return project
 
     def register_project(self, project: ProjectTableDocument) -> None:
+        """Register project."""
+
         if project.id in self.projects:
             raise ValueError(f"Project id already exists: {project.id}")
         if self.project_by_name(project.name, required=False) is not None:
@@ -121,6 +143,8 @@ class TableRepository(QObject):
         ))
 
     def remove_project(self, project_id: str) -> ProjectTableDocument | None:
+        """Remove project."""
+
         project = self.projects.pop(project_id, None)
         stack = self._undo_stacks.pop(project_id, None)
         if stack is not None:
@@ -135,12 +159,16 @@ class TableRepository(QObject):
         return project
 
     def project(self, project_id: str) -> ProjectTableDocument:
+        """Return the requested project."""
+
         try:
             return self.projects[project_id]
         except KeyError as exc:
             raise KeyError(f"Unknown project: {project_id}") from exc
 
     def project_by_name(self, name: str, required: bool = True) -> ProjectTableDocument | None:
+        """Return the project with the requested display name."""
+
         normalized = str(name).strip().casefold()
         for project in self.projects.values():
             if project.name.casefold() == normalized:
@@ -150,6 +178,8 @@ class TableRepository(QObject):
         return None
 
     def sheet(self, project_id: str, sheet_id: str) -> SheetDocument:
+        """Return the requested sheet."""
+
         project = self.project(project_id)
         try:
             return project.sheets[sheet_id]
@@ -157,21 +187,29 @@ class TableRepository(QObject):
             raise KeyError(f"Unknown sheet: {sheet_id}") from exc
 
     def undo_stack(self, project_id: str) -> QUndoStack:
+        """Return the undo stack for the requested project."""
+
         try:
             return self._undo_stacks[project_id]
         except KeyError as exc:
             raise KeyError(f"Unknown project undo stack: {project_id}") from exc
 
     def push(self, project_id: str, command: QUndoCommand) -> None:
+        """Push an undoable table mutation onto the project stack."""
+
         self.undo_stack(project_id).push(command)
 
     @contextmanager
     def transaction(self, project_id: str) -> Iterator[None]:
+        """Group table changes into one undoable repository operation."""
+
         self._transaction_depth += 1
         try:
             yield
         finally:
             self._transaction_depth -= 1
+            # Nested commands may each report changes, but observers must see
+            # one merged refresh only after the outermost mutation succeeds.
             if self._transaction_depth == 0:
                 pending = list(self._pending.values())
                 self._pending.clear()
@@ -179,6 +217,8 @@ class TableRepository(QObject):
                     self.transaction_committed.emit(changes)
 
     def record_change(self, changes: TableChangeSet) -> None:
+        """Publish a repository change after a successful mutation."""
+
         existing = self._pending.get(changes.project_id)
         if existing is None:
             self._pending[changes.project_id] = changes
@@ -189,10 +229,14 @@ class TableRepository(QObject):
             self.transaction_committed.emit(pending)
 
     def column_ref(self, project_id: str, sheet_id: str, column_id: str) -> ColumnRef:
+        """Build a stable reference to the requested table column."""
+
         self.sheet(project_id, sheet_id).column(column_id)
         return ColumnRef(project_id, sheet_id, column_id)
 
     def has_ref(self, ref: ColumnRef | None) -> bool:
+        """Return whether a column reference still resolves."""
+
         if ref is None:
             return False
         try:
@@ -203,6 +247,8 @@ class TableRepository(QObject):
 
     def iter_column_refs(self, project_id: str | None = None,
                          allowed_types: Iterable[ColumnType] | None = None) -> Iterator[ColumnRef]:
+        """Iterate over column refs."""
+
         allowed = set(allowed_types) if allowed_types is not None else None
         projects = self.projects.values() if project_id is None else (self.project(project_id),)
         for project in projects:
@@ -212,17 +258,23 @@ class TableRepository(QObject):
                         yield ColumnRef(project.id, sheet.id, column.id)
 
     def ref_label(self, ref: ColumnRef) -> str:
+        """Return the ref label."""
+
         project = self.project(ref.project_id)
         sheet = self.sheet(ref.project_id, ref.sheet_id)
         column = sheet.column(ref.column_id)
         return f"{project.name}/{sheet.name}/{column.name}"
 
     def series(self, ref: ColumnRef) -> pd.Series:
+        """Return a copy of the series referenced by a column reference."""
+
         if not self.has_ref(ref):
             raise KeyError("Data column no longer exists.")
         return self.sheet(ref.project_id, ref.sheet_id).frame[ref.column_id]
 
     def line_pair(self, x_ref: ColumnRef, y_ref: ColumnRef) -> AlignedPair:
+        """Return aligned numeric x/y data for two column references."""
+
         x_series, y_series = self._aligned_series(x_ref, y_ref)
         if len(x_series) != len(y_series):
             raise ValueError("Data columns must belong to row-aligned sheets.")
@@ -240,6 +292,8 @@ class TableRepository(QObject):
         return AlignedPair(x, y, valid, int((~valid).sum()))
 
     def valid_pair(self, x_ref: ColumnRef, y_ref: ColumnRef) -> AlignedPair:
+        """Return whether two references resolve to aligned numeric data."""
+
         x_series, y_series = self._aligned_series(x_ref, y_ref)
         if len(x_series) != len(y_series):
             raise ValueError("Data columns must belong to row-aligned sheets.")
@@ -284,9 +338,13 @@ class TableRepository(QObject):
         return TableRepository._numeric_values(series)
 
     def snapshot(self, project_id: str) -> dict[str, Any]:
+        """Return a serializable snapshot of the current state."""
+
         return self.project(project_id).to_snapshot()
 
     def restore_snapshot(self, snapshot: dict[str, Any]) -> ProjectTableDocument:
+        """Restore snapshot."""
+
         project = ProjectTableDocument.from_snapshot(snapshot)
         self.register_project(project)
         return project

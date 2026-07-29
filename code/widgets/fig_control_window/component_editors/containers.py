@@ -1,3 +1,5 @@
+"""Provide reusable Inspector stacks and toolboxes."""
+
 from __future__ import annotations
 
 import os
@@ -194,6 +196,8 @@ class AxesSemanticInspectorPanel(QFrame):
 
 
 class ChartInspectorStack(QFrame):
+    """Provide the chart inspector stack Qt widget."""
+
     def __init__(self, axes):
         super().__init__()
         self.axes = axes
@@ -208,6 +212,8 @@ class ChartInspectorStack(QFrame):
         self.main_layout.addWidget(self.toolbox_stack)
 
     def ensure_toolbox(self, key):
+        """Ensure toolbox exists and return it."""
+
         toolbox = self._toolboxes.get(key)
         if toolbox is None:
             toolbox = InspectorToolBox(self)
@@ -217,9 +223,13 @@ class ChartInspectorStack(QFrame):
         return toolbox
 
     def toolbox(self, key):
+        """Return the requested toolbox."""
+
         return self._toolboxes.get(key)
 
     def show_toolbox(self, key) -> bool:
+        """Show toolbox."""
+
         toolbox = self.toolbox(key)
         if toolbox is None:
             return False
@@ -228,6 +238,8 @@ class ChartInspectorStack(QFrame):
 
 
 class ElementInspectorStack(QFrame):
+    """Provide the element inspector stack Qt widget."""
+
     def __init__(self, axes):
         super().__init__()
         self.axes = axes
@@ -242,6 +254,8 @@ class ElementInspectorStack(QFrame):
         self.main_layout.addLayout(self.toolbox_stack)
 
     def ensure_toolbox(self, key):
+        """Ensure toolbox exists and return it."""
+
         toolbox = self._toolboxes.get(key)
         if toolbox is None:
             toolbox = InspectorToolBox(self)
@@ -251,9 +265,13 @@ class ElementInspectorStack(QFrame):
         return toolbox
 
     def toolbox(self, key):
+        """Return the requested toolbox."""
+
         return self._toolboxes.get(key)
 
     def show_toolbox(self, key) -> bool:
+        """Show toolbox."""
+
         toolbox = self.toolbox(key)
         if toolbox is None:
             return False
@@ -262,6 +280,8 @@ class ElementInspectorStack(QFrame):
 
 
 class InspectorToolBox(QToolBox):
+    """Represent the application's inspector tool box."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(qss_func.qss_loader(qss_path))
@@ -269,11 +289,15 @@ class InspectorToolBox(QToolBox):
         self.setContextMenuPolicy(Qt.DefaultContextMenu)
 
     def add_inspector(self, inspector, label: str):
+        """Add inspector."""
+
         index = self.addItem(inspector, label + str(self._item_count))
         self._item_count += 1
         return index
 
     def remove_inspector(self, inspector) -> bool:
+        """Remove inspector."""
+
         index = self.indexOf(inspector)
         if index < 0:
             return False
@@ -283,6 +307,8 @@ class InspectorToolBox(QToolBox):
         return True
 
     def contextMenuEvent(self, event):
+        """Handle Qt context-menu events for this widget."""
+
         inspector = self.currentWidget()
         if (
             inspector is None
@@ -297,6 +323,8 @@ class InspectorToolBox(QToolBox):
             self.delete_inspector(self.currentIndex())
 
     def delete_inspector(self, index: int | None = None):
+        """Delete inspector."""
+
         if index is None:
             index = self.currentIndex()
         if index is None or index < 0 or index >= self.count():

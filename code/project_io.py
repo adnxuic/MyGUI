@@ -1,3 +1,5 @@
+"""Validate, migrate, save, and load MyGUI project snapshots."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +23,8 @@ PROJECT_SCHEMA_VERSION = 6
 
 def export_database_snapshot(filename: str | Path, repository: TableRepository,
                              project_id: str | None = None) -> None:
+    """Export database snapshot."""
+
     if project_id is None:
         payload = [project.to_snapshot() for project in repository.projects.values()]
     else:
@@ -74,6 +78,8 @@ def _validate_table(table_snapshot: Any, project_id: str,
 
 
 def migrate_v4_to_v5(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Migrate v4 to v5."""
+
     root = deepcopy(_expect_dict(snapshot, "project"))
     if root.get("schema") != PROJECT_SCHEMA_NAME or root.get("schema_version") != 4:
         raise ValueError("migrate_v4_to_v5 requires a schema v4 project.")
@@ -94,6 +100,8 @@ def migrate_v4_to_v5(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def migrate_v5_to_v6(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Migrate v5 to v6."""
+
     root = deepcopy(_expect_dict(snapshot, "project"))
     if root.get("schema") != PROJECT_SCHEMA_NAME or root.get("schema_version") != 5:
         raise ValueError("migrate_v5_to_v6 requires a schema v5 project.")
@@ -110,6 +118,8 @@ def migrate_v5_to_v6(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Migrate project snapshot."""
+
     root = deepcopy(_expect_dict(snapshot, "project"))
     if root.get("schema") != PROJECT_SCHEMA_NAME:
         raise ValueError("Unsupported project file.")
@@ -131,6 +141,8 @@ def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate project snapshot."""
+
     root = _expect_dict(snapshot, "project")
     if root.get("schema") != PROJECT_SCHEMA_NAME:
         raise ValueError("Unsupported project file.")
@@ -150,6 +162,8 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
 
 
 def project_snapshot(figure_window=None) -> dict[str, Any]:
+    """Build the complete serializable project snapshot."""
+
     if figure_window is None or getattr(figure_window, "current_canva", None) is None:
         raise ValueError("No current project canvas to save.")
     canvas = figure_window.current_canva
@@ -167,6 +181,8 @@ def project_snapshot(figure_window=None) -> dict[str, Any]:
 
 
 def save_project_snapshot(filename: str | Path, figure_window=None) -> None:
+    """Save project snapshot."""
+
     path = Path(filename)
     snapshot = project_snapshot(figure_window)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -188,6 +204,8 @@ def save_project_snapshot(filename: str | Path, figure_window=None) -> None:
 
 
 def load_project_file(filename: str | Path) -> dict[str, Any]:
+    """Load project file."""
+
     with Path(filename).open("r", encoding="utf-8-sig") as handle:
         snapshot = json.load(handle)
     snapshot = migrate_project_snapshot(snapshot)
@@ -196,6 +214,8 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
 
 
 def restore_project_snapshot(filename: str | Path, table=None, figure_window=None) -> dict[str, Any]:
+    """Restore project snapshot."""
+
     snapshot = load_project_file(filename)
     project_meta = snapshot["project"]
     project_id = project_meta["id"]

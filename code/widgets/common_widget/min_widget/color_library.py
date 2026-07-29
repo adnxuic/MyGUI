@@ -1,3 +1,5 @@
+"""Persist custom, favorite, and recently used color palettes."""
+
 from __future__ import annotations
 
 import json
@@ -121,17 +123,25 @@ class ColorLibrary(QObject):
         self.changed.emit()
 
     def consume_load_warning(self) -> bool:
+        """Return and clear load warning."""
+
         warning = self._load_warning
         self._load_warning = False
         return warning
 
     def palettes(self) -> tuple[PaletteDefinition, ...]:
+        """Return the available palettes."""
+
         return builtin_palettes() + tuple(self.custom_palettes.values())
 
     def palette(self, palette_id: str) -> PaletteDefinition | None:
+        """Return the requested palette."""
+
         return builtin_palette_map().get(palette_id) or self.custom_palettes.get(palette_id)
 
     def favorite_palettes(self) -> tuple[PaletteDefinition, ...]:
+        """Return the available favorite palettes."""
+
         return tuple(
             palette
             for palette_id in self.favorite_palette_ids
@@ -139,11 +149,15 @@ class ColorLibrary(QObject):
         )
 
     def record_recent(self, color) -> str:
+        """Record recent."""
+
         normalized = normalize_color(color)
         self.record_recent_many((normalized,))
         return normalized
 
     def record_recent_many(self, colors) -> tuple[str, ...]:
+        """Record recent many."""
+
         normalized_colors = tuple(normalize_color(color) for color in colors)
         recent = list(self.recent_colors)
         for normalized in normalized_colors:
@@ -153,9 +167,13 @@ class ColorLibrary(QObject):
         return normalized_colors
 
     def is_favorite_color(self, color) -> bool:
+        """Return whether favorite color."""
+
         return normalize_color(color) in self.favorite_colors
 
     def toggle_favorite_color(self, color) -> bool:
+        """Toggle favorite color."""
+
         normalized = normalize_color(color)
         if normalized in self.favorite_colors:
             self.favorite_colors.remove(normalized)
@@ -167,9 +185,13 @@ class ColorLibrary(QObject):
         return favorite
 
     def is_favorite_palette(self, palette_id: str) -> bool:
+        """Return whether favorite palette."""
+
         return str(palette_id) in self.favorite_palette_ids
 
     def toggle_favorite_palette(self, palette_id: str) -> bool:
+        """Toggle favorite palette."""
+
         palette_id = str(palette_id)
         if self.palette(palette_id) is None:
             raise ValueError(f"Unknown palette: {palette_id}")
@@ -200,6 +222,8 @@ class ColorLibrary(QObject):
         return normalized
 
     def create_custom_palette(self, name: str, colors) -> PaletteDefinition:
+        """Create custom palette."""
+
         palette = PaletteDefinition(
             id=f"custom:{uuid4()}",
             name=self._validate_custom_name(name),
@@ -212,6 +236,8 @@ class ColorLibrary(QObject):
         return palette
 
     def update_custom_palette(self, palette_id: str, name: str, colors) -> PaletteDefinition:
+        """Update custom palette."""
+
         current = self.custom_palettes.get(str(palette_id))
         if current is None:
             raise ValueError(f"Unknown custom palette: {palette_id}")
@@ -227,6 +253,8 @@ class ColorLibrary(QObject):
         return palette
 
     def delete_custom_palette(self, palette_id: str) -> bool:
+        """Delete custom palette."""
+
         palette_id = str(palette_id)
         if self.custom_palettes.pop(palette_id, None) is None:
             return False

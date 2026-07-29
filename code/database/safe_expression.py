@@ -1,3 +1,5 @@
+"""Compile and evaluate restricted mathematical expressions."""
+
 import ast
 from typing import Any, Callable, Mapping
 
@@ -92,6 +94,8 @@ def _validate_node(node: ast.AST, variable_names: set[str]) -> None:
 
 
 def compile_math_expression(expression: str, variable_names: set[str] | None = None) -> ast.Expression:
+    """Compile math expression for safe reuse."""
+
     variables = set(variable_names or {"x"})
     try:
         parsed = ast.parse(expression, mode="eval")
@@ -103,6 +107,8 @@ def compile_math_expression(expression: str, variable_names: set[str] | None = N
 
 
 def evaluate_math_expression(expression: str, variables: Mapping[str, Any]) -> Any:
+    """Evaluate math expression in the restricted math environment."""
+
     parsed = compile_math_expression(expression, set(variables))
     compiled = compile(parsed, "<math-expression>", "eval")
     namespace: dict[str, Any] = {
@@ -116,6 +122,8 @@ def evaluate_math_expression(expression: str, variables: Mapping[str, Any]) -> A
 
 
 def evaluate_curve_expression(expression: str, x: np.ndarray) -> np.ndarray:
+    """Evaluate curve expression in the restricted math environment."""
+
     value = evaluate_math_expression(expression, {"x": x})
     if np.isscalar(value):
         return np.full_like(x, value, dtype=float)

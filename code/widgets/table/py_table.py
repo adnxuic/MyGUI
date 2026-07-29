@@ -1,3 +1,5 @@
+"""Manage project tables and their sheet tabs."""
+
 from __future__ import annotations
 
 import os
@@ -14,6 +16,8 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyTable(QFrame):
+    """Provide the py table Qt widget."""
+
     def __init__(self, repository: TableRepository):
         super().__init__()
         self.repository = repository
@@ -40,15 +44,21 @@ class PyTable(QFrame):
 
     @property
     def current_project_id(self) -> str | None:
+        """Return the current project id."""
+
         return self._current_project_id
 
     @property
     def current_table_name(self) -> str | None:
+        """Return the current table name."""
+
         if self._current_project_id is None:
             return None
         return self.repository.project(self._current_project_id).name
 
     def set_figure_window(self, figure_window):
+        """Set figure window."""
+
         self._figure_window = figure_window
 
     def _dependency_handler(self, refs, reason):
@@ -57,18 +67,26 @@ class PyTable(QFrame):
         return self._figure_window.prepare_dependency_cascade(refs, reason)
 
     def has_table(self, table_name: str) -> bool:
+        """Return whether this object has table."""
+
         return self.repository.project_by_name(table_name, required=False) is not None
 
     def table_names(self) -> list[str]:
+        """Return the available table names."""
+
         return [project.name for project in self.repository.projects.values()]
 
     def current_subtable(self) -> PySubTable | None:
+        """Return the current subtable."""
+
         if self._current_project_id is None:
             return None
         return self._subtables.get(self._current_project_id)
 
     def create_project_table(self, table_name: str, first_sheet_name: str = "Sheet1",
                              switch: bool = True) -> PySubTable:
+        """Create project table."""
+
         table_name = validate_component_name(table_name, "Project name")
         first_sheet_name = validate_component_name(first_sheet_name, "Sheet name")
         project = self.repository.create_project(table_name, first_sheet_name)
@@ -84,6 +102,8 @@ class PyTable(QFrame):
         return subtable
 
     def switch_to_table(self, table: str | None):
+        """Select the requested project table."""
+
         if table is None:
             self._current_project_id = None
             self.stack.setCurrentWidget(self.empty_label)
@@ -99,6 +119,8 @@ class PyTable(QFrame):
         self.stack.setCurrentWidget(self._subtables[project_id])
 
     def rename_project_table(self, old_name: str, new_name: str):
+        """Rename project table."""
+
         new_name = validate_component_name(new_name, "Project name")
         project = self.repository.project_by_name(old_name)
         existing = self.repository.project_by_name(new_name, required=False)
@@ -110,6 +132,8 @@ class PyTable(QFrame):
         ))
 
     def remove_project_table(self, table: str):
+        """Remove project table."""
+
         project = self.repository.projects.get(table) or self.repository.project_by_name(table, required=False)
         if project is None:
             return
@@ -124,6 +148,8 @@ class PyTable(QFrame):
             self.switch_to_table(next(iter(self._subtables), None))
 
     def clear_tables(self):
+        """Clear tables."""
+
         for subtable in self._subtables.values():
             self.stack.removeWidget(subtable)
             subtable.dispose()
@@ -133,6 +159,8 @@ class PyTable(QFrame):
         self.switch_to_table(None)
 
     def load_project_table_snapshot(self, table_snapshot: dict) -> PySubTable:
+        """Load project table snapshot."""
+
         project = self.repository.restore_snapshot(table_snapshot)
         subtable = self._add_project_widget(project.id)
         self.switch_to_table(project.id)

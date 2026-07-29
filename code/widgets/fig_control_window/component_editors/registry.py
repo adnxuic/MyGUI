@@ -1,3 +1,5 @@
+"""Resolve editor profiles and manage Inspector lifecycles."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -37,6 +39,8 @@ class EditorRegistry:
 
     @staticmethod
     def component_kind(component) -> str:
+        """Return the component kind."""
+
         kind = getattr(component, "kind", None)
         if kind is None:
             state = getattr(component, "state", None)
@@ -56,6 +60,8 @@ class EditorRegistry:
 
     @staticmethod
     def component_role(component) -> str:
+        """Return the component role."""
+
         role = getattr(component, "role", None)
         if role is None:
             state = getattr(component, "state", None)
@@ -74,6 +80,8 @@ class EditorRegistry:
         return EditorRegistry._value_key(role)
 
     def register(self, kind: str, editor=None, *, role=None):
+        """Register the supplied object and return it."""
+
         key = (
             self._kind_key(kind),
             None if role is None else self._value_key(role),
@@ -86,6 +94,8 @@ class EditorRegistry:
         return decorator(editor) if editor is not None else decorator
 
     def unregister(self, kind: str, *, role=None) -> None:
+        """Remove the supplied registration."""
+
         key = (
             self._kind_key(kind),
             None if role is None else self._value_key(role),
@@ -100,6 +110,8 @@ class EditorRegistry:
         *,
         role=None,
     ) -> None:
+        """Register profile."""
+
         key = (
             self._kind_key(kind),
             None if role is None else self._value_key(role),
@@ -107,6 +119,8 @@ class EditorRegistry:
         self._profiles[key] = profile
 
     def resolve_profile(self, component) -> EditorProfile | None:
+        """Return the editor profile registered for a component."""
+
         kind = self.component_kind(component)
         role = self.component_role(component)
         return self._profiles.get(
@@ -115,6 +129,8 @@ class EditorRegistry:
         )
 
     def resolve(self, component):
+        """Resolve the requested object, returning no value when it is unavailable."""
+
         kind = self.component_kind(component)
         role = self.component_role(component)
         return self._editors.get(
@@ -131,6 +147,8 @@ class EditorRegistry:
         parent=None,
         **kwargs,
     ):
+        """Create and return a new instance."""
+
         if context is not None:
             color_library = context.color_library
         if color_library is None:

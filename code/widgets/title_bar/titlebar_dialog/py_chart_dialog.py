@@ -1,3 +1,5 @@
+"""Collect inputs for creating chart components."""
+
 from Qt_core import *
 
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
@@ -81,6 +83,8 @@ def _commit_color_input(figure_window: PyFigureWindow, widget: ColorChoiceWidget
 
 # Curve creation dialog
 class PyCurveDialog(QDialog):
+    """Provide the py curve dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
@@ -146,6 +150,8 @@ class PyCurveDialog(QDialog):
 
     def accept(self):
         # Warn if current canvas is empty
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -169,11 +175,15 @@ class PyCurveDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 
 # Line plot dialog
 class PyPlotDialog(QDialog):
+    """Provide the py plot dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
@@ -228,6 +238,8 @@ class PyPlotDialog(QDialog):
 
     def accept(self):
         # Warn if current canvas is empty
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -257,11 +269,15 @@ class PyPlotDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 
 # Scatter plot dialog
 class PyScatterDialog(QDialog):
+    """Provide the py scatter dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
@@ -324,6 +340,8 @@ class PyScatterDialog(QDialog):
 
     def accept(self):
         # Warn if current canvas is empty
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -353,10 +371,14 @@ class PyScatterDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 
 class PyFitDialog(QDialog):
+    """Provide the py fit dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("fit_dialog")
@@ -405,6 +427,8 @@ class PyFitDialog(QDialog):
 
     def accept(self):
         # Warn if current canvas is empty
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -435,10 +459,14 @@ class PyFitDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 
 class PyInterpolationDialog(QDialog):
+    """Provide the py interpolation dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("interpolation_dialog")
@@ -500,9 +528,13 @@ class PyInterpolationDialog(QDialog):
         self.setLayout(self.layout)
 
     def change_method(self):
+        """Change method."""
+
         self.options_input.update_option_visibility()
 
     def lambda_auto_changed(self, checked: bool):
+        """Apply the lambda auto changed emitted by the corresponding control."""
+
         self.lambda_value_input.setEnabled(not checked)
 
     def _lambda_options(self, method: str):
@@ -511,6 +543,8 @@ class PyInterpolationDialog(QDialog):
 
     def accept(self):
         # Warn if current canvas is empty
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -544,6 +578,8 @@ class PyInterpolationDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 

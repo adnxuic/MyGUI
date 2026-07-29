@@ -1,3 +1,5 @@
+"""Define reusable property controls and editor-section foundations."""
+
 from __future__ import annotations
 
 import json
@@ -117,6 +119,8 @@ class ComponentEditorBase(QWidget):
         return properties if isinstance(properties, Mapping) else {}
 
     def build(self, property_specs=None) -> None:
+        """Build and lay out this editor section's controls."""
+
         specs = self._normalize_specs(
             self._controller_specs() if property_specs is None else property_specs
         )
@@ -130,9 +134,13 @@ class ComponentEditorBase(QWidget):
             self.form_layout.addRow(label, editor)
 
     def editor(self, key: str) -> QWidget:
+        """Return the editor widget used for the property."""
+
         return self._editors[key]
 
     def editors(self) -> Mapping[str, QWidget]:
+        """Return the available editors."""
+
         return dict(self._editors)
 
     @staticmethod
@@ -482,6 +490,8 @@ class ComponentEditorBase(QWidget):
         return f"{label} updated."
 
     def apply_property(self, key: str, value: Any) -> bool:
+        """Apply property."""
+
         old_value = self._state_properties().get(key)
         try:
             result = self._set_controller_property(key, value)
@@ -572,6 +582,8 @@ class ComponentEditorBase(QWidget):
         del blocker
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         properties = self._state_properties()
         for key in self._editors:
             if key in properties:

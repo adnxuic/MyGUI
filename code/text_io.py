@@ -1,3 +1,5 @@
+"""Detect and import delimited text data into table documents."""
+
 from __future__ import annotations
 
 import csv
@@ -30,6 +32,8 @@ TEXT_PREVIEW_TYPE_ROWS = max(200, EXCEL_PREVIEW_ROWS)
 
 @dataclass(frozen=True)
 class TextDataSource:
+    """Represent the application's text data source."""
+
     path: Path
     encoding: str
     lines: list[str]
@@ -37,6 +41,8 @@ class TextDataSource:
 
 @dataclass(frozen=True)
 class TextTableDetection:
+    """Represent the application's text table detection."""
+
     delimiter: str
     data_start_line: int
     data_end_line: int
@@ -46,6 +52,8 @@ class TextTableDetection:
 
 
 def read_text_source(file_name: str | Path) -> TextDataSource:
+    """Read text source."""
+
     path = Path(file_name)
     if not path.is_file():
         raise ValueError(f"Text data file does not exist: {path}")
@@ -83,6 +91,8 @@ def read_text_source(file_name: str | Path) -> TextDataSource:
 
 
 def split_text_fields(line: str, delimiter: str) -> list[str]:
+    """Split text fields."""
+
     separator = TEXT_DELIMITERS[delimiter]
     if separator is None:
         return re.split(r"\s+", line.strip()) if line.strip() else []
@@ -169,6 +179,8 @@ def _best_run(source: TextDataSource, delimiter: str):
 
 
 def detect_text_table(source: TextDataSource, delimiter: str | None = None) -> TextTableDetection:
+    """Detect delimiter, encoding, and tabular structure in text data."""
+
     candidates = [delimiter] if delimiter is not None else list(TEXT_DELIMITERS)
     best = None
     for candidate in candidates:
@@ -229,6 +241,8 @@ def _convert_text_value(token: str):
 def build_text_sheet(source: TextDataSource, delimiter: str, data_start_line: int,
                      header_line: int | None, row_limit: int | None = None
                      ) -> tuple[ExcelSheetData, bool, int]:
+    """Build text sheet."""
+
     start = data_start_line - 1
     if start < 0 or start >= len(source.lines):
         raise ValueError("First data line is outside the source file.")
@@ -273,6 +287,8 @@ def build_text_sheet(source: TextDataSource, delimiter: str, data_start_line: in
 
 
 class TextImportDialog(QDialog):
+    """Provide the text import dialog Qt widget."""
+
     def __init__(self, source: TextDataSource, parent=None):
         super().__init__(parent)
         self.source = source
@@ -375,6 +391,8 @@ class TextImportDialog(QDialog):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
 
     def specs(self) -> list[ExcelSheetSpec]:
+        """Return the current specs."""
+
         if self._accepted_specs is not None:
             return self._accepted_specs
         if self.preview is None:
@@ -439,6 +457,8 @@ def _default_text_specs(source: TextDataSource) -> list[ExcelSheetSpec]:
 
 
 def import_text_into_table(file_name: str, table, parent=None, show_preview: bool = True):
+    """Import text into table."""
+
     source = read_text_source(file_name)
     if show_preview:
         dialog = TextImportDialog(source, parent)
@@ -455,6 +475,8 @@ def import_text_into_table(file_name: str, table, parent=None, show_preview: boo
 
 def import_text_into_workspace(file_name: str, table, figure_window=None, parent=None,
                                show_preview: bool = True):
+    """Import text into workspace."""
+
     create_canvas = figure_window is not None and figure_window.current_canva is None
     subtable = import_text_into_table(
         file_name, table, parent=parent or table, show_preview=show_preview

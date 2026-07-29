@@ -50,9 +50,13 @@ class ComponentLocator:
     def set_parent_resolver(
         self, resolver: Callable[[str], Any | None] | None
     ) -> None:
+        """Set parent resolver."""
+
         self._parent_resolver = resolver
 
     def bind(self, component_id: str, target: Any) -> None:
+        """Bind a component identifier to its live target."""
+
         self.unbind(component_id)
         try:
             self._targets[component_id] = target
@@ -63,6 +67,8 @@ class ComponentLocator:
             self._strong_targets[component_id] = target
 
     def unbind(self, component_id: str) -> None:
+        """Remove the live-target binding for a component."""
+
         self._targets.pop(component_id, None)
         self._strong_targets.pop(component_id, None)
 
@@ -73,6 +79,8 @@ class ComponentLocator:
         *,
         prepend: bool = False,
     ) -> None:
+        """Register resolver."""
+
         kind = ComponentKind(kind)
         if prepend:
             self._resolvers[kind].insert(0, resolver)
@@ -80,6 +88,8 @@ class ComponentLocator:
             self._resolvers[kind].append(resolver)
 
     def resolve(self, state: ComponentState) -> Any | None:
+        """Resolve the requested object, returning no value when it is unavailable."""
+
         direct = self._targets.get(state.id, self._strong_targets.get(state.id))
         parent = self._resolve_parent(state)
 
@@ -98,6 +108,8 @@ class ComponentLocator:
         return self._resolve_semantic(state, parent)
 
     def require(self, state: ComponentState) -> Any:
+        """Resolve the requested object or raise when it is unavailable."""
+
         target = self.resolve(state)
         if target is None:
             raise ComponentNotFoundError(
@@ -107,6 +119,8 @@ class ComponentLocator:
         return target
 
     def find_id(self, target: Any) -> str | None:
+        """Return the component ID bound to a live Matplotlib target."""
+
         for component_id, candidate in self._targets.items():
             if candidate is target:
                 return component_id

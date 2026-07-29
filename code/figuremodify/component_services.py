@@ -110,6 +110,8 @@ class AxesCommandService:
         selector=None,
         recursive: bool = True,
     ):
+        """Return the Controller for an axes semantic component."""
+
         return self.registry.find_one(
             parent_id=axes_id,
             kind=kind,
@@ -125,6 +127,8 @@ class AxesCommandService:
         fontfamily: str | None = None,
         fontsize: float | None = None,
     ) -> ComponentBatchChange:
+        """Set label style."""
+
         patch = {}
         if fontfamily is not None:
             patch["fontfamily"] = fontfamily
@@ -145,6 +149,8 @@ class AxesCommandService:
         x_position,
         y_position,
     ) -> ComponentBatchChange:
+        """Set label positions."""
+
         x_label = self.semantic(axes_id, role=ComponentRole.X_LABEL)
         y_label = self.semantic(axes_id, role=ComponentRole.Y_LABEL)
         return self.registry.apply_transaction(
@@ -166,6 +172,8 @@ class AxesCommandService:
         side: str,
         visible: bool,
     ) -> ComponentBatchChange:
+        """Set spine visible."""
+
         axis_name = "y" if side in {"left", "right"} else "x"
         axis_role = (
             ComponentRole.X_AXIS
@@ -196,6 +204,8 @@ class AxesCommandService:
         )
 
     def ensure_legend(self, axes_id: str):
+        """Return the current legend, creating it only when necessary."""
+
         controller = self.semantic(
             axes_id,
             kind=ComponentKind.LEGEND,
@@ -217,6 +227,8 @@ class AxesCommandService:
         axes_id: str,
         position,
     ) -> ComponentChange:
+        """Set legend position."""
+
         controller, legend = self.ensure_legend(axes_id)
         del legend
         return controller.apply_mutation(
@@ -230,10 +242,14 @@ class AxesCommandService:
         )
 
     def cycle_state(self, axes_id: str) -> ColorCycleState:
+        """Return the axes color-cycle state, creating it when absent."""
+
         value = self._axes(axes_id).state.properties.get("color_cycle")
         return ColorCycleState.from_dict(value)
 
     def peek_color(self, axes_id: str) -> ColorSelection:
+        """Preview the next chart color without advancing the cycle."""
+
         return self.cycle_state(axes_id).peek()
 
     def commit_color_selection(
@@ -241,6 +257,10 @@ class AxesCommandService:
         axes_id: str,
         selection: ColorSelection,
     ) -> ComponentChange:
+        """Commit a previewed color after component creation succeeds."""
+
+        # Preview and commit are deliberately separate: cancelled or failed
+        # chart creation must not consume a color from the axes sequence.
         cycle = self.cycle_state(axes_id)
         cycle.commit(selection)
         return self._axes(axes_id).set_property(
@@ -253,6 +273,8 @@ class AxesCommandService:
         axes_id: str,
         palette: PaletteDefinition,
     ) -> ComponentBatchChange:
+        """Apply palette."""
+
         controllers = self.registry.query(
             capabilities={"color", "data"},
             parent_id=axes_id,
@@ -307,6 +329,8 @@ class FunctionCurveService:
         *,
         samples: int | None = None,
     ) -> ComponentChange:
+        """Apply the supplied component changes."""
+
         controller = _controller(
             self.registry,
             component,
@@ -349,6 +373,8 @@ class ChartDataService:
 
     @staticmethod
     def refs_for(controller) -> tuple[ColumnRef, ColumnRef]:
+        """Return the data references stored by a component."""
+
         data = controller.state.data
         return (
             _column_ref(data["x_ref"]),
@@ -378,6 +404,8 @@ class ChartDataService:
         x_ref: ColumnRef | dict[str, Any],
         y_ref: ColumnRef | dict[str, Any],
     ) -> ComponentChange:
+        """Set refs."""
+
         controller = _controller(self.registry, component)
         if not isinstance(
             controller,
@@ -417,6 +445,8 @@ class ChartDataService:
         return _notices(change, *notices)
 
     def refresh(self, component) -> ComponentChange:
+        """Refresh the component from its current data references."""
+
         controller = _controller(self.registry, component)
         try:
             x_ref, y_ref = self.refs_for(controller)
@@ -428,6 +458,8 @@ class ChartDataService:
         self,
         changed_columns: Iterable[ColumnRef],
     ) -> list[ComponentChange]:
+        """Refresh components affected by changed table data."""
+
         changed = set(changed_columns)
         results: list[ComponentChange] = []
         with self.registry.batch_updates():
@@ -474,6 +506,8 @@ class InterpolationService:
         lam_auto: bool,
         preserve_on_failure: bool = True,
     ) -> ComponentChange:
+        """Configure the service with its current registry dependencies."""
+
         controller = _controller(
             self.registry,
             component,
@@ -546,6 +580,8 @@ class InterpolationService:
         return _notices(change, *notices)
 
     def refresh(self, component) -> ComponentChange:
+        """Refresh the component from its current data references."""
+
         controller = _controller(
             self.registry,
             component,
@@ -583,6 +619,8 @@ class FitService:
         x_ref: ColumnRef | dict[str, Any],
         y_ref: ColumnRef | dict[str, Any],
     ) -> ComponentChange:
+        """Set sources."""
+
         controller = _controller(
             self.registry,
             component,
@@ -608,6 +646,8 @@ class FitService:
         )
 
     def next_request(self, component_id: str) -> int:
+        """Start a new generation used to reject stale async results."""
+
         generation = self._request_generation.get(component_id, 0) + 1
         self._request_generation[component_id] = generation
         return generation
@@ -617,12 +657,16 @@ class FitService:
         component_id: str,
         generation: int,
     ) -> bool:
+        """Return whether an asynchronous result is still current."""
+
         return (
             component_id in self.registry
             and self._request_generation.get(component_id) == generation
         )
 
     def cancel(self, component_id: str) -> None:
+        """Close the dialog without applying pending changes."""
+
         self._request_generation[component_id] = (
             self._request_generation.get(component_id, 0) + 1
         )
@@ -639,6 +683,8 @@ class FitService:
         x_start: float,
         x_stop: float,
     ) -> ComponentChange:
+        """Apply a completed result only if it belongs to the current request."""
+
         controller = _controller(
             self.registry,
             component,
@@ -672,6 +718,8 @@ class FitService:
         x_start: float,
         x_stop: float,
     ) -> ComponentChange:
+        """Update display range."""
+
         controller = _controller(
             self.registry,
             component,
@@ -723,6 +771,8 @@ class TextRenderService:
         component,
         properties: dict[str, Any],
     ) -> ComponentChange:
+        """Apply the pending values through the component Controller."""
+
         controller = _controller(
             self.registry,
             component,
@@ -863,6 +913,8 @@ class ComponentDependencyService:
         self,
         refs: Iterable[ColumnRef],
     ) -> list[ComponentState]:
+        """Return data-backed component states affected by this source."""
+
         requested = set(refs)
         return [
             controller.state
@@ -876,6 +928,8 @@ class ComponentDependencyService:
         self,
         snapshots: Iterable[ComponentState],
     ) -> None:
+        """Delete states."""
+
         with self.registry.batch_updates():
             for state in snapshots:
                 if state.id in self.registry:
@@ -885,6 +939,8 @@ class ComponentDependencyService:
         self,
         snapshots: Iterable[ComponentState],
     ) -> None:
+        """Restore states."""
+
         for state in sorted(
             snapshots,
             key=lambda item: (item.order, item.id),

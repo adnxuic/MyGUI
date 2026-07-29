@@ -1,3 +1,5 @@
+"""Host the component inspector beside the active figure."""
+
 import os
 
 from Qt_core import *
@@ -15,6 +17,8 @@ qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyFigControlWindow(QFrame):
+    """Provide the py fig control window Qt widget."""
+
     def __init__(self):
         super().__init__()
         self.setObjectName("fig_control_window")

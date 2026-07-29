@@ -1,3 +1,5 @@
+"""Provide the title bar's style pull-down menu."""
+
 from Qt_core import *
 from code.widgets.title_bar.py_title_button import StaticSelectButton
 from code.widgets import qss_func
@@ -9,6 +11,8 @@ qss_path = os.path.join(current_path, "style.qss")
 qss_file = qss_func.qss_loader(qss_path)
 
 class StyleMenu(QMenu):
+    """Provide the style menu Qt widget."""
+
     def __init__(self, connect_button, button_dict=None):
         super().__init__()
 
@@ -59,4 +63,6 @@ class StyleMenu(QMenu):
 
 
     def menu_about_to_hide(self):
+        """Restore button state when the attached menu closes."""
+
         self.connect_button.setChecked(False)

@@ -1,3 +1,5 @@
+"""Collect inputs for creating Figure text elements."""
+
 from Qt_core import *
 
 from matplotlib import font_manager
@@ -12,6 +14,8 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
 class PyTextDialog(QDialog):
+    """Provide the py text dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("text_dialog")
@@ -113,6 +117,8 @@ class PyTextDialog(QDialog):
 
     def accept(self):
         # 如果current_canva为空，弹出警告
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -136,6 +142,8 @@ class PyTextDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 

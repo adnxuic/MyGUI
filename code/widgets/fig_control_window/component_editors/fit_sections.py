@@ -1,3 +1,5 @@
+"""Edit fit inputs, actions, results, and display ranges."""
+
 from __future__ import annotations
 
 from Qt_core import *
@@ -35,6 +37,8 @@ def _controller_data(controller, key: str, fallback=None):
 
 
 class FitDomainSection(QFrame):
+    """Provide the fit domain section Qt widget."""
+
     def __init__(
         self,
         controller: FitCurveController,
@@ -156,6 +160,8 @@ class FitDomainSection(QFrame):
             self.expression_input.blockSignals(False)
 
     def expression_change(self):
+        """Apply the expression change emitted by the corresponding control."""
+
         return True
 
     def _engine_display_name(self, engine: str) -> str:
@@ -194,6 +200,8 @@ class FitDomainSection(QFrame):
         )
 
     def open_fit_window(self, engine: str):
+        """Open fit window."""
+
         if self._disposed:
             return None
         if engine not in {"Python", "Matlab"}:
@@ -458,6 +466,8 @@ class FitDomainSection(QFrame):
         fit_type=None,
         fit_options=None,
     ):
+        """Update curve."""
+
         state_data = _controller_state(self.controller).data
         engine = engine or state_data["engine"]
         fit_type = (
@@ -522,9 +532,13 @@ class FitDomainSection(QFrame):
         return True
 
     def x_start_change(self):
+        """Apply the x start change emitted by the corresponding control."""
+
         return self._range_change(self.x_start_input.value(), self.x_stop_input.value())
 
     def x_stop_change(self):
+        """Apply the x stop change emitted by the corresponding control."""
+
         return self._range_change(self.x_start_input.value(), self.x_stop_input.value())
 
     def _range_change(self, x_start, x_stop):
@@ -552,6 +566,8 @@ class FitDomainSection(QFrame):
         return True
 
     def sync_from_controller(self):
+        """Refresh controls from authoritative Controller state."""
+
         state = _controller_state(self.controller)
         data = state.data
         fit_result = data.get("fit_result")
@@ -571,6 +587,8 @@ class FitDomainSection(QFrame):
         )
 
     def dispose(self):
+        """Disconnect callbacks and release resources owned by this object."""
+
         if self._disposed:
             return
         self._disposed = True
@@ -631,14 +649,20 @@ class FitSectionProxy(QFrame):
             layout.addWidget(domain.range_editor)
 
     def sync_from_controller(self):
+        """Refresh controls from authoritative Controller state."""
+
         if self.part == "actions":
             self.domain.sync_from_controller()
 
     def dispose(self):
+        """Disconnect callbacks and release resources owned by this object."""
+
         if self.part == "actions":
             self.domain.dispose()
 
 class FitActionsSection(FitSectionProxy):
+    """Edit the fit actions properties of a component."""
+
     def __init__(self, controller, *, context, parent=None):
         super().__init__(
             controller,
@@ -649,6 +673,8 @@ class FitActionsSection(FitSectionProxy):
 
 
 class FitResultSection(FitSectionProxy):
+    """Edit the fit result properties of a component."""
+
     def __init__(self, controller, *, context, parent=None):
         super().__init__(
             controller,
@@ -659,6 +685,8 @@ class FitResultSection(FitSectionProxy):
 
 
 class FitDisplayRangeSection(FitSectionProxy):
+    """Edit the fit display range properties of a component."""
+
     def __init__(self, controller, *, context, parent=None):
         super().__init__(
             controller,

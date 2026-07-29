@@ -1,3 +1,5 @@
+"""Define color palettes, selections, and ordered color-cycle state."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,6 +26,8 @@ def normalize_color(value: Any) -> str:
 
 @dataclass(frozen=True, slots=True)
 class PaletteDefinition:
+    """Represent the application's palette definition."""
+
     id: str
     name: str
     colors: tuple[str, ...]
@@ -48,11 +52,15 @@ class PaletteDefinition:
 
     @property
     def display_name(self) -> str:
+        """Return the display name."""
+
         if self.category and self.category != self.name:
             return f"{self.category} · {self.name}"
         return self.name
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert this object to dict."""
+
         return {
             "id": self.id,
             "name": self.name,
@@ -63,6 +71,8 @@ class PaletteDefinition:
 
     @classmethod
     def from_dict(cls, value: Any, *, source: str | None = None) -> "PaletteDefinition":
+        """Build an instance from dict."""
+
         if not isinstance(value, dict):
             raise ValueError("Palette state must be an object.")
         return cls(
@@ -76,6 +86,8 @@ class PaletteDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ColorSelection:
+    """Represent the application's color selection."""
+
     color: str
     palette: PaletteDefinition | None = None
     palette_index: int | None = None
@@ -107,19 +119,27 @@ class ColorCycleState:
 
     @property
     def active_palette(self) -> PaletteDefinition | None:
+        """Return the palette currently used by the color cycle."""
+
         return self.palette
 
     def reset(self) -> None:
+        """Restore the initial state."""
+
         self.palette = None
         self.next_index = 0
 
     def activate(self, palette: PaletteDefinition, next_index: int = 0) -> None:
+        """Activate a palette and reset its per-axes cursor."""
+
         if not isinstance(palette, PaletteDefinition):
             raise TypeError("palette must be a PaletteDefinition.")
         self.palette = palette
         self.next_index = int(next_index) % len(palette.colors)
 
     def peek(self) -> ColorSelection:
+        """Preview the next color without advancing the cycle."""
+
         if self.palette is None:
             return ColorSelection(DEFAULT_COLOR)
         index = self.next_index % len(self.palette.colors)
@@ -135,9 +155,13 @@ class ColorCycleState:
         self.next_index = (int(selection.palette_index) + 1) % len(selection.palette.colors)
 
     def commit_palette_for_count(self, palette: PaletteDefinition, object_count: int) -> None:
+        """Commit palette for count."""
+
         self.activate(palette, int(object_count) % len(palette.colors))
 
     def to_dict(self) -> dict[str, Any] | None:
+        """Convert this object to dict."""
+
         if self.palette is None:
             return None
         return {
@@ -147,6 +171,8 @@ class ColorCycleState:
 
     @classmethod
     def from_dict(cls, value: Any) -> "ColorCycleState":
+        """Build an instance from dict."""
+
         if value is None:
             return cls()
         if not isinstance(value, dict):
@@ -163,6 +189,8 @@ class ColorCycleState:
 
 @lru_cache(maxsize=1)
 def builtin_palettes() -> tuple[PaletteDefinition, ...]:
+    """Return the built-in palette definitions."""
+
     palettes: list[PaletteDefinition] = []
     for category_index, (category, definitions) in enumerate(color_combi_dict.items()):
         if not isinstance(definitions, dict):
@@ -181,10 +209,14 @@ def builtin_palettes() -> tuple[PaletteDefinition, ...]:
 
 @lru_cache(maxsize=1)
 def builtin_palette_map() -> dict[str, PaletteDefinition]:
+    """Return built-in palettes keyed by name."""
+
     return {palette.id: palette for palette in builtin_palettes()}
 
 
 def all_single_colors() -> tuple[str, ...]:
+    """Return all distinct colors from the built-in palettes."""
+
     for definitions in color_combi_dict.values():
         if not isinstance(definitions, dict):
             return tuple(normalize_color(color) for color in definitions)

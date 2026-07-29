@@ -1,3 +1,5 @@
+"""Adapt SciPy fitting models to MyGUI's common fit-result contract."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -22,6 +24,8 @@ SCIPY_NONLINEAR_METHODS = ("trf", "dogbox", "lm")
 
 
 def fit_type_groups() -> dict[str, list[str]]:
+    """Fit type groups using the selected model and options."""
+
     groups: dict[str, list[str]] = {}
     for spec in SCIPY_FIT_MODELS.values():
         groups.setdefault(spec.group, []).append(spec.fit_type)
@@ -172,6 +176,8 @@ def _x_scale(value: Any, count: int) -> float | str | np.ndarray:
 
 
 def default_fit_options(fit_type: str) -> dict[str, Any]:
+    """Return the default fit options."""
+
     spec = get_model_spec(fit_type)
     method = LINEAR_METHOD if spec.is_linear else NONLINEAR_METHOD
     options: dict[str, Any] = {
@@ -202,6 +208,8 @@ def default_fit_options(fit_type: str) -> dict[str, Any]:
 
 
 def get_func_info(fit_type: str) -> dict[str, Any]:
+    """Return func info."""
+
     spec = get_model_spec(fit_type)
     return {
         "expression": spec.formula_template,
@@ -284,6 +292,8 @@ def fit_curve(
     fit_type: str,
     fit_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Fit curve using the selected model and options."""
+
     spec = get_model_spec(fit_type)
     x_data = _as_float_array(x, "X Data")
     y_data = _as_float_array(y, "Y Data")

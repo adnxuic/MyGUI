@@ -1,3 +1,5 @@
+"""Provide interpolation algorithms used by data-backed chart components."""
+
 from collections.abc import Callable
 
 import numpy as np
@@ -98,6 +100,8 @@ def _coerce_lambda(lam: float | None, lam_auto: bool) -> float | None:
 
 def linear_interpolate(x: np.ndarray, y: np.ndarray,
                        samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the linear method."""
+
     x_values, y_values = _prepare_xy(x, y)
     x_new = _new_domain(x_values, samples)
     return x_new, np.interp(x_new, x_values, y_values)
@@ -105,6 +109,8 @@ def linear_interpolate(x: np.ndarray, y: np.ndarray,
 
 def nearest_interpolate(x: np.ndarray, y: np.ndarray,
                         samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the nearest method."""
+
     x_values, y_values = _prepare_xy(x, y)
     x_new = _new_domain(x_values, samples)
     right = np.searchsorted(x_values, x_new, side="left")
@@ -117,6 +123,8 @@ def nearest_interpolate(x: np.ndarray, y: np.ndarray,
 
 def previous_interpolate(x: np.ndarray, y: np.ndarray,
                          samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the previous method."""
+
     x_values, y_values = _prepare_xy(x, y)
     x_new = _new_domain(x_values, samples)
     indexes = np.searchsorted(x_values, x_new, side="right") - 1
@@ -126,6 +134,8 @@ def previous_interpolate(x: np.ndarray, y: np.ndarray,
 
 def next_interpolate(x: np.ndarray, y: np.ndarray,
                      samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the next method."""
+
     x_values, y_values = _prepare_xy(x, y)
     x_new = _new_domain(x_values, samples)
     indexes = np.searchsorted(x_values, x_new, side="left")
@@ -135,11 +145,15 @@ def next_interpolate(x: np.ndarray, y: np.ndarray,
 
 def CubicSpline_interpolate(x: np.ndarray, y: np.ndarray,
                             samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the cubic spline method."""
+
     return _evaluate_interpolator(x, y, lambda x_values, y_values: CubicSpline(x_values, y_values), samples)
 
 
 def b_spline_interpolate(x: np.ndarray, y: np.ndarray, k=3,
                          samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the b spline method."""
+
     x_values, y_values = _prepare_xy(x, y)
     order = _validate_b_spline_order(k, len(x_values))
     x_new = _new_domain(x_values, samples)
@@ -149,16 +163,22 @@ def b_spline_interpolate(x: np.ndarray, y: np.ndarray, k=3,
 
 def b_spline_splrep_interpolate(x: np.ndarray, y: np.ndarray, k=3,
                                 samples: int = DEFAULT_INTERPOLATION_SAMPLES, **kwargs):
+    """Interpolate values with the b spline splrep method."""
+
     return b_spline_interpolate(x, y, k=k, samples=samples, **kwargs)
 
 
 def pchip_interpolate(x: np.ndarray, y: np.ndarray,
                       samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the pchip method."""
+
     return _evaluate_interpolator(x, y, lambda x_values, y_values: PchipInterpolator(x_values, y_values), samples)
 
 
 def akima_interpolate(x: np.ndarray, y: np.ndarray,
                       samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the akima method."""
+
     return _evaluate_interpolator(
         x,
         y,
@@ -169,6 +189,8 @@ def akima_interpolate(x: np.ndarray, y: np.ndarray,
 
 def makima_interpolate(x: np.ndarray, y: np.ndarray,
                        samples: int = DEFAULT_INTERPOLATION_SAMPLES, **_kwargs):
+    """Interpolate values with the makima method."""
+
     return _evaluate_interpolator(
         x,
         y,
@@ -180,6 +202,8 @@ def makima_interpolate(x: np.ndarray, y: np.ndarray,
 def smoothing_spline_interpolate(x: np.ndarray, y: np.ndarray,
                                  samples: int = DEFAULT_INTERPOLATION_SAMPLES,
                                  lam: float | None = None, lam_auto: bool = True, **_kwargs):
+    """Interpolate values with the smoothing spline method."""
+
     x_values, y_values = _prepare_xy(x, y)
     if len(x_values) < 5:
         raise ValueError("Smoothing spline requires at least 5 data points.")
@@ -204,16 +228,22 @@ interpolate_dict = {
 
 
 def interpolation_uses_order(method: str) -> bool:
+    """Return whether the method accepts an interpolation order."""
+
     return method == B_SPLINE_METHOD
 
 
 def interpolation_uses_lambda(method: str) -> bool:
+    """Return whether the method accepts a smoothing parameter."""
+
     return method == SMOOTHING_SPLINE_METHOD
 
 
 def interpolate_curve(x: np.ndarray, y: np.ndarray, method: str, k: int = 3,
                       samples: int = DEFAULT_INTERPOLATION_SAMPLES,
                       lam: float | None = None, lam_auto: bool = True):
+    """Interpolate the supplied curve with the selected method."""
+
     if method not in interpolate_dict:
         raise ValueError(f"Unknown interpolation method: {method}")
     return interpolate_dict[method](

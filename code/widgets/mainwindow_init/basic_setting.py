@@ -1,3 +1,5 @@
+"""Apply basic startup settings to the Qt application."""
+
 from code.widgets import json_func, qss_func
 import sys
 import os

@@ -1,3 +1,5 @@
+"""Normalize curve-fitting results and compute goodness-of-fit statistics."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,8 @@ GOODNESS_FIELDS = ("sse", "rsquare", "dfe", "adjrsquare", "rmse")
 
 
 def as_list(value: Any) -> list[Any]:
+    """Normalize a scalar or sequence to a list."""
+
     if value is None:
         return []
     if isinstance(value, (str, bytes)):
@@ -24,6 +28,8 @@ def as_list(value: Any) -> list[Any]:
 
 
 def to_float_or_none(value: Any) -> float | None:
+    """Convert this object to float or none."""
+
     if value is None:
         return None
     if isinstance(value, (list, tuple)) and value:
@@ -35,6 +41,8 @@ def to_float_or_none(value: Any) -> float | None:
 
 
 def coefficient_values(coeff_value: Any) -> list[float]:
+    """Return fitted coefficient values in declaration order."""
+
     values = as_list(coeff_value)
     if values and not isinstance(values[0], (int, float, str, bytes)):
         values = as_list(values[0])
@@ -42,6 +50,8 @@ def coefficient_values(coeff_value: Any) -> list[float]:
 
 
 def replace_coefficients(expression: str, coefficient_names, coefficient_values_) -> str:
+    """Return fit results with replacement coefficient values."""
+
     result = expression
     pairs = sorted(
         ((str(name), value) for name, value in zip(coefficient_names, coefficient_values_)),
@@ -55,6 +65,8 @@ def replace_coefficients(expression: str, coefficient_names, coefficient_values_
 
 
 def confidence_rows(confidence_bounds: Any, coefficient_count: int) -> tuple[list[float | None], list[float | None]]:
+    """Normalize confidence-interval data into display rows."""
+
     rows = as_list(confidence_bounds)
     if len(rows) < 2:
         return [None] * coefficient_count, [None] * coefficient_count
@@ -66,6 +78,8 @@ def confidence_rows(confidence_bounds: Any, coefficient_count: int) -> tuple[lis
 
 
 def loads_json_object(value: Any) -> dict[str, Any]:
+    """Parse a JSON object while accepting already-decoded mappings."""
+
     if value is None:
         return {}
     if isinstance(value, dict):
@@ -82,6 +96,8 @@ def loads_json_object(value: Any) -> dict[str, Any]:
 
 
 def goodness_to_dict(gof_value: Any) -> dict[str, float | None]:
+    """Convert fit goodness statistics to a serializable mapping."""
+
     if isinstance(gof_value, (str, bytes)):
         try:
             parsed = loads_json_object(gof_value)
@@ -95,6 +111,8 @@ def goodness_to_dict(gof_value: Any) -> dict[str, float | None]:
 
 
 def compute_goodness(y_data, y_fit, parameter_count: int) -> dict[str, float]:
+    """Compute goodness."""
+
     y = np.asarray(y_data, dtype=float)
     fitted = np.asarray(y_fit, dtype=float)
     residuals = y - fitted
@@ -132,6 +150,8 @@ def compute_goodness(y_data, y_fit, parameter_count: int) -> dict[str, float]:
 
 
 def covariance_from_jacobian(jacobian, residuals, dfe: int) -> np.ndarray:
+    """Estimate parameter covariance from a fit Jacobian."""
+
     jac = np.asarray(jacobian, dtype=float)
     if jac.ndim != 2 or jac.size == 0 or dfe <= 0:
         return np.full((jac.shape[1] if jac.ndim == 2 else 0, jac.shape[1] if jac.ndim == 2 else 0), np.nan)
@@ -153,6 +173,8 @@ def confidence_from_covariance(
     dfe: int,
     confidence_level: float = CONFIDENCE_LEVEL,
 ) -> tuple[list[float], list[float]]:
+    """Compute confidence intervals from a covariance matrix."""
+
     coeff_values = np.asarray(values, dtype=float)
     covariance_array = np.asarray(covariance, dtype=float)
     nan_bounds = [float("nan")] * int(coeff_values.size)
@@ -193,6 +215,8 @@ def build_fit_result(
     confidence_level: float = CONFIDENCE_LEVEL,
     engine: str | None = None,
 ) -> dict[str, Any]:
+    """Build fit result."""
+
     names = [str(name) for name in as_list(coefficient_names)]
     values = coefficient_values(coefficient_values_)
     values.extend([float("nan")] * max(0, len(names) - len(values)))

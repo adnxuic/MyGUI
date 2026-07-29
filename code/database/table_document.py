@@ -1,3 +1,5 @@
+"""Define typed table documents and their serializable schemas."""
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -18,6 +20,8 @@ INVALID_NAME_CHARS = {"/", "\\"}
 
 
 def validate_component_name(name: str, label: str = "Name") -> str:
+    """Validate component name."""
+
     cleaned = str(name).strip()
     if not cleaned:
         raise ValueError(f"{label} must not be empty.")
@@ -27,6 +31,8 @@ def validate_component_name(name: str, label: str = "Name") -> str:
 
 
 class ColumnType(str, Enum):
+    """Enumerate the supported column type values."""
+
     AUTO = "auto"
     NUMBER = "number"
     TEXT = "text"
@@ -43,10 +49,14 @@ PANDAS_DTYPES: dict[ColumnType, str] = {
 
 
 def new_id() -> str:
+    """Return a new stable identifier."""
+
     return str(uuid4())
 
 
 def is_missing(value: Any) -> bool:
+    """Return whether missing."""
+
     if value is None or value is pd.NA or value is pd.NaT:
         return True
     if isinstance(value, str):
@@ -92,6 +102,8 @@ def _is_datetime_like(value: Any) -> bool:
 
 
 def infer_column_type(values: Iterable[Any]) -> ColumnType:
+    """Infer column type from the supplied values."""
+
     present = [value for value in values if not is_missing(value)]
     if not present:
         return ColumnType.AUTO
@@ -105,6 +117,8 @@ def infer_column_type(values: Iterable[Any]) -> ColumnType:
 
 
 def coerce_value(value: Any, column_type: ColumnType) -> Any:
+    """Coerce value to its declared table type."""
+
     if is_missing(value):
         return pd.NaT if column_type == ColumnType.DATETIME else pd.NA
     if column_type == ColumnType.AUTO:
@@ -142,6 +156,8 @@ def coerce_value(value: Any, column_type: ColumnType) -> Any:
 
 
 def coerce_series(values: Sequence[Any] | pd.Series, column_type: ColumnType) -> pd.Series:
+    """Coerce series to its declared table type."""
+
     raw = list(values)
     resolved = infer_column_type(raw) if column_type == ColumnType.AUTO else column_type
     if resolved == ColumnType.AUTO:
@@ -151,6 +167,8 @@ def coerce_series(values: Sequence[Any] | pd.Series, column_type: ColumnType) ->
 
 
 def display_value(value: Any, column_type: ColumnType) -> str:
+    """Return the display form of value."""
+
     if is_missing(value):
         return ""
     if column_type == ColumnType.BOOLEAN:
@@ -167,6 +185,8 @@ def display_value(value: Any, column_type: ColumnType) -> str:
 
 
 def json_value(value: Any, column_type: ColumnType) -> Any:
+    """Convert a typed table value to a JSON-compatible value."""
+
     if is_missing(value):
         return None
     if column_type == ColumnType.NUMBER:
@@ -180,11 +200,15 @@ def json_value(value: Any, column_type: ColumnType) -> Any:
 
 @dataclass(frozen=True)
 class ColumnRef:
+    """Describe column ref values shared across application layers."""
+
     project_id: str
     sheet_id: str
     column_id: str
 
     def to_dict(self) -> dict[str, str]:
+        """Convert this object to dict."""
+
         return {
             "project_id": self.project_id,
             "sheet_id": self.sheet_id,
@@ -193,6 +217,8 @@ class ColumnRef:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ColumnRef":
+        """Build an instance from dict."""
+
         if not isinstance(value, dict):
             raise ValueError("Data reference must be an object.")
         fields = tuple(str(value.get(name, "")).strip() for name in ("project_id", "sheet_id", "column_id"))
@@ -203,12 +229,16 @@ class ColumnRef:
 
 @dataclass
 class ColumnSchema:
+    """Describe column schema values shared across application layers."""
+
     id: str
     name: str
     type: ColumnType = ColumnType.AUTO
     width: int = DEFAULT_COLUMN_WIDTH
 
     def to_snapshot(self, values: pd.Series) -> dict[str, Any]:
+        """Convert this object to snapshot."""
+
         return {
             "id": self.id,
             "name": self.name,
@@ -220,6 +250,8 @@ class ColumnSchema:
 
 @dataclass
 class SheetDocument:
+    """Own the typed data and schema for one sheet."""
+
     id: str
     name: str
     row_count: int = DEFAULT_ROWS
@@ -228,6 +260,8 @@ class SheetDocument:
 
     @classmethod
     def create(cls, name: str = "Sheet1", column_count: int = DEFAULT_COLUMNS) -> "SheetDocument":
+        """Create and return a new instance."""
+
         document = cls(id=new_id(), name=validate_component_name(name, "Sheet name"), row_count=DEFAULT_ROWS)
         for index in range(column_count):
             document.add_column(name=f"Column {index + 1}")
@@ -235,18 +269,26 @@ class SheetDocument:
 
     @property
     def column_ids(self) -> list[str]:
+        """Return the column ids."""
+
         return [column.id for column in self.columns]
 
     def column_index(self, column_id: str) -> int:
+        """Return the column index."""
+
         for index, column in enumerate(self.columns):
             if column.id == column_id:
                 return index
         raise KeyError(f"Unknown column: {column_id}")
 
     def column(self, column_id: str) -> ColumnSchema:
+        """Return the requested column."""
+
         return self.columns[self.column_index(column_id)]
 
     def validate_column_name(self, name: str, exclude_id: str | None = None) -> str:
+        """Validate column name."""
+
         cleaned = str(name).strip()
         if not cleaned:
             raise ValueError("Column name must not be empty.")
@@ -256,6 +298,8 @@ class SheetDocument:
         return cleaned
 
     def unique_column_name(self, preferred: str) -> str:
+        """Return a unique column name."""
+
         base = str(preferred).strip() or f"Column {len(self.columns) + 1}"
         existing = {column.name.casefold() for column in self.columns}
         if base.casefold() not in existing:
@@ -276,6 +320,8 @@ class SheetDocument:
     def add_column(self, name: str | None = None, column_type: ColumnType = ColumnType.AUTO,
                    index: int | None = None, column_id: str | None = None,
                    width: int = DEFAULT_COLUMN_WIDTH, values: Sequence[Any] | None = None) -> ColumnSchema:
+        """Add column."""
+
         name = self.validate_column_name(self.unique_column_name(name or f"Column {len(self.columns) + 1}"))
         raw = list(values) if values is not None else [pd.NA] * self.row_count
         if len(raw) > self.row_count:
@@ -297,12 +343,16 @@ class SheetDocument:
         return schema
 
     def remove_column(self, column_id: str) -> tuple[int, ColumnSchema, pd.Series]:
+        """Remove column."""
+
         index = self.column_index(column_id)
         schema = self.columns.pop(index)
         values = self.frame.pop(column_id).copy(deep=True)
         return index, schema, values
 
     def restore_column(self, index: int, schema: ColumnSchema, values: pd.Series) -> None:
+        """Restore column."""
+
         self.columns.insert(index, schema)
         restored = values.reset_index(drop=True)
         if len(restored) < self.row_count:
@@ -314,6 +364,8 @@ class SheetDocument:
         self.frame = self.frame[self.column_ids]
 
     def move_column(self, source: int, destination: int) -> None:
+        """Move column."""
+
         if not 0 <= source < len(self.columns):
             raise IndexError("Column index is out of range.")
         destination = max(0, min(destination, len(self.columns) - 1))
@@ -322,6 +374,8 @@ class SheetDocument:
         self.frame = self.frame[self.column_ids]
 
     def ensure_rows(self, count: int) -> None:
+        """Ensure rows exists and return it."""
+
         count = int(count)
         if count <= self.row_count:
             return
@@ -332,6 +386,8 @@ class SheetDocument:
         self.row_count = count
 
     def truncate_rows(self, count: int) -> None:
+        """Truncate the sheet to the requested row count."""
+
         count = max(0, min(int(count), self.row_count))
         if count == self.row_count:
             return
@@ -339,6 +395,8 @@ class SheetDocument:
         self.row_count = count
 
     def insert_rows(self, index: int, count: int = 1) -> None:
+        """Insert rows."""
+
         index = max(0, min(int(index), self.row_count))
         count = max(1, int(count))
         for column in self.columns:
@@ -350,6 +408,8 @@ class SheetDocument:
         self.row_count += count
 
     def remove_rows(self, index: int, count: int = 1) -> pd.DataFrame:
+        """Remove rows."""
+
         if not 0 <= index < self.row_count:
             raise IndexError("Row index is out of range.")
         count = max(1, min(int(count), self.row_count - index))
@@ -361,6 +421,8 @@ class SheetDocument:
         return removed
 
     def restore_rows(self, index: int, rows: pd.DataFrame) -> None:
+        """Restore rows."""
+
         index = max(0, min(int(index), self.row_count))
         restored = rows[self.column_ids].copy(deep=True)
         self.frame = pd.concat(
@@ -369,6 +431,8 @@ class SheetDocument:
         self.row_count = len(self.frame)
 
     def move_row(self, source: int, destination: int) -> None:
+        """Move row."""
+
         if not 0 <= source < self.row_count:
             raise IndexError("Row index is out of range.")
         destination = max(0, min(int(destination), self.row_count - 1))
@@ -380,6 +444,8 @@ class SheetDocument:
         self.frame = self.frame.iloc[order].reset_index(drop=True)
 
     def resolved_edit(self, column_id: str, values: Sequence[Any]) -> tuple[ColumnType, list[Any]]:
+        """Return the row count and type implied by a pending cell edit."""
+
         schema = self.column(column_id)
         resolved = schema.type
         if resolved == ColumnType.AUTO:
@@ -389,6 +455,8 @@ class SheetDocument:
         return resolved, [coerce_value(value, resolved) for value in values]
 
     def set_cell(self, row: int, column_id: str, value: Any) -> tuple[Any, ColumnType]:
+        """Set cell."""
+
         if not 0 <= row < self.row_count:
             raise IndexError("Row index is out of range.")
         schema = self.column(column_id)
@@ -402,6 +470,8 @@ class SheetDocument:
 
     def set_block(self, start_row: int, start_column: int,
                   rows: Sequence[Sequence[Any]]) -> tuple[pd.DataFrame, list[ColumnType]]:
+        """Set block."""
+
         block = [list(row) for row in rows]
         if not block:
             return pd.DataFrame(), []
@@ -435,6 +505,8 @@ class SheetDocument:
 
     def replace_block(self, start_row: int, column_ids: Sequence[str], values: pd.DataFrame,
                       types: Sequence[ColumnType] | None = None) -> None:
+        """Replace block."""
+
         if types is not None:
             for column_id, column_type in zip(column_ids, types):
                 schema = self.column(column_id)
@@ -446,6 +518,8 @@ class SheetDocument:
         self.frame.loc[start_row:stop, list(column_ids)] = values[list(column_ids)].to_numpy()
 
     def convert_column(self, column_id: str, target: ColumnType) -> tuple[ColumnType, pd.Series]:
+        """Convert a column to the requested declared type."""
+
         if target == ColumnType.AUTO and self.frame[column_id].notna().any():
             raise ValueError("Only an empty column can use the automatic type.")
         schema = self.column(column_id)
@@ -458,12 +532,16 @@ class SheetDocument:
         return old_type, old_values
 
     def sort_rows(self, column_id: str, ascending: bool = True) -> list[int]:
+        """Sort rows."""
+
         series = self.frame[column_id]
         ordered = series.sort_values(ascending=ascending, na_position="last", kind="stable").index.tolist()
         self.frame = self.frame.loc[ordered].reset_index(drop=True)
         return ordered
 
     def to_snapshot(self) -> dict[str, Any]:
+        """Convert this object to snapshot."""
+
         return {
             "id": self.id,
             "name": self.name,
@@ -473,6 +551,8 @@ class SheetDocument:
 
     @classmethod
     def from_snapshot(cls, snapshot: dict[str, Any]) -> "SheetDocument":
+        """Build an instance from snapshot."""
+
         sheet_id = str(snapshot.get("id", "")).strip()
         if not sheet_id:
             raise ValueError("Sheet id must not be empty.")
@@ -504,18 +584,24 @@ class SheetDocument:
 
 @dataclass
 class ProjectTableDocument:
+    """Own the typed data and schema for one project table."""
+
     id: str
     name: str
     sheets: "OrderedDict[str, SheetDocument]" = field(default_factory=OrderedDict)
 
     @classmethod
     def create(cls, name: str, first_sheet_name: str = "Sheet1") -> "ProjectTableDocument":
+        """Create and return a new instance."""
+
         project = cls(id=new_id(), name=validate_component_name(name, "Project name"))
         sheet = SheetDocument.create(first_sheet_name)
         project.sheets[sheet.id] = sheet
         return project
 
     def sheet_by_name(self, name: str) -> SheetDocument:
+        """Return the sheet with the requested display name."""
+
         normalized = str(name).strip().casefold()
         for sheet in self.sheets.values():
             if sheet.name.casefold() == normalized:
@@ -523,6 +609,8 @@ class ProjectTableDocument:
         raise KeyError(f"Unknown sheet: {name}")
 
     def unique_sheet_name(self, preferred: str) -> str:
+        """Return a unique sheet name."""
+
         base = str(preferred).strip() or f"Sheet{len(self.sheets) + 1}"
         existing = {sheet.name.casefold() for sheet in self.sheets.values()}
         if base.casefold() not in existing:
@@ -533,6 +621,8 @@ class ProjectTableDocument:
         return f"{base} {suffix}"
 
     def add_sheet(self, name: str | None = None, sheet: SheetDocument | None = None) -> SheetDocument:
+        """Add sheet."""
+
         if sheet is None:
             sheet = SheetDocument.create(validate_component_name(
                 self.unique_sheet_name(name or f"Sheet{len(self.sheets) + 1}"), "Sheet name"
@@ -545,6 +635,8 @@ class ProjectTableDocument:
         return sheet
 
     def to_snapshot(self) -> dict[str, Any]:
+        """Convert this object to snapshot."""
+
         return {
             "id": self.id,
             "name": self.name,
@@ -553,6 +645,8 @@ class ProjectTableDocument:
 
     @classmethod
     def from_snapshot(cls, snapshot: dict[str, Any]) -> "ProjectTableDocument":
+        """Build an instance from snapshot."""
+
         project = cls(id=str(snapshot["id"]), name=str(snapshot["name"]))
         sheets = snapshot.get("sheets", [])
         if not isinstance(sheets, list):

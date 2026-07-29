@@ -1,3 +1,5 @@
+"""Provide a reusable empty-state widget for unpopulated views."""
+
 from Qt_core import *
 
 

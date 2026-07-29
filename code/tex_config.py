@@ -1,3 +1,5 @@
+"""Manage optional TeX rendering state and diagnostic logging."""
+
 import io
 import logging
 from collections.abc import Callable
@@ -83,6 +85,8 @@ def configure_tex_logging(
     include_file: bool | None = None,
     include_stderr: bool | None = None,
 ) -> logging.Logger:
+    """Configure log routing for the optional TeX integration."""
+
     global _LOGGER_SIGNATURE
     if include_file is None:
         include_file = _LOG_TO_FILE
@@ -142,6 +146,8 @@ def configure_tex_logging(
 
 
 def set_tex_log_sinks(include_file: bool, include_stderr: bool) -> logging.Logger:
+    """Set tex log sinks."""
+
     global _LOG_TO_FILE, _LOG_TO_STDERR
     _LOG_TO_FILE = include_file
     _LOG_TO_STDERR = include_stderr
@@ -149,19 +155,27 @@ def set_tex_log_sinks(include_file: bool, include_stderr: bool) -> logging.Logge
 
 
 def tex_logger() -> logging.Logger:
+    """Return the logger used by the TeX integration."""
+
     return configure_tex_logging()
 
 
 def is_tex_enabled() -> bool:
+    """Return whether tex enabled."""
+
     return bool(mpl.rcParams.get("text.usetex", False))
 
 
 def register_tex_state_listener(listener: TexStateListener) -> None:
+    """Register tex state listener."""
+
     if listener not in _TEX_STATE_LISTENERS:
         _TEX_STATE_LISTENERS.append(listener)
 
 
 def unregister_tex_state_listener(listener: TexStateListener) -> None:
+    """Unregister tex state listener."""
+
     try:
         _TEX_STATE_LISTENERS.remove(listener)
     except ValueError:
@@ -169,6 +183,8 @@ def unregister_tex_state_listener(listener: TexStateListener) -> None:
 
 
 def clear_tex_state_listeners() -> None:
+    """Clear tex state listeners."""
+
     _TEX_STATE_LISTENERS.clear()
 
 
@@ -177,10 +193,14 @@ def _notify_tex_state_listeners(enabled: bool) -> None:
         try:
             listener(enabled)
         except RuntimeError:
+            # Qt raises RuntimeError when a Python callback still references a
+            # QObject whose C++ instance has already been destroyed.
             unregister_tex_state_listener(listener)
 
 
 def set_tex_enabled(enabled: bool, notify: bool = True) -> None:
+    """Enable or disable Matplotlib TeX rendering."""
+
     previous = is_tex_enabled()
     mpl.rcParams["text.usetex"] = bool(enabled)
     if notify and previous != bool(enabled):
@@ -188,10 +208,14 @@ def set_tex_enabled(enabled: bool, notify: bool = True) -> None:
 
 
 def default_preamble_text() -> str:
+    """Return the default preamble text."""
+
     return "\n".join(DEFAULT_PREAMBLE_LINES)
 
 
 def normalize_preamble(text: str) -> str:
+    """Normalize non-empty TeX preamble lines."""
+
     lines = []
     for line in text.splitlines():
         stripped = line.strip()
@@ -201,6 +225,8 @@ def normalize_preamble(text: str) -> str:
 
 
 def has_tex_engine() -> bool:
+    """Return whether a supported TeX executable is available."""
+
     for command in TEX_ENGINE_COMMANDS:
         path = shutil.which(command)
         if path:
@@ -211,6 +237,8 @@ def has_tex_engine() -> bool:
 
 
 def validate_tex_runtime(preamble: str) -> str | None:
+    """Validate tex runtime."""
+
     logger = tex_logger()
     started_at = time.monotonic()
     preamble_line_count = len(preamble.splitlines()) if preamble else 0

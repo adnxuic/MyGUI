@@ -76,6 +76,8 @@ class ComponentRegistry:
         target: Any | None = None,
         require_parent: bool = True,
     ) -> ComponentController[Any]:
+        """Register the supplied object and return it."""
+
         state = controller.state
         if state.id in self._controllers:
             raise ComponentValidationError(
@@ -110,6 +112,8 @@ class ComponentRegistry:
         return controller
 
     def get(self, component_id: str) -> ComponentController[Any]:
+        """Return the object registered for the supplied identifier."""
+
         try:
             return self._controllers[component_id]
         except KeyError as exc:
@@ -118,6 +122,8 @@ class ComponentRegistry:
             ) from exc
 
     def resolve_target(self, component_id: str) -> Any | None:
+        """Resolve the live Matplotlib target for a component."""
+
         controller = self._controllers.get(component_id)
         if controller is None or controller.deleted:
             return None
@@ -127,6 +133,8 @@ class ComponentRegistry:
             return None
 
     def children(self, component_id: str | None) -> list[ComponentController[Any]]:
+        """Return the children."""
+
         return self._ordered(
             self._controllers[item]
             for item in self._children.get(component_id, ())
@@ -136,6 +144,8 @@ class ComponentRegistry:
     def descendants(
         self, component_id: str
     ) -> list[ComponentController[Any]]:
+        """Return the descendants."""
+
         if component_id not in self._controllers:
             raise ComponentNotFoundError(
                 f"Unknown component id {component_id!r}."
@@ -157,6 +167,8 @@ class ComponentRegistry:
         parent_id: str | None = None,
         recursive: bool = False,
     ) -> list[ComponentController[Any]]:
+        """Return controllers matching the supplied component filters."""
+
         kind_value = ComponentKind(kind) if kind is not None else None
         role_value = ComponentRole(role) if role is not None else None
         if isinstance(capabilities, str):
@@ -221,6 +233,8 @@ class ComponentRegistry:
     def snapshot(
         self, component_ids: Iterable[str] | None = None
     ) -> dict[str, ComponentState]:
+        """Return a serializable snapshot of the current state."""
+
         ids = (
             list(component_ids)
             if component_ids is not None
@@ -231,6 +245,8 @@ class ComponentRegistry:
     def restore(
         self, snapshots: dict[str, ComponentState]
     ) -> list[ComponentChange]:
+        """Restore the previously captured state."""
+
         originals = self.snapshot(snapshots)
         changes: list[ComponentChange] = []
         with self.batch_updates():
@@ -246,6 +262,8 @@ class ComponentRegistry:
     def set_properties(
         self, operations: Iterable[tuple[str, str, Any]]
     ) -> list[ComponentChange]:
+        """Set properties."""
+
         patches: dict[str, dict[str, Any]] = {}
         for component_id, key, value in operations:
             patches.setdefault(component_id, {})[key] = value
@@ -332,6 +350,8 @@ class ComponentRegistry:
         return ComponentBatchChange(tuple(changes), True)
 
     def delete(self, component_id: str) -> ComponentChange:
+        """Remove the component through its controller."""
+
         return self.get(component_id).delete()
 
     def add_cleanup_callback(
@@ -362,6 +382,8 @@ class ComponentRegistry:
     def add_remove_listener(
         self, callback: Callable[[ComponentState], None]
     ) -> Callable[[], None]:
+        """Register a callback invoked after a component is removed."""
+
         if not callable(callback):
             raise TypeError("Remove listener must be callable.")
         self._remove_listeners.append(callback)
@@ -401,6 +423,8 @@ class ComponentRegistry:
         return unsubscribe
 
     def clear(self, *, delete_targets: bool = False) -> None:
+        """Remove all owned entries and detach their callbacks."""
+
         roots = [
             controller.component_id
             for controller in self.children(None)
@@ -421,6 +445,8 @@ class ComponentRegistry:
         self._pending.clear()
 
     def states(self) -> list[ComponentState]:
+        """Return the available states."""
+
         return [controller.state for controller in self.query()]
 
     def request_update(
@@ -428,6 +454,8 @@ class ComponentRegistry:
         subject: Axes | Figure | None,
         impacts: UpdateImpact,
     ) -> None:
+        """Queue the redraw work implied by the supplied impacts."""
+
         if subject is None or impacts == UpdateImpact.NONE:
             return
         key = id(subject)
@@ -441,6 +469,8 @@ class ComponentRegistry:
 
     @contextmanager
     def batch_updates(self) -> Iterator["ComponentRegistry"]:
+        """Coalesce redraw impacts produced inside the context."""
+
         self._batch_depth += 1
         try:
             yield self
@@ -450,6 +480,8 @@ class ComponentRegistry:
                 self.flush_updates()
 
     def flush_updates(self) -> None:
+        """Apply all redraw impacts accumulated by the current batch."""
+
         pending = list(self._pending.values())
         self._pending.clear()
 
@@ -462,6 +494,9 @@ class ComponentRegistry:
                 and non_redraw
                 & (UpdateImpact.RELIM | UpdateImpact.AUTOSCALE)
             ):
+                # Matplotlib mutates limits during autoscaling.  Mirror those
+                # implicit artist changes back into the authoritative state so
+                # Inspectors and project saves cannot retain stale limits.
                 component_id = self.locator.find_id(subject)
                 controller = (
                     self._controllers.get(component_id)
@@ -495,6 +530,8 @@ class ComponentRegistry:
             apply_update_impacts(figure, impacts)
 
     def validate_tree(self) -> None:
+        """Validate parent links and component-tree invariants."""
+
         roots = [
             controller
             for controller in self._controllers.values()

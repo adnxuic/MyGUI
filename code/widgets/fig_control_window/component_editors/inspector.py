@@ -1,3 +1,5 @@
+"""Compose component inspectors from registered editor sections."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,9 +19,13 @@ class EditorSection:
     section_key = ""
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         return None
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         return None
 
 
@@ -28,6 +34,8 @@ SectionFactory = Callable[[object, object, QWidget | None], QWidget]
 
 @dataclass(frozen=True, slots=True)
 class SectionSpec:
+    """Describe section spec values shared across application layers."""
+
     key: str
     title: str
     factory: SectionFactory
@@ -36,6 +44,8 @@ class SectionSpec:
 
 @dataclass(frozen=True, slots=True)
 class EditorProfile:
+    """Represent the application's editor profile."""
+
     key: str
     title: str
     sections: tuple[SectionSpec, ...]
@@ -89,12 +99,18 @@ class ComponentInspector(QFrame):
         self.layout.addStretch()
 
     def section(self, key: str) -> QWidget:
+        """Return the requested section."""
+
         return self._sections_by_key[key]
 
     def sections(self) -> tuple[QWidget, ...]:
+        """Return the available sections."""
+
         return tuple(self._sections)
 
     def editor(self, key: str) -> QWidget:
+        """Return the editor widget used for the property."""
+
         for section in self._sections:
             getter = getattr(section, "editor", None)
             if not callable(getter):
@@ -106,12 +122,16 @@ class ComponentInspector(QFrame):
         raise KeyError(key)
 
     def sync_from_controller(self) -> None:
+        """Refresh controls from authoritative Controller state."""
+
         for section in tuple(self._sections):
             sync = getattr(section, "sync_from_controller", None)
             if callable(sync):
                 sync()
 
     def delete_object(self):
+        """Delete object."""
+
         if not self.can_delete:
             return False
         result = self.context.registry.delete(
@@ -123,6 +143,8 @@ class ComponentInspector(QFrame):
         )
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         if self._disposed:
             return
         self._disposed = True
@@ -136,5 +158,7 @@ class ComponentInspector(QFrame):
             release(self)
 
     def closeEvent(self, event):
+        """Handle Qt close events and release owned resources."""
+
         self.dispose()
         super().closeEvent(event)

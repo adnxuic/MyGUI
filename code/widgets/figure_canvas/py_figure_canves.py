@@ -1,3 +1,5 @@
+"""Host Matplotlib figures and register their editable components."""
+
 from copy import deepcopy
 from typing import Any, Optional
 from Qt_core import *
@@ -71,6 +73,8 @@ mpl.use("QtAgg")
 
 
 class PyFigureCanvas(QWidget):
+    """Provide the py figure canvas Qt widget."""
+
     def __init__(self, parent=None, width=4, height=3, dpi=200, style=None,
                  repository: TableRepository | None = None, project_id: str | None = None,
                  project_name: str | None = None, project_path: str | None = None,
@@ -225,6 +229,8 @@ class PyFigureCanvas(QWidget):
 
     @property
     def current_axes_controller(self) -> AxesController | None:
+        """Return the current axes controller."""
+
         component_id = self.current_axes_component_id
         if component_id is None or component_id not in self.component_registry:
             return None
@@ -288,6 +294,8 @@ class PyFigureCanvas(QWidget):
 
     @property
     def component_style(self) -> str:
+        """Return the style mapping for a component."""
+
         try:
             state = self.component_registry.get(
                 self.root_component_id
@@ -553,6 +561,8 @@ class PyFigureCanvas(QWidget):
         self,
         figure_inspector: FigureInspectorPanel,
     ) -> None:
+        """Set figure inspector."""
+
         self.figure_inspector = figure_inspector
 
     def update_current_axes(self, component) -> None:
@@ -579,6 +589,8 @@ class PyFigureCanvas(QWidget):
                 self.figure_inspector.show_axes_inspector(inspector)
 
     def set_current_axes_by_index(self, axes_index: int):
+        """Set current axes by index."""
+
         try:
             controller = self.component_registry.find_one(
                 kind=ComponentKind.AXES,
@@ -589,13 +601,19 @@ class PyFigureCanvas(QWidget):
         self.update_current_axes(controller)
 
     def redraw(self):
+        """Schedule a coalesced canvas redraw."""
+
         self.fig.canvas.draw()
 
     def cancel_pending_draw(self):
+        """Cancel a queued redraw that has not reached the canvas yet."""
+
         if hasattr(self.canva, "_draw_pending"):
             self.canva._draw_pending = False
 
     def closeEvent(self, event):
+        """Handle Qt close events and release owned resources."""
+
         self.cancel_pending_draw()
         try:
             self.repository.transaction_committed.disconnect(self._table_changed)
@@ -724,6 +742,8 @@ class PyFigureCanvas(QWidget):
         ncols=1,
         slots: list[int] | tuple[int, ...] | None = None,
     ):
+        """Add axes."""
+
         start_index = len(self.fig.axes)
         layout_group = self._next_layout_group()
         if slots is None:
@@ -777,6 +797,8 @@ class PyFigureCanvas(QWidget):
     def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str,
                   color_order: int | None = None,
                   object_id: str | None = None):
+        """Add curve."""
+
         color = normalize_color(color)
         object_id = object_id or new_id()
         x = np.linspace(x_start, x_stop, 1000)
@@ -852,6 +874,8 @@ class PyFigureCanvas(QWidget):
     def add_plot(self, x, y, style, size, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
                  object_id: str | None = None,
                  color_order: int | None = None):
+        """Add plot."""
+
         color = normalize_color(color)
         object_id = object_id or new_id()
         with mpl.style.context(self.component_style):
@@ -882,6 +906,8 @@ class PyFigureCanvas(QWidget):
     def add_scatter(self, x, y, size, color, marker, label, x_ref: ColumnRef, y_ref: ColumnRef,
                     object_id: str | None = None,
                     color_order: int | None = None):
+        """Add scatter."""
+
         color = normalize_color(color)
         object_id = object_id or new_id()
         with mpl.style.context(self.component_style):
@@ -916,6 +942,8 @@ class PyFigureCanvas(QWidget):
                       x_start: float | None = None, x_stop: float | None = None,
                       style: str = "solid", object_id: str | None = None,
                       color_order: int | None = None):
+        """Add fit curve."""
+
         if engine not in {"Python", "Matlab"}:
             raise ValueError(f"Unsupported fitting engine: {engine}")
 
@@ -981,6 +1009,8 @@ class PyFigureCanvas(QWidget):
                               samples=DEFAULT_INTERPOLATION_SAMPLES,
                               lam=None, lam_auto=True, object_id: str | None = None,
                               color_order: int | None = None, allow_empty: bool = False):
+        """Add interpolate curve."""
+
         color = normalize_color(color)
         with mpl.style.context(self.component_style):
             x_values = np.asarray(x)
@@ -1054,6 +1084,8 @@ class PyFigureCanvas(QWidget):
     def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
                  usetex: bool | None = None,
                  object_id: str | None = None):
+        """Add text."""
+
         desired_usetex = self._resolve_text_usetex(usetex)
         text_artist = self.current_axes.text(
             x,
@@ -1089,6 +1121,8 @@ class PyFigureCanvas(QWidget):
     def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: int,
                         usetex: bool | None = None,
                         object_id: str | None = None):
+        """Add global text."""
+
         desired_usetex = self._resolve_text_usetex(usetex)
         text_artist = self.fig.text(
             x,
@@ -1122,6 +1156,8 @@ class PyFigureCanvas(QWidget):
         return text_artist
 
     def save(self, filename, dpi=None):
+        """Save the current figure through the selected destination."""
+
         if dpi is None:
             save_dpi = self.document_dpi
         else:
@@ -1283,12 +1319,16 @@ class PyFigureCanvas(QWidget):
         self,
         snapshots: list[ComponentState],
     ) -> None:
+        """Remove components captured before a table mutation."""
+
         self.dependency_service.delete_states(snapshots)
 
     def restore_data_dependents(
         self,
         snapshots: list[ComponentState],
     ) -> None:
+        """Restore components captured before a table mutation."""
+
         self.dependency_service.restore_states(snapshots)
 
     def restore_component_tree(
@@ -1493,6 +1533,8 @@ class PyFigureCanvas(QWidget):
         self.redraw()
 
     def set_project_name(self, name: str):
+        """Set project name."""
+
         controller = self.component_registry.get(self.root_component_id)
         change = controller.set_property("name", name)
         if not change.ok:

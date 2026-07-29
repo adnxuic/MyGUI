@@ -1,3 +1,5 @@
+"""Isolate optional MATLAB integration behind stable application-facing helpers."""
+
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -68,6 +70,8 @@ NONLINEAR_ALGORITHMS = ("Trust-Region", "Levenberg-Marquardt", "Interior-Point")
 
 @dataclass(frozen=True)
 class MatlabStatus:
+    """Represent the application's matlab status."""
+
     available: bool
     message: str = ""
 
@@ -78,15 +82,21 @@ _MATLAB_STATE_LISTENERS: list[MatlabStateListener] = []
 
 
 def is_matlab_enabled() -> bool:
+    """Return whether matlab enabled."""
+
     return _MATLAB_ENABLED
 
 
 def register_matlab_state_listener(listener: MatlabStateListener) -> None:
+    """Register matlab state listener."""
+
     if listener not in _MATLAB_STATE_LISTENERS:
         _MATLAB_STATE_LISTENERS.append(listener)
 
 
 def unregister_matlab_state_listener(listener: MatlabStateListener) -> None:
+    """Unregister matlab state listener."""
+
     try:
         _MATLAB_STATE_LISTENERS.remove(listener)
     except ValueError:
@@ -94,6 +104,8 @@ def unregister_matlab_state_listener(listener: MatlabStateListener) -> None:
 
 
 def clear_matlab_state_listeners() -> None:
+    """Clear matlab state listeners."""
+
     _MATLAB_STATE_LISTENERS.clear()
 
 
@@ -102,10 +114,14 @@ def _notify_matlab_state_listeners(enabled: bool) -> None:
         try:
             listener(enabled)
         except RuntimeError:
+            # Settings windows are short-lived; prune callbacks whose wrapped
+            # Qt object has already been deleted instead of breaking MATLAB.
             unregister_matlab_state_listener(listener)
 
 
 def set_matlab_enabled(enabled: bool, notify: bool = True) -> None:
+    """Enable or disable MATLAB-dependent application features."""
+
     global _MATLAB_ENABLED
     previous = _MATLAB_ENABLED
     _MATLAB_ENABLED = bool(enabled)
@@ -114,6 +130,8 @@ def set_matlab_enabled(enabled: bool, notify: bool = True) -> None:
 
 
 def fit_method_for_name(func_name: str) -> str:
+    """Fit method for name using the selected model and options."""
+
     if func_name in LINEAR_LEAST_SQUARES_FIT_NAMES:
         return "LinearLeastSquares"
     if any(func_name.startswith(prefix) for prefix in LINEAR_LEAST_SQUARES_FIT_PREFIXES):
@@ -143,6 +161,8 @@ def _empty_start_points(method: str, coefficients: list[str]) -> list[float | No
 
 
 def default_fit_options(func_name: str, coefficients: list[str]) -> dict[str, Any]:
+    """Return the default fit options."""
+
     method = fit_method_for_name(func_name)
     options: dict[str, Any] = {
         "Method": method,
@@ -168,6 +188,8 @@ def default_fit_options(func_name: str, coefficients: list[str]) -> dict[str, An
 
 
 def fallback_func_info(func_name: str) -> dict[str, Any]:
+    """Return MATLAB function metadata without starting MATLAB."""
+
     expression, coefficients = _fallback_func_exp(func_name)
     coefficients = [str(coefficient) for coefficient in coefficients]
     return {
@@ -227,6 +249,8 @@ def configure_matlab_logging(
     include_file: bool | None = None,
     include_stderr: bool | None = None,
 ) -> logging.Logger:
+    """Configure log routing for the optional MATLAB integration."""
+
     global _LOGGER_SIGNATURE
     if include_file is None:
         include_file = _LOG_TO_FILE
@@ -286,6 +310,8 @@ def configure_matlab_logging(
 
 
 def set_matlab_log_sinks(include_file: bool, include_stderr: bool) -> logging.Logger:
+    """Set matlab log sinks."""
+
     global _LOG_TO_FILE, _LOG_TO_STDERR
     _LOG_TO_FILE = include_file
     _LOG_TO_STDERR = include_stderr
@@ -293,6 +319,8 @@ def set_matlab_log_sinks(include_file: bool, include_stderr: bool) -> logging.Lo
 
 
 def matlab_logger() -> logging.Logger:
+    """Return the logger used by the MATLAB integration."""
+
     return configure_matlab_logging()
 
 
@@ -324,11 +352,15 @@ def _import_matlab_runtime() -> Any:
 
 
 def ensure_matlab_available() -> MatlabStatus:
+    """Ensure matlab available exists and return it."""
+
     _import_matlab_runtime()
     return MatlabStatus(True)
 
 
 def check_matlab_connection(initialize_packages: bool = CONNECT_INITIALIZE_PACKAGES) -> MatlabStatus:
+    """Probe MATLAB and return the current connection status."""
+
     matlab_logger().debug(
         "MATLAB connection smoke check started initialize_packages=%s",
         initialize_packages,
@@ -345,6 +377,8 @@ def check_matlab_connection(initialize_packages: bool = CONNECT_INITIALIZE_PACKA
 
 
 def matlab_status() -> MatlabStatus:
+    """Return a snapshot of MATLAB availability and connection state."""
+
     try:
         return ensure_matlab_available()
     except RuntimeError as exc:
@@ -575,6 +609,8 @@ def ensure_matlab_available_isolated(
     timeout: float = DEFAULT_CONNECT_TIMEOUT_SECONDS,
     initialize_packages: bool | None = None,
 ) -> MatlabStatus:
+    """Ensure matlab available isolated exists and return it."""
+
     if initialize_packages is None:
         initialize_packages = CONNECT_INITIALIZE_PACKAGES
     result = _run_isolated(
@@ -598,6 +634,8 @@ def get_func_exp_isolated(
     func_name: str,
     timeout: float = DEFAULT_EXPRESSION_TIMEOUT_SECONDS,
 ) -> tuple[str, list[str]]:
+    """Return func exp isolated."""
+
     result = _run_isolated(
         {"op": "get_func_exp", "func_name": func_name},
         timeout,
@@ -610,6 +648,8 @@ def get_func_info_isolated(
     func_name: str,
     timeout: float = DEFAULT_EXPRESSION_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
+    """Return func info isolated."""
+
     result = _run_isolated(
         {"op": "get_func_info", "func_name": func_name},
         timeout,
@@ -627,6 +667,8 @@ def fit_curve_isolated(
     fit_options: dict[str, Any] | None = None,
     timeout: float = DEFAULT_FIT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
+    """Fit curve isolated using the selected model and options."""
+
     result = _run_isolated(
         {
             "op": "fit_curve",
@@ -816,6 +858,8 @@ def _normalize_func_info(func_name: str, expression: Any, coefficients: Any,
 
 
 def get_func_info(func_name: str) -> dict[str, Any]:
+    """Return func info."""
+
     matlab_logger().debug("MATLAB function metadata extraction started func_name=%s", func_name)
     try:
         with _initialized_package(GET_FUNC_PACKAGE) as get_func:
@@ -848,6 +892,8 @@ def get_func_info(func_name: str) -> dict[str, Any]:
 
 
 def get_func_exp(func_name: str) -> tuple[str, list[str]]:
+    """Return func exp."""
+
     try:
         info = get_func_info(func_name)
     except RuntimeError as exc:
@@ -994,6 +1040,8 @@ def fit_curve(
     fit_type: str,
     fit_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Fit curve using the selected model and options."""
+
     matlab_logger().debug(
         "MATLAB fitting started fit_type=%s x_len=%s y_len=%s has_fit_options=%s",
         fit_type,

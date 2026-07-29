@@ -1,3 +1,5 @@
+"""Provide shared title-bar dialog shells."""
+
 from Qt_core import *
 
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
@@ -10,6 +12,8 @@ qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
 class PyStyleDialog(QDialog):
+    """Provide the py style dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.style = dialog_name
@@ -65,6 +69,8 @@ class PyStyleDialog(QDialog):
         self.setLayout(self.layout)
 
     def accept(self):
+        """Validate the inputs and accept the dialog when they are usable."""
+
         width = float(self.width_line.text())
         height = float(self.height_line.text())
         dpi = int(self.dpi_line.text())
@@ -80,10 +86,14 @@ class PyStyleDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 
 class PyLayoutDialog(QDialog):
+    """Provide the py layout dialog Qt widget."""
+
     def __init__(self, dialog_name=None, figure_window=None, layout=None, parent=None):
         super().__init__(parent)
         self.setObjectName("layout_dialog")
@@ -114,6 +124,8 @@ class PyLayoutDialog(QDialog):
 
     def accept(self):
         # 如果current_canva为空，弹出警告
+        """Validate the inputs and accept the dialog when they are usable."""
+
         if self.figure_window.current_canva is None:
             QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
             return
@@ -122,6 +134,8 @@ class PyLayoutDialog(QDialog):
         super().accept()
 
     def reject(self):
+        """Reject the dialog without applying its pending inputs."""
+
         super().reject()
 
 

@@ -1,3 +1,5 @@
+"""Build file, chart, layout, and element menus for the title bar."""
+
 from Qt_core import *
 
 from code.widgets.table.py_table import PyTable
@@ -21,6 +23,8 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class SelectorMenuBar(QFrame):
+    """Provide the selector title-bar menu."""
+
     def __init__(self, stacklayout_bottom=None, figure_window=None):
         super().__init__()
 
@@ -59,6 +63,8 @@ class SelectorMenuBar(QFrame):
         self.buttonGroup.addButton(self.element_button)
 
     def the_button_was_toggled(self, checked):
+        """Synchronize the button appearance after its checked state changes."""
+
         if not checked:
             return
 
@@ -89,18 +95,24 @@ class SelectorMenuBar(QFrame):
 
 
 def load_excel_into_table(file_name: str, table: PyTable, figure_window=None, parent=None):
+    """Load excel into table."""
+
     return import_excel_into_workspace(
         file_name, table, figure_window=figure_window, parent=parent or table
     )
 
 
 def load_text_into_table(file_name: str, table: PyTable, figure_window=None, parent=None):
+    """Load text into table."""
+
     return import_text_into_workspace(
         file_name, table, figure_window=figure_window, parent=parent or table
     )
 
 
 class MenuBar(QFrame):
+    """Provide the menu bar title-bar menu."""
+
     def __init__(self, table: PyTable, figure_window=None):
         super().__init__()
 
@@ -147,9 +159,13 @@ class MenuBar(QFrame):
 
     def show_menu(self, menu_name, button_name):
         # 显示菜单
+        """Show menu."""
+
         menu_name.exec(button_name.mapToGlobal(button_name.rect().bottomLeft()))
 
     def initActions(self):
+        """Initialize actions."""
+
         file_open_action = QAction(QIcon("pictures/icons/open.svg"), "打开 Excel...", self.file_menu)
         file_open_action.triggered.connect(self.open_file)
 
@@ -181,6 +197,8 @@ class MenuBar(QFrame):
         self.file_menu.addAction(file_export_data_action)
 
     def open_file(self):
+        """Open file."""
+
         file_name, _ = QFileDialog.getOpenFileName(self, "打开 Excel", "", EXCEL_FILE_FILTER)
         if not file_name or not os.path.exists(file_name):
             return
@@ -191,6 +209,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "打开 Excel", str(exc))
 
     def open_project(self):
+        """Open project."""
+
         file_name, _ = QFileDialog.getOpenFileName(
             self, "打开项目", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
         if not file_name or not os.path.exists(file_name):
@@ -202,6 +222,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "打开项目", str(exc))
 
     def save_file(self):
+        """Save file."""
+
         file_name, _ = QFileDialog.getSaveFileName(
             self, "保存项目", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
         if not file_name:
@@ -213,6 +235,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "保存项目", str(exc))
 
     def export_current_figure(self):
+        """Export current figure."""
+
         if self.figure_window is None or self.figure_window.current_canva is None:
             QMessageBox.warning(self, "导出当前图片", "Please select a figure canvas first.")
             return
@@ -228,6 +252,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "导出当前图片", str(exc))
 
     def export_data(self):
+        """Export data."""
+
         file_name, _ = QFileDialog.getSaveFileName(self, "导出数据", "", "JSON Files (*.json)")
         if not file_name:
             return
@@ -239,6 +265,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "导出数据", str(exc))
 
     def open_file(self):
+        """Open file."""
+
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Excel", "", EXCEL_FILE_FILTER)
         if not file_name or not os.path.exists(file_name):
             return
@@ -255,6 +283,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "Open Excel", str(exc))
 
     def open_project(self):
+        """Open project."""
+
         file_name, _ = QFileDialog.getOpenFileName(
             self, "Open Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
         if not file_name or not os.path.exists(file_name):
@@ -268,6 +298,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "Open Project", str(exc))
 
     def open_text_file(self):
+        """Open text file."""
+
         file_name, _ = QFileDialog.getOpenFileName(
             self,
             "Open Text Data",
@@ -288,6 +320,8 @@ class MenuBar(QFrame):
             QMessageBox.warning(self, "Open Text Data", str(exc))
 
     def save_file(self):
+        """Save file."""
+
         if self.figure_window is None or self.figure_window.current_canva is None:
             message = "Please create or open a project before saving."
             status_messages.show_error(message)
@@ -301,6 +335,8 @@ class MenuBar(QFrame):
             self.save_file_as()
 
     def save_file_as(self):
+        """Save file as."""
+
         if self.figure_window is None or self.figure_window.current_canva is None:
             message = "Please create or open a project before saving."
             status_messages.show_error(message)
@@ -333,6 +369,8 @@ class MenuBar(QFrame):
 
 
 class ControlBar(QFrame):
+    """Provide the control bar Qt widget."""
+
     def __init__(self, parent=None):
         super().__init__()
         # 设置对象名称
@@ -362,6 +400,8 @@ class ControlBar(QFrame):
 
 
 class LegacySelectorStyleMenuBar(QFrame):
+    """Provide the legacy selector style title-bar menu."""
+
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
 
@@ -399,6 +439,8 @@ class LegacySelectorStyleMenuBar(QFrame):
 
 
 class LegacySelectorLayoutMenuBar(QFrame):
+    """Provide the legacy selector layout title-bar menu."""
+
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
         # 读取可用的样式
@@ -448,6 +490,8 @@ class LegacySelectorChartMenuBar(QFrame):
 
 
 class LegacySelectorElementMenuBar(QFrame):
+    """Provide the legacy selector element title-bar menu."""
+
     def __init__(self, figure_window=None):
         super().__init__()
 
@@ -470,6 +514,8 @@ class LegacySelectorElementMenuBar(QFrame):
 # fixed-width classes above.  Keeping the old definitions during this focused
 # GUI change avoids mixing dead-code removal into the feature commit.
 class SelectorStyleMenuBar(ResponsiveActionGallery):
+    """Provide the selector style title-bar menu."""
+
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
         style_json_path = os.path.join(current_path, "available_styles.json")
@@ -489,6 +535,8 @@ class SelectorStyleMenuBar(ResponsiveActionGallery):
 
 
 class SelectorLayoutMenuBar(ResponsiveActionGallery):
+    """Provide the selector layout title-bar menu."""
+
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
         layout_json_path = os.path.join(current_path, "available_layout.json")
@@ -509,6 +557,8 @@ class SelectorLayoutMenuBar(ResponsiveActionGallery):
 
 
 class SelectorChartMenuBar(ResponsiveActionGallery):
+    """Provide the selector chart title-bar menu."""
+
     def __init__(self, figure_window=None):
         super().__init__()
         for name, dialog_type in chart_dialog_dict.items():
@@ -525,6 +575,8 @@ class SelectorChartMenuBar(ResponsiveActionGallery):
 
 
 class SelectorElementMenuBar(ResponsiveActionGallery):
+    """Provide the selector element title-bar menu."""
+
     def __init__(self, figure_window=None):
         super().__init__()
         for name, dialog_type in element_dialog_dict.items():

@@ -1,3 +1,5 @@
+"""Define the built-in SciPy curve-fitting model catalog."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,8 @@ Array = np.ndarray
 
 @dataclass(frozen=True)
 class FitModelSpec:
+    """Describe fit model spec values shared across application layers."""
+
     fit_type: str
     group: str
     coefficient_names: tuple[str, ...]
@@ -611,6 +615,8 @@ SCIPY_FIT_MODELS = _build_registry()
 
 
 def get_model_spec(fit_type: str) -> FitModelSpec:
+    """Return model spec."""
+
     try:
         return SCIPY_FIT_MODELS[fit_type]
     except KeyError as exc:

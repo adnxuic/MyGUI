@@ -1,3 +1,5 @@
+"""Provide Controller-free inputs shared with component creation dialogs."""
+
 from __future__ import annotations
 
 from Qt_core import *
@@ -75,6 +77,8 @@ class DataReferenceInput(QFrame):
         return value if isinstance(value, ColumnRef) else None
 
     def update_data(self) -> None:
+        """Update data."""
+
         current_x = self.get_x_ref()
         current_y = self.get_y_ref()
         if self.project_id is None:
@@ -111,9 +115,13 @@ class DataReferenceInput(QFrame):
         del blocker
 
     def get_x_ref(self) -> ColumnRef | None:
+        """Return x ref."""
+
         return self._current_ref(self.x_data_input)
 
     def get_y_ref(self) -> ColumnRef | None:
+        """Return y ref."""
+
         return self._current_ref(self.y_data_input)
 
     @staticmethod
@@ -126,11 +134,15 @@ class DataReferenceInput(QFrame):
         combo.setCurrentIndex(-1)
 
     def set_x_ref(self, ref: ColumnRef | None) -> None:
+        """Set x ref."""
+
         blocker = QSignalBlocker(self.x_data_input)
         self._set_ref(self.x_data_input, ref)
         del blocker
 
     def set_y_ref(self, ref: ColumnRef | None) -> None:
+        """Set y ref."""
+
         blocker = QSignalBlocker(self.y_data_input)
         self._set_ref(self.y_data_input, ref)
         del blocker
@@ -140,6 +152,8 @@ class DataReferenceInput(QFrame):
         x_ref: ColumnRef | None,
         y_ref: ColumnRef | None,
     ) -> None:
+        """Set refs."""
+
         x_blocker = QSignalBlocker(self.x_data_input)
         y_blocker = QSignalBlocker(self.y_data_input)
         self._set_ref(self.x_data_input, x_ref)
@@ -147,10 +161,14 @@ class DataReferenceInput(QFrame):
         del x_blocker, y_blocker
 
     def refs_connect(self, x_callback, y_callback) -> None:
+        """Refresh selectors after their data-reference source changes."""
+
         self.x_data_input.currentIndexChanged.connect(x_callback)
         self.y_data_input.currentIndexChanged.connect(y_callback)
 
     def dispose(self) -> None:
+        """Disconnect callbacks and release resources owned by this object."""
+
         if self._disposed:
             return
         self._disposed = True
@@ -162,6 +180,8 @@ class DataReferenceInput(QFrame):
             pass
 
     def closeEvent(self, event):
+        """Handle Qt close events and release owned resources."""
+
         self.dispose()
         super().closeEvent(event)
 
@@ -224,15 +244,23 @@ class LineAppearanceInput(QFrame):
         layout.addWidget(self.label_widget)
 
     def style(self) -> str:
+        """Return the selected style."""
+
         return self.line_style_editor.style()
 
     def linewidth(self) -> float:
+        """Return the linewidth."""
+
         return self.line_style_editor.size()
 
     def color(self) -> str:
+        """Return the selected color."""
+
         return self.color_input.color()
 
     def label(self) -> str:
+        """Return the current display label."""
+
         return self.label_input.text()
 
 
@@ -319,14 +347,20 @@ class InterpolationOptionsInput(QFrame):
         self.optionsChanged.emit()
 
     def update_option_visibility(self) -> None:
+        """Update option visibility."""
+
         method = self.method()
         self.k_widget.setVisible(interpolation_uses_order(method))
         self.lambda_widget.setVisible(interpolation_uses_lambda(method))
 
     def method(self) -> str:
+        """Return the method."""
+
         return self.method_input.currentText()
 
     def lambda_options(self) -> tuple[float | None, bool]:
+        """Return the lambda options."""
+
         if not interpolation_uses_lambda(self.method()):
             return None, True
         if self.lambda_auto_input.isChecked():
@@ -334,6 +368,8 @@ class InterpolationOptionsInput(QFrame):
         return float(self.lambda_value_input.value()), False
 
     def options(self) -> dict:
+        """Return the options."""
+
         lam, lam_auto = self.lambda_options()
         return {
             "method": self.method(),
@@ -352,6 +388,8 @@ class InterpolationOptionsInput(QFrame):
         lam: float | None,
         lam_auto: bool,
     ) -> None:
+        """Set options."""
+
         controls = (
             self.method_input,
             self.samples_input,

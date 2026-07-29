@@ -1,7 +1,11 @@
+"""Display leveled user-facing messages in the bottom bar."""
+
 from Qt_core import *
 
 
 class PyMessageBar(QFrame):
+    """Provide the py message bar Qt widget."""
+
     _LEVELS = frozenset({"info", "success", "warning", "error"})
 
     def __init__(self, parent=None):
@@ -25,6 +29,8 @@ class PyMessageBar(QFrame):
         self._set_level("info")
 
     def show_message(self, message, level="info"):
+        """Show message."""
+
         message = str(message)
         self.message_label.setText(message)
         self.message_label.setToolTip(message)
@@ -43,13 +49,21 @@ class PyMessageBar(QFrame):
             style.polish(widget)
 
     def show_error(self, message):
+        """Show error."""
+
         self.show_message(message, "error")
 
     def show_success(self, message):
+        """Show success."""
+
         self.show_message(message, "success")
 
     def show_warning(self, message):
+        """Show warning."""
+
         self.show_message(message, "warning")
 
     def clear_message(self):
+        """Clear the current Message Bar text and reset its level."""
+
         self.show_message("", "info")

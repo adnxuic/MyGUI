@@ -16,6 +16,8 @@ from .errors import ComponentValidationError
 
 
 class ComponentKind(str, Enum):
+    """Enumerate the supported component kind values."""
+
     FIGURE = "figure"
     AXES = "axes"
     AXIS = "axis"
@@ -30,6 +32,8 @@ class ComponentKind(str, Enum):
 
 
 class ComponentRole(str, Enum):
+    """Enumerate the supported component role values."""
+
     FIGURE = "figure"
     AXES = "axes"
     X_AXIS = "x_axis"
@@ -102,6 +106,8 @@ class UpdateImpact(IntFlag):
     REDRAW = 8
 
     def to_names(self) -> list[str]:
+        """Convert this object to names."""
+
         return [
             member.name.lower()
             for member in type(self)
@@ -110,6 +116,8 @@ class UpdateImpact(IntFlag):
 
 
 class ChangeStatus(str, Enum):
+    """Enumerate the supported change status values."""
+
     APPLIED = "applied"
     EMPTY = "empty"
     REJECTED = "rejected"
@@ -292,11 +300,15 @@ class ComponentState:
             )
 
     def clone(self, **changes: Any) -> "ComponentState":
+        """Return an independent copy of this component state."""
+
         values = self.to_dict()
         values.update(changes)
         return type(self).from_dict(values)
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert this object to dict."""
+
         return {
             "id": self.id,
             "kind": self.kind.value,
@@ -310,6 +322,8 @@ class ComponentState:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ComponentState":
+        """Build an instance from dict."""
+
         if not isinstance(value, Mapping):
             raise ComponentValidationError("Component state must be an object.")
         fields = set(value)
@@ -375,6 +389,8 @@ class PropertySpec:
             object.__setattr__(self, "choices", tuple(self.choices))
 
     def normalize(self, value: Any) -> Any:
+        """Return the value normalized by this property specification."""
+
         if value is None:
             if self.allow_none:
                 return None
@@ -425,6 +441,8 @@ class PropertySpec:
         return normalized
 
     def metadata(self) -> dict[str, Any]:
+        """Return serializable metadata for this property specification."""
+
         return {
             "key": self.key,
             "editor": self.editor,
@@ -458,10 +476,14 @@ class ComponentChange:
 
     @property
     def ok(self) -> bool:
+        """Return whether the operation completed successfully."""
+
         return self.status is not ChangeStatus.REJECTED
 
     @property
     def changed(self) -> bool:
+        """Report whether the current value differs from its initial value."""
+
         return self.status in {
             ChangeStatus.APPLIED,
             ChangeStatus.EMPTY,
@@ -480,10 +502,14 @@ class ComponentBatchChange:
 
     @property
     def ok(self) -> bool:
+        """Return whether the operation completed successfully."""
+
         return self.committed and all(change.ok for change in self.changes)
 
     @property
     def changed(self) -> bool:
+        """Report whether the current value differs from its initial value."""
+
         return self.committed and any(change.changed for change in self.changes)
 
 
