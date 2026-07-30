@@ -20,6 +20,7 @@ from .registry import EditorRegistry
 from .inspector import (
     ComponentInspector,
     EditorProfile,
+    EditorPlacement,
     EditorSection,
     SectionSpec,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "EditorRegistry",
     "ComponentInspector",
     "EditorProfile",
+    "EditorPlacement",
     "EditorSection",
     "SectionSpec",
     "DataReferenceInput",

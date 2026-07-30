@@ -4,8 +4,11 @@
 
 ## Core types
 
-- `ComponentInspector(controller, context, profile)` owns section layout, deletion policy, synchronization, and section disposal.
-- `EditorProfile` defines the profile key, title, ordered `SectionSpec` records, and whether the component may be removed.
+- `ComponentInspector(controller, context, profile)` owns section layout,
+  synchronization, and section disposal. Business deletion authority comes
+  only from the Controller.
+- `EditorProfile` defines the profile key, title, ordered `SectionSpec`
+  records, visual `placement`, and dynamic `instance_label_prefix`.
 - `EditorSection` provides `sync_from_controller()` and `dispose()` lifecycle methods.
 - `PropertySection` generates a selected, ordered subset of Controller `PropertySpec` editors. It blocks signals during synchronization, rolls rejected values back, injects the application `ColorLibrary`, and reports one Message Bar result per operation.
 - `ComponentEditorBase` remains the generic all-properties fallback for unregistered component kinds and tests.
@@ -30,7 +33,9 @@ role-specific modification widgets:
   Element Inspector stacks.
 - `AxesSemanticInspectorPanel` contains the General, X/Y Axis, Spines,
   Ticks/Grid, Title/Labels, and Legend pages.
-- `InspectorToolBox` owns the visible Inspectors for one component role.
+- `InspectorToolBox` owns an ordered accordion of visible Inspectors for one
+  component role. Every `InspectorHeader` stores its own stable
+  `component_id`; no Qt `QToolBox` child-button discovery is used.
 
 Canvas and window code use the containers' add, find, show, remove, and
 toolbox lookup methods. Layout stacks and toolbox dictionaries are private
@@ -87,6 +92,53 @@ Every page binds Controller properties; the UI does not directly mutate Matplotl
 Closing an Inspector or its Manager disposes each Section exactly once.
 Repository, TeX, MATLAB, and asynchronous fitting callbacks are detached or
 invalidated before the QWidget is removed.
+
+## Component and Axes deletion
+
+Only a component instance label owns the instance context menu. `Delete
+Component` targets the stable `component_id` associated with that exact
+label; right-clicking the Inspector content does not infer a target from the
+current page.
+
+Role navigation labels such as `function curve`, `data plot`, and `text`
+provide `Batch Delete...`. The selection dialog lists `(component_id,
+display_label)` entries, checks all entries initially, supports Select All and
+Clear All, and disables `Delete (0)` until at least one entry is selected.
+Single-instance and batch actions both call
+`ComponentDeletionService.delete_many(component_ids)`, a thin adapter over
+`ComponentRegistry.delete_transaction()`. The Controller's runtime
+`DeletionPolicy` is the only permission source. A failed transaction restores
+the same Controller, Matplotlib artist, Locator binding, Editor, Header,
+label order, current page, callbacks, and pending updates; it publishes no
+cleanup or lifecycle event. A successful commit alone emits `REMOVED`, after
+which `ComponentEditorManager` disposes and removes the Inspector. The
+completed action produces one Message Bar result. Removing the last instance
+removes its empty role toolbox and navigation button.
+
+Deleting a palette-backed Line or Scatter also releases its palette slot by
+replacing the parent Axes `color_cycle` state inside the same transaction.
+The next creation reuses an available deleted color without recoloring
+survivors. A custom one-off color does not affect the palette cursor, and a
+failed deletion restores the exact pre-action cursor.
+
+Axes navigation labels provide `Delete Axes`. After confirmation,
+`AxesCommandService.delete_axes(axes_id)` removes the Axes artist and its
+complete semantic/dynamic subtree. Surviving Axes retain their component IDs
+and subplot `layout_group`/`slot`, while `order`, selector `index`, and
+`axe1...axeN` labels become contiguous. The next Axes at the deleted position
+is selected, or the preceding Axes when the last position was removed. An
+empty Figure enters the No Axes state. Figure itself is closed through its
+project tab, not through Component deletion.
+
+Axes reindex state and the target subtree are submitted in the same Registry
+transaction. Until commit, the existing Axes Panel, button, current page,
+current Axes, shared/twinned links, and Matplotlib observer state remain
+untouched. The Canvas updates its Axes-ID map and navigation only after the
+committed `REMOVED` events and does not perform a second redraw.
+
+Title, Axis Label, Legend, Axis, Spine, Tick, Tick Label, and Grid states never
+offer physical deletion. Their existing Controller behavior uses `visible`
+when hiding is supported.
 
 ## Controller-free creation inputs
 

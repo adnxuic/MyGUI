@@ -28,6 +28,10 @@ The public value types are:
 - `ComponentBatchChange`: the committed or rejected result of a multi-component transaction.
 - `ComponentEvent`: committed `ADDED`, `CHANGED`, or `REMOVED` lifecycle notification used by Editors.
 - `ChangeStatus`: `APPLIED`, `EMPTY`, `REJECTED`, `DELETED`, or `NOOP`.
+- `DeletionPolicy`: runtime-only `REMOVE`, `HIDE`, or `FORBID` authority
+  declared by each Controller type.
+- `RemovalHandle`: runtime-only capture of the exact target, owner, position,
+  callbacks, and update subject used by reversible physical removal.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -36,7 +40,9 @@ The public value types are:
 - `set_property(key, value)` for one validated transactional edit;
 - `apply_mutation(mutation)` for an atomic property, persistent-data, and drawable-data edit;
 - `apply_state(state)`, `snapshot()`, and `restore(snapshot)`;
-- idempotent `delete()`.
+- idempotent `delete()`, routed by `DeletionPolicy`;
+- `prepare_remove()`, `commit_remove(handle)`, and
+  `rollback_remove(handle)` for identity-preserving physical removal.
 
 A rejected operation restores the previous target and state. Controllers report an `EMPTY` result when a valid data-bound component has no drawable rows.
 
@@ -48,7 +54,8 @@ A rejected operation restores the previous target and state. Controllers report 
 - filtered `query(kind=..., role=..., capabilities=..., parent_id=..., recursive=...)`;
 - multi-component `snapshot()` and transactional `restore()`;
 - `apply_transaction()` and transactional `set_properties()` with artist/state rollback and buffered events;
-- subtree deletion and tree validation;
+- `delete_transaction(component_ids, state_replacements=(), verifier=None)`
+  for atomic subtree deletion, survivor reindexing, and tree validation;
 - event subscription for Editor synchronization and cleanup;
 - `batch_updates()` to coalesce relimit, autoscale, legend refresh, and one final draw.
 
@@ -59,6 +66,30 @@ matches the canvas. This synchronization event has no `ComponentChange` and
 therefore does not create a user-facing success message.
 
 `ComponentLocator` weakly binds stable artists by component ID. Axes, Axis, Spine, Text, and stable Line/Scatter targets can also resolve through their parent and selector. Tick, Tick Label, Grid, and Legend Controllers resolve semantically each time because Matplotlib may recreate their underlying artists.
+
+Deletion is a Registry structure transaction. It prepares every removable
+root, buffers survivor changes and events, detaches the original
+artist/Axes reversibly, validates the candidate tree, and commits only after
+all checks pass. Failure restores the same Controllers, targets, Locator
+bindings, Matplotlib container order, pending updates, and Controller state;
+cleanup and lifecycle listeners see no intermediate event. Success marks and
+unbinds the removed subtree, runs cleanup, emits child-first `REMOVED`
+events, publishes survivor `CHANGED` events, and schedules at most one paint
+per Figure. A paint failure after commit is a warning and does not claim that
+the committed deletion was rolled back.
+
+The first-party deletion policies are:
+
+| Policy | Components |
+| --- | --- |
+| `REMOVE` | Axes, every Line role, Scatter, free Text |
+| `HIDE` | Axis, Spine, Tick, Tick Label, Grid, Title, axis labels, Legend |
+| `FORBID` | Figure and the default for a new Controller type |
+
+Axes use a specialized Matplotlib 3.9 removal handle. Its reversible stage
+preserves `_localaxes`, `_axstack`, current Axes, mouse grabber, callbacks,
+and shared/twinned relationships without firing `_axes_change_event`.
+Matplotlib receives one Axes-change notification only after commit.
 
 `register_figure_components()` builds a complete Controller tree for an existing Figure. `create_semantic_children()` adds the fixed Axis, Spine, Tick, Tick Label, Grid, Title, Axis Label, and Legend records for an Axes. Callers can inject an `id_factory(path)` to produce deterministic project IDs.
 
@@ -100,6 +131,8 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 - `InterpolationService`: validated interpolation configuration and refresh;
 - `FitService`: persistent fit results, manual-refit generations, and display-range updates;
 - `TextRenderService`: synchronous render verification with rollback and glyph warnings;
+- `ComponentDeletionService`: dynamic-component adapter that composes
+  palette-slot release state with `ComponentRegistry.delete_transaction()`;
 - `ComponentDependencyService`: query/delete/restore of table-bound component snapshots.
 
 These services do not maintain parallel project records. `ComponentRegistry` and `ComponentState` are the only runtime truth. The visible panels receive an `EditorContext`, call Controllers/services directly, and are synchronized or removed through committed Registry events. `Py*Modify` façade classes are not part of the architecture.
@@ -164,15 +197,22 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
 ## Template for adding a Component
 
 1. Add the new `ComponentKind` and `ComponentRole` values, then register the allowed pairing in `ROLES_BY_KIND`.
-2. Derive a Controller from the nearest family. Declare `KIND`, accepted `ROLES`, `PROPERTY_SPECS`, and capability names.
-3. Implement only target-specific hooks: selector validation, property read/write overrides, `_apply_data()`, empty-state detection, or deletion.
+2. Derive a Controller from the nearest family. Declare `KIND`, accepted
+   `ROLES`, `PROPERTY_SPECS`, capability names, and an explicit
+   `DELETION_POLICY`.
+3. Implement only target-specific hooks: selector validation, property
+   read/write overrides, `_apply_data()`, empty-state detection, or
+   `prepare_remove`/`commit_remove`/`rollback_remove` when `REMOVE` cannot use
+   the normal Matplotlib artist-list handle.
 4. Add stable binding or a semantic resolver in `ComponentLocator`. Prefer semantic selectors for Matplotlib objects that may be recreated.
 5. Register the `(kind, role)` to Controller mapping in `CONTROLLER_TYPES`.
 6. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 7. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
 8. Extend v6 serialization, strict validation, v4/v5 migration, and direct v6 project round-trip coverage when the component is persistent.
 9. Register an `EditorProfile` assembled from existing Sections when the generic all-properties fallback is insufficient. Add a new Section only for a genuinely new interaction, inject `EditorContext` and the application `ColorLibrary`, and keep QWidget state out of `ComponentState`.
-10. Add Controller contract tests for resolve, read/write, rejection rollback, snapshot/restore, idempotent deletion, events, and coalesced redraw.
+10. Add Controller contract tests for resolve, read/write, rejection
+    rollback, snapshot/restore, deletion policy, same-object removal rollback,
+    event invisibility, and coalesced redraw.
 
 Minimal Controller shape:
 
@@ -180,6 +220,7 @@ Minimal Controller shape:
 class ExampleController(ComponentController[ExampleArtist]):
     KIND = ComponentKind.EXAMPLE
     ROLES = frozenset({ComponentRole.EXAMPLE})
+    DELETION_POLICY = DeletionPolicy.REMOVE
     PROPERTY_SPECS = (
         PropertySpec(
             "visible",

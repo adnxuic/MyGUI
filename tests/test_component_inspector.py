@@ -39,6 +39,7 @@ from code.widgets.fig_control_window.component_editors import (
     ComponentInspector,
     DataReferenceInput,
     EditorContext,
+    EditorPlacement,
     EditorRegistry,
     InterpolationOptionsInput,
     LineAppearanceSection,
@@ -355,8 +356,12 @@ class ComponentInspectorTests(unittest.TestCase):
             SEMANTIC_TEXT_PROFILE.sections,
             TEXT_PROFILE.sections,
         )
-        self.assertEqual(TEXT_PROFILE.deletion, "remove")
-        self.assertEqual(SEMANTIC_TEXT_PROFILE.deletion, "none")
+        self.assertIs(TEXT_PROFILE.placement, EditorPlacement.ELEMENT)
+        self.assertEqual(TEXT_PROFILE.instance_label_prefix, "text")
+        self.assertIs(
+            SEMANTIC_TEXT_PROFILE.placement,
+            EditorPlacement.SEMANTIC,
+        )
         self.assertEqual(
             tuple(section.key for section in TEXT_PROFILE.sections),
             ("content", "typography", "transform", "position", "render"),

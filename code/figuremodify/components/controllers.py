@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 import math
 from pathlib import Path
 from typing import Any, ClassVar
@@ -29,7 +30,7 @@ from code.database.interpolate_func import (
 )
 from code.database.safe_expression import compile_math_expression
 
-from .base import ComponentController
+from .base import ComponentController, RemovalHandle
 from .errors import ComponentNotFoundError, ComponentValidationError
 from .models import (
     ChangeStatus,
@@ -38,6 +39,7 @@ from .models import (
     ComponentMutation,
     ComponentRole,
     ComponentState,
+    DeletionPolicy,
     PropertySpec,
     UpdateImpact,
     XYData,
@@ -322,6 +324,7 @@ class FigureController(ContainerController):
 
     KIND = ComponentKind.FIGURE
     ROLES = frozenset({ComponentRole.FIGURE})
+    DELETION_POLICY = DeletionPolicy.FORBID
     PROPERTY_SPECS = (
         PropertySpec(
             "name",
@@ -418,15 +421,12 @@ class FigureController(ContainerController):
         if self._property_callback is not None:
             self._property_callback(spec.key, deepcopy(value))
 
-    def _delete_target(self, target: Figure) -> None:
-        target.clear()
-
-
 class AxesController(ContainerController):
     """Coordinate state changes for axes components."""
 
     KIND = ComponentKind.AXES
     ROLES = frozenset({ComponentRole.AXES})
+    DELETION_POLICY = DeletionPolicy.REMOVE
     PROPERTY_SPECS = (
         PropertySpec(
             "position",
@@ -543,20 +543,101 @@ class AxesController(ContainerController):
             return
         super()._write_property(target, spec, value)
 
+    def prepare_remove(self) -> "AxesRemovalHandle":
+        """Capture Matplotlib's pinned Axes containers without mutating them."""
+
+        target = self.resolve_target()
+        figure = target.figure
+        if figure is None or target not in figure._localaxes:
+            raise ComponentValidationError(
+                "Axes is not attached to its registered Figure."
+            )
+        stack_axes = dict(figure._axstack._axes)
+        if target not in stack_axes:
+            raise ComponentValidationError(
+                "Axes is missing from the Figure Axes stack."
+            )
+        canvas = figure.canvas
+        return AxesRemovalHandle(
+            target=target,
+            figure=figure,
+            subject=figure,
+            localaxes=tuple(figure._localaxes),
+            stack_axes=stack_axes,
+            stale=figure.stale,
+            target_stale=target.stale,
+            stale_callback=target.stale_callback,
+            mouse_grabber=getattr(canvas, "mouse_grabber", None),
+            detached=False,
+        )
+
+    def commit_remove(self, handle: "AxesRemovalHandle") -> None:
+        """Temporarily detach an Axes without notifying Matplotlib observers."""
+
+        if handle.detached:
+            return
+        handle.detached = True
+        try:
+            handle.figure._localaxes.remove(handle.target)
+            handle.figure._axstack.remove(handle.target)
+        except (KeyError, ValueError) as exc:
+            self.rollback_remove(handle)
+            raise ComponentValidationError(
+                "Prepared Axes is no longer in its original Figure containers."
+            ) from exc
+
+    def rollback_remove(self, handle: "AxesRemovalHandle") -> None:
+        """Restore the exact Axes containers and current-Axes stack."""
+
+        if not handle.detached:
+            return
+        handle.figure._localaxes[:] = handle.localaxes
+        handle.figure._axstack._axes = dict(handle.stack_axes)
+        handle.figure.stale = handle.stale
+        handle.target.stale = handle.target_stale
+        handle.target.stale_callback = handle.stale_callback
+        handle.target.figure = handle.figure
+        handle.target.axes = handle.target
+        canvas = handle.figure.canvas
+        if canvas is not None and hasattr(canvas, "mouse_grabber"):
+            canvas.mouse_grabber = handle.mouse_grabber
+        handle.detached = False
+
+    def _finalize_remove(self, handle: "AxesRemovalHandle") -> None:
+        """Publish Matplotlib's Axes removal only after Registry commit."""
+
+        figure = handle.figure
+        target = handle.target
+        figure._remove_axes(target, owners=())
+        target.stale_callback = None
+        target.axes = None
+        target.figure = None
+
+
+@dataclass(slots=True)
+class AxesRemovalHandle:
+    """Pinned Matplotlib 3.9 Axes structures needed for exact rollback."""
+
+    target: Axes
+    figure: Figure
+    subject: Figure
+    localaxes: tuple[Axes, ...]
+    stack_axes: dict[Axes, int]
+    stale: bool
+    target_stale: bool
+    stale_callback: Any
+    mouse_grabber: Any
+    detached: bool
+
 
 class AxisComponentController(ComponentController[Any]):
     """Coordinate state changes for axis component components."""
 
     CAPABILITIES = frozenset({"axis_component"})
+    DELETION_POLICY = DeletionPolicy.HIDE
 
     def _validate_candidate(self, state: ComponentState) -> None:
         _axis_name(state)
-
-    def delete(self) -> ComponentChange:
-        """Fixed axis semantics remain in the tree and delete means hide."""
-
-        return self.set_property("visible", False)
-
 
 class AxisController(AxisComponentController):
     """Coordinate state changes for axis components."""
@@ -1132,6 +1213,7 @@ class TextController(ComponentController[Text]):
     """Coordinate state changes for text components."""
 
     KIND = ComponentKind.TEXT
+    DELETION_POLICY = DeletionPolicy.REMOVE
     ROLES = frozenset(
         {
             ComponentRole.TITLE,
@@ -1228,11 +1310,7 @@ class TitleController(TextController):
     """Coordinate state changes for title components."""
 
     ROLES = frozenset({ComponentRole.TITLE})
-
-    def delete(self) -> ComponentChange:
-        """Remove the component through its controller."""
-
-        return self.set_property("visible", False)
+    DELETION_POLICY = DeletionPolicy.HIDE
 
     def _write_property(
         self, target: Text, spec: PropertySpec, value: Any
@@ -1246,21 +1324,17 @@ class AxisLabelController(TextController):
     """Coordinate state changes for axis label components."""
 
     ROLES = frozenset({ComponentRole.X_LABEL, ComponentRole.Y_LABEL})
+    DELETION_POLICY = DeletionPolicy.HIDE
 
     def _validate_candidate(self, state: ComponentState) -> None:
         _axis_name(state)
-
-    def delete(self) -> ComponentChange:
-        """Remove the component through its controller."""
-
-        return self.set_property("visible", False)
-
 
 class LegendController(ComponentController[Legend]):
     """Coordinate state changes for legend components."""
 
     KIND = ComponentKind.LEGEND
     ROLES = frozenset({ComponentRole.LEGEND})
+    DELETION_POLICY = DeletionPolicy.HIDE
     PROPERTY_SPECS = (
         PropertySpec("visible", bool, True, editor="check"),
         PropertySpec(
@@ -1334,8 +1408,8 @@ class LegendController(ComponentController[Legend]):
                 raise
             return self.state
 
-    def delete(self) -> ComponentChange:
-        """Remove the component through its controller."""
+    def _hide_for_delete(self) -> ComponentChange:
+        """Hide semantic state even when no concrete Legend exists yet."""
 
         state = self.state
         properties = dict(state.properties)
@@ -1492,6 +1566,7 @@ class LineController(ComponentController[Line2D]):
     """Coordinate state changes for line components."""
 
     KIND = ComponentKind.LINE
+    DELETION_POLICY = DeletionPolicy.REMOVE
     ROLES = frozenset(
         {
             ComponentRole.LINE,
@@ -1961,6 +2036,7 @@ class ScatterController(CollectionController):
 
     KIND = ComponentKind.SCATTER
     ROLES = frozenset({ComponentRole.SCATTER})
+    DELETION_POLICY = DeletionPolicy.REMOVE
     PROPERTY_SPECS = (
         PropertySpec(
             "label",

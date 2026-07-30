@@ -17,6 +17,7 @@ from code.widgets.fig_control_window.component_editors import (
 from code.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
+    ComponentDeletionService,
     ComponentDependencyService,
     FitService,
     FunctionCurveService,
@@ -30,6 +31,7 @@ from code.figuremodify.components import (
     ComponentRole,
     ComponentState,
     DataPlotController,
+    DeletionPolicy,
     FigureController,
     FitCurveController,
     FunctionCurveController,
@@ -96,10 +98,12 @@ class PyFigureCanvas(QWidget):
         self.project_name = project_name or ""
         self.project_table_name = self.project_name
         self.project_path = project_path
+        self._disposed = False
         self.color_library = color_library or ColorLibrary(parent=self)
         self._component_id_overrides = self._component_paths_from_tree(
             component_tree
         )
+        self._allocated_component_ids: set[str] = set()
         self._restore_component_tree = (
             deepcopy(component_tree)
             if isinstance(component_tree, dict)
@@ -148,6 +152,9 @@ class PyFigureCanvas(QWidget):
             self.component_registry,
             restore_state=self._restore_component_state,
         )
+        self.deletion_service = ComponentDeletionService(
+            self.component_registry
+        )
         self.editor_context = EditorContext(
             registry=self.component_registry,
             color_library=self.color_library,
@@ -160,6 +167,7 @@ class PyFigureCanvas(QWidget):
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
             dependency_service=self.dependency_service,
+            deletion_service=self.deletion_service,
         )
         self.root_component_id = self._component_id("figure")
         source_root = self._source_component_state(self.root_component_id)
@@ -330,10 +338,20 @@ class PyFigureCanvas(QWidget):
         )
 
     def _component_id(self, semantic_path: str) -> str:
-        return self._component_id_overrides.get(
+        candidate = self._component_id_overrides.get(
             semantic_path,
             deterministic_component_id(self.project_id, semantic_path),
         )
+        while (
+            candidate in self._allocated_component_ids
+            or (
+                hasattr(self, "component_registry")
+                and candidate in self.component_registry
+            )
+        ):
+            candidate = new_id()
+        self._allocated_component_ids.add(candidate)
+        return candidate
 
     @staticmethod
     def _component_paths_from_tree(
@@ -627,6 +645,96 @@ class PyFigureCanvas(QWidget):
             raise IndexError(f"Invalid axes index: {axes_index}") from exc
         self.update_current_axes(controller)
 
+    def request_delete_axes(self, axes_id: str) -> bool:
+        """Confirm and delete one Axes subtree from its navigation label."""
+
+        try:
+            controller = self.component_registry.get(axes_id)
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return False
+        state = controller.state
+        descendants = self.component_registry.descendants(axes_id)
+        dynamic_count = sum(
+            item.DELETION_POLICY is DeletionPolicy.REMOVE
+            for item in descendants
+        )
+        label = f"axe{int(state.selector.get('index', 0)) + 1}"
+        dynamic_detail = (
+            f", including {dynamic_count} chart/free-text"
+            if dynamic_count
+            else ""
+        )
+        response = QMessageBox.question(
+            self,
+            "Delete Axes",
+            (
+                f"Delete {label} and its {len(descendants)} child "
+                f"components{dynamic_detail}? This action cannot be undone."
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if response != QMessageBox.Yes:
+            return False
+        return self.delete_axes(axes_id)
+
+    def delete_axes(self, axes_id: str) -> bool:
+        """Delete an Axes through the domain service and synchronize its UI."""
+
+        try:
+            target_controller = self.component_registry.get(axes_id)
+            target_state = target_controller.state
+            target_axes = target_controller.resolve_target()
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return False
+        deleted_index = int(target_state.selector.get("index", 0))
+        previous_current = self.current_axes_component_id
+        result = self.axes_commands.delete_axes(axes_id)
+        if not result.ok:
+            self.message_presenter.discard_pending()
+            return self.message_presenter.present(result)
+
+        self._axes_component_ids.pop(target_axes, None)
+        if self.figure_inspector is not None:
+            self.figure_inspector.remove_axes_inspector(axes_id)
+
+        surviving = sorted(
+            self.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda controller: int(controller.state.selector["index"]),
+        )
+        self._axes_component_ids = {
+            controller.resolve_target(): controller.component_id
+            for controller in surviving
+        }
+        surviving_ids = {
+            controller.component_id for controller in surviving
+        }
+        if (
+            previous_current != axes_id
+            and previous_current in surviving_ids
+        ):
+            next_id = previous_current
+        elif surviving:
+            next_id = surviving[min(deleted_index, len(surviving) - 1)].component_id
+        else:
+            next_id = None
+        self.current_axes_component_id = None
+        if next_id is not None:
+            self.update_current_axes(next_id)
+        try:
+            self.component_registry.validate_tree()
+            normalize_v6_figure(self.component_snapshot())
+        except Exception as exc:
+            self.message_presenter.discard_pending()
+            status_messages.show_error(str(exc))
+            return False
+        return self.message_presenter.present(
+            result,
+            success="Axes deleted.",
+        )
+
     def redraw(self):
         """Schedule a coalesced canvas redraw."""
 
@@ -638,16 +746,24 @@ class PyFigureCanvas(QWidget):
         if hasattr(self.canva, "_draw_pending"):
             self.canva._draw_pending = False
 
-    def closeEvent(self, event):
-        """Handle Qt close events and release owned resources."""
+    def dispose(self) -> None:
+        """Idempotently detach project callbacks and editor resources."""
 
+        if self._disposed:
+            return
+        self._disposed = True
         self.cancel_pending_draw()
         try:
             self.repository.transaction_committed.disconnect(self._table_changed)
-        except RuntimeError:
+        except (RuntimeError, TypeError):
             pass
         self.message_presenter.close()
         self.component_editor_manager.close()
+
+    def closeEvent(self, event):
+        """Handle Qt close events and release owned resources."""
+
+        self.dispose()
         super().closeEvent(event)
 
     def _table_changed(self, changes: TableChangeSet):
@@ -713,16 +829,20 @@ class PyFigureCanvas(QWidget):
     def _add_visible_editor(
         self,
         controller,
-        *,
-        item_label: str,
     ):
-        """Create and place a role-registered editor without string routing."""
+        """Create and place an editor from its registered UI profile."""
 
         state = controller.state
+        profile = self.editor_registry.resolve_profile(controller)
+        if profile is None or not profile.instance_label_prefix:
+            raise RuntimeError(
+                f"Component {state.id!r} has no dynamic Inspector profile."
+            )
         if state.parent_id == self.root_component_id:
             toolbox = self.figure_inspector.ensure_figure_element_toolbox(
                 state.role,
-                "text",
+                profile.title,
+                delete_callback=self.delete_component_group,
             )
         else:
             axes = self.component_registry.resolve_target(state.parent_id)
@@ -732,7 +852,9 @@ class PyFigureCanvas(QWidget):
             toolbox = axes_inspector.ensure_component_toolbox(
                 state.kind,
                 state.role,
-                state.role.value.replace("_", " "),
+                profile.title,
+                delete_callback=self.delete_component_group,
+                placement=profile.placement,
             )
 
         editor = self.component_editor_manager.create(
@@ -741,9 +863,41 @@ class PyFigureCanvas(QWidget):
             parent=toolbox,
             remover=toolbox.remove_inspector,
         )
-        toolbox.add_inspector(editor, item_label)
+        try:
+            toolbox.add_inspector(
+                editor,
+                profile.instance_label_prefix,
+            )
+        except Exception:
+            self.component_editor_manager.release(editor)
+            editor.dispose()
+            editor.setParent(None)
+            editor.deleteLater()
+            raise
         toolbox.setCurrentWidget(editor)
         return editor
+
+    def delete_component_group(
+        self,
+        component_ids,
+        role_label: str = "component",
+    ) -> bool:
+        """Delete selected visible components and present one batch result."""
+
+        ids = tuple(dict.fromkeys(str(item) for item in component_ids))
+        result = self.deletion_service.delete_many(ids)
+        if not result.ok:
+            # Rollback may reapply a restored state and queue a generic
+            # Controller success.  The batch failure is the sole result for
+            # this user action.
+            self.message_presenter.discard_pending()
+        return self.message_presenter.present(
+            result,
+            success=(
+                f"{len(ids)} {role_label} component"
+                f"{'' if len(ids) == 1 else 's'} deleted."
+            ),
+        )
 
     def _next_layout_group(self) -> int:
         """Return an unused layout group without assuming persisted IDs are dense."""
@@ -805,6 +959,7 @@ class PyFigureCanvas(QWidget):
                     axes_controller,
                     self.editor_context,
                     self.color_library,
+                    delete_callback=self.request_delete_axes,
                 )
                 btn.clicked.connect(
                     lambda _checked=False, target_id=axes_id:
@@ -850,7 +1005,7 @@ class PyFigureCanvas(QWidget):
                 "x_stop": float(x_stop),
             },
         )
-        self._add_visible_editor(controller, item_label="curve")
+        self._add_visible_editor(controller)
         self.redraw()
         return line
 
@@ -934,7 +1089,7 @@ class PyFigureCanvas(QWidget):
                 "y_ref": y_ref.to_dict(),
             },
         )
-        self._add_visible_editor(controller, item_label="plot")
+        self._add_visible_editor(controller)
         self.redraw()
         return line
 
@@ -967,7 +1122,7 @@ class PyFigureCanvas(QWidget):
                 "y_ref": y_ref.to_dict(),
             },
         )
-        self._add_visible_editor(controller, item_label="scatter")
+        self._add_visible_editor(controller)
         self.redraw()
         return scatter
 
@@ -1035,10 +1190,7 @@ class PyFigureCanvas(QWidget):
                 "x_stop": float(x_stop),
             },
         )
-        self._add_visible_editor(
-            controller,
-            item_label="fitting",
-        )
+        self._add_visible_editor(controller)
         self.redraw()
         return line
 
@@ -1103,7 +1255,7 @@ class PyFigureCanvas(QWidget):
                 "lam_auto": bool(lam_auto),
             },
         )
-        self._add_visible_editor(controller, item_label="interpolate")
+        self._add_visible_editor(controller)
         self.redraw()
         if x_new.size:
             status_messages.show_success("Interpolation curve created.")
@@ -1154,7 +1306,7 @@ class PyFigureCanvas(QWidget):
         )
         if not result.ok or result.notices:
             self.message_presenter.present(result)
-        self._add_visible_editor(controller, item_label="text")
+        self._add_visible_editor(controller)
         self.redraw()
         return text_artist
 
@@ -1191,7 +1343,7 @@ class PyFigureCanvas(QWidget):
         if not result.ok or result.notices:
             self.message_presenter.present(result)
         if self.figure_inspector is not None:
-            self._add_visible_editor(controller, item_label="text")
+            self._add_visible_editor(controller)
             self.figure_inspector.show_figure_elements()
         self.redraw()
         return text_artist

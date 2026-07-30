@@ -10,3 +10,19 @@ QToolBox::tab:selected {
     font: bold;
     color: white;
 }
+
+QToolButton#inspector_toolbox_header {
+    background: #EBECF0;
+    border: none;
+    border-radius: 5px;
+    padding: 6px;
+    font-size: 16px;
+    color: #6d6868;
+    text-align: left;
+}
+
+QToolButton#inspector_toolbox_header:checked {
+    background: #0281ff;
+    font-weight: bold;
+    color: white;
+}

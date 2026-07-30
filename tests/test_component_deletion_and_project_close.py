@@ -1,0 +1,997 @@
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from Qt_core import (
+    QApplication,
+    QDialog,
+    QEvent,
+    QFileDialog,
+    QMessageBox,
+    QPoint,
+)
+
+from code import status_messages
+from code.figuremodify.components import (
+    ComponentEventKind,
+    ComponentKind,
+    ComponentRole,
+)
+from code.figuremodify.style_base.color_models import PaletteDefinition
+from code.project_io import (
+    load_project_file,
+    project_snapshot,
+    restore_project_snapshot,
+)
+from code.widgets.fig_control_window.component_editors.dialogs import (
+    ComponentBatchDeleteDialog,
+)
+from code.widgets.fig_control_window.figure_inspector import (
+    _run_batch_delete_dialog,
+)
+from main import MainWindow
+
+
+class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.window = MainWindow()
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="DeleteProject",
+        )
+        self.canvas = self.window.figure_window.current_canva
+        self.canvas.add_axes()
+
+    def tearDown(self):
+        status_messages.clear_status_handler()
+        self.window.close_without_prompt()
+        self.app.processEvents()
+        self.directory.cleanup()
+
+    def _add_curves(self):
+        self.canvas.add_curve(
+            "x",
+            0.0,
+            1.0,
+            "-",
+            "#112233",
+            "first",
+            object_id="curve-first",
+        )
+        self.canvas.add_curve(
+            "x**2",
+            0.0,
+            1.0,
+            "--",
+            "#445566",
+            "second",
+            object_id="curve-second",
+        )
+        inspector = self.canvas.figure_inspector.find_axes_inspector(
+            self.canvas.current_axes
+        )
+        toolbox = inspector.component_toolbox(
+            ComponentKind.LINE,
+            ComponentRole.FUNCTION_CURVE,
+        )
+        return inspector, toolbox
+
+    def test_batch_dialog_defaults_to_all_and_disables_empty_confirmation(self):
+        dialog = ComponentBatchDeleteDialog(
+            (("one", "curve0"), ("two", "curve1")),
+            role_label="function curve",
+        )
+        try:
+            self.assertEqual(dialog.selected_component_ids(), ["one", "two"])
+            self.assertEqual(dialog.delete_button.text(), "Delete (2)")
+            self.assertTrue(dialog.delete_button.isEnabled())
+
+            dialog._set_all_checked(False)
+            self.assertEqual(dialog.selected_component_ids(), [])
+            self.assertEqual(dialog.delete_button.text(), "Delete (0)")
+            self.assertFalse(dialog.delete_button.isEnabled())
+
+            dialog._checkboxes[1].setChecked(True)
+            self.assertEqual(dialog.selected_component_ids(), ["two"])
+            self.assertEqual(dialog.delete_button.text(), "Delete (1)")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+            self.app.processEvents()
+
+    def test_instance_delete_uses_the_explicit_header_target_once(self):
+        _inspector, toolbox = self._add_curves()
+        first = self.canvas.component_editor_manager.editor("curve-first")
+        second = self.canvas.component_editor_manager.editor("curve-second")
+        toolbox.setCurrentWidget(second)
+        first_header = toolbox.header("curve-first")
+        messages = []
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+
+        with mock.patch.object(
+            toolbox,
+            "_confirm_header_delete",
+            return_value=True,
+        ):
+            first_header.customContextMenuRequested.emit(QPoint())
+
+        self.assertNotIn("curve-first", self.canvas.component_registry)
+        self.assertIn("curve-second", self.canvas.component_registry)
+        self.assertIs(toolbox.currentWidget(), second)
+        self.assertEqual(toolbox.count(), 1)
+        self.assertEqual(len(messages), 1)
+
+    def test_role_dialog_partial_selection_deletes_only_checked_instance(self):
+        inspector, toolbox = self._add_curves()
+
+        def accept_partial(dialog):
+            dialog._checkboxes[1].setChecked(False)
+            return QDialog.Accepted
+
+        with mock.patch.object(
+            ComponentBatchDeleteDialog,
+            "exec",
+            new=accept_partial,
+        ):
+            _run_batch_delete_dialog(
+                inspector,
+                toolbox,
+                "function curve",
+                self.canvas.delete_component_group,
+            )
+        self.app.processEvents()
+
+        self.assertNotIn("curve-first", self.canvas.component_registry)
+        self.assertIn("curve-second", self.canvas.component_registry)
+        self.assertEqual(
+            toolbox.inspector_entries(),
+            [("curve-second", "curve1")],
+        )
+
+    def test_batch_delete_rolls_back_artists_ids_and_inspectors_on_failure(self):
+        inspector, toolbox = self._add_curves()
+        registry = self.canvas.component_registry
+        first_controller = registry.get("curve-first")
+        second_controller = registry.get("curve-second")
+        first_artist = first_controller.resolve_target()
+        second_artist = second_controller.resolve_target()
+        first_editor = self.canvas.component_editor_manager.editor(
+            "curve-first"
+        )
+        second_editor = self.canvas.component_editor_manager.editor(
+            "curve-second"
+        )
+        first_header = toolbox.header("curve-first")
+        second_header = toolbox.header("curve-second")
+        current = toolbox.currentWidget()
+        original_lines = tuple(self.canvas.current_axes.lines)
+        original_entries = toolbox.inspector_entries()
+        original_project = project_snapshot(
+            self.window.figure_window,
+            canvas=self.canvas,
+        )
+        original_fingerprint = (
+            self.window.figure_window._snapshot_fingerprint(
+                original_project
+            )
+        )
+        events = []
+        cleanup = []
+        registry.subscribe(events.append)
+        registry.add_cleanup_callback(
+            "curve-first",
+            lambda state: cleanup.append(state.id),
+        )
+
+        messages = []
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+        with mock.patch.object(
+            second_controller,
+            "commit_remove",
+            side_effect=RuntimeError("injected batch failure"),
+        ):
+            self.assertFalse(
+                self.canvas.delete_component_group(
+                    ["curve-first", "curve-second"],
+                    "function curve",
+                )
+            )
+        self.app.processEvents()
+
+        self.assertIn("curve-first", registry)
+        self.assertIn("curve-second", registry)
+        self.assertIs(registry.get("curve-first"), first_controller)
+        self.assertIs(registry.get("curve-second"), second_controller)
+        self.assertIs(first_controller.resolve_target(), first_artist)
+        self.assertIs(second_controller.resolve_target(), second_artist)
+        self.assertEqual(tuple(self.canvas.current_axes.lines), original_lines)
+        self.assertIs(
+            self.canvas.component_editor_manager.editor("curve-first"),
+            first_editor,
+        )
+        self.assertIs(
+            self.canvas.component_editor_manager.editor("curve-second"),
+            second_editor,
+        )
+        self.assertIs(toolbox.header("curve-first"), first_header)
+        self.assertIs(toolbox.header("curve-second"), second_header)
+        self.assertIs(toolbox.currentWidget(), current)
+        self.assertEqual(toolbox.inspector_entries(), original_entries)
+        self.assertEqual(toolbox.count(), 2)
+        self.assertIs(
+            inspector.component_toolbox(
+                ComponentKind.LINE,
+                ComponentRole.FUNCTION_CURVE,
+            ),
+            toolbox,
+        )
+        self.assertEqual(
+            [
+                event
+                for event in events
+                if event.kind is ComponentEventKind.REMOVED
+            ],
+            [],
+        )
+        self.assertEqual(cleanup, [])
+        rolled_back_project = project_snapshot(
+            self.window.figure_window,
+            canvas=self.canvas,
+        )
+        self.assertEqual(rolled_back_project, original_project)
+        self.assertEqual(
+            self.window.figure_window._snapshot_fingerprint(
+                rolled_back_project
+            ),
+            original_fingerprint,
+        )
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "error")
+
+    def test_chart_delete_releases_palette_slot_and_failure_restores_cursor(self):
+        self._add_curves()
+        self.canvas.add_curve(
+            "x**3",
+            0.0,
+            1.0,
+            ":",
+            "#778899",
+            "third",
+            object_id="curve-third",
+        )
+        registry = self.canvas.component_registry
+        axes_id = self.canvas.current_axes_component_id
+        palette = PaletteDefinition(
+            "test:delete-release",
+            "Delete release",
+            ("red", "green", "blue"),
+        )
+        self.assertTrue(
+            self.canvas.axes_commands.apply_palette(
+                axes_id,
+                palette,
+            ).ok
+        )
+        self.assertEqual(
+            self.canvas.axes_commands.cycle_state(axes_id).next_index,
+            0,
+        )
+
+        self.assertTrue(
+            self.canvas.delete_component_group(
+                ("curve-second",),
+                "function curve",
+            )
+        )
+
+        cycle = self.canvas.axes_commands.cycle_state(axes_id)
+        self.assertEqual(cycle.active_palette, palette)
+        self.assertEqual(cycle.next_index, 1)
+        self.assertEqual(
+            self.canvas.creation_color_cycle().peek().color,
+            palette.colors[1],
+        )
+        self.assertEqual(
+            registry.get("curve-first")
+            .state.properties["color"]
+            .casefold(),
+            palette.colors[0].casefold(),
+        )
+        self.assertEqual(
+            registry.get("curve-third")
+            .state.properties["color"]
+            .casefold(),
+            palette.colors[2].casefold(),
+        )
+
+        cursor_before_failure = registry.get(axes_id).state.properties[
+            "color_cycle"
+        ]
+        third = registry.get("curve-third")
+        with mock.patch.object(
+            third,
+            "commit_remove",
+            side_effect=RuntimeError("injected palette rollback failure"),
+        ):
+            self.assertFalse(
+                self.canvas.delete_component_group(
+                    ("curve-third",),
+                    "function curve",
+                )
+            )
+        self.assertIn("curve-third", registry)
+        self.assertEqual(
+            registry.get(axes_id).state.properties["color_cycle"],
+            cursor_before_failure,
+        )
+        self.assertEqual(
+            self.canvas.creation_color_cycle().peek().color,
+            palette.colors[1],
+        )
+
+    def test_inspector_add_failure_rolls_back_accordion_and_manager_tracking(self):
+        _inspector, toolbox = self._add_curves()
+        original_entries = toolbox.inspector_entries()
+        original_current = toolbox.currentWidget()
+        original_headers = tuple(
+            toolbox.header(component_id)
+            for component_id, _label in original_entries
+        )
+        original_insert = toolbox.main_layout.insertWidget
+        calls = 0
+
+        def fail_body_insert(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            result = original_insert(*args, **kwargs)
+            if calls == 2:
+                raise RuntimeError("injected accordion insertion failure")
+            return result
+
+        with mock.patch.object(
+            toolbox.main_layout,
+            "insertWidget",
+            side_effect=fail_body_insert,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "accordion insertion",
+            ):
+                self.canvas.add_curve(
+                    "x**3",
+                    0.0,
+                    1.0,
+                    ":",
+                    "#778899",
+                    "third",
+                    object_id="curve-third",
+                )
+        self.app.processEvents()
+
+        self.assertEqual(toolbox.inspector_entries(), original_entries)
+        self.assertIs(toolbox.currentWidget(), original_current)
+        self.assertEqual(
+            tuple(
+                toolbox.header(component_id)
+                for component_id, _label in original_entries
+            ),
+            original_headers,
+        )
+        self.assertIsNone(
+            self.canvas.component_editor_manager.editor("curve-third")
+        )
+
+    def test_full_role_delete_removes_empty_toolbox_and_navigation(self):
+        inspector, _toolbox = self._add_curves()
+
+        self.assertTrue(
+            self.canvas.delete_component_group(
+                ["curve-first", "curve-second"],
+                "function curve",
+            )
+        )
+        self.app.processEvents()
+
+        self.assertIsNone(
+            inspector.component_toolbox(
+                ComponentKind.LINE,
+                ComponentRole.FUNCTION_CURVE,
+            )
+        )
+        self.assertEqual(
+            self.canvas.component_registry.query(
+                role=ComponentRole.FUNCTION_CURVE
+            ),
+            [],
+        )
+
+    def test_fixed_semantic_components_never_expose_physical_delete(self):
+        fixed_roles = {
+            ComponentRole.TITLE,
+            ComponentRole.X_LABEL,
+            ComponentRole.Y_LABEL,
+            ComponentRole.LEGEND,
+            ComponentRole.X_AXIS,
+            ComponentRole.Y_AXIS,
+            ComponentRole.SPINE,
+            ComponentRole.MAJOR_TICK,
+            ComponentRole.MINOR_TICK,
+            ComponentRole.MAJOR_TICK_LABEL,
+            ComponentRole.MINOR_TICK_LABEL,
+            ComponentRole.GRID,
+        }
+        editors = [
+            self.canvas.component_editor_manager.editor(
+                controller.component_id
+            )
+            for controller in self.canvas.component_registry.query()
+            if controller.state.role in fixed_roles
+        ]
+
+        self.assertTrue(editors)
+        self.assertTrue(
+            all(editor is not None and not editor.can_delete for editor in editors)
+        )
+
+    def test_axes_delete_cascades_reindexes_and_does_not_reuse_ids(self):
+        self.canvas.add_axes()
+        self.canvas.add_axes()
+        axes = sorted(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        deleted = axes[1]
+        deleted_target = deleted.resolve_target()
+        deleted_descendants = {
+            item.component_id
+            for item in self.canvas.component_registry.descendants(
+                deleted.component_id
+            )
+        }
+        surviving_ids = [axes[0].component_id, axes[2].component_id]
+        surviving_subplots = [
+            axes[0].state.data["subplot"].copy(),
+            axes[2].state.data["subplot"].copy(),
+        ]
+        self.canvas.update_current_axes(deleted)
+
+        axes_events = []
+        observer_id = self.canvas.fig._axobservers.connect(
+            "_axes_change_event",
+            lambda figure: axes_events.append(figure),
+        )
+        try:
+            with mock.patch.object(
+                self.canvas.canva,
+                "draw_idle",
+                wraps=self.canvas.canva.draw_idle,
+            ) as draw_idle:
+                self.assertTrue(
+                    self.canvas.delete_axes(deleted.component_id)
+                )
+            draw_idle.assert_called_once_with()
+        finally:
+            self.canvas.fig._axobservers.disconnect(observer_id)
+        self.assertEqual(axes_events, [self.canvas.fig])
+
+        self.assertNotIn(deleted_target, self.canvas.fig.axes)
+        self.assertNotIn(deleted.component_id, self.canvas.component_registry)
+        self.assertTrue(
+            deleted_descendants.isdisjoint(
+                {
+                    item.component_id
+                    for item in self.canvas.component_registry.query()
+                }
+            )
+        )
+        remaining = sorted(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        self.assertEqual(
+            [item.component_id for item in remaining],
+            surviving_ids,
+        )
+        self.assertEqual(
+            [item.state.selector["index"] for item in remaining],
+            [0, 1],
+        )
+        self.assertEqual([item.state.order for item in remaining], [0, 1])
+        self.assertEqual(
+            [item.state.data["subplot"] for item in remaining],
+            surviving_subplots,
+        )
+        self.assertEqual(
+            self.canvas.current_axes_component_id,
+            surviving_ids[1],
+        )
+
+        occupied = {
+            item.component_id
+            for item in self.canvas.component_registry.query()
+        }
+        self.canvas.add_axes()
+        added = max(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        self.assertNotIn(added.component_id, occupied)
+        self.canvas.component_registry.validate_tree()
+        self.canvas.component_snapshot()
+
+    def test_axes_delete_failures_preserve_matplotlib_registry_and_ui_identity(self):
+        self.canvas.add_axes()
+        registry = self.canvas.component_registry
+        axes_controllers = sorted(
+            registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        target, survivor = axes_controllers
+        target_axes = target.resolve_target()
+        survivor_axes = survivor.resolve_target()
+        target_axes._shared_axes["x"].join(target_axes, survivor_axes)
+        target_axes._twinned_axes.join(target_axes, survivor_axes)
+        self.canvas.update_current_axes(target)
+        self.canvas.canva.grab_mouse(target_axes)
+
+        panel = self.canvas.figure_inspector.axes_inspector(
+            target.component_id
+        )
+        button = next(
+            entry[2]
+            for entry in self.canvas.figure_inspector._axes_entries
+            if entry[0] == target.component_id
+        )
+        original_figure_axes = tuple(self.canvas.fig.axes)
+        original_stack = dict(self.canvas.fig._axstack._axes)
+        original_current_axes = self.canvas.fig._axstack.current()
+        original_snapshot = self.canvas.component_snapshot()
+        original_shared = tuple(
+            target_axes._shared_axes["x"].get_siblings(target_axes)
+        )
+        original_twinned = tuple(
+            target_axes._twinned_axes.get_siblings(target_axes)
+        )
+        major_formatter = survivor_axes.xaxis.get_major_formatter()
+        major_locator = survivor_axes.xaxis.get_major_locator()
+        formatter_axis = major_formatter.axis
+        locator_axis = major_locator.axis
+        component_events = []
+        axes_events = []
+        cleanup = []
+        unsubscribe = registry.subscribe(component_events.append)
+        observer_id = self.canvas.fig._axobservers.connect(
+            "_axes_change_event",
+            lambda figure: axes_events.append(figure),
+        )
+        registry.add_cleanup_callback(
+            target.component_id,
+            lambda state: cleanup.append(state.id),
+        )
+
+        def assert_unchanged():
+            self.assertEqual(tuple(self.canvas.fig.axes), original_figure_axes)
+            self.assertEqual(
+                dict(self.canvas.fig._axstack._axes),
+                original_stack,
+            )
+            self.assertIs(
+                self.canvas.fig._axstack.current(),
+                original_current_axes,
+            )
+            self.assertEqual(
+                self.canvas.current_axes_component_id,
+                target.component_id,
+            )
+            self.assertIs(registry.get(target.component_id), target)
+            self.assertIs(target.resolve_target(), target_axes)
+            self.assertEqual(
+                tuple(
+                    target_axes._shared_axes["x"].get_siblings(target_axes)
+                ),
+                original_shared,
+            )
+            self.assertEqual(
+                tuple(target_axes._twinned_axes.get_siblings(target_axes)),
+                original_twinned,
+            )
+            self.assertIs(major_formatter.axis, formatter_axis)
+            self.assertIs(major_locator.axis, locator_axis)
+            self.assertIs(self.canvas.canva.mouse_grabber, target_axes)
+            self.assertIs(
+                self.canvas.figure_inspector.axes_inspector(
+                    target.component_id
+                ),
+                panel,
+            )
+            self.assertIs(
+                next(
+                    entry[2]
+                    for entry in self.canvas.figure_inspector._axes_entries
+                    if entry[0] == target.component_id
+                ),
+                button,
+            )
+            self.assertEqual(
+                self.canvas.component_snapshot(),
+                original_snapshot,
+            )
+            self.assertEqual(component_events, [])
+            self.assertEqual(axes_events, [])
+            self.assertEqual(cleanup, [])
+
+        try:
+            with mock.patch.object(
+                survivor,
+                "apply_state",
+                side_effect=RuntimeError("injected survivor failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            with mock.patch.object(
+                target,
+                "commit_remove",
+                side_effect=RuntimeError("injected detach failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            original_validate = registry.validate_tree
+            calls = 0
+
+            def fail_candidate_validation():
+                nonlocal calls
+                calls += 1
+                original_validate()
+                if calls == 2:
+                    raise RuntimeError("injected tree validation failure")
+
+            with mock.patch.object(
+                registry,
+                "validate_tree",
+                side_effect=fail_candidate_validation,
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+        finally:
+            unsubscribe()
+            self.canvas.fig._axobservers.disconnect(observer_id)
+            self.canvas.canva.release_mouse(target_axes)
+
+    def test_deleting_last_axes_enters_no_axes_state(self):
+        axes_id = self.canvas.current_axes_component_id
+
+        with mock.patch.object(
+            self.canvas.canva,
+            "draw_idle",
+            wraps=self.canvas.canva.draw_idle,
+        ) as draw_idle:
+            self.assertTrue(self.canvas.delete_axes(axes_id))
+
+        self.assertEqual(self.canvas.fig.axes, [])
+        draw_idle.assert_called_once_with()
+        self.assertIsNone(self.canvas.current_axes_component_id)
+        self.assertIs(
+            self.canvas.figure_inspector.current_panel(),
+            self.canvas.figure_inspector.no_axes_state,
+        )
+
+    def test_axes_delete_round_trips_through_schema_v6(self):
+        self.canvas.add_axes()
+        axes = sorted(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        self.assertTrue(self.canvas.delete_axes(axes[0].component_id))
+        surviving = self.canvas.component_registry.query(
+            kind=ComponentKind.AXES
+        )[0].state
+        path = Path(self.directory.name, "axes-delete.mygui.json")
+        self.assertTrue(
+            self.window.title_bar.menu_bar._save_project_to(
+                str(path),
+                canvas=self.canvas,
+            )
+        )
+        loaded = MainWindow()
+        try:
+            restore_project_snapshot(
+                path,
+                loaded.table,
+                loaded.figure_window,
+            )
+            restored = loaded.figure_window.current_canva
+            restored_axes = restored.component_registry.query(
+                kind=ComponentKind.AXES
+            )
+            self.assertEqual(len(restored_axes), 1)
+            self.assertEqual(
+                restored_axes[0].component_id,
+                surviving.id,
+            )
+            self.assertEqual(
+                restored_axes[0].state.selector["index"],
+                0,
+            )
+            self.assertEqual(
+                restored_axes[0].state.data["subplot"],
+                surviving.data["subplot"],
+            )
+        finally:
+            loaded.close_without_prompt()
+            self.app.processEvents()
+
+    def test_partial_component_delete_round_trips_survivor_identity_and_state(self):
+        self._add_curves()
+        survivor = self.canvas.component_registry.get("curve-second")
+        self.assertTrue(
+            survivor.set_property("linewidth", 3.25).ok
+        )
+        self.assertTrue(
+            self.canvas.delete_component_group(
+                ("curve-first",),
+                "function curve",
+            )
+        )
+        survivor_state = survivor.state
+        path = Path(self.directory.name, "partial-delete.mygui.json")
+        self.assertTrue(
+            self.window.title_bar.menu_bar._save_project_to(
+                str(path),
+                canvas=self.canvas,
+            )
+        )
+
+        loaded = MainWindow()
+        try:
+            restore_project_snapshot(
+                path,
+                loaded.table,
+                loaded.figure_window,
+            )
+            registry = (
+                loaded.figure_window.current_canva.component_registry
+            )
+            self.assertNotIn("curve-first", registry)
+            restored = registry.get("curve-second").state
+            self.assertEqual(restored.id, survivor_state.id)
+            self.assertEqual(restored.order, survivor_state.order)
+            self.assertEqual(
+                restored.properties,
+                survivor_state.properties,
+            )
+        finally:
+            loaded.close_without_prompt()
+            self.app.processEvents()
+
+    def test_dirty_fingerprint_tracks_save_table_and_toolbar_view(self):
+        figure_window = self.window.figure_window
+        path = Path(self.directory.name, "dirty.mygui.json")
+        self.assertTrue(figure_window.is_canvas_dirty(self.canvas))
+
+        self.assertTrue(
+            self.window.title_bar.menu_bar._save_project_to(
+                str(path),
+                canvas=self.canvas,
+            )
+        )
+        self.assertFalse(figure_window.is_canvas_dirty(self.canvas))
+
+        sheet = self.window.repository.project(
+            self.canvas.project_id
+        ).sheets.values()
+        next(iter(sheet)).set_block(0, 0, [[1]])
+        self.assertTrue(figure_window.is_canvas_dirty(self.canvas))
+
+        figure_window.mark_canvas_clean(self.canvas)
+        self.canvas.current_axes.set_xlim(2.0, 5.0)
+        self.assertTrue(figure_window.is_canvas_dirty(self.canvas))
+
+    def test_targeted_background_save_writes_the_requested_project(self):
+        first = self.canvas
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="ForegroundProject",
+        )
+        second = self.window.figure_window.current_canva
+        second.add_axes()
+        target = Path(self.directory.name, "background.mygui.json")
+
+        self.assertTrue(
+            self.window.title_bar.menu_bar._save_project_to(
+                str(target),
+                canvas=first,
+            )
+        )
+
+        self.assertIs(self.window.figure_window.current_canva, second)
+        self.assertEqual(
+            load_project_file(target)["project"]["id"],
+            first.project_id,
+        )
+        self.assertFalse(self.window.figure_window.is_canvas_dirty(first))
+        self.assertTrue(self.window.figure_window.is_canvas_dirty(second))
+
+    def test_closing_background_tab_keeps_foreground_selection(self):
+        first = self.canvas
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="ForegroundProject",
+        )
+        second = self.window.figure_window.current_canva
+        second.add_axes()
+
+        with mock.patch.object(
+            self.window,
+            "_project_close_choice",
+            return_value=QMessageBox.Discard,
+        ):
+            self.assertTrue(self.window.close_project_from_tab(0))
+
+        self.assertIs(self.window.figure_window.current_canva, second)
+        self.assertEqual(
+            self.window.table.current_project_id,
+            second.project_id,
+        )
+        self.assertNotIn(
+            first.project_id,
+            self.window.repository.projects,
+        )
+
+    def test_close_cancel_and_save_as_cancel_leave_exact_tab_intact(self):
+        figure_window = self.window.figure_window
+        project_id = self.canvas.project_id
+        with mock.patch.object(
+            self.window,
+            "_project_close_choice",
+            return_value=QMessageBox.Cancel,
+        ):
+            self.assertFalse(self.window.close_project_from_tab(0))
+        self.assertIn(project_id, figure_window.canvas)
+        self.assertIn(project_id, self.window.repository.projects)
+
+        with (
+            mock.patch.object(
+                self.window,
+                "_project_close_choice",
+                return_value=QMessageBox.Save,
+            ),
+            mock.patch.object(
+                QFileDialog,
+                "getSaveFileName",
+                return_value=("", ""),
+            ),
+        ):
+            self.assertFalse(self.window.close_project_from_tab(0))
+        self.assertEqual(figure_window.tabwindow.count(), 1)
+        self.assertIn(project_id, self.window.repository.projects)
+
+    def test_close_save_failure_preserves_file_and_open_project(self):
+        path = Path(self.directory.name, "locked.mygui.json")
+        self.assertTrue(
+            self.window.title_bar.menu_bar._save_project_to(
+                str(path),
+                canvas=self.canvas,
+            )
+        )
+        original = path.read_bytes()
+        self.canvas.current_axes.set_xlim(4.0, 9.0)
+        with (
+            mock.patch.object(
+                self.window,
+                "_project_close_choice",
+                return_value=QMessageBox.Save,
+            ),
+            mock.patch(
+                "code.project_io.os.replace",
+                side_effect=PermissionError("destination is locked"),
+            ),
+            mock.patch.object(QMessageBox, "warning"),
+        ):
+            self.assertFalse(self.window.close_project_from_tab(0))
+
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(self.window.figure_window.tabwindow.count(), 1)
+        self.assertIn(
+            self.canvas.project_id,
+            self.window.repository.projects,
+        )
+        self.assertTrue(
+            self.window.figure_window.is_canvas_dirty(self.canvas)
+        )
+
+    def test_discard_closes_project_and_cleans_all_runtime_maps(self):
+        figure_window = self.window.figure_window
+        project_id = self.canvas.project_id
+        with mock.patch.object(
+            self.window,
+            "_project_close_choice",
+            return_value=QMessageBox.Discard,
+        ):
+            self.assertTrue(self.window.close_project_from_tab(0))
+
+        self.assertEqual(figure_window.tabwindow.count(), 0)
+        self.assertNotIn(project_id, figure_window.canvas)
+        self.assertNotIn(project_id, figure_window._clean_fingerprints)
+        self.assertNotIn(project_id, self.window.repository.projects)
+        self.assertNotIn(project_id, self.window.table._subtables)
+        self.assertIsNone(figure_window.current_canva)
+        self.assertIsNone(self.window.table.current_project_id)
+
+    def test_exit_cancel_keeps_all_projects_and_prior_save_is_clean(self):
+        first = self.canvas
+        first_path = Path(self.directory.name, "first.mygui.json")
+        self.assertTrue(
+            self.window.title_bar.menu_bar._save_project_to(
+                str(first_path),
+                canvas=first,
+            )
+        )
+        first.current_axes.set_xlim(3.0, 7.0)
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="SecondProject",
+        )
+        second = self.window.figure_window.current_canva
+        second.add_axes()
+        event = mock.Mock()
+
+        with (
+            mock.patch.object(
+                self.window,
+                "isVisible",
+                return_value=True,
+            ),
+            mock.patch.object(
+                self.window,
+                "_project_close_choice",
+                side_effect=(QMessageBox.Save, QMessageBox.Cancel),
+            ),
+        ):
+            self.window.closeEvent(event)
+
+        event.ignore.assert_called_once_with()
+        self.assertEqual(self.window.figure_window.tabwindow.count(), 2)
+        self.assertIn(first.project_id, self.window.repository.projects)
+        self.assertIn(second.project_id, self.window.repository.projects)
+        self.assertFalse(
+            self.window.figure_window.is_canvas_dirty(first)
+        )
+        self.assertTrue(
+            self.window.figure_window.is_canvas_dirty(second)
+        )
+        self.assertEqual(
+            load_project_file(first_path)["project"]["id"],
+            first.project_id,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

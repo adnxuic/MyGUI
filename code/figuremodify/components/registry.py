@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
+from copy import deepcopy
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -22,8 +23,11 @@ from .models import (
     ComponentEventKind,
     ComponentKind,
     ComponentMutation,
+    ComponentNotice,
     ComponentRole,
     ComponentState,
+    DeletionPolicy,
+    MessageLevel,
     UpdateImpact,
 )
 
@@ -354,6 +358,322 @@ class ComponentRegistry:
 
         return self.get(component_id).delete()
 
+    def delete_transaction(
+        self,
+        component_ids: Iterable[str],
+        *,
+        state_replacements: Iterable[ComponentState] = (),
+        verifier: Callable[[], None] | None = None,
+    ) -> ComponentBatchChange:
+        """Atomically remove component subtrees and replace survivor state.
+
+        Artist/Axes detachment remains reversible until the candidate
+        Registry tree and optional external verifier both pass.  Cleanup and
+        lifecycle events are deliberately delayed until after that boundary.
+        """
+
+        requested = tuple(
+            dict.fromkeys(str(component_id) for component_id in component_ids)
+        )
+        replacements = tuple(state_replacements)
+        if not requested and not replacements:
+            return ComponentBatchChange((), True)
+
+        try:
+            requested_controllers = {
+                component_id: self.get(component_id)
+                for component_id in requested
+            }
+            requested_set = set(requested)
+            roots: list[str] = []
+            for component_id in requested:
+                parent_id = requested_controllers[component_id].state.parent_id
+                visited_parents: set[str] = set()
+                while parent_id is not None and parent_id not in requested_set:
+                    if parent_id in visited_parents:
+                        raise ComponentValidationError(
+                            "Component tree contains an ancestor cycle."
+                        )
+                    visited_parents.add(parent_id)
+                    parent = self._controllers.get(parent_id)
+                    parent_id = (
+                        parent.state.parent_id if parent is not None else None
+                    )
+                if parent_id is None:
+                    roots.append(component_id)
+            for component_id in roots:
+                controller = requested_controllers[component_id]
+                if controller.DELETION_POLICY is not DeletionPolicy.REMOVE:
+                    raise ComponentValidationError(
+                        f"Component {component_id!r} uses deletion policy "
+                        f"{controller.DELETION_POLICY.value!r}."
+                    )
+        except Exception as exc:
+            return ComponentBatchChange((), False, message=str(exc))
+
+        removed_ids: set[str] = set()
+        postorder_ids: list[str] = []
+        collecting: set[str] = set()
+
+        def collect(component_id: str) -> None:
+            if component_id in collecting:
+                raise ComponentValidationError(
+                    "Component tree contains a deletion cycle."
+                )
+            if component_id in removed_ids:
+                return
+            collecting.add(component_id)
+            children = sorted(
+                self._children.get(component_id, ()),
+                key=lambda child_id: (
+                    self._controllers[child_id].state.order,
+                    child_id,
+                ),
+            )
+            for child_id in children:
+                collect(child_id)
+            collecting.remove(component_id)
+            removed_ids.add(component_id)
+            postorder_ids.append(component_id)
+
+        try:
+            for component_id in roots:
+                collect(component_id)
+        except Exception as exc:
+            return ComponentBatchChange((), False, message=str(exc))
+
+        replacement_by_id: dict[str, ComponentState] = {}
+        try:
+            for state in replacements:
+                if not isinstance(state, ComponentState):
+                    raise ComponentValidationError(
+                        "State replacements must contain ComponentState values."
+                    )
+                if state.id in replacement_by_id:
+                    raise ComponentValidationError(
+                        f"Duplicate state replacement {state.id!r}."
+                    )
+                if state.id in removed_ids:
+                    raise ComponentValidationError(
+                        f"Cannot replace removed component {state.id!r}."
+                    )
+                self.get(state.id)
+                replacement_by_id[state.id] = state
+        except Exception as exc:
+            return ComponentBatchChange((), False, message=str(exc))
+
+        removed_controllers = {
+            component_id: self._controllers[component_id]
+            for component_id in postorder_ids
+        }
+        removed_states = {
+            component_id: controller.state
+            for component_id, controller in removed_controllers.items()
+        }
+        rollback_snapshots: dict[
+            str,
+            tuple[ComponentState, Any, dict[str, Any]],
+        ] = {}
+        handles: list[tuple[ComponentController[Any], Any]] = []
+        changes: list[ComponentChange] = []
+        failure: ComponentChange | None = None
+        prior_pending = dict(self._pending)
+        event_start = len(self._event_buffer)
+        original_controllers = self._controllers
+        original_children = self._children
+        staged_tree = False
+
+        self._transaction_depth += 1
+        self._batch_depth += 1
+        try:
+            for component_id in roots:
+                controller = requested_controllers[component_id]
+                handles.append((controller, controller.prepare_remove()))
+
+            snapshot_ids = list(replacement_by_id)
+            if any(
+                self.get(component_id).state.kind is ComponentKind.AXES
+                for component_id in replacement_by_id
+            ):
+                snapshot_ids.extend(
+                    controller.component_id
+                    for controller in self.query(kind=ComponentKind.AXES)
+                    if controller.component_id not in snapshot_ids
+                )
+            rollback_snapshots = {
+                component_id: self.get(
+                    component_id
+                )._transaction_snapshot()
+                for component_id in snapshot_ids
+            }
+            for component_id, state in replacement_by_id.items():
+                controller = self.get(component_id)
+                change = controller.apply_state(state)
+                changes.append(change)
+                if not change.ok:
+                    failure = change
+                    raise ComponentValidationError(
+                        change.message
+                        or f"Could not replace component {component_id!r}."
+                    )
+
+            for controller, handle in handles:
+                controller.commit_remove(handle)
+
+            candidate_controllers = {
+                component_id: controller
+                for component_id, controller in original_controllers.items()
+                if component_id not in removed_ids
+            }
+            candidate_children: dict[str | None, set[str]] = defaultdict(set)
+            for parent_id, child_ids in original_children.items():
+                if parent_id in removed_ids:
+                    continue
+                candidate_children[parent_id].update(
+                    child_id
+                    for child_id in child_ids
+                    if child_id not in removed_ids
+                )
+            self._controllers = candidate_controllers
+            self._children = candidate_children
+            staged_tree = True
+            # Lightweight Controller unit registries intentionally omit the
+            # Figure semantic tree.  Production registries always contain a
+            # Figure root and therefore take the full structural validator.
+            if any(
+                controller.state.kind is ComponentKind.FIGURE
+                for controller in candidate_controllers.values()
+            ):
+                self.validate_tree()
+            if verifier is not None:
+                verifier()
+        except Exception as exc:
+            if failure is None:
+                state = (
+                    requested_controllers[roots[0]].state
+                    if roots
+                    else next(iter(replacement_by_id.values()), None)
+                )
+                failure = ComponentChange(
+                    state.id if state is not None else "",
+                    None,
+                    state.clone() if state is not None else None,
+                    state.clone() if state is not None else None,
+                    ChangeStatus.REJECTED,
+                    message=str(exc),
+                )
+                changes.append(failure)
+            if staged_tree:
+                self._controllers = original_controllers
+                self._children = original_children
+            rollback_handles = sorted(
+                handles,
+                key=lambda item: (
+                    id(getattr(item[1], "owner", item[1])),
+                    int(getattr(item[1], "index", 0)),
+                ),
+            )
+            for controller, handle in rollback_handles:
+                try:
+                    controller.rollback_remove(handle)
+                except Exception:
+                    # A rollback hook is required to be idempotent.  Continue
+                    # restoring Registry state even if a faulty future hook
+                    # violates that contract.
+                    continue
+            for component_id in rollback_snapshots:
+                try:
+                    original_controllers[
+                        component_id
+                    ]._restore_transaction_snapshot(
+                        rollback_snapshots[component_id]
+                    )
+                except Exception:
+                    continue
+            # Axis limit/scale restoration may disable autoscaling on a
+            # shared sibling.  Restore that cross-Axes flag only after every
+            # affected Axes has received its other original properties.
+            for component_id, snapshot in rollback_snapshots.items():
+                controller = original_controllers[component_id]
+                spec = controller.property_specs().get("autoscale_on")
+                raw = snapshot[2]
+                if spec is None or "autoscale_on" not in raw:
+                    continue
+                try:
+                    controller._write_property(
+                        controller.resolve_target(),
+                        spec,
+                        deepcopy(raw["autoscale_on"]),
+                    )
+                except Exception:
+                    continue
+            self._pending = prior_pending
+            del self._event_buffer[event_start:]
+            self._batch_depth -= 1
+            self._transaction_depth -= 1
+            return ComponentBatchChange(
+                tuple(changes),
+                False,
+                message=failure.message,
+            )
+
+        survivor_events = self._event_buffer[event_start:]
+        del self._event_buffer[event_start:]
+        notices: list[ComponentNotice] = []
+        for component_id in postorder_ids:
+            controller = removed_controllers[component_id]
+            controller._deleted = True
+            self.locator.unbind(component_id)
+        for controller, handle in handles:
+            try:
+                controller._finalize_remove(handle)
+            except Exception as exc:
+                notices.append(
+                    ComponentNotice(
+                        MessageLevel.WARNING,
+                        f"Component was removed, but Matplotlib cleanup "
+                        f"reported: {exc}",
+                    )
+                )
+            self.request_update(handle.subject, controller.DELETE_IMPACTS)
+        for component_id in postorder_ids:
+            self._notify_removed(removed_states[component_id])
+        self._event_buffer.extend(survivor_events)
+        for component_id in roots:
+            state = removed_states[component_id]
+            changes.append(
+                ComponentChange(
+                    component_id,
+                    None,
+                    state,
+                    None,
+                    ChangeStatus.DELETED,
+                    requested_controllers[
+                        component_id
+                    ].DELETE_IMPACTS,
+                )
+            )
+
+        self._batch_depth -= 1
+        if self._batch_depth == 0:
+            try:
+                self.flush_updates()
+            except Exception as exc:
+                notices.append(
+                    ComponentNotice(
+                        MessageLevel.WARNING,
+                        f"Components were removed, but repaint failed: {exc}",
+                    )
+                )
+        self._transaction_depth -= 1
+        if self._transaction_depth == 0:
+            self._flush_events()
+        return ComponentBatchChange(
+            tuple(changes),
+            True,
+            notices=tuple(notices),
+        )
+
     def add_cleanup_callback(
         self,
         component_id: str,
@@ -478,6 +798,18 @@ class ComponentRegistry:
             self._batch_depth -= 1
             if self._batch_depth == 0:
                 self.flush_updates()
+
+    @contextmanager
+    def batch_events(self) -> Iterator["ComponentRegistry"]:
+        """Publish lifecycle and change events after one compound operation."""
+
+        self._transaction_depth += 1
+        try:
+            yield self
+        finally:
+            self._transaction_depth -= 1
+            if self._transaction_depth == 0:
+                self._flush_events()
 
     def flush_updates(self) -> None:
         """Apply all redraw impacts accumulated by the current batch."""

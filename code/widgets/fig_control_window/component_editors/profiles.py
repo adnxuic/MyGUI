@@ -10,7 +10,7 @@ from .fit_sections import (
     FitDisplayRangeSection,
     FitResultSection,
 )
-from .inspector import EditorProfile, SectionSpec
+from .inspector import EditorPlacement, EditorProfile, SectionSpec
 from .sections import (
     DataReferenceSection,
     LegendLocationSection,
@@ -284,7 +284,8 @@ LINE_PROFILES = {
                 _line_appearance,
             ),
         ),
-        deletion="remove",
+        placement=EditorPlacement.CHART,
+        instance_label_prefix="curve",
     ),
     ComponentRole.FUNCTION_CURVE: EditorProfile(
         "function_curve",
@@ -301,7 +302,8 @@ LINE_PROFILES = {
                 _line_appearance,
             ),
         ),
-        deletion="remove",
+        placement=EditorPlacement.CHART,
+        instance_label_prefix="curve",
     ),
     ComponentRole.DATA_PLOT: EditorProfile(
         "data_plot",
@@ -318,7 +320,8 @@ LINE_PROFILES = {
                 _line_appearance,
             ),
         ),
-        deletion="remove",
+        placement=EditorPlacement.CHART,
+        instance_label_prefix="plot",
     ),
     ComponentRole.FIT_CURVE: EditorProfile(
         "fit_curve",
@@ -338,7 +341,8 @@ LINE_PROFILES = {
                 _line_appearance,
             ),
         ),
-        deletion="remove",
+        placement=EditorPlacement.CHART,
+        instance_label_prefix="fitting",
     ),
     ComponentRole.INTERPOLATION: EditorProfile(
         "interpolation",
@@ -360,7 +364,8 @@ LINE_PROFILES = {
                 _line_appearance,
             ),
         ),
-        deletion="remove",
+        placement=EditorPlacement.CHART,
+        instance_label_prefix="interpolate",
     ),
 }
 
@@ -380,7 +385,8 @@ SCATTER_PROFILE = EditorProfile(
             _scatter_appearance,
         ),
     ),
-    deletion="remove",
+    placement=EditorPlacement.CHART,
+    instance_label_prefix="scatter",
 )
 
 
@@ -399,7 +405,8 @@ TEXT_PROFILE = EditorProfile(
         SectionSpec("position", "Position and visibility", _text_position),
         SectionSpec("render", "Rendering", _text_render),
     ),
-    deletion="remove",
+    placement=EditorPlacement.ELEMENT,
+    instance_label_prefix="text",
 )
 
 
@@ -407,7 +414,7 @@ SEMANTIC_TEXT_PROFILE = EditorProfile(
     "semantic_text",
     "Text",
     TEXT_PROFILE.sections,
-    deletion="none",
+    placement=EditorPlacement.SEMANTIC,
 )
 
 

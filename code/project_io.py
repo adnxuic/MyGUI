@@ -161,12 +161,15 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
     validate_v6_figure(root.get("figure"), refs, project_id, project_name)
 
 
-def project_snapshot(figure_window=None) -> dict[str, Any]:
+def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     """Build the complete serializable project snapshot."""
 
-    if figure_window is None or getattr(figure_window, "current_canva", None) is None:
+    if figure_window is None:
+        raise ValueError("No Figure window is available to save.")
+    if canvas is None:
+        canvas = getattr(figure_window, "current_canva", None)
+    if canvas is None:
         raise ValueError("No current project canvas to save.")
-    canvas = figure_window.current_canva
     project = figure_window.repository.project(canvas.project_id)
     figure = normalize_v6_figure(canvas.component_snapshot())
     snapshot = {
@@ -180,11 +183,18 @@ def project_snapshot(figure_window=None) -> dict[str, Any]:
     return snapshot
 
 
-def save_project_snapshot(filename: str | Path, figure_window=None) -> None:
+def save_project_snapshot(
+    filename: str | Path,
+    figure_window=None,
+    *,
+    canvas=None,
+) -> dict[str, Any]:
     """Save project snapshot."""
 
     path = Path(filename)
-    snapshot = project_snapshot(figure_window)
+    if canvas is None and figure_window is not None:
+        canvas = getattr(figure_window, "current_canva", None)
+    snapshot = project_snapshot(figure_window, canvas=canvas)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_name = None
     try:
@@ -201,6 +211,12 @@ def save_project_snapshot(filename: str | Path, figure_window=None) -> None:
                 os.unlink(temp_name)
             except PermissionError:
                 pass
+    if canvas is not None:
+        canvas.project_path = str(path)
+    mark_clean = getattr(figure_window, "mark_canvas_clean", None)
+    if callable(mark_clean) and canvas is not None:
+        mark_clean(canvas, snapshot=snapshot)
+    return snapshot
 
 
 def load_project_file(filename: str | Path) -> dict[str, Any]:
@@ -233,11 +249,14 @@ def restore_project_snapshot(filename: str | Path, table=None, figure_window=Non
         table.load_project_table_snapshot(snapshot["table"])
         table_loaded = True
         if figure_window is not None:
-            figure_window.load_project_figure_snapshot(
+            canvas = figure_window.load_project_figure_snapshot(
                 snapshot["figure"],
                 project_name,
                 project_path=str(Path(filename)),
             )
+            mark_clean = getattr(figure_window, "mark_canvas_clean", None)
+            if callable(mark_clean) and canvas is not None:
+                mark_clean(canvas)
         return snapshot
     except Exception:
         if figure_window is not None:

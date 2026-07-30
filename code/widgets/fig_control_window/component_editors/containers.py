@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 
 from Qt_core import *
@@ -236,6 +237,20 @@ class ChartInspectorStack(QFrame):
         self.toolbox_stack.setCurrentWidget(toolbox)
         return True
 
+    def remove_toolbox(self, key) -> bool:
+        """Remove an empty toolbox and return to the stack empty state."""
+
+        toolbox = self._toolboxes.pop(key, None)
+        if toolbox is None:
+            return False
+        was_current = self.toolbox_stack.currentWidget() is toolbox
+        self.toolbox_stack.removeWidget(toolbox)
+        if was_current:
+            self.toolbox_stack.setCurrentWidget(self.empty_state)
+        toolbox.setParent(None)
+        toolbox.deleteLater()
+        return True
+
 
 class ElementInspectorStack(QFrame):
     """Provide the element inspector stack Qt widget."""
@@ -278,20 +293,134 @@ class ElementInspectorStack(QFrame):
         self.toolbox_stack.setCurrentWidget(toolbox)
         return True
 
+    def remove_toolbox(self, key) -> bool:
+        """Remove an empty toolbox and return to the stack empty state."""
 
-class InspectorToolBox(QToolBox):
-    """Represent the application's inspector tool box."""
+        toolbox = self._toolboxes.pop(key, None)
+        if toolbox is None:
+            return False
+        was_current = self.toolbox_stack.currentWidget() is toolbox
+        self.toolbox_stack.removeWidget(toolbox)
+        if was_current:
+            self.toolbox_stack.setCurrentWidget(self.empty_state)
+        toolbox.setParent(None)
+        toolbox.deleteLater()
+        return True
+
+
+class InspectorHeader(QToolButton):
+    """Explicit accordion header bound to one stable component ID."""
+
+    deleteRequested = Signal(str)
+
+    def __init__(self, component_id: str, text: str, parent=None):
+        super().__init__(parent)
+        if not component_id:
+            raise ValueError("Inspector header requires a stable component ID.")
+        if not isinstance(text, str) or not text:
+            raise ValueError("Inspector header requires display text.")
+        self.component_id = str(component_id)
+        self.setObjectName("inspector_toolbox_header")
+        self.setText(text)
+        self.setCheckable(True)
+        self.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.setArrowType(Qt.RightArrow)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+
+
+@dataclass(slots=True)
+class _InspectorEntry:
+    component_id: str
+    label: str
+    inspector: QWidget
+    header: InspectorHeader
+
+
+class InspectorToolBox(QFrame):
+    """Own an explicit, stable-ID accordion of component Inspectors."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(qss_func.qss_loader(qss_path))
         self._item_count = 0
-        self.setContextMenuPolicy(Qt.DefaultContextMenu)
+        self._entries: list[_InspectorEntry] = []
+        self._entry_by_id: dict[str, _InspectorEntry] = {}
+        self._current: QWidget | None = None
+        self._empty_callback = None
+        self._delete_callback = None
+        self._role_label = "component"
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.addStretch()
+
+    def set_empty_callback(self, callback) -> None:
+        """Set the callback invoked after the last Inspector is removed."""
+
+        self._empty_callback = callback
+
+    def set_delete_callback(self, callback, role_label="component") -> None:
+        """Set the sole business callback used by header and batch deletion."""
+
+        self._delete_callback = callback
+        self._role_label = str(role_label or "component")
 
     def add_inspector(self, inspector, label: str):
-        """Add inspector."""
+        """Atomically add a validated accordion entry."""
 
-        index = self.addItem(inspector, label + str(self._item_count))
+        controller = getattr(inspector, "controller", None)
+        component_id = getattr(controller, "component_id", None)
+        if not component_id:
+            raise ValueError(
+                "Inspector labels require a stable component ID."
+            )
+        component_id = str(component_id)
+        if component_id in self._entry_by_id:
+            raise ValueError(
+                f"Duplicate Inspector component ID {component_id!r}."
+            )
+        display_label = f"{label}{self._item_count}"
+        header = InspectorHeader(component_id, display_label, self)
+        header.clicked.connect(
+            lambda _checked=False, target=inspector:
+            self.setCurrentWidget(target)
+        )
+        header.customContextMenuRequested.connect(
+            lambda position, target=header:
+            self._show_header_context_menu(target, position)
+        )
+        entry = _InspectorEntry(
+            component_id,
+            display_label,
+            inspector,
+            header,
+        )
+        previous_current = self._current
+        index = len(self._entries)
+        try:
+            self._entries.append(entry)
+            self._entry_by_id[component_id] = entry
+            self.main_layout.insertWidget(self.main_layout.count() - 1, header)
+            self.main_layout.insertWidget(
+                self.main_layout.count() - 1,
+                inspector,
+            )
+            inspector.setVisible(False)
+            if previous_current is None:
+                self.setCurrentWidget(inspector)
+        except Exception:
+            self.main_layout.removeWidget(inspector)
+            self.main_layout.removeWidget(header)
+            self._entry_by_id.pop(component_id, None)
+            if entry in self._entries:
+                self._entries.remove(entry)
+            header.setParent(None)
+            header.deleteLater()
+            self._current = previous_current
+            if previous_current is not None:
+                previous_current.setVisible(True)
+            raise
         self._item_count += 1
         return index
 
@@ -301,40 +430,149 @@ class InspectorToolBox(QToolBox):
         index = self.indexOf(inspector)
         if index < 0:
             return False
-        self.removeItem(index)
+        entry = self._entries[index]
+        was_current = inspector is self._current
+        self._entries.pop(index)
+        self._entry_by_id.pop(entry.component_id, None)
+        self.main_layout.removeWidget(entry.header)
+        self.main_layout.removeWidget(inspector)
+        entry.header.setParent(None)
+        entry.header.deleteLater()
         inspector.setParent(None)
         inspector.deleteLater()
+        if was_current:
+            self._current = None
+            if self._entries:
+                next_index = min(index, len(self._entries) - 1)
+                self.setCurrentWidget(self._entries[next_index].inspector)
+        if self.count() == 0 and callable(self._empty_callback):
+            self._empty_callback()
         return True
 
-    def contextMenuEvent(self, event):
-        """Handle Qt context-menu events for this widget."""
+    def count(self) -> int:
+        """Return the number of Inspector entries."""
 
-        inspector = self.currentWidget()
+        return len(self._entries)
+
+    def widget(self, index: int):
+        """Return the Inspector at ``index`` or ``None``."""
+
+        if index < 0 or index >= len(self._entries):
+            return None
+        return self._entries[index].inspector
+
+    def indexOf(self, inspector) -> int:
+        """Return the stable entry index for an Inspector."""
+
+        for index, entry in enumerate(self._entries):
+            if entry.inspector is inspector:
+                return index
+        return -1
+
+    def itemText(self, index: int) -> str:
+        """Return the immutable display label at ``index``."""
+
+        if index < 0 or index >= len(self._entries):
+            return ""
+        return self._entries[index].label
+
+    def currentWidget(self):
+        """Return the expanded Inspector, if any."""
+
+        return self._current
+
+    def currentIndex(self) -> int:
+        """Return the expanded Inspector index."""
+
+        return self.indexOf(self._current)
+
+    def setCurrentIndex(self, index: int) -> None:
+        """Expand the Inspector at ``index``."""
+
+        target = self.widget(index)
+        if target is not None:
+            self.setCurrentWidget(target)
+
+    def setCurrentWidget(self, inspector) -> None:
+        """Expand exactly one Inspector without changing entry identity."""
+
+        if self.indexOf(inspector) < 0:
+            return
+        self._current = inspector
+        for entry in self._entries:
+            active = entry.inspector is inspector
+            entry.inspector.setVisible(active)
+            entry.header.setChecked(active)
+            entry.header.setArrowType(
+                Qt.DownArrow if active else Qt.RightArrow
+            )
+
+    def inspector_entries(self) -> list[tuple[str, str]]:
+        """Return visible component IDs and labels in page order."""
+
+        return [
+            (entry.component_id, entry.label)
+            for entry in self._entries
+        ]
+
+    def inspector(self, component_id: str):
+        """Return the visible Inspector associated with a stable ID."""
+
+        entry = self._entry_by_id.get(str(component_id))
+        return entry.inspector if entry is not None else None
+
+    def header(self, component_id: str):
+        """Return the explicit Header associated with a stable ID."""
+
+        entry = self._entry_by_id.get(str(component_id))
+        return entry.header if entry is not None else None
+
+    def _show_header_context_menu(self, header, position) -> None:
+        component_id = getattr(header, "component_id", None)
+        inspector = self.inspector(component_id) if component_id else None
         if (
             inspector is None
             or not getattr(inspector, "can_delete", True)
-            or not callable(getattr(inspector, "delete_object", None))
         ):
             return
-        menu = QMenu(self)
-        delete_action = menu.addAction("Delete")
-        action = menu.exec(event.globalPos())
-        if action == delete_action:
-            self.delete_inspector(self.currentIndex())
+        if self._confirm_header_delete(header, position):
+            header.deleteRequested.emit(component_id)
+            self._submit_delete(component_id, inspector)
 
-    def delete_inspector(self, index: int | None = None):
+    def _confirm_header_delete(self, header, position) -> bool:
+        """Return whether the explicit Header menu confirmed deletion."""
+
+        menu = QMenu(self)
+        delete_action = menu.addAction("Delete Component")
+        action = menu.exec(header.mapToGlobal(position))
+        return action == delete_action
+
+    def _submit_delete(self, component_id: str, inspector) -> bool:
+        if callable(self._delete_callback):
+            return self._delete_callback(
+                (component_id,),
+                self._role_label,
+            ) is not False
+        delete_object = getattr(inspector, "delete_object", None)
+        return bool(callable(delete_object) and delete_object() is not False)
+
+    def delete_inspector(self, target=None):
         """Delete inspector."""
 
-        if index is None:
-            index = self.currentIndex()
-        if index is None or index < 0 or index >= self.count():
+        if target is None:
+            inspector = self.currentWidget()
+        elif isinstance(target, int):
+            if target < 0 or target >= self.count():
+                return False
+            inspector = self.widget(target)
+        else:
+            inspector = target
+        if inspector is None or self.indexOf(inspector) < 0:
             return False
-        inspector = self.widget(index)
-        delete_object = getattr(inspector, "delete_object", None)
-        if not callable(delete_object):
+        controller = getattr(inspector, "controller", None)
+        component_id = getattr(controller, "component_id", None)
+        if not component_id:
             return False
-        result = delete_object()
-        if result is False:
-            return False
-        self.remove_inspector(inspector)
-        return True
+        # The Registry REMOVED event is the sole production path that disposes
+        # and removes the Inspector through ComponentEditorManager.
+        return self._submit_delete(str(component_id), inspector)

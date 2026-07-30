@@ -326,13 +326,8 @@ class MenuBar(QFrame):
             message = "Please create or open a project before saving."
             status_messages.show_error(message)
             QMessageBox.warning(self, "Save Project", message)
-            return
-
-        project_path = getattr(self.figure_window.current_canva, "project_path", None)
-        if project_path:
-            self._save_project_to(project_path)
-        else:
-            self.save_file_as()
+            return False
+        return self.save_canvas(self.figure_window.current_canva)
 
     def save_file_as(self):
         """Save file as."""
@@ -341,13 +336,43 @@ class MenuBar(QFrame):
             message = "Please create or open a project before saving."
             status_messages.show_error(message)
             QMessageBox.warning(self, "Save Project", message)
-            return
+            return False
+        return self.save_canvas(
+            self.figure_window.current_canva,
+            save_as=True,
+        )
 
+    def save_canvas(
+        self,
+        canvas,
+        *,
+        save_as: bool = False,
+        announce: bool = True,
+    ) -> bool:
+        """Save one explicit canvas, including when it is a background tab."""
+
+        if canvas is None:
+            return False
+        project_path = getattr(canvas, "project_path", None)
+        if not save_as and project_path:
+            return self._save_project_to(
+                project_path,
+                canvas=canvas,
+                announce=announce,
+            )
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "Save Project", "", "MyGUI Project (*.mygui.json);;JSON Files (*.json)")
+            self,
+            "Save Project",
+            "",
+            "MyGUI Project (*.mygui.json);;JSON Files (*.json)",
+        )
         if not file_name:
-            return
-        self._save_project_to(file_name)
+            return False
+        return self._save_project_to(
+            file_name,
+            canvas=canvas,
+            announce=announce,
+        )
 
     @staticmethod
     def _project_save_path(file_name: str) -> str:
@@ -356,16 +381,33 @@ class MenuBar(QFrame):
             path = path.with_suffix(".mygui.json")
         return str(path)
 
-    def _save_project_to(self, file_name: str):
+    def _save_project_to(
+        self,
+        file_name: str,
+        *,
+        canvas=None,
+        announce: bool = True,
+    ) -> bool:
         file_name = self._project_save_path(file_name)
         try:
-            canvas = self.figure_window.current_canva
-            save_project_snapshot(file_name, self.figure_window)
-            canvas.project_path = file_name
-            status_messages.show_success(f"Project saved: {Path(file_name).name}")
+            if canvas is None:
+                canvas = self.figure_window.current_canva
+            if canvas is None:
+                raise ValueError("Select a project before saving.")
+            save_project_snapshot(
+                file_name,
+                self.figure_window,
+                canvas=canvas,
+            )
+            if announce:
+                status_messages.show_success(
+                    f"Project saved: {Path(file_name).name}"
+                )
+            return True
         except Exception as exc:
             status_messages.show_error(str(exc))
             QMessageBox.warning(self, "Save Project", str(exc))
+            return False
 
 
 class ControlBar(QFrame):

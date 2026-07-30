@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
+import matplotlib
 import numpy as np
 from matplotlib.figure import Figure
 
@@ -18,7 +19,14 @@ from code.figuremodify.components import (
     ComponentRole,
     ComponentState,
     DataPlotController,
+    DeletionPolicy,
     FitCurveController,
+    FigureController,
+    LegendController,
+    LineController,
+    ScatterController,
+    TextController,
+    TitleController,
     register_figure_components,
 )
 from code.figuremodify.style_base.color_models import PaletteDefinition
@@ -94,6 +102,34 @@ class ComponentServiceTests(unittest.TestCase):
             require_parent=False,
         )
 
+    def test_first_party_deletion_policy_and_matplotlib_axes_contract(self):
+        self.assertEqual(matplotlib.__version__, "3.9.0")
+        self.assertIs(
+            FigureController.DELETION_POLICY,
+            DeletionPolicy.FORBID,
+        )
+        self.assertIs(
+            TitleController.DELETION_POLICY,
+            DeletionPolicy.HIDE,
+        )
+        self.assertIs(
+            LegendController.DELETION_POLICY,
+            DeletionPolicy.HIDE,
+        )
+        for controller_type in (
+            LineController,
+            ScatterController,
+            TextController,
+        ):
+            self.assertIs(
+                controller_type.DELETION_POLICY,
+                DeletionPolicy.REMOVE,
+            )
+        self.assertIsInstance(self.figure._localaxes, list)
+        self.assertIsInstance(self.figure._axstack._axes, dict)
+        self.assertIn(self.axes, self.figure._localaxes)
+        self.assertIn(self.axes, self.figure._axstack._axes)
+
     def test_registry_transaction_publishes_only_committed_events_and_draws_once(self):
         first_line, = self.axes.plot([0, 1], [1, 2])
         second_line, = self.axes.plot([0, 1], [2, 3])
@@ -144,6 +180,8 @@ class ComponentServiceTests(unittest.TestCase):
             ComponentRole.DATA_PLOT,
             second_line,
         )
+        first_state = first.state
+        second_state = second.state
         events = []
         self.registry.subscribe(events.append)
         original_write = second._write_property
@@ -176,9 +214,189 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(first_line.get_color().casefold(), "#010101")
         self.assertEqual(second_line.get_color().casefold(), "#020202")
-        self.assertEqual(first.state.properties["color"], "#010101")
-        self.assertEqual(second.state.properties["color"], "#020202")
+        self.assertEqual(first.state, first_state)
+        self.assertEqual(second.state, second_state)
         self.assertEqual(events, [])
+
+    def test_delete_transaction_rolls_back_same_objects_without_events(self):
+        first_line, = self.axes.plot([0, 1], [1, 2])
+        second_line, = self.axes.plot([0, 1], [2, 3])
+        first = self._line_controller(
+            "first",
+            ComponentRole.DATA_PLOT,
+            first_line,
+        )
+        second = self._line_controller(
+            "second",
+            ComponentRole.DATA_PLOT,
+            second_line,
+        )
+        original_lines = tuple(self.axes.lines)
+        events = []
+        cleanup = []
+        self.registry.subscribe(events.append)
+        self.registry.add_cleanup_callback(
+            first.component_id,
+            lambda state: cleanup.append(state.id),
+        )
+        original_commit = second.commit_remove
+
+        def fail_commit(_handle):
+            raise RuntimeError("synthetic detach failure")
+
+        second.commit_remove = fail_commit
+        try:
+            result = self.registry.delete_transaction(
+                (first.component_id, second.component_id)
+            )
+        finally:
+            second.commit_remove = original_commit
+
+        self.assertFalse(result.ok)
+        self.assertIs(self.registry.get(first.component_id), first)
+        self.assertIs(self.registry.get(second.component_id), second)
+        self.assertIs(first.resolve_target(), first_line)
+        self.assertIs(second.resolve_target(), second_line)
+        self.assertEqual(tuple(self.axes.lines), original_lines)
+        self.assertFalse(first.deleted)
+        self.assertFalse(second.deleted)
+        self.assertEqual(events, [])
+        self.assertEqual(cleanup, [])
+        self.figure.canvas.draw_idle.assert_not_called()
+
+    def test_delete_transaction_verifier_failure_restores_container_order(self):
+        lines = [
+            self.axes.plot([0, 1], [index, index + 1])[0]
+            for index in range(4)
+        ]
+        first = self._line_controller(
+            "first",
+            ComponentRole.DATA_PLOT,
+            lines[1],
+        )
+        second = self._line_controller(
+            "second",
+            ComponentRole.DATA_PLOT,
+            lines[2],
+        )
+        original = tuple(self.axes.lines)
+
+        def reject_candidate():
+            raise RuntimeError("synthetic tree verifier failure")
+
+        result = self.registry.delete_transaction(
+            (first.component_id, second.component_id),
+            verifier=reject_candidate,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(tuple(self.axes.lines), original)
+        self.assertIs(self.axes.lines[1], lines[1])
+        self.assertIs(self.axes.lines[2], lines[2])
+
+    def test_delete_transaction_keeps_commit_when_repaint_fails(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "first",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        self.figure.canvas.draw_idle.side_effect = RuntimeError(
+            "synthetic repaint failure"
+        )
+
+        result = self.registry.delete_transaction(
+            (controller.component_id,)
+        )
+
+        self.assertTrue(result.ok)
+        self.assertNotIn(controller.component_id, self.registry)
+        self.assertNotIn(line, self.axes.lines)
+        self.assertEqual(len(result.notices), 1)
+        self.assertEqual(result.notices[0].level.value, "warning")
+        self.assertIn("repaint failed", result.notices[0].message)
+
+    def test_delete_transaction_commits_cleanup_events_and_one_draw(self):
+        first_line, = self.axes.plot([0, 1], [1, 2])
+        second_line, = self.axes.plot([0, 1], [2, 3])
+        first = self._line_controller(
+            "first",
+            ComponentRole.DATA_PLOT,
+            first_line,
+        )
+        second = self._line_controller(
+            "second",
+            ComponentRole.DATA_PLOT,
+            second_line,
+        )
+        events = []
+        cleanup = []
+        self.registry.subscribe(events.append)
+        for controller in (first, second):
+            self.registry.add_cleanup_callback(
+                controller.component_id,
+                lambda state: cleanup.append(state.id),
+            )
+        self.figure.canvas.draw_idle.reset_mock()
+
+        result = self.registry.delete_transaction(
+            ("first", "first", "second")
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(tuple(self.axes.lines), ())
+        self.assertEqual(cleanup, ["first", "second"])
+        self.assertEqual(
+            [event.kind for event in events],
+            [ComponentEventKind.REMOVED, ComponentEventKind.REMOVED],
+        )
+        self.assertEqual(self.figure.canvas.draw_idle.call_count, 1)
+
+    def test_delete_transaction_rejects_unknown_and_fixed_semantics(self):
+        registry = register_figure_components(self.figure)
+        title = registry.find_one(role=ComponentRole.TITLE)
+
+        self.assertTrue(registry.delete_transaction(()).ok)
+        self.assertFalse(
+            registry.delete_transaction(("missing-component",)).ok
+        )
+        self.assertFalse(
+            registry.delete_transaction((title.component_id,)).ok
+        )
+        self.assertIn(title.component_id, registry)
+
+    def test_delete_transaction_keeps_requested_ancestor_and_emits_postorder(self):
+        registry = register_figure_components(self.figure)
+        axes = registry.find_one(kind=ComponentKind.AXES)
+        title = registry.find_one(
+            parent_id=axes.component_id,
+            role=ComponentRole.TITLE,
+        )
+        events = []
+        registry.subscribe(events.append)
+
+        result = registry.delete_transaction(
+            (title.component_id, axes.component_id, axes.component_id)
+        )
+
+        self.assertTrue(result.ok)
+        self.assertNotIn(axes.component_id, registry)
+        removed_ids = [
+            event.component_id
+            for event in events
+            if event.kind is ComponentEventKind.REMOVED
+        ]
+        self.assertIn(title.component_id, removed_ids)
+        self.assertEqual(removed_ids[-1], axes.component_id)
+        deleted = [
+            change
+            for change in result.changes
+            if change.status.value == "deleted"
+        ]
+        self.assertEqual(
+            [change.component_id for change in deleted],
+            [axes.component_id],
+        )
 
     def test_empty_axes_can_select_palette_for_future_charts(self):
         registry = register_figure_components(self.figure)

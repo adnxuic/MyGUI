@@ -45,6 +45,7 @@ from code.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
     PaletteDefinition,
+    normalize_color,
 )
 from code.figuremodify.style_base.creation_defaults import (
     MATPLOTLIB_STYLE_PALETTE_SOURCE,
@@ -92,6 +93,129 @@ def _warning(message: str) -> ComponentNotice:
     return ComponentNotice(MessageLevel.WARNING, message)
 
 
+def _color_cycle_replacements_for_deletion(
+    registry: ComponentRegistry,
+    component_ids: Iterable[str],
+) -> tuple[ComponentState, ...]:
+    """Release palette slots consumed by chart components being removed.
+
+    The replacement states are submitted with the structural deletion, so a
+    failed detach/tree verification restores the exact original cursor.
+    """
+
+    requested = tuple(
+        dict.fromkeys(str(component_id) for component_id in component_ids)
+    )
+    existing = {
+        component_id: registry.get(component_id)
+        for component_id in requested
+        if component_id in registry
+    }
+    requested_set = set(existing)
+    roots = []
+    for component_id, controller in existing.items():
+        parent_id = controller.state.parent_id
+        visited: set[str] = set()
+        while parent_id is not None and parent_id not in requested_set:
+            if parent_id in visited:
+                return ()
+            visited.add(parent_id)
+            parent = registry.get(parent_id) if parent_id in registry else None
+            parent_id = parent.state.parent_id if parent is not None else None
+        if parent_id is None:
+            roots.append(component_id)
+
+    removed_ids: set[str] = set()
+    for component_id in roots:
+        removed_ids.add(component_id)
+        removed_ids.update(
+            controller.component_id
+            for controller in registry.descendants(component_id)
+        )
+
+    deleted_by_axes: dict[str, list[Any]] = {}
+    for component_id in removed_ids:
+        controller = registry.get(component_id)
+        if not {"color", "data"}.issubset(controller.capabilities()):
+            continue
+        parent_id = controller.state.parent_id
+        if parent_id is None or parent_id in removed_ids:
+            continue
+        try:
+            parent = registry.get(parent_id)
+        except Exception:
+            continue
+        if parent.state.kind is not ComponentKind.AXES:
+            continue
+        deleted_by_axes.setdefault(parent_id, []).append(controller)
+
+    replacements: list[ComponentState] = []
+    for axes_id, deleted in deleted_by_axes.items():
+        axes = registry.get(axes_id)
+        cycle = ColorCycleState.from_dict(
+            axes.state.properties.get("color_cycle")
+        )
+        palette = cycle.active_palette
+        if palette is None:
+            continue
+
+        occupied: set[int] = set()
+        for controller in registry.query(
+            parent_id=axes_id,
+            recursive=True,
+            capabilities={"color", "data"},
+        ):
+            if controller.component_id in removed_ids:
+                continue
+            try:
+                color = normalize_color(
+                    controller.state.properties["color"]
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            occupied.update(
+                index
+                for index, palette_color in enumerate(palette.colors)
+                if palette_color == color
+            )
+
+        released: list[tuple[int, int, str]] = []
+        for controller in deleted:
+            state = controller.state
+            try:
+                color = normalize_color(state.properties["color"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            matching = [
+                index
+                for index, palette_color in enumerate(palette.colors)
+                if palette_color == color
+            ]
+            if not matching:
+                # A one-off custom color never advanced this palette.
+                continue
+            expected = int(state.order) % len(palette.colors)
+            index = expected if expected in matching else matching[0]
+            released.append((int(state.order), index, state.id))
+
+        available = [
+            index
+            for _order, index, _component_id in sorted(released)
+            if index not in occupied
+        ]
+        if not available:
+            continue
+        next_index = available[0]
+        if cycle.next_index == next_index:
+            continue
+        cycle.activate(palette, next_index)
+        state = axes.state
+        properties = dict(state.properties)
+        properties["color_cycle"] = cycle.to_dict()
+        replacements.append(state.clone(properties=properties))
+    return tuple(replacements)
+
+
 def _column_ref(value: ColumnRef | dict[str, Any]) -> ColumnRef:
     return value if isinstance(value, ColumnRef) else ColumnRef.from_dict(value)
 
@@ -137,6 +261,43 @@ class AxesCommandService:
             role=role,
             selector=selector,
             recursive=recursive,
+        )
+
+    def delete_axes(self, axes_id: str) -> ComponentBatchChange:
+        """Delete one Axes subtree and keep remaining semantic indexes valid."""
+
+        try:
+            self._axes(axes_id)
+            self.registry.validate_tree()
+        except Exception as exc:
+            return ComponentBatchChange((), False, message=str(exc))
+        remaining = sorted(
+            (
+                controller
+                for controller in self.registry.query(kind=ComponentKind.AXES)
+                if controller.component_id != axes_id
+            ),
+            key=lambda controller: int(
+                controller.state.selector.get("index", controller.state.order)
+            ),
+        )
+        replacements = []
+        for index, controller in enumerate(remaining):
+            state = controller.state
+            if (
+                state.order == index
+                and state.selector.get("index") == index
+            ):
+                continue
+            replacements.append(
+                state.clone(
+                    order=index,
+                    selector={"index": index},
+                )
+            )
+        return self.registry.delete_transaction(
+            (axes_id,),
+            state_replacements=replacements,
         )
 
     def set_label_style(
@@ -307,7 +468,15 @@ class AxesCommandService:
     def peek_color(self, axes_id: str) -> ColorSelection:
         """Preview the next chart color without advancing the cycle."""
 
-        return self.cycle_state(axes_id).peek()
+        cycle = self.cycle_state(axes_id)
+        palette = cycle.active_palette
+        if palette is None:
+            return cycle.peek()
+        return self.preview_color_cycle(
+            axes_id,
+            palette,
+            cycle.next_index,
+        ).peek()
 
     def preview_color_cycle(
         self,
@@ -323,11 +492,39 @@ class AxesCommandService:
             active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE
             or active.id == fallback_palette.id
         ):
-            return cycle
-        return ColorCycleState(
-            fallback_palette,
-            max(0, int(fallback_index)) % len(fallback_palette.colors),
-        )
+            preview = ColorCycleState.from_dict(cycle.to_dict())
+        else:
+            preview = ColorCycleState(
+                fallback_palette,
+                max(0, int(fallback_index)) % len(fallback_palette.colors),
+            )
+        palette = preview.active_palette
+        if palette is None:
+            return preview
+        occupied: set[int] = set()
+        for controller in self.registry.query(
+            parent_id=axes_id,
+            recursive=True,
+            capabilities={"color", "data"},
+        ):
+            try:
+                color = normalize_color(
+                    controller.state.properties["color"]
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            occupied.update(
+                index
+                for index, palette_color in enumerate(palette.colors)
+                if palette_color == color
+            )
+        start = preview.next_index
+        for offset in range(len(palette.colors)):
+            candidate = (start + offset) % len(palette.colors)
+            if candidate not in occupied:
+                preview.activate(palette, candidate)
+                break
+        return preview
 
     def commit_color_selection(
         self,
@@ -970,6 +1167,30 @@ class TextRenderService:
         )
 
 
+class ComponentDeletionService:
+    """Submit dynamic component deletion to the Registry transaction."""
+
+    def __init__(self, registry: ComponentRegistry):
+        self.registry = registry
+
+    def delete_many(
+        self,
+        component_ids: Iterable[str],
+    ) -> ComponentBatchChange:
+        """Delete selected components as one identity-preserving transaction."""
+
+        ids = tuple(
+            dict.fromkeys(str(component_id) for component_id in component_ids)
+        )
+        return self.registry.delete_transaction(
+            ids,
+            state_replacements=_color_cycle_replacements_for_deletion(
+                self.registry,
+                ids,
+            ),
+        )
+
+
 class ComponentDependencyService:
     """Query and delete table-bound components from Registry state."""
 
@@ -1010,13 +1231,21 @@ class ComponentDependencyService:
     def delete_states(
         self,
         snapshots: Iterable[ComponentState],
-    ) -> None:
-        """Delete states."""
+    ) -> ComponentBatchChange:
+        """Delete table dependents through the shared physical transaction."""
 
-        with self.registry.batch_updates():
-            for state in snapshots:
-                if state.id in self.registry:
-                    self.registry.delete(state.id)
+        ids = tuple(
+            state.id
+            for state in snapshots
+            if state.id in self.registry
+        )
+        return self.registry.delete_transaction(
+            ids,
+            state_replacements=_color_cycle_replacements_for_deletion(
+                self.registry,
+                ids,
+            ),
+        )
 
     def restore_states(
         self,

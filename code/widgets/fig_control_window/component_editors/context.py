@@ -245,6 +245,13 @@ class MessagePresenter:
 
         self._detach_registry()
 
+    def discard_pending(self) -> None:
+        """Discard fallback messages already covered by a compound action."""
+
+        self._flush_timer.stop()
+        self._pending_changes.clear()
+        self._consumed_changes.clear()
+
 
 class ComponentEditorManager:
     """Create, synchronize, and dispose visible component Editors."""
@@ -416,6 +423,7 @@ class EditorContext:
     fitting: object
     text_rendering: object
     dependency_service: object | None = None
+    deletion_service: object | None = None
 
     @property
     def repository(self):

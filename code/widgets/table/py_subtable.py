@@ -405,6 +405,7 @@ class TableView(QTableView):
         self.setAlternatingRowColors(True)
         self.setWordWrap(False)
         self.setSortingEnabled(False)
+        self._disposed = False
 
         horizontal = self.horizontalHeader()
         horizontal.setMinimumSectionSize(60)
@@ -450,6 +451,8 @@ class TableView(QTableView):
             QTimer.singleShot(0, self._apply_column_widths)
 
     def _apply_column_widths(self):
+        if self._disposed or self.project_id not in self.repository.projects:
+            return
         self._applying_widths = True
         try:
             for index, column in enumerate(self.sheet.columns):
@@ -781,6 +784,20 @@ class TableView(QTableView):
         elif action == down:
             self.move_row(1)
 
+    def dispose(self) -> None:
+        """Detach repository callbacks and ignore queued UI refreshes."""
+
+        if self._disposed:
+            return
+        self._disposed = True
+        try:
+            self.repository.transaction_committed.disconnect(
+                self._repository_changed
+            )
+        except (RuntimeError, TypeError):
+            pass
+        self.setModel(None)
+
 
 class SheetTabWidget(QTabWidget):
     """Provide the sheet tab widget Qt widget."""
@@ -857,13 +874,7 @@ class PySubTable(QFrame):
         while self.tabWidget.count():
             widget = self.tabWidget.widget(0)
             if isinstance(widget, TableView):
-                try:
-                    self.repository.transaction_committed.disconnect(
-                        widget._repository_changed
-                    )
-                except (RuntimeError, TypeError):
-                    pass
-                widget.setModel(None)
+                widget.dispose()
             self.tabWidget.removeTab(0)
             if widget is not None:
                 widget.deleteLater()

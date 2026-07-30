@@ -82,6 +82,9 @@ class MainWindow(QMainWindow):
 
         self.title_bar = PyTitleBar(self, self.figure_window, self.fig_control_window, self.table)
         self.figure_window.requestStyleSelector.connect(self.title_bar.show_style_selector)
+        self.figure_window.projectCloseRequested.connect(
+            self.close_project_from_tab
+        )
         self.central_widget_layout.addWidget(self.title_bar, stretch=0)
 
         self.left_column = PyLeftColumn(self.table, self.fig_control_window)
@@ -364,14 +367,96 @@ class MainWindow(QMainWindow):
             status_messages.show_error(str(exc))
             QMessageBox.warning(self, "Import Data", str(exc))
 
+    def _project_close_choice(self, canvas):
+        """Ask how to handle one dirty project."""
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Warning)
+        dialog.setWindowTitle("Unsaved Project")
+        dialog.setText(
+            f'Save changes to "{canvas.project_name}" before closing?'
+        )
+        dialog.setInformativeText(
+            "Unsaved changes will be lost if you choose Discard."
+        )
+        dialog.setStandardButtons(
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.Save)
+        choice = dialog.exec()
+        dialog.deleteLater()
+        return choice
+
+    def _prepare_canvas_close(self, canvas) -> str | None:
+        """Return the accepted close mode, saving first when requested."""
+
+        if not self.figure_window.is_canvas_dirty(canvas):
+            return "clean"
+        choice = self._project_close_choice(canvas)
+        if choice == QMessageBox.Cancel:
+            return None
+        if choice == QMessageBox.Save:
+            saved = self.title_bar.menu_bar.save_canvas(
+                canvas,
+                announce=False,
+            )
+            return "saved" if saved else None
+        if choice == QMessageBox.Discard:
+            return "discarded"
+        return None
+
+    def close_project_from_tab(self, index: int) -> bool:
+        """Close the exact tab requested by its context menu."""
+
+        if index < 0 or index >= self.figure_window.tabwindow.count():
+            return False
+        canvas = self.figure_window.tabwindow.widget(index)
+        mode = self._prepare_canvas_close(canvas)
+        if mode is None:
+            return False
+        project_name = canvas.project_name
+        if not self.figure_window.close_project_at(index):
+            status_messages.show_error(
+                f"Could not close project: {project_name}"
+            )
+            return False
+        if mode == "saved":
+            status_messages.show_success(
+                f"Project saved and closed: {project_name}"
+            )
+        elif mode == "discarded":
+            status_messages.show_success(
+                f"Project closed without saving: {project_name}"
+            )
+        else:
+            status_messages.show_success(f"Project closed: {project_name}")
+        return True
+
+    def close_without_prompt(self) -> bool:
+        """Close programmatically without unsaved-project dialogs."""
+
+        self._skip_close_confirmation = True
+        return self.close()
+
     def closeEvent(self, event):
         """Persist layout state and release global callbacks before closing."""
 
+        should_confirm = (
+            self.isVisible()
+            and not getattr(self, "_skip_close_confirmation", False)
+        )
+        if should_confirm:
+            for canvas in self.figure_window.canvases():
+                if self._prepare_canvas_close(canvas) is None:
+                    event.ignore()
+                    return
         self._save_workspace_layout()
         if hasattr(self, "bottom_bar"):
             status_messages.clear_status_handler(self.bottom_bar.show_message)
-        if hasattr(self.figure_window, "cancel_pending_draws"):
-            self.figure_window.cancel_pending_draws()
+        if hasattr(self.figure_window, "clear_figures"):
+            self.figure_window.clear_figures()
+        if hasattr(self.table, "clear_tables"):
+            self.table.clear_tables()
         super().closeEvent(event)
 
 

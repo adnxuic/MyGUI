@@ -35,6 +35,35 @@ These settings are application preferences. They are not written to `.mygui.json
 - The Axes Inspector keeps the existing navigation as six scrollable pages: General, X/Y Axis, Spines, Ticks/Grid, Title/Labels, and Legend. Every region binds its semantic Controller directly.
 - Chart creation dialogs reuse controller-free line appearance, data reference, and interpolation-option inputs. Accepting a dialog still delegates component creation to the active canvas.
 
+## Project tab close and application exit
+
+The canvas tab bar resolves context menus with `tabAt(position)`. `Rename
+Project` and `Close Project` therefore operate on the clicked tab without
+switching a background project.
+
+Each project has a runtime clean fingerprint made from its full typed Table
+snapshot and normalized schema-v6 component tree. A new project has no clean
+baseline and is dirty. Loading or completing an atomic save establishes the
+baseline. Table edits, project rename, Component changes, Undo, and
+Matplotlib toolbar view changes are detected by comparing a fresh snapshot;
+fingerprint errors are treated as dirty.
+
+Closing a dirty tab offers Save, Discard, and Cancel:
+
+- Save writes to `canvas.project_path`, or opens Save As when no path exists.
+  Cancelling Save As or a failed write leaves the project open.
+- Discard closes without writing.
+- Cancel leaves every project object unchanged.
+- A clean project closes without a prompt.
+
+Closing removes the matching project ID from the Canvas map, Figure
+Inspector, Table stack, `TableRepository`, and Undo stack, then disposes
+Registry, repository, TeX, MATLAB, fitting, and redraw callbacks
+idempotently. Closing the final project shows the Canvas, Table, and Inspector
+empty states. Application exit runs the same checks for every project before
+disposing any of them; a Cancel or failed save aborts exit, while projects
+saved earlier in that pass remain clean.
+
 ## Figure DPI
 
 `PyFigureCanvas.document_dpi` is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change `document_dpi`, project `figure.dpi`, figure size in inches, or default export dimensions.

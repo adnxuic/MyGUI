@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Literal
+from enum import Enum
+from typing import Callable
 
 from Qt_core import (
     QFrame,
@@ -11,6 +12,7 @@ from Qt_core import (
     QVBoxLayout,
     QWidget,
 )
+from code.figuremodify.components import DeletionPolicy
 
 
 class EditorSection:
@@ -32,6 +34,14 @@ class EditorSection:
 SectionFactory = Callable[[object, object, QWidget | None], QWidget]
 
 
+class EditorPlacement(str, Enum):
+    """Purely visual destination for a registered Inspector profile."""
+
+    CHART = "chart"
+    ELEMENT = "element"
+    SEMANTIC = "semantic"
+
+
 @dataclass(frozen=True, slots=True)
 class SectionSpec:
     """Describe section spec values shared across application layers."""
@@ -49,7 +59,8 @@ class EditorProfile:
     key: str
     title: str
     sections: tuple[SectionSpec, ...]
-    deletion: Literal["remove", "none"] = "none"
+    placement: EditorPlacement = EditorPlacement.SEMANTIC
+    instance_label_prefix: str = ""
 
 
 class ComponentInspector(QFrame):
@@ -69,7 +80,9 @@ class ComponentInspector(QFrame):
         self.controller = controller
         self.context = context
         self.profile = profile
-        self.can_delete = profile.deletion == "remove"
+        self.can_delete = (
+            controller.DELETION_POLICY is DeletionPolicy.REMOVE
+        )
         self._sections: list[QWidget] = []
         self._sections_by_key: dict[str, QWidget] = {}
         self._disposed = False
@@ -134,8 +147,11 @@ class ComponentInspector(QFrame):
 
         if not self.can_delete:
             return False
-        result = self.context.registry.delete(
-            self.controller.component_id
+        service = getattr(self.context, "deletion_service", None)
+        result = (
+            service.delete_many((self.controller.component_id,))
+            if service is not None
+            else self.context.registry.delete(self.controller.component_id)
         )
         return self.context.messages.present(
             result,

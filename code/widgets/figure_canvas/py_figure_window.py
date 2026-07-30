@@ -1,5 +1,7 @@
 """Manage the tabbed collection of application figures."""
 
+import hashlib
+import json
 from typing import Any, Optional
 
 from Qt_core import *
@@ -29,30 +31,32 @@ class FigureTabWidget(QTabWidget):
     def __init__(self, figure_window, parent=None):
         super().__init__(parent)
         self.figure_window = figure_window
+        tab_bar = self.tabBar()
+        tab_bar.setContextMenuPolicy(Qt.CustomContextMenu)
+        tab_bar.customContextMenuRequested.connect(self.show_context_menu)
 
-    def mousePressEvent(self, event):
-        """Handle pointer presses for the widget."""
+    def show_context_menu(self, position):
+        """Show the menu for the exact tab under the pointer."""
 
-        if event.button() == Qt.RightButton:
-            clicked_tab_index = self.tabBar().tabAt(event.position().toPoint())
-            if clicked_tab_index != -1:
-                self.show_context_menu(event.globalPosition().toPoint(), clicked_tab_index)
-        super().mousePressEvent(event)
-
-    def show_context_menu(self, position, tab_index):
-        """Show context menu."""
-
+        tab_index = self.tabBar().tabAt(position)
+        if tab_index < 0:
+            return
         menu = QMenu(self)
-        rename_action = menu.addAction("Rename")
-        action = menu.exec(position)
+        rename_action = menu.addAction("Rename Project")
+        menu.addSeparator()
+        close_action = menu.addAction("Close Project")
+        action = menu.exec(self.tabBar().mapToGlobal(position))
         if action == rename_action:
             self.figure_window.rename_project_from_tab(tab_index)
+        elif action == close_action:
+            self.figure_window.projectCloseRequested.emit(tab_index)
 
 
 class PyFigureWindow(QFrame):
     """Provide the py figure window Qt widget."""
 
     requestStyleSelector = Signal()
+    projectCloseRequested = Signal(int)
 
     def __init__(
         self,
@@ -73,6 +77,7 @@ class PyFigureWindow(QFrame):
         self.color_library = color_library or ColorLibrary(parent=self)
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
+        self._clean_fingerprints: dict[str, str] = {}
         self.table = None
 
         self.current_figure_inspector: Optional[FigureInspectorPanel] = None
@@ -154,7 +159,7 @@ class PyFigureWindow(QFrame):
             color_library=self.color_library,
             component_tree=component_tree,
         )
-        self.canvas['canva' + str(len(self.canvas) + 1)] = canva
+        self.canvas[project.id] = canva
 
         figure_inspector = (
             self.figure_inspector_host.add_figure_inspector()
@@ -165,6 +170,56 @@ class PyFigureWindow(QFrame):
 
         self.tabwindow.setCurrentWidget(canva)
         self._update_empty_state()
+
+    @staticmethod
+    def _snapshot_fingerprint(snapshot: dict[str, Any]) -> str:
+        payload = json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+    def mark_canvas_clean(
+        self,
+        canvas: PyFigureCanvas,
+        *,
+        snapshot: dict[str, Any] | None = None,
+    ) -> None:
+        """Record the current persisted state as the clean baseline."""
+
+        if snapshot is None:
+            from code.project_io import project_snapshot
+
+            snapshot = project_snapshot(self, canvas=canvas)
+        self._clean_fingerprints[canvas.project_id] = (
+            self._snapshot_fingerprint(snapshot)
+        )
+
+    def is_canvas_dirty(self, canvas: PyFigureCanvas) -> bool:
+        """Return whether a canvas differs from its latest load/save state."""
+
+        baseline = self._clean_fingerprints.get(canvas.project_id)
+        if baseline is None:
+            return True
+        try:
+            from code.project_io import project_snapshot
+
+            current = project_snapshot(self, canvas=canvas)
+            return self._snapshot_fingerprint(current) != baseline
+        except Exception:
+            # Snapshot failures must never silently permit data loss.
+            return True
+
+    def canvases(self) -> tuple[PyFigureCanvas, ...]:
+        """Return project canvases in tab order."""
+
+        return tuple(
+            self.tabwindow.widget(index)
+            for index in range(self.tabwindow.count())
+        )
 
     def change_current_canvas(self):
         """Change current canvas."""
@@ -219,10 +274,11 @@ class PyFigureWindow(QFrame):
         while self.tabwindow.count():
             widget = self.tabwindow.widget(0)
             self.tabwindow.removeTab(0)
-            if hasattr(widget, "cancel_pending_draw"):
-                widget.cancel_pending_draw()
+            if hasattr(widget, "dispose"):
+                widget.dispose()
             widget.deleteLater()
         self.canvas.clear()
+        self._clean_fingerprints.clear()
         self.current_canva = None
         self.current_figure_inspector = None
         self._update_empty_state()
@@ -236,19 +292,45 @@ class PyFigureWindow(QFrame):
             canvas = self.tabwindow.widget(index)
             if getattr(canvas, "project_name", None) != project_name:
                 continue
+            return self.remove_project_at(index)
+        return False
+
+    def remove_project_at(self, index: int) -> bool:
+        """Remove one Figure-side project without prompting or table cleanup."""
+
+        if index < 0 or index >= self.tabwindow.count():
+            return False
+        canvas = self.tabwindow.widget(index)
+        project_id = getattr(canvas, "project_id", None)
+        if hasattr(canvas, "dispose"):
+            canvas.dispose()
+        was_blocked = self.tabwindow.blockSignals(True)
+        try:
             self.tabwindow.removeTab(index)
-            if hasattr(canvas, "cancel_pending_draw"):
-                canvas.cancel_pending_draw()
-            canvas.deleteLater()
             if self.figure_inspector_host is not None:
                 self.figure_inspector_host.remove_figure_inspector(index)
-            self.canvas = {
-                key: value
-                for key, value in self.canvas.items()
-                if value is not canvas
-            }
-            self.change_current_canvas()
-            return
+        finally:
+            self.tabwindow.blockSignals(was_blocked)
+        if project_id is not None:
+            self.canvas.pop(project_id, None)
+            self._clean_fingerprints.pop(project_id, None)
+        canvas.deleteLater()
+        self.change_current_canvas()
+        return True
+
+    def close_project_at(self, index: int) -> bool:
+        """Remove a complete project from Figure, Table, and Repository state."""
+
+        if index < 0 or index >= self.tabwindow.count():
+            return False
+        canvas = self.tabwindow.widget(index)
+        project_id = canvas.project_id
+        if not self.remove_project_at(index):
+            return False
+        if self.table is not None:
+            self.table.remove_project_table(project_id)
+        self.change_current_canvas()
+        return True
 
     def cancel_pending_draws(self):
         """Cancel pending draws."""

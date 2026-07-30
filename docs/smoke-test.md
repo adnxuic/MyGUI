@@ -57,6 +57,32 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 23. Open a second different project and confirm it coexists with the current project.
 24. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
 25. Enter invalid expression, data reference, color, range, and interpolation values. Confirm each failed operation restores the last valid control and artist state and reports exactly one red Message Bar error.
+26. Add two Function Curves. Right-click the first instance label while the
+    second is selected and delete it; confirm only the clicked curve,
+    Inspector, and artist disappear and one green result is shown.
+27. Right-click the `function curve` role label. Confirm the batch dialog
+    starts fully selected, `Clear All` disables `Delete (0)`, partial
+    selection deletes only checked instances, and deleting all removes the
+    empty role navigation.
+    With a color palette active, delete the middle of three palette-colored
+    charts and confirm the next creation previews the released middle color;
+    surviving chart colors must not change.
+    Repeat with an injected or otherwise reproducible failure and confirm the
+    original artists, labels, expanded page, callbacks, and Inspector objects
+    and palette cursor remain in place; only one red result is shown.
+28. Create three Axes and delete the first, middle, and last in separate runs.
+    Confirm the dialog reports the cascade count, stable surviving IDs and
+    subplot slots persist after save/open, labels remain `axe1...axeN`, and
+    deleting the last Axes shows No Axes. On a forced failure, confirm the
+    Figure Axes order, current Axes, shared/twinned links, Axes Panel, and
+    navigation buttons do not change and no intermediate removal is visible.
+29. Save one of two projects while its tab is in the background and confirm
+    the file contains that project. Modify a saved project through the Table,
+    Component Inspector, and toolbar zoom, then close its tab and verify
+    Save/Discard/Cancel, Save As cancellation, and save failure behavior.
+30. Exit with multiple dirty projects. Confirm any Cancel or failed save
+    aborts exit without closing a project, while an earlier successful save
+    remains clean.
 
 ## Matplotlib Style Creation Defaults
 

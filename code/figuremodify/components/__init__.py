@@ -1,6 +1,6 @@
 """Qt-independent controllers for Matplotlib Figure components."""
 
-from .base import ComponentController
+from .base import ComponentController, RemovalHandle
 from .controllers import (
     CONTROLLER_TYPES,
     LINESTYLE_ALIASES,
@@ -50,6 +50,7 @@ from .models import (
     ComponentNotice,
     ComponentRole,
     ComponentState,
+    DeletionPolicy,
     KEEP_RUNTIME_DATA,
     MessageLevel,
     PropertySpec,
@@ -72,6 +73,7 @@ __all__ = [
     "ComponentChange",
     "ComponentController",
     "ComponentDeletedError",
+    "DeletionPolicy",
     "ComponentError",
     "ComponentEvent",
     "ComponentEventKind",
@@ -96,6 +98,7 @@ __all__ = [
     "LineController",
     "MessageLevel",
     "PropertySpec",
+    "RemovalHandle",
     "ScatterController",
     "SpineController",
     "TextController",

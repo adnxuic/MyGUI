@@ -169,3 +169,11 @@ Before Table or Figure application state changes, the loader validates:
 - data references, compatible column types, interpolation methods, and fitting engines.
 
 Project writes use a temporary file followed by atomic replacement. If the operating system blocks replacement, saving fails and leaves the previous project file unchanged. `size_inches` and `dpi` remain document/export values; display device-pixel ratio does not alter them.
+
+`project_snapshot(figure_window, canvas=...)` and
+`save_project_snapshot(path, figure_window, canvas=...)` accept an explicit
+target Canvas, so saving a background tab cannot serialize the current tab by
+mistake. A successful save returns the written snapshot, updates that Canvas
+path, and establishes its runtime clean fingerprint. Dirty fingerprints,
+selected tabs, Inspector state, and close-dialog choices are runtime-only and
+are not added to schema v6.

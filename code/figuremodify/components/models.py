@@ -125,6 +125,14 @@ class ChangeStatus(str, Enum):
     NOOP = "noop"
 
 
+class DeletionPolicy(str, Enum):
+    """Runtime business policy for removing a Figure component."""
+
+    REMOVE = "remove"
+    HIDE = "hide"
+    FORBID = "forbid"
+
+
 class MessageLevel(str, Enum):
     """User-facing severity carried without importing the GUI message bar."""
 
