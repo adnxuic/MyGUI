@@ -78,12 +78,15 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     Repeat with an injected or otherwise reproducible failure and confirm the
     original artists, tree selection/expansion, callbacks, and Inspector objects
     and palette cursor remain in place; only one red result is shown.
-28. Create three Axes and delete the first, middle, and last in separate runs.
-    Confirm the dialog reports the cascade count, stable surviving IDs and
-    subplot slots persist after save/open, labels remain `Axes 1...Axes N`,
-    and deleting the last Axes shows the Figure root Inspector. On a forced failure, confirm the
-    Figure Axes order, current Axes, shared/twinned links, Axes Panel, and
-    tree selection do not change and no intermediate removal is visible.
+28. Create a 2x2 Axes layout and delete the first, middle, and last Axes in
+    separate runs. Confirm the deleted cell remains empty; every surviving
+    Axes keeps its original position and subplot slot without overlap or
+    expansion. Confirm the dialog reports the cascade count, stable surviving
+    IDs and subplot slots persist after save/open, labels remain
+    `Axes 1...Axes N`, and deleting the final remaining Axes shows the Figure
+    root Inspector. On a forced failure, confirm the Figure Axes order,
+    current Axes, shared/twinned links, Axes Panel, tree selection, and layout
+    do not change and no intermediate removal is visible.
 29. Save one of two projects while its tab is in the background and confirm
     the file contains that project. Modify a saved project through the Table,
     Component Inspector, and toolbar zoom, then close its tab and verify

@@ -84,6 +84,103 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
         return inspector, toolbox
 
+    def _replace_with_two_by_two_axes(self):
+        existing = list(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES)
+        )
+        for controller in reversed(existing):
+            self.assertTrue(self.canvas.delete_axes(controller.component_id))
+        self.canvas.add_axes(2, 2)
+        self.canvas.fig.canvas.draw()
+        axes = sorted(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        self.assertEqual(len(axes), 4)
+        return axes
+
+    def _assert_two_by_two_delete_preserves_layout(self, deleted_index):
+        axes = self._replace_with_two_by_two_axes()
+
+        def bounds(controller):
+            return tuple(
+                float(value)
+                for value in controller.resolve_target().get_position().bounds
+            )
+
+        before = {}
+        for controller in axes:
+            target = controller.resolve_target()
+            subplot_spec = target.get_subplotspec()
+            target_bounds = bounds(controller)
+            self.assertEqual(
+                tuple(controller.state.properties["position"]),
+                target_bounds,
+            )
+            before[controller.component_id] = {
+                "bounds": target_bounds,
+                "subplot": controller.state.data["subplot"].copy(),
+                "spec": (
+                    subplot_spec.get_geometry(),
+                    subplot_spec.num1,
+                    subplot_spec.num2,
+                ),
+            }
+
+        deleted = axes[deleted_index]
+        self.assertTrue(self.canvas.delete_axes(deleted.component_id))
+        self.canvas.fig.canvas.draw()
+
+        remaining = sorted(
+            self.canvas.component_registry.query(kind=ComponentKind.AXES),
+            key=lambda item: item.state.selector["index"],
+        )
+        expected_ids = [
+            controller.component_id
+            for controller in axes
+            if controller.component_id != deleted.component_id
+        ]
+        self.assertEqual(
+            [controller.component_id for controller in remaining],
+            expected_ids,
+        )
+        self.assertEqual(
+            [controller.state.selector["index"] for controller in remaining],
+            [0, 1, 2],
+        )
+        self.assertEqual(
+            [controller.state.order for controller in remaining],
+            [0, 1, 2],
+        )
+        for controller in remaining:
+            target = controller.resolve_target()
+            subplot_spec = target.get_subplotspec()
+            expected = before[controller.component_id]
+            self.assertEqual(
+                controller.state.data["subplot"],
+                expected["subplot"],
+            )
+            self.assertEqual(
+                (
+                    subplot_spec.get_geometry(),
+                    subplot_spec.num1,
+                    subplot_spec.num2,
+                ),
+                expected["spec"],
+            )
+            for actual, original in zip(
+                bounds(controller), expected["bounds"]
+            ):
+                self.assertAlmostEqual(actual, original, places=12)
+            self.assertEqual(
+                tuple(controller.state.properties["position"]),
+                bounds(controller),
+            )
+        self.assertEqual(
+            len({bounds(controller) for controller in remaining}),
+            len(remaining),
+        )
+
     def test_batch_dialog_defaults_to_all_and_disables_empty_confirmation(self):
         dialog = ComponentBatchDeleteDialog(
             (("one", "curve0"), ("two", "curve1")),
@@ -615,6 +712,15 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.canvas.component_registry.validate_tree()
         self.canvas.component_snapshot()
 
+    def test_axes_delete_preserves_two_by_two_layout_after_first_slot(self):
+        self._assert_two_by_two_delete_preserves_layout(0)
+
+    def test_axes_delete_preserves_two_by_two_layout_after_middle_slot(self):
+        self._assert_two_by_two_delete_preserves_layout(1)
+
+    def test_axes_delete_preserves_two_by_two_layout_after_last_slot(self):
+        self._assert_two_by_two_delete_preserves_layout(3)
+
     def test_axes_delete_failures_preserve_matplotlib_registry_and_ui_identity(self):
         self.canvas.add_axes()
         registry = self.canvas.component_registry
@@ -718,6 +824,14 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         try:
             with mock.patch.object(
                 survivor,
+                "read_state",
+                side_effect=RuntimeError("injected live state failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            with mock.patch.object(
+                survivor,
                 "apply_state",
                 side_effect=RuntimeError("injected survivor failure"),
             ):
@@ -777,15 +891,20 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
 
     def test_axes_delete_round_trips_through_schema_v6(self):
-        self.canvas.add_axes()
-        axes = sorted(
+        axes = self._replace_with_two_by_two_axes()
+        self.assertTrue(self.canvas.delete_axes(axes[1].component_id))
+        surviving = sorted(
             self.canvas.component_registry.query(kind=ComponentKind.AXES),
             key=lambda item: item.state.selector["index"],
         )
-        self.assertTrue(self.canvas.delete_axes(axes[0].component_id))
-        surviving = self.canvas.component_registry.query(
-            kind=ComponentKind.AXES
-        )[0].state
+        surviving_ids = [item.component_id for item in surviving]
+        surviving_subplots = [
+            item.state.data["subplot"].copy() for item in surviving
+        ]
+        surviving_positions = [
+            tuple(float(value) for value in item.resolve_target().get_position().bounds)
+            for item in surviving
+        ]
         path = Path(self.directory.name, "axes-delete.mygui.json")
         self.assertTrue(
             self.window.title_bar.menu_bar._save_project_to(
@@ -804,18 +923,46 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             restored_axes = restored.component_registry.query(
                 kind=ComponentKind.AXES
             )
-            self.assertEqual(len(restored_axes), 1)
+            restored_axes.sort(
+                key=lambda item: item.state.selector["index"]
+            )
+            self.assertEqual(len(restored_axes), 3)
             self.assertEqual(
-                restored_axes[0].component_id,
-                surviving.id,
+                [item.component_id for item in restored_axes],
+                surviving_ids,
             )
             self.assertEqual(
-                restored_axes[0].state.selector["index"],
-                0,
+                [item.state.selector["index"] for item in restored_axes],
+                [0, 1, 2],
             )
             self.assertEqual(
-                restored_axes[0].state.data["subplot"],
-                surviving.data["subplot"],
+                [item.state.data["subplot"] for item in restored_axes],
+                surviving_subplots,
+            )
+            for controller, original_position in zip(
+                restored_axes, surviving_positions
+            ):
+                restored_position = tuple(
+                    float(value)
+                    for value in controller.resolve_target().get_position().bounds
+                )
+                for actual, original in zip(
+                    restored_position, original_position
+                ):
+                    self.assertAlmostEqual(actual, original, places=12)
+            self.assertEqual(
+                len(
+                    {
+                        tuple(
+                            float(value)
+                            for value in controller.resolve_target()
+                            .get_position()
+                            .bounds
+                        )
+                        for controller in restored_axes
+                    }
+                ),
+                len(restored_axes),
             )
         finally:
             loaded.close_without_prompt()

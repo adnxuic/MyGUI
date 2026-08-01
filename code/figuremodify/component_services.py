@@ -269,32 +269,37 @@ class AxesCommandService:
         try:
             self._axes(axes_id)
             self.registry.validate_tree()
+            remaining = sorted(
+                (
+                    controller
+                    for controller in self.registry.query(
+                        kind=ComponentKind.AXES
+                    )
+                    if controller.component_id != axes_id
+                ),
+                key=lambda controller: int(
+                    controller.state.selector.get(
+                        "index", controller.state.order
+                    )
+                ),
+            )
+            replacements = []
+            for index, controller in enumerate(remaining):
+                cached_state = controller.state
+                if (
+                    cached_state.order == index
+                    and cached_state.selector.get("index") == index
+                ):
+                    continue
+                live_state = controller.read_state(strict=True)
+                replacements.append(
+                    live_state.clone(
+                        order=index,
+                        selector={"index": index},
+                    )
+                )
         except Exception as exc:
             return ComponentBatchChange((), False, message=str(exc))
-        remaining = sorted(
-            (
-                controller
-                for controller in self.registry.query(kind=ComponentKind.AXES)
-                if controller.component_id != axes_id
-            ),
-            key=lambda controller: int(
-                controller.state.selector.get("index", controller.state.order)
-            ),
-        )
-        replacements = []
-        for index, controller in enumerate(remaining):
-            state = controller.state
-            if (
-                state.order == index
-                and state.selector.get("index") == index
-            ):
-                continue
-            replacements.append(
-                state.clone(
-                    order=index,
-                    selector={"index": index},
-                )
-            )
         return self.registry.delete_transaction(
             (axes_id,),
             state_replacements=replacements,

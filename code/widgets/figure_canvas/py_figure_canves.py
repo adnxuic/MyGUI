@@ -543,8 +543,10 @@ class PyFigureCanvas(QWidget):
                 }
             },
         )
+        axes_controller = AxesController(axes_state, target=axe)
+        axes_controller.sync_from_target(strict=True)
         self.component_registry.register(
-            AxesController(axes_state),
+            axes_controller,
             target=axe,
         )
         create_semantic_children(

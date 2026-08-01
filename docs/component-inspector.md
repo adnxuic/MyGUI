@@ -137,8 +137,11 @@ complete semantic/dynamic subtree. Surviving Axes retain their component IDs
 and subplot `layout_group`/`slot`, while `order`, selector `index`, and
 `Axes 1...Axes N` labels become contiguous. The next Axes at the deleted position
 is selected, or the preceding Axes when the last position was removed. An
-empty Figure selects its Figure root Inspector. Figure itself is closed
-through its project tab, not through Component deletion.
+empty Figure selects its Figure root Inspector. Deleting one cell from a
+multi-cell subplot layout leaves that cell empty: every surviving Axes keeps
+its existing position and `SubplotSpec` instead of expanding or moving into
+another cell. Figure itself is closed through its project tab, not through
+Component deletion.
 
 Axes reindex state and the target subtree are submitted in the same Registry
 transaction. Until commit, the existing Axes Panel, current Inspector,
