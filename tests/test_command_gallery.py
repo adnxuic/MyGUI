@@ -181,7 +181,7 @@ class LazySettingsDialogTests(unittest.TestCase):
 
     def test_settings_dialog_is_lazy_parented_and_can_reset_layout(self):
         host = QMainWindow()
-        left_column = PyLeftColumn(QFrame(), None)
+        left_column = PyLeftColumn()
         host.setCentralWidget(left_column)
         reset_layout = Mock()
         left_column.set_reset_layout_callback(reset_layout)

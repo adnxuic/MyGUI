@@ -1,5 +1,6 @@
 """Start MyGUI and compose its top-level Qt workspace."""
 
+import ctypes
 import sys
 from pathlib import Path
 
@@ -14,9 +15,14 @@ from code.database import TableRepository
 from code.excel_io import import_excel_into_workspace, is_supported_excel_workbook
 from code.text_io import import_text_into_workspace
 from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
+from code.widgets.component_tree import ComponentTreeHost
 from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
 from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
-from code.widgets.left_column.py_left_column import PyLeftColumn
+from code.widgets.left_column import (
+    ExplorerMode,
+    LeftExplorerHost,
+    PyLeftColumn,
+)
 from code.widgets.mainwindow_init import mainwindow_qss
 from code.widgets.right_column.py_right_column import PyRightColumn
 from code.widgets.table.py_table import PyTable
@@ -25,13 +31,41 @@ from code.widgets.title_bar.py_title_bar import PyTitleBar
 from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
+APP_ICON_PATH = Path("pictures/icons/app_icon.ico")
+WINDOWS_APP_USER_MODEL_ID = "MyGUI.Desktop"
+
+
+def configure_windows_taskbar_identity() -> bool:
+    """Give the process a stable Windows taskbar identity when supported."""
+
+    if sys.platform != "win32":
+        return False
+    try:
+        result = (
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                WINDOWS_APP_USER_MODEL_ID
+            )
+        )
+    except (AttributeError, OSError):
+        return False
+    return result == 0
+
+
+def configure_application_icon(application: QApplication) -> QIcon:
+    """Apply the shared application icon and return the loaded Qt icon."""
+
+    icon = QIcon(str(APP_ICON_PATH))
+    application.setWindowIcon(icon)
+    return icon
+
+
 class MainWindow(QMainWindow):
     """Coordinate the application's table, Figure, and Inspector workspaces."""
 
     WORKSPACE_SETTINGS_GROUP = "workspaceLayout"
-    WORKSPACE_SETTINGS_VERSION = 1
+    WORKSPACE_SETTINGS_VERSION = 2
     DEFAULT_OUTER_SPLITTER_SIZES = (45, 55)
-    DEFAULT_INNER_SPLITTER_SIZES = (420, 240)
+    DEFAULT_EXPLORER_SPLITTER_SIZES = (420, 240)
     MIN_CANVAS_WIDTH = 400
     MIN_DEFAULT_LEFT_WIDTH = 572
     MAX_DEFAULT_LEFT_WIDTH = 760
@@ -42,8 +76,13 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings
         self._workspace_layout_restored = False
-        self._last_visible_inner_sizes = list(self.DEFAULT_INNER_SPLITTER_SIZES)
+        self._last_visible_explorer_sizes = list(
+            self.DEFAULT_EXPLORER_SPLITTER_SIZES
+        )
+        self._explorer_mode = ExplorerMode.TABLE
+        self._explorer_visible = True
         self.setWindowTitle("MyGUI")
+        self.setWindowIcon(QIcon(str(APP_ICON_PATH)))
         self.setup_ui()
         self.setAcceptDrops(True)
 
@@ -67,6 +106,21 @@ class MainWindow(QMainWindow):
         self.table = PyTable(self.repository)
         self.table.setMinimumWidth(220)
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.component_tree_host = ComponentTreeHost()
+        self.component_tree_host.setMinimumWidth(220)
+        self.component_tree_host.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding,
+        )
+        self.left_explorer = LeftExplorerHost(
+            self.table,
+            self.component_tree_host,
+        )
+        self.left_explorer.setMinimumWidth(220)
+        self.left_explorer.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding,
+        )
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.figure_window = PyFigureWindow(
@@ -75,6 +129,7 @@ class MainWindow(QMainWindow):
             ),
             repository=self.repository,
             color_library=self.color_library,
+            component_tree_host=self.component_tree_host,
         )
         self.figure_window.setMinimumWidth(self.MIN_CANVAS_WIDTH)
         self.figure_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -87,20 +142,25 @@ class MainWindow(QMainWindow):
         )
         self.central_widget_layout.addWidget(self.title_bar, stretch=0)
 
-        self.left_column = PyLeftColumn(self.table, self.fig_control_window)
+        self.left_column = PyLeftColumn()
         self.left_column.set_reset_layout_callback(self.reset_workspace_layout)
         self.right_column = PyRightColumn(self.fig_control_window.layout)
         self.left_column.setFixedWidth(CONTROL_SIZES["activity_rail"])
         self.right_column.setFixedWidth(CONTROL_SIZES["activity_rail"])
 
-        self.table_control_splitter = QSplitter(Qt.Horizontal)
-        self.table_control_splitter.setObjectName("table_control_splitter")
-        self.table_control_splitter.setChildrenCollapsible(False)
-        self.table_control_splitter.addWidget(self.table)
-        self.table_control_splitter.addWidget(self.fig_control_window)
-        self.table_control_splitter.setStretchFactor(0, 0)
-        self.table_control_splitter.setStretchFactor(1, 1)
-        self.table_control_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.explorer_control_splitter = QSplitter(Qt.Horizontal)
+        self.explorer_control_splitter.setObjectName(
+            "explorer_control_splitter"
+        )
+        self.explorer_control_splitter.setChildrenCollapsible(False)
+        self.explorer_control_splitter.addWidget(self.left_explorer)
+        self.explorer_control_splitter.addWidget(self.fig_control_window)
+        self.explorer_control_splitter.setStretchFactor(0, 0)
+        self.explorer_control_splitter.setStretchFactor(1, 1)
+        self.explorer_control_splitter.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding,
+        )
 
         self.left_workspace = QWidget()
         self.left_workspace.setObjectName("left_workspace")
@@ -109,7 +169,7 @@ class MainWindow(QMainWindow):
         self.left_middle_layout.setSpacing(0)
         self.left_middle_layout.setContentsMargins(0, 0, 0, 0)
         self.left_middle_layout.addWidget(self.left_column)
-        self.left_middle_layout.addWidget(self.table_control_splitter)
+        self.left_middle_layout.addWidget(self.explorer_control_splitter)
         self.left_middle_layout.addWidget(self.right_column)
 
         self.workspace_splitter = QSplitter(Qt.Horizontal)
@@ -131,9 +191,12 @@ class MainWindow(QMainWindow):
 
         self._restore_workspace_layout()
         self.workspace_splitter.splitterMoved.connect(self._workspace_splitter_moved)
-        self.table_control_splitter.splitterMoved.connect(self._table_splitter_moved)
-        self.left_column.table_button.pressed.connect(self._remember_visible_inner_sizes)
-        self.left_column.table_button.toggled.connect(self._table_visibility_changed)
+        self.explorer_control_splitter.splitterMoved.connect(
+            self._explorer_splitter_moved
+        )
+        self.left_column.explorerModeRequested.connect(
+            self._explorer_mode_requested
+        )
 
     @classmethod
     def _valid_splitter_sizes(cls, value):
@@ -169,8 +232,9 @@ class MainWindow(QMainWindow):
 
     def _restore_workspace_layout(self):
         outer_sizes = list(self.DEFAULT_OUTER_SPLITTER_SIZES)
-        inner_sizes = list(self.DEFAULT_INNER_SPLITTER_SIZES)
-        table_visible = True
+        explorer_sizes = list(self.DEFAULT_EXPLORER_SPLITTER_SIZES)
+        explorer_mode = ExplorerMode.TABLE
+        explorer_visible = True
 
         if self.settings is not None:
             self.settings.beginGroup(self.WORKSPACE_SETTINGS_GROUP)
@@ -179,27 +243,55 @@ class MainWindow(QMainWindow):
                     version = int(self.settings.value("version", 0))
                 except (TypeError, ValueError, OverflowError):
                     version = 0
-                if version == self.WORKSPACE_SETTINGS_VERSION:
+                if version in {1, self.WORKSPACE_SETTINGS_VERSION}:
                     saved_outer = self._valid_splitter_sizes(
                         self.settings.value("outerSplitterSizes")
                     )
-                    saved_inner = self._valid_splitter_sizes(
+                    saved_explorer = self._valid_splitter_sizes(
                         self.settings.value("innerSplitterSizes")
                     )
-                    if saved_outer is not None and saved_inner is not None:
+                    if (
+                        saved_outer is not None
+                        and saved_explorer is not None
+                    ):
                         outer_sizes = saved_outer
-                        inner_sizes = saved_inner
-                        table_visible = self._setting_bool(
-                            self.settings.value("tableVisible", True), True
-                        )
+                        explorer_sizes = saved_explorer
+                        if version == 1:
+                            explorer_mode = ExplorerMode.TABLE
+                            explorer_visible = self._setting_bool(
+                                self.settings.value(
+                                    "tableVisible",
+                                    True,
+                                ),
+                                True,
+                            )
+                        else:
+                            try:
+                                explorer_mode = ExplorerMode(
+                                    self.settings.value(
+                                        "explorerMode",
+                                        ExplorerMode.TABLE.value,
+                                    )
+                                )
+                            except (TypeError, ValueError):
+                                explorer_mode = ExplorerMode.TABLE
+                            explorer_visible = self._setting_bool(
+                                self.settings.value(
+                                    "explorerVisible",
+                                    True,
+                                ),
+                                True,
+                            )
                         self._workspace_layout_restored = True
             finally:
                 self.settings.endGroup()
 
-        self._last_visible_inner_sizes = list(inner_sizes)
+        self._last_visible_explorer_sizes = list(explorer_sizes)
+        self._explorer_mode = explorer_mode
+        self._explorer_visible = explorer_visible
         self.workspace_splitter.setSizes(outer_sizes)
-        self.table_control_splitter.setSizes(inner_sizes)
-        self.left_column.table_button.setChecked(table_visible)
+        self.explorer_control_splitter.setSizes(explorer_sizes)
+        self._apply_explorer_state(restore_sizes=False)
 
     def _apply_default_workspace_sizes(self):
         if self._workspace_layout_restored:
@@ -216,35 +308,50 @@ class MainWindow(QMainWindow):
         )
         left_width = min(preferred_left, max(1, available - self.MIN_CANVAS_WIDTH))
         self.workspace_splitter.setSizes([left_width, max(1, available - left_width)])
-        self.table_control_splitter.setSizes(self.DEFAULT_INNER_SPLITTER_SIZES)
+        self.explorer_control_splitter.setSizes(
+            self.DEFAULT_EXPLORER_SPLITTER_SIZES
+        )
 
-    def _remember_visible_inner_sizes(self):
-        if not self.left_column.table_button.isChecked():
+    def _remember_visible_explorer_sizes(self):
+        if not self._explorer_visible:
             return
-        sizes = self._valid_splitter_sizes(self.table_control_splitter.sizes())
+        sizes = self._valid_splitter_sizes(
+            self.explorer_control_splitter.sizes()
+        )
         if sizes is not None:
-            self._last_visible_inner_sizes = sizes
+            self._last_visible_explorer_sizes = sizes
 
     def _workspace_splitter_moved(self, _position, _index):
         # Persist once on close so dragging remains free of synchronous writes.
         return None
 
-    def _table_splitter_moved(self, _position, _index):
-        self._remember_visible_inner_sizes()
+    def _explorer_splitter_moved(self, _position, _index):
+        self._remember_visible_explorer_sizes()
 
-    def _table_visibility_changed(self, visible):
-        if visible:
+    def _explorer_mode_requested(self, mode_value: str) -> None:
+        mode = ExplorerMode(mode_value)
+        if self._explorer_visible and mode is self._explorer_mode:
+            self._remember_visible_explorer_sizes()
+            self._explorer_visible = False
+        else:
+            self._explorer_mode = mode
+            self._explorer_visible = True
+        self._apply_explorer_state(restore_sizes=True)
+
+    def _apply_explorer_state(self, *, restore_sizes: bool) -> None:
+        self.left_explorer.set_mode(self._explorer_mode)
+        self.left_explorer.setVisible(self._explorer_visible)
+        self.left_column.set_explorer_state(
+            self._explorer_mode.value,
+            self._explorer_visible,
+        )
+        if self._explorer_visible and restore_sizes:
             QTimer.singleShot(
                 0,
-                lambda: self.table_control_splitter.setSizes(
-                    self._last_visible_inner_sizes
+                lambda: self.explorer_control_splitter.setSizes(
+                    self._last_visible_explorer_sizes
                 ),
             )
-            return
-        geometry_sizes = [self.table.width(), self.fig_control_window.width()]
-        sizes = self._valid_splitter_sizes(geometry_sizes)
-        if sizes is not None:
-            self._last_visible_inner_sizes = sizes
 
     def _save_workspace_layout(self):
         if self.settings is None:
@@ -253,21 +360,28 @@ class MainWindow(QMainWindow):
         if outer_sizes is None:
             outer_sizes = list(self.DEFAULT_OUTER_SPLITTER_SIZES)
 
-        if self.left_column.table_button.isChecked():
-            inner_sizes = self._valid_splitter_sizes(self.table_control_splitter.sizes())
-            if inner_sizes is not None:
-                self._last_visible_inner_sizes = inner_sizes
-        inner_sizes = self._valid_splitter_sizes(self._last_visible_inner_sizes)
-        if inner_sizes is None:
-            inner_sizes = list(self.DEFAULT_INNER_SPLITTER_SIZES)
+        self._remember_visible_explorer_sizes()
+        explorer_sizes = self._valid_splitter_sizes(
+            self._last_visible_explorer_sizes
+        )
+        if explorer_sizes is None:
+            explorer_sizes = list(self.DEFAULT_EXPLORER_SPLITTER_SIZES)
 
         self.settings.beginGroup(self.WORKSPACE_SETTINGS_GROUP)
         try:
             self.settings.setValue("version", self.WORKSPACE_SETTINGS_VERSION)
             self.settings.setValue("outerSplitterSizes", outer_sizes)
-            self.settings.setValue("innerSplitterSizes", inner_sizes)
             self.settings.setValue(
-                "tableVisible", self.left_column.table_button.isChecked()
+                "innerSplitterSizes",
+                explorer_sizes,
+            )
+            self.settings.setValue(
+                "explorerMode",
+                self._explorer_mode.value,
+            )
+            self.settings.setValue(
+                "explorerVisible",
+                self._explorer_visible,
             )
         finally:
             self.settings.endGroup()
@@ -284,9 +398,15 @@ class MainWindow(QMainWindow):
             self.settings.sync()
 
         self._workspace_layout_restored = False
-        self._last_visible_inner_sizes = list(self.DEFAULT_INNER_SPLITTER_SIZES)
-        self.left_column.table_button.setChecked(True)
-        self.table_control_splitter.setSizes(self.DEFAULT_INNER_SPLITTER_SIZES)
+        self._last_visible_explorer_sizes = list(
+            self.DEFAULT_EXPLORER_SPLITTER_SIZES
+        )
+        self._explorer_mode = ExplorerMode.TABLE
+        self._explorer_visible = True
+        self._apply_explorer_state(restore_sizes=False)
+        self.explorer_control_splitter.setSizes(
+            self.DEFAULT_EXPLORER_SPLITTER_SIZES
+        )
         self._apply_default_workspace_sizes()
 
     def showEvent(self, event):
@@ -461,7 +581,9 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+    configure_windows_taskbar_identity()
     app = QApplication(sys.argv)
+    configure_application_icon(app)
     QCoreApplication.setOrganizationName("MyGUI")
     QCoreApplication.setApplicationName("MyGUI")
     window = MainWindow(settings=QSettings())

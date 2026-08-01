@@ -17,6 +17,7 @@ from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import DebouncedTextBinding, RangeEditor
 from .context import EditorContext
 from .inputs import InterpolationOptionsInput
+from .inspector import EditorSection
 
 
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +35,7 @@ def _controller_state(controller):
     return controller.read_state()
 
 
-class FunctionCurveSection(QFrame):
+class FunctionCurveSection(QFrame, EditorSection):
     """Provide the function curve section Qt widget."""
 
     TEXT_DEBOUNCE_MS = 250
@@ -169,7 +170,7 @@ class FunctionCurveSection(QFrame):
         self._expression_binding.cancel()
 
 
-class InterpolationSection(QFrame):
+class InterpolationSection(QFrame, EditorSection):
     """Provide the interpolation section Qt widget."""
 
     def __init__(

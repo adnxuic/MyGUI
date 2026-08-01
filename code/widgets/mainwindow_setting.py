@@ -44,7 +44,7 @@ class MainWindow_Setting(object):
         self.table.setMouseTracking(True)
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setMouseTracking(True)
-        self.left_column = PyLeftColumn(self.table, self.fig_control_window)
+        self.left_column = PyLeftColumn()
 
         # 右边栏
         self.right_column = PyRightColumn(parent)
@@ -94,7 +94,6 @@ class MainWindow_Setting(object):
         left_boundary = self.table.geometry().right() - boundary_width
         right_boundary = self.fig_control_window.geometry().left() + boundary_width
         return left_boundary <= x <= right_boundary
-
 
 
 

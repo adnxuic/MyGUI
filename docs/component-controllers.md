@@ -50,13 +50,18 @@ A rejected operation restores the previous target and state. Controllers report 
 
 `ComponentRegistry` owns Controllers and their parent/child relationships. It supports:
 
-- `register()`, `get()`, `children()`, and `descendants()`;
+- `register()`, `get()`, `children()`, `descendants()`, and cycle-safe
+  `ancestor(component_id, kind=...)` lookup;
 - filtered `query(kind=..., role=..., capabilities=..., parent_id=..., recursive=...)`;
 - multi-component `snapshot()` and transactional `restore()`;
 - `apply_transaction()` and transactional `set_properties()` with artist/state rollback and buffered events;
 - `delete_transaction(component_ids, state_replacements=(), verifier=None)`
   for atomic subtree deletion, survivor reindexing, and tree validation;
-- event subscription for Editor synchronization and cleanup;
+- event and batch subscription for Editor synchronization, tree projection,
+  and cleanup;
+- `registration_transaction()` for atomic publication of a new artist,
+  Controller subtree, Locator binding, Inspector preflight, events, and
+  pending redraw work;
 - `batch_updates()` to coalesce relimit, autoscale, legend refresh, and one final draw.
 
 After a coalesced `RELIM` or `AUTOSCALE`, the Registry reads the affected
@@ -138,7 +143,8 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 These services do not maintain parallel project records. `ComponentRegistry` and `ComponentState` are the only runtime truth. The visible panels receive an `EditorContext`, call Controllers/services directly, and are synchronized or removed through committed Registry events. `Py*Modify` façade classes are not part of the architecture.
 
 Production editors use one `ComponentInspector` shell. `EditorProfile` declares
-the ordered `EditorSection` composition for a kind/role pair, while
+the ordered `EditorSection` composition, explicit placement, and UI-only tree
+presentation for an exact `EditorKey` kind/role pair, while
 `PropertySection` generates an ordered subset of Controller `PropertySpec`
 controls. `register_production_profiles()` installs all first-party mappings,
 and `ComponentEditorManager.create()` is the production create-and-track
@@ -209,7 +215,10 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
 6. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 7. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
 8. Extend v6 serialization, strict validation, v4/v5 migration, and direct v6 project round-trip coverage when the component is persistent.
-9. Register an `EditorProfile` assembled from existing Sections when the generic all-properties fallback is insufficient. Add a new Section only for a genuinely new interaction, inject `EditorContext` and the application `ColorLibrary`, and keep QWidget state out of `ComponentState`.
+9. Register an exact `EditorProfile` with explicit placement,
+   `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
+   only for a genuinely new interaction, inject `EditorContext` and the
+   application `ColorLibrary`, and keep QWidget state out of `ComponentState`.
 10. Add Controller contract tests for resolve, read/write, rejection
     rollback, snapshot/restore, deletion policy, same-object removal rollback,
     event invisibility, and coalesced redraw.

@@ -49,3 +49,6 @@ matlab_sources/r2025a_build_*/
 test.mygui.json
 test_tex.mygui.json
 test2.mygui.json
+pictures/icons/app_icon.png
+pictures/icons/app_icon_mark.png
+pictures/icons/app_icon_mark.ico

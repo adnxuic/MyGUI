@@ -26,6 +26,8 @@ from code.figuremodify.component_services import (
 )
 from code.figuremodify.components import (
     AxesController,
+    ComponentEvent,
+    ComponentEventKind,
     ComponentKind,
     ComponentRegistry,
     ComponentRole,
@@ -84,6 +86,8 @@ mpl.use("QtAgg")
 class PyFigureCanvas(QWidget):
     """Provide the py figure canvas Qt widget."""
 
+    componentSelectionChanged = Signal(str)
+
     def __init__(self, parent=None, width=4, height=3, dpi=200, style=None,
                  repository: TableRepository | None = None, project_id: str | None = None,
                  project_name: str | None = None, project_path: str | None = None,
@@ -99,6 +103,8 @@ class PyFigureCanvas(QWidget):
         self.project_table_name = self.project_name
         self.project_path = project_path
         self._disposed = False
+        self._restoring_component_tree_now = False
+        self._selection_repair_pending = False
         self.color_library = color_library or ColorLibrary(parent=self)
         self._component_id_overrides = self._component_paths_from_tree(
             component_tree
@@ -118,6 +124,7 @@ class PyFigureCanvas(QWidget):
         self.component_registry = ComponentRegistry()
         self.editor_registry = EditorRegistry()
         register_production_profiles(self.editor_registry)
+        self.editor_registry.validate_production_profiles()
         self.component_editor_registry = self.editor_registry
         self.axes_commands = AxesCommandService(self.component_registry)
         self.function_curve_service = FunctionCurveService(
@@ -200,6 +207,11 @@ class PyFigureCanvas(QWidget):
         self.figure_inspector: Optional[FigureInspectorPanel] = None
 
         self.current_axes_component_id: str | None = None
+        self.current_component_id: str | None = None
+        self._selection_unsubscribe = self.component_registry.subscribe(
+            self._component_selection_event,
+            kinds=(ComponentEventKind.REMOVED,),
+        )
         self.repository.transaction_committed.connect(self._table_changed)
 
         self.canva = FigureCanvasQTAgg(self.fig)
@@ -334,7 +346,18 @@ class PyFigureCanvas(QWidget):
         return self.axes_commands.preview_color_cycle(
             axes_id,
             defaults.chart_palette,
-            self._claim_color_order(),
+            self._next_axes_color_index(axes_id),
+        )
+
+    def _next_axes_color_index(self, axes_id: str) -> int:
+        """Return the per-Axes preview cursor without consuming it."""
+
+        return sum(
+            controller.state.kind in {
+                ComponentKind.LINE,
+                ComponentKind.SCATTER,
+            }
+            for controller in self.component_registry.children(axes_id)
         )
 
     def _component_id(self, semantic_path: str) -> str:
@@ -609,6 +632,88 @@ class PyFigureCanvas(QWidget):
         """Set figure inspector."""
 
         self.figure_inspector = figure_inspector
+        self.select_component(self.root_component_id)
+
+    def select_component(self, component_id: str) -> bool:
+        """Select one Component and show exactly its own Inspector."""
+
+        component_id = str(component_id)
+        if component_id not in self.component_registry:
+            return False
+        previous_component_id = self.current_component_id
+        previous_axes_id = self.current_axes_component_id
+        inspector_existed = (
+            self.figure_inspector is not None
+            and self.figure_inspector.inspector(component_id) is not None
+        )
+        try:
+            if (
+                self.figure_inspector is not None
+                and not self.figure_inspector.show_component(component_id)
+            ):
+                raise RuntimeError(
+                    f"Inspector for component {component_id!r} is unavailable."
+                )
+        except Exception as exc:
+            self.current_component_id = previous_component_id
+            self.current_axes_component_id = previous_axes_id
+            if self.figure_inspector is not None:
+                if not inspector_existed:
+                    self.figure_inspector.remove_component_inspector(
+                        component_id
+                    )
+                if (
+                    previous_component_id is not None
+                    and previous_component_id in self.component_registry
+                ):
+                    try:
+                        self.figure_inspector.show_component(
+                            previous_component_id
+                        )
+                    except Exception:
+                        pass
+            status_messages.show_error(str(exc))
+            return False
+        axes_id = self._axes_ancestor_id(component_id)
+        if axes_id is not None:
+            self.current_axes_component_id = axes_id
+        self.current_component_id = component_id
+        if component_id != previous_component_id:
+            self.componentSelectionChanged.emit(component_id)
+        return True
+
+    def _axes_ancestor_id(self, component_id: str) -> str | None:
+        controller = self.component_registry.ancestor(
+            component_id,
+            kind=ComponentKind.AXES,
+        )
+        return controller.component_id if controller is not None else None
+
+    def _component_selection_event(self, event: ComponentEvent) -> None:
+        if event.component_id != self.current_component_id:
+            return
+        self.current_component_id = None
+        if self._selection_repair_pending:
+            return
+        self._selection_repair_pending = True
+        QTimer.singleShot(0, self._repair_component_selection)
+
+    def _repair_component_selection(self) -> None:
+        self._selection_repair_pending = False
+        if self._disposed:
+            return
+        if (
+            self.current_component_id is not None
+            and self.current_component_id in self.component_registry
+        ):
+            return
+        target = (
+            self.current_axes_component_id
+            if self.current_axes_component_id in self.component_registry
+            else self.root_component_id
+        )
+        if target in self.component_registry:
+            self.select_component(target)
 
     def update_current_axes(self, component) -> None:
         """Select an Axes by Controller/ID/artist and show its Inspector."""
@@ -625,13 +730,7 @@ class PyFigureCanvas(QWidget):
             raise TypeError("Current axes must be an Axes Controller, ID, or artist.")
         if not isinstance(controller, AxesController):
             raise TypeError("The selected component is not an Axes.")
-        self.current_axes_component_id = controller.component_id
-        if self.figure_inspector is not None:
-            inspector = self.figure_inspector.find_axes_inspector(
-                controller.resolve_target()
-            )
-            if inspector is not None:
-                self.figure_inspector.show_axes_inspector(inspector)
+        self.select_component(controller.component_id)
 
     def set_current_axes_by_index(self, axes_index: int):
         """Set current axes by index."""
@@ -646,7 +745,7 @@ class PyFigureCanvas(QWidget):
         self.update_current_axes(controller)
 
     def request_delete_axes(self, axes_id: str) -> bool:
-        """Confirm and delete one Axes subtree from its navigation label."""
+        """Confirm and delete one Axes subtree."""
 
         try:
             controller = self.component_registry.get(axes_id)
@@ -659,7 +758,7 @@ class PyFigureCanvas(QWidget):
             item.DELETION_POLICY is DeletionPolicy.REMOVE
             for item in descendants
         )
-        label = f"axe{int(state.selector.get('index', 0)) + 1}"
+        label = f"Axes {int(state.selector.get('index', 0)) + 1}"
         dynamic_detail = (
             f", including {dynamic_count} chart/free-text"
             if dynamic_count
@@ -723,6 +822,8 @@ class PyFigureCanvas(QWidget):
         self.current_axes_component_id = None
         if next_id is not None:
             self.update_current_axes(next_id)
+        elif self.root_component_id in self.component_registry:
+            self.select_component(self.root_component_id)
         try:
             self.component_registry.validate_tree()
             normalize_v6_figure(self.component_snapshot())
@@ -757,6 +858,9 @@ class PyFigureCanvas(QWidget):
             self.repository.transaction_committed.disconnect(self._table_changed)
         except (RuntimeError, TypeError):
             pass
+        if self._selection_unsubscribe is not None:
+            self._selection_unsubscribe()
+            self._selection_unsubscribe = None
         self.message_presenter.close()
         self.component_editor_manager.close()
 
@@ -795,15 +899,11 @@ class PyFigureCanvas(QWidget):
     def _claim_color_order(self, preferred: int | None = None) -> int:
         if preferred is not None:
             return max(0, int(preferred))
-        axes_id = self.current_axes_component_id
-        if axes_id is None:
+        if self.current_axes_component_id is None:
             raise ValueError("Select an axes before adding a chart.")
         orders = [
             controller.state.order
-            for controller in self.component_registry.query(
-                parent_id=axes_id,
-                recursive=False,
-            )
+            for controller in self.component_registry.query()
             if controller.state.kind in {
                 ComponentKind.LINE,
                 ComponentKind.SCATTER,
@@ -826,56 +926,45 @@ class PyFigureCanvas(QWidget):
         ]
         return max(orders, default=-1) + 1
 
-    def _add_visible_editor(
-        self,
-        controller,
-    ):
-        """Create and place an editor from its registered UI profile."""
+    def _select_created_component(self, controller) -> None:
+        """Lazily materialize and select a newly committed component."""
 
-        state = controller.state
-        profile = self.editor_registry.resolve_profile(controller)
-        if profile is None or not profile.instance_label_prefix:
+        if self._restoring_component_tree_now or self.figure_inspector is None:
+            return
+        if not self.select_component(controller.component_id):
             raise RuntimeError(
-                f"Component {state.id!r} has no dynamic Inspector profile."
-            )
-        if state.parent_id == self.root_component_id:
-            toolbox = self.figure_inspector.ensure_figure_element_toolbox(
-                state.role,
-                profile.title,
-                delete_callback=self.delete_component_group,
-            )
-        else:
-            axes = self.component_registry.resolve_target(state.parent_id)
-            axes_inspector = self.figure_inspector.find_axes_inspector(axes)
-            if axes_inspector is None:
-                raise RuntimeError("Axes Inspector is unavailable.")
-            toolbox = axes_inspector.ensure_component_toolbox(
-                state.kind,
-                state.role,
-                profile.title,
-                delete_callback=self.delete_component_group,
-                placement=profile.placement,
+                f"Could not open Inspector for {controller.component_id!r}."
             )
 
-        editor = self.component_editor_manager.create(
-            controller,
-            context=self.editor_context,
-            parent=toolbox,
-            remover=toolbox.remove_inspector,
-        )
+    @staticmethod
+    def _remove_created_artist(artist) -> None:
         try:
-            toolbox.add_inspector(
-                editor,
-                profile.instance_label_prefix,
+            artist.remove()
+        except (RuntimeError, ValueError):
+            pass
+
+    def _prepare_created_component(self, controller, transaction) -> None:
+        """Verify lazy Inspector construction before Registry publication."""
+
+        if self._restoring_component_tree_now or self.figure_inspector is None:
+            return
+        previous_component_id = self.current_component_id
+        if not self.figure_inspector.show_component(controller.component_id):
+            raise RuntimeError(
+                f"Inspector for {controller.component_id!r} is unavailable."
             )
-        except Exception:
-            self.component_editor_manager.release(editor)
-            editor.dispose()
-            editor.setParent(None)
-            editor.deleteLater()
-            raise
-        toolbox.setCurrentWidget(editor)
-        return editor
+
+        def rollback_inspector() -> None:
+            self.figure_inspector.remove_component_inspector(
+                controller.component_id
+            )
+            if (
+                previous_component_id is not None
+                and previous_component_id in self.component_registry
+            ):
+                self.figure_inspector.show_component(previous_component_id)
+
+        transaction.on_rollback(rollback_inspector)
 
     def delete_component_group(
         self,
@@ -942,33 +1031,49 @@ class PyFigureCanvas(QWidget):
                 raise ValueError("Subplot slots are invalid.")
         first_axes = None
         first_controller = None
-        with mpl_style.context(self.component_style):
-            for i, slot in enumerate(subplot_slots):
-                axe = self.fig.add_subplot(nrows, ncols, slot)
-                axes_index = start_index + i
-                axes_id, _component_controllers = self._register_axes_components(
-                    axe,
-                    axes_index,
-                    nrows=nrows,
-                    ncols=ncols,
-                    slot=slot,
-                    layout_group=layout_group,
+        allocated_ids_before = set(self._allocated_component_ids)
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.on_rollback(
+                lambda: setattr(
+                    self,
+                    "_allocated_component_ids",
+                    allocated_ids_before,
                 )
-                axes_controller = self.component_registry.get(axes_id)
-                btn = self.figure_inspector.add_axes_inspector(
-                    axes_controller,
-                    self.editor_context,
-                    self.color_library,
-                    delete_callback=self.request_delete_axes,
-                )
-                btn.clicked.connect(
-                    lambda _checked=False, target_id=axes_id:
-                    self.update_current_axes(target_id)
-                )
+            )
+            with mpl_style.context(self.component_style):
+                for i, slot in enumerate(subplot_slots):
+                    axe = self.fig.add_subplot(nrows, ncols, slot)
+                    transaction.on_rollback(
+                        lambda target=axe: self._remove_created_artist(target)
+                    )
+                    axes_index = start_index + i
+                    axes_id, _component_controllers = self._register_axes_components(
+                        axe,
+                        axes_index,
+                        nrows=nrows,
+                        ncols=ncols,
+                        slot=slot,
+                        layout_group=layout_group,
+                    )
+                    transaction.on_rollback(
+                        lambda target=axe: self._axes_component_ids.pop(
+                            target, None
+                        )
+                    )
+                    axes_controller = self.component_registry.get(axes_id)
+                    self.figure_inspector.add_axes_inspector(
+                        axes_controller,
+                        self.editor_context,
+                        self.color_library,
+                    )
+                    transaction.on_rollback(
+                        lambda target_id=axes_id:
+                        self.figure_inspector.remove_axes_inspector(target_id)
+                    )
 
-                if i == 0:
-                    first_axes = axe
-                    first_controller = axes_controller
+                    if i == 0:
+                        first_axes = axe
+                        first_controller = axes_controller
 
         if first_axes is not None:
             self.update_current_axes(first_controller)
@@ -985,27 +1090,32 @@ class PyFigureCanvas(QWidget):
         object_id = object_id or new_id()
         x = np.linspace(x_start, x_stop, 1000)
         y = evaluate_curve_expression(func_text, x)
-        with mpl_style.context(self.component_style):
-            line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            FunctionCurveController,
-            object_id,
-            ComponentRole.FUNCTION_CURVE,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "color": color,
-                "label": label,
-            },
-            {
-                "expression": func_text,
-                "x_start": float(x_start),
-                "x_stop": float(x_stop),
-            },
-        )
-        self._add_visible_editor(controller)
+        with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(line)
+            )
+            component_order = self._claim_color_order(color_order)
+            controller = self._register_chart_controller(
+                FunctionCurveController,
+                object_id,
+                ComponentRole.FUNCTION_CURVE,
+                line,
+                component_order,
+                {
+                    "linestyle": line.get_linestyle(),
+                    "color": color,
+                    "label": label,
+                },
+                {
+                    "expression": func_text,
+                    "x_start": float(x_start),
+                    "x_stop": float(x_stop),
+                },
+            )
+            self._prepare_created_component(controller, transaction)
+        self._select_created_component(controller)
         self.redraw()
         return line
 
@@ -1024,31 +1134,37 @@ class PyFigureCanvas(QWidget):
 
         color = normalize_color(color)
         object_id = object_id or new_id()
-        with mpl_style.context(self.component_style):
-            line, = self.current_axes.plot(
-                np.asarray(x),
-                np.asarray(y),
-                linestyle=style,
-                color=color,
-                label=label,
+        with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                line, = self.current_axes.plot(
+                    np.asarray(x),
+                    np.asarray(y),
+                    linestyle=style,
+                    color=color,
+                    label=label,
+                )
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(line)
             )
-        component_order = self._claim_color_order(color_order)
-        self._register_chart_controller(
-            LineController,
-            object_id,
-            ComponentRole.LINE,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "color": color,
-                "label": label,
-            },
-            {
-                "x": np.asarray(x).tolist(),
-                "y": np.asarray(y).tolist(),
-            },
-        )
+            component_order = self._claim_color_order(color_order)
+            controller = self._register_chart_controller(
+                LineController,
+                object_id,
+                ComponentRole.LINE,
+                line,
+                component_order,
+                {
+                    "linestyle": line.get_linestyle(),
+                    "color": color,
+                    "label": label,
+                },
+                {
+                    "x": np.asarray(x).tolist(),
+                    "y": np.asarray(y).tolist(),
+                },
+            )
+            self._prepare_created_component(controller, transaction)
+        self._select_created_component(controller)
         self.redraw()
         return line
 
@@ -1069,27 +1185,32 @@ class PyFigureCanvas(QWidget):
         }
         if linewidth is not None:
             plot_kwargs["linewidth"] = float(linewidth)
-        with mpl_style.context(self.component_style):
-            line, = self.current_axes.plot(x, y, **plot_kwargs)
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            DataPlotController,
-            object_id,
-            ComponentRole.DATA_PLOT,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "markersize": float(line.get_markersize()),
-                "color": color,
-                "label": label,
-            },
-            {
-                "x_ref": x_ref.to_dict(),
-                "y_ref": y_ref.to_dict(),
-            },
-        )
-        self._add_visible_editor(controller)
+        with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                line, = self.current_axes.plot(x, y, **plot_kwargs)
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(line)
+            )
+            component_order = self._claim_color_order(color_order)
+            controller = self._register_chart_controller(
+                DataPlotController,
+                object_id,
+                ComponentRole.DATA_PLOT,
+                line,
+                component_order,
+                {
+                    "linestyle": line.get_linestyle(),
+                    "markersize": float(line.get_markersize()),
+                    "color": color,
+                    "label": label,
+                },
+                {
+                    "x_ref": x_ref.to_dict(),
+                    "y_ref": y_ref.to_dict(),
+                },
+            )
+            self._prepare_created_component(controller, transaction)
+        self._select_created_component(controller)
         self.redraw()
         return line
 
@@ -1101,28 +1222,35 @@ class PyFigureCanvas(QWidget):
 
         color = normalize_color(color)
         object_id = object_id or new_id()
-        with mpl_style.context(self.component_style):
-            scatter = self.current_axes.scatter(x, y, s=size, c=color, marker=marker, label=label)
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            ScatterController,
-            object_id,
-            ComponentRole.SCATTER,
-            scatter,
-            component_order,
-            {
-                "color": color,
-                "edgecolor": color,
-                "size": float(size),
-                "marker": marker,
-                "label": label,
-            },
-            {
-                "x_ref": x_ref.to_dict(),
-                "y_ref": y_ref.to_dict(),
-            },
-        )
-        self._add_visible_editor(controller)
+        with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                scatter = self.current_axes.scatter(
+                    x, y, s=size, c=color, marker=marker, label=label
+                )
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(scatter)
+            )
+            component_order = self._claim_color_order(color_order)
+            controller = self._register_chart_controller(
+                ScatterController,
+                object_id,
+                ComponentRole.SCATTER,
+                scatter,
+                component_order,
+                {
+                    "color": color,
+                    "edgecolor": color,
+                    "size": float(size),
+                    "marker": marker,
+                    "label": label,
+                },
+                {
+                    "x_ref": x_ref.to_dict(),
+                    "y_ref": y_ref.to_dict(),
+                },
+            )
+            self._prepare_created_component(controller, transaction)
+        self._select_created_component(controller)
         self.redraw()
         return scatter
 
@@ -1166,31 +1294,36 @@ class PyFigureCanvas(QWidget):
             plot_kwargs["linestyle"] = style
         with mpl_style.context(self.component_style):
             line, = self.current_axes.plot(line_x, line_y, **plot_kwargs)
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            FitCurveController,
-            object_id,
-            ComponentRole.FIT_CURVE,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "color": color,
-                "label": label,
-            },
-            {
-                "x_ref": x_ref.to_dict(),
-                "y_ref": y_ref.to_dict(),
-                "engine": engine,
-                "fit_type": deepcopy(fit_type),
-                "fit_options": deepcopy(fit_options),
-                "fit_result": deepcopy(fit_result),
-                "expression": expression or "",
-                "x_start": float(x_start),
-                "x_stop": float(x_stop),
-            },
-        )
-        self._add_visible_editor(controller)
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(line)
+            )
+            component_order = self._claim_color_order(color_order)
+            controller = self._register_chart_controller(
+                FitCurveController,
+                object_id,
+                ComponentRole.FIT_CURVE,
+                line,
+                component_order,
+                {
+                    "linestyle": line.get_linestyle(),
+                    "color": color,
+                    "label": label,
+                },
+                {
+                    "x_ref": x_ref.to_dict(),
+                    "y_ref": y_ref.to_dict(),
+                    "engine": engine,
+                    "fit_type": deepcopy(fit_type),
+                    "fit_options": deepcopy(fit_options),
+                    "fit_result": deepcopy(fit_result),
+                    "expression": expression or "",
+                    "x_start": float(x_start),
+                    "x_stop": float(x_stop),
+                },
+            )
+            self._prepare_created_component(controller, transaction)
+        self._select_created_component(controller)
         self.redraw()
         return line
 
@@ -1233,29 +1366,34 @@ class PyFigureCanvas(QWidget):
                     )
             line, = self.current_axes.plot(x_new, y_new, color=color, label=label)
         object_id = object_id or new_id()
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            InterpolationController,
-            object_id,
-            ComponentRole.INTERPOLATION,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "color": color,
-                "label": label,
-            },
-            {
-                "x_ref": x_ref.to_dict(),
-                "y_ref": y_ref.to_dict(),
-                "method": method,
-                "k": int(k),
-                "samples": int(samples),
-                "lam": None if lam is None else float(lam),
-                "lam_auto": bool(lam_auto),
-            },
-        )
-        self._add_visible_editor(controller)
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(line)
+            )
+            component_order = self._claim_color_order(color_order)
+            controller = self._register_chart_controller(
+                InterpolationController,
+                object_id,
+                ComponentRole.INTERPOLATION,
+                line,
+                component_order,
+                {
+                    "linestyle": line.get_linestyle(),
+                    "color": color,
+                    "label": label,
+                },
+                {
+                    "x_ref": x_ref.to_dict(),
+                    "y_ref": y_ref.to_dict(),
+                    "method": method,
+                    "k": int(k),
+                    "samples": int(samples),
+                    "lam": None if lam is None else float(lam),
+                    "lam_auto": bool(lam_auto),
+                },
+            )
+            self._prepare_created_component(controller, transaction)
+        self._select_created_component(controller)
         self.redraw()
         if x_new.size:
             status_messages.show_success("Interpolation curve created.")
@@ -1290,23 +1428,28 @@ class PyFigureCanvas(QWidget):
             )
         object_id = object_id or new_id()
         parent_id = self.current_axes_component_id
-        controller = self._register_text_controller(
-            object_id,
-            text_artist,
-            parent_id=parent_id,
-            order=self._next_child_order(
-                parent_id,
-                kind=ComponentKind.TEXT,
-            ),
-            scope="axes",
-        )
-        result = self.text_render_service.apply(
-            controller,
-            {"usetex": desired_usetex},
-        )
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(text_artist)
+            )
+            controller = self._register_text_controller(
+                object_id,
+                text_artist,
+                parent_id=parent_id,
+                order=self._next_child_order(
+                    parent_id,
+                    kind=ComponentKind.TEXT,
+                ),
+                scope="axes",
+            )
+            result = self.text_render_service.apply(
+                controller,
+                {"usetex": desired_usetex},
+            )
+            self._prepare_created_component(controller, transaction)
         if not result.ok or result.notices:
             self.message_presenter.present(result)
-        self._add_visible_editor(controller)
+        self._select_created_component(controller)
         self.redraw()
         return text_artist
 
@@ -1326,25 +1469,29 @@ class PyFigureCanvas(QWidget):
                 usetex=False,
             )
         object_id = object_id or new_id()
-        controller = self._register_text_controller(
-            object_id,
-            text_artist,
-            parent_id=self.root_component_id,
-            order=self._next_child_order(
-                self.root_component_id,
-                kind=ComponentKind.TEXT,
-            ),
-            scope="figure",
-        )
-        result = self.text_render_service.apply(
-            controller,
-            {"usetex": desired_usetex},
-        )
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(text_artist)
+            )
+            controller = self._register_text_controller(
+                object_id,
+                text_artist,
+                parent_id=self.root_component_id,
+                order=self._next_child_order(
+                    self.root_component_id,
+                    kind=ComponentKind.TEXT,
+                ),
+                scope="figure",
+            )
+            result = self.text_render_service.apply(
+                controller,
+                {"usetex": desired_usetex},
+            )
+            self._prepare_created_component(controller, transaction)
         if not result.ok or result.notices:
             self.message_presenter.present(result)
         if self.figure_inspector is not None:
-            self._add_visible_editor(controller)
-            self.figure_inspector.show_figure_elements()
+            self._select_created_component(controller)
         self.redraw()
         return text_artist
 
@@ -1529,6 +1676,29 @@ class PyFigureCanvas(QWidget):
         component_tree: dict[str, Any] | None = None,
     ) -> None:
         """Materialize and apply a validated v6 component tree directly."""
+
+        self._restoring_component_tree_now = True
+        try:
+            with self.component_registry.batch_events():
+                self._restore_component_tree_impl(component_tree)
+        finally:
+            self._restoring_component_tree_now = False
+        target = (
+            self.current_axes_component_id
+            if self.current_axes_component_id in self.component_registry
+            else self.root_component_id
+        )
+        if (
+            self.figure_inspector is not None
+            and target in self.component_registry
+        ):
+            self.select_component(target)
+
+    def _restore_component_tree_impl(
+        self,
+        component_tree: dict[str, Any] | None = None,
+    ) -> None:
+        """Perform the materialization while creation selection is paused."""
 
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):

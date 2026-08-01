@@ -8,8 +8,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from Qt_core import QApplication, QDialog, QObject, QSettings, Qt
 
 from code.widgets.fig_control_window.figure_inspector import (
+    AxesInspectorPanel,
     FigureInspectorPanel,
 )
+from code.widgets.left_column import ExplorerMode
 from code.widgets.theme import CONTROL_SIZES
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
@@ -53,6 +55,10 @@ class GuiLayoutTests(unittest.TestCase):
         ]
 
     def test_constructor_builds_native_single_shell_without_showing_it(self):
+        existing_dialogs = sum(
+            isinstance(widget, QDialog)
+            for widget in self.app.topLevelWidgets()
+        )
         window = MainWindow()
         try:
             self.assertFalse(window.isVisible())
@@ -64,7 +70,7 @@ class GuiLayoutTests(unittest.TestCase):
             self.assertIs(window.workspace_splitter.parentWidget(), window.central_widget)
             self.assertEqual(
                 sum(isinstance(widget, QDialog) for widget in self.app.topLevelWidgets()),
-                0,
+                existing_dialogs,
             )
             self.assertIsNone(window.title_bar.findChild(QObject, "minimize_button"))
             self.assertIsNone(window.title_bar.findChild(QObject, "close_button"))
@@ -128,6 +134,7 @@ class GuiLayoutTests(unittest.TestCase):
 
             buttons = (
                 window.left_column.table_button,
+                window.left_column.components_button,
                 window.left_column.setting_button,
                 window.right_column.tex_button,
                 window.right_column.matlab_button,
@@ -139,6 +146,10 @@ class GuiLayoutTests(unittest.TestCase):
 
             self.assertGreater(
                 self._icon_lightness(window.left_column.table_button), 200
+            )
+            self.assertLess(
+                self._icon_lightness(window.left_column.components_button),
+                100,
             )
             self.assertLess(
                 self._icon_lightness(window.left_column.setting_button), 100
@@ -171,11 +182,15 @@ class GuiLayoutTests(unittest.TestCase):
             tex_icon_key = window.right_column.tex_button.icon().cacheKey()
             matlab_icon_key = window.right_column.matlab_button.icon().cacheKey()
 
-            window.left_column.table_button.setChecked(False)
+            window.left_column.table_button.click()
             window.right_column.tex_button.setChecked(True)
             self.app.processEvents()
             self.assertLess(
                 self._icon_lightness(window.left_column.table_button), 100
+            )
+            self.assertLess(
+                self._icon_lightness(window.left_column.components_button),
+                100,
             )
             self.assertEqual(
                 window.right_column.tex_button.icon().cacheKey(), tex_icon_key
@@ -226,25 +241,26 @@ class GuiLayoutTests(unittest.TestCase):
             )
             self.assertIs(
                 figure_window.current_figure_inspector.current_panel(),
-                figure_window.current_figure_inspector.no_axes_state,
+                figure_window.current_figure_inspector.root_inspector,
+            )
+            self.assertEqual(
+                figure_window.current_canva.current_component_id,
+                figure_window.current_canva.root_component_id,
             )
 
             figure_window.current_canva.add_axes()
             self.app.processEvents()
-            self.assertIsNot(
+            self.assertIsInstance(
                 figure_window.current_figure_inspector.current_panel(),
-                figure_window.current_figure_inspector.no_axes_state,
+                AxesInspectorPanel,
             )
-            axes_widget = figure_window.current_figure_inspector.find_axes_inspector(
-                figure_window.current_canva.current_axes
+            axes_widget = figure_window.current_figure_inspector.axes_inspector(
+                figure_window.current_canva.current_axes_component_id
             )
             self.assertIsNotNone(axes_widget)
-            section_scroll_areas = axes_widget.semantic_panel.section_pages
-            self.assertEqual(len(section_scroll_areas), 6)
-            self.assertTrue(all(area.widgetResizable() for area in section_scroll_areas))
-            self.assertGreater(
-                section_scroll_areas[0].verticalScrollBar().maximum(),
-                0,
+            self.assertEqual(
+                axes_widget.current_component_id(),
+                figure_window.current_canva.current_axes_component_id,
             )
 
             figure_window.clear_figures()
@@ -315,10 +331,10 @@ class GuiLayoutTests(unittest.TestCase):
             target = MainWindow()
             self._show(target)
             target.workspace_splitter.setSizes([620, 660])
-            target.table_control_splitter.setSizes([330, 260])
+            target.explorer_control_splitter.setSizes([330, 260])
             self.app.processEvents()
             outer_sizes = target.workspace_splitter.sizes()
-            inner_sizes = target.table_control_splitter.sizes()
+            inner_sizes = target.explorer_control_splitter.sizes()
             try:
                 restore_project_snapshot(
                     project_path,
@@ -327,7 +343,10 @@ class GuiLayoutTests(unittest.TestCase):
                 )
                 self.app.processEvents()
                 self.assertEqual(target.workspace_splitter.sizes(), outer_sizes)
-                self.assertEqual(target.table_control_splitter.sizes(), inner_sizes)
+                self.assertEqual(
+                    target.explorer_control_splitter.sizes(),
+                    inner_sizes,
+                )
             finally:
                 self._close(target)
 
@@ -351,17 +370,18 @@ class GuiLayoutSettingsTests(unittest.TestCase):
         window.deleteLater()
         self.app.processEvents()
 
-    def test_splitters_and_table_visibility_roundtrip_then_reset(self):
+    def test_splitters_and_explorer_mode_roundtrip_then_reset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir, "layout.ini")
             first = MainWindow(settings=self._settings(path))
             self._show(first)
             first.workspace_splitter.setSizes([640, 640])
-            first.table_control_splitter.setSizes([330, 260])
+            first.explorer_control_splitter.setSizes([330, 260])
             self.app.processEvents()
             saved_outer = first.workspace_splitter.sizes()
-            saved_inner = first.table_control_splitter.sizes()
-            first.left_column.table_button.setChecked(False)
+            saved_inner = first.explorer_control_splitter.sizes()
+            first.left_column.components_button.click()
+            first.left_column.components_button.click()
             self.app.processEvents()
             self._close(first)
 
@@ -370,13 +390,25 @@ class GuiLayoutSettingsTests(unittest.TestCase):
             self._show(second)
             try:
                 self.assertFalse(second.left_column.table_button.isChecked())
-                self.assertFalse(second.table.isVisible())
+                self.assertFalse(
+                    second.left_column.components_button.isChecked()
+                )
+                self.assertFalse(second.left_explorer.isVisible())
+                self.assertIs(
+                    second._explorer_mode,
+                    ExplorerMode.COMPONENTS,
+                )
                 self.assertEqual(second.workspace_splitter.sizes(), saved_outer)
-                self.assertEqual(second._last_visible_inner_sizes, saved_inner)
+                self.assertEqual(
+                    second._last_visible_explorer_sizes,
+                    saved_inner,
+                )
 
                 second.reset_workspace_layout()
                 self.app.processEvents()
                 self.assertTrue(second.left_column.table_button.isChecked())
+                self.assertTrue(second.left_explorer.isVisible())
+                self.assertIs(second._explorer_mode, ExplorerMode.TABLE)
                 settings.beginGroup(second.WORKSPACE_SETTINGS_GROUP)
                 try:
                     self.assertIsNone(settings.value("version"))
@@ -408,6 +440,48 @@ class GuiLayoutSettingsTests(unittest.TestCase):
                 self.assertGreaterEqual(window.figure_window.width(), 400)
             finally:
                 self._close(window)
+
+    def test_v1_table_visibility_migrates_to_v2_explorer_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir, "layout.ini")
+            settings = self._settings(path)
+            settings.beginGroup(MainWindow.WORKSPACE_SETTINGS_GROUP)
+            settings.setValue("version", 1)
+            settings.setValue("outerSplitterSizes", [640, 640])
+            settings.setValue("innerSplitterSizes", [330, 260])
+            settings.setValue("tableVisible", False)
+            settings.endGroup()
+            settings.sync()
+
+            window = MainWindow(settings=self._settings(path))
+            self._show(window)
+            try:
+                self.assertTrue(window._workspace_layout_restored)
+                self.assertIs(window._explorer_mode, ExplorerMode.TABLE)
+                self.assertFalse(window._explorer_visible)
+                self.assertFalse(window.left_explorer.isVisible())
+            finally:
+                self._close(window)
+
+            migrated = self._settings(path)
+            migrated.beginGroup(MainWindow.WORKSPACE_SETTINGS_GROUP)
+            try:
+                self.assertEqual(
+                    int(migrated.value("version")),
+                    MainWindow.WORKSPACE_SETTINGS_VERSION,
+                )
+                self.assertEqual(
+                    migrated.value("explorerMode"),
+                    ExplorerMode.TABLE.value,
+                )
+                self.assertFalse(
+                    MainWindow._setting_bool(
+                        migrated.value("explorerVisible"),
+                        True,
+                    )
+                )
+            finally:
+                migrated.endGroup()
 
     def test_extreme_splitter_ratio_falls_back_to_defaults(self):
         with tempfile.TemporaryDirectory() as temp_dir:

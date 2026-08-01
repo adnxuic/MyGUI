@@ -369,7 +369,7 @@ class ComponentEditorManager:
                     else:
                         editor.setEnabled(False)
                         editor.deleteLater()
-                except RuntimeError:
+                except Exception:
                     pass
             return
         if event.kind is ComponentEventKind.CHANGED:
@@ -404,7 +404,7 @@ class ComponentEditorManager:
                 continue
             try:
                 self._dispose_editor(editor)
-            except RuntimeError:
+            except Exception:
                 pass
 
 

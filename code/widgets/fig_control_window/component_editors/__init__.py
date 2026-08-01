@@ -16,13 +16,14 @@ from .common import (
     modification_succeeded,
     normalize_line_style,
 )
-from .registry import EditorRegistry
+from .registry import EditorKey, EditorRegistry
 from .inspector import (
     ComponentInspector,
     EditorProfile,
     EditorPlacement,
     EditorSection,
     SectionSpec,
+    TreePresentationSpec,
 )
 from .inputs import (
     DataReferenceInput,
@@ -53,11 +54,13 @@ __all__ = [
     "ComponentEditorBase",
     "DebouncedTextBinding",
     "EditorRegistry",
+    "EditorKey",
     "ComponentInspector",
     "EditorProfile",
     "EditorPlacement",
     "EditorSection",
     "SectionSpec",
+    "TreePresentationSpec",
     "DataReferenceInput",
     "InterpolationOptionsInput",
     "LineAppearanceInput",

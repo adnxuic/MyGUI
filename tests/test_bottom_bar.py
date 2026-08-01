@@ -221,7 +221,7 @@ class IconButtonAccessibilityTests(unittest.TestCase):
 
     def test_activity_rail_icon_buttons_have_names_and_tooltips(self):
         table = QFrame()
-        left_column = PyLeftColumn(table, None)
+        left_column = PyLeftColumn()
 
         stack = QStackedLayout()
         for _ in range(3):
@@ -231,6 +231,7 @@ class IconButtonAccessibilityTests(unittest.TestCase):
         try:
             for button in (
                 left_column.table_button,
+                left_column.components_button,
                 left_column.setting_button,
                 right_column.tex_button,
                 right_column.matlab_button,

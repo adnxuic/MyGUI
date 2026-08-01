@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from code.figuremodify.components import ComponentKind, ComponentRole
+from code.figuremodify.components import (
+    ComponentKind,
+    ComponentRole,
+    ROLES_BY_KIND,
+)
 
 from .chart_sections import FunctionCurveSection, InterpolationSection
 from .fit_sections import (
@@ -10,7 +14,12 @@ from .fit_sections import (
     FitDisplayRangeSection,
     FitResultSection,
 )
-from .inspector import EditorPlacement, EditorProfile, SectionSpec
+from .inspector import (
+    EditorPlacement,
+    EditorProfile,
+    SectionSpec,
+    TreePresentationSpec,
+)
 from .sections import (
     DataReferenceSection,
     LegendLocationSection,
@@ -273,6 +282,73 @@ def _palette(controller, context, parent):
     )
 
 
+def _property_value(key: str):
+    return lambda state: state.properties.get(key)
+
+
+def _line_preview(state):
+    label = state.properties.get("label")
+    if str(label or "").strip() and not str(label).startswith("_"):
+        return label
+    if state.role is ComponentRole.FUNCTION_CURVE:
+        return state.data.get("expression")
+    return ""
+
+
+def _axes_label(state):
+    return f"Axes {int(state.selector.get('index', state.order)) + 1}"
+
+
+def _axis_label(state):
+    axis = str(state.selector.get("axis", "")).upper()
+    return f"{axis} Axis" if axis else "Axis"
+
+
+def _spine_label(state):
+    side = str(state.selector.get("name", "")).replace("_", " ").title()
+    return f"{side} Spine" if side else "Spine"
+
+
+def _tick_label(state):
+    axis = str(state.selector.get("axis", "")).upper()
+    level = str(state.selector.get("level", "")).title()
+    suffix = (
+        "Tick Labels"
+        if state.kind is ComponentKind.TICK_LABEL_GROUP
+        else "Ticks"
+    )
+    return " ".join(part for part in (axis, level, suffix) if part)
+
+
+def _grid_label(state):
+    axis = str(state.selector.get("axis", "")).upper()
+    level = str(state.selector.get("level", "")).title()
+    return " ".join(part for part in (axis, level, "Grid") if part)
+
+
+def _semantic_text_label(state):
+    return {
+        ComponentRole.TITLE: "Title",
+        ComponentRole.X_LABEL: "X Label",
+        ComponentRole.Y_LABEL: "Y Label",
+    }.get(state.role, "Text")
+
+
+def _semantic_sort(state):
+    if state.kind is ComponentKind.AXIS:
+        return (0 if state.selector.get("axis") == "x" else 1,)
+    if state.kind is ComponentKind.SPINE:
+        return ({"left": 0, "right": 1, "top": 2, "bottom": 3}.get(
+            str(state.selector.get("name", "")), 99
+        ),)
+    if state.role is ComponentRole.TITLE:
+        return (0,)
+    if state.kind is ComponentKind.LEGEND:
+        return (1,)
+    level = str(state.selector.get("level", ""))
+    return ({"major": 0, "minor": 1}.get(level, state.order),)
+
+
 LINE_PROFILES = {
     ComponentRole.LINE: EditorProfile(
         "line",
@@ -285,7 +361,9 @@ LINE_PROFILES = {
             ),
         ),
         placement=EditorPlacement.CHART,
-        instance_label_prefix="curve",
+        tree=TreePresentationSpec(
+            "Line", "Lines", "curve", _line_preview, 30
+        ),
     ),
     ComponentRole.FUNCTION_CURVE: EditorProfile(
         "function_curve",
@@ -303,7 +381,9 @@ LINE_PROFILES = {
             ),
         ),
         placement=EditorPlacement.CHART,
-        instance_label_prefix="curve",
+        tree=TreePresentationSpec(
+            "Function Curve", "Function Curves", "curve", _line_preview, 30
+        ),
     ),
     ComponentRole.DATA_PLOT: EditorProfile(
         "data_plot",
@@ -321,7 +401,9 @@ LINE_PROFILES = {
             ),
         ),
         placement=EditorPlacement.CHART,
-        instance_label_prefix="plot",
+        tree=TreePresentationSpec(
+            "Plot", "Plots", "plot", _line_preview, 30
+        ),
     ),
     ComponentRole.FIT_CURVE: EditorProfile(
         "fit_curve",
@@ -342,7 +424,9 @@ LINE_PROFILES = {
             ),
         ),
         placement=EditorPlacement.CHART,
-        instance_label_prefix="fitting",
+        tree=TreePresentationSpec(
+            "Fit Curve", "Fit Curves", "fitting", _line_preview, 30
+        ),
     ),
     ComponentRole.INTERPOLATION: EditorProfile(
         "interpolation",
@@ -365,7 +449,9 @@ LINE_PROFILES = {
             ),
         ),
         placement=EditorPlacement.CHART,
-        instance_label_prefix="interpolate",
+        tree=TreePresentationSpec(
+            "Interpolation", "Interpolations", "interpolate", _line_preview, 30
+        ),
     ),
 }
 
@@ -386,7 +472,9 @@ SCATTER_PROFILE = EditorProfile(
         ),
     ),
     placement=EditorPlacement.CHART,
-    instance_label_prefix="scatter",
+    tree=TreePresentationSpec(
+        "Scatter", "Scatters", "scatter", _line_preview, 30
+    ),
 )
 
 
@@ -406,7 +494,13 @@ TEXT_PROFILE = EditorProfile(
         SectionSpec("render", "Rendering", _text_render),
     ),
     placement=EditorPlacement.ELEMENT,
-    instance_label_prefix="text",
+    tree=TreePresentationSpec(
+        "Text",
+        "Texts",
+        "text",
+        _property_value("text"),
+        40,
+    ),
 )
 
 
@@ -415,6 +509,12 @@ SEMANTIC_TEXT_PROFILE = EditorProfile(
     "Text",
     TEXT_PROFILE.sections,
     placement=EditorPlacement.SEMANTIC,
+    tree=TreePresentationSpec(
+        _semantic_text_label,
+        preview=_property_value("text"),
+        sort_bucket=20,
+        sort_key=_semantic_sort,
+    ),
 )
 
 
@@ -426,6 +526,13 @@ LEGEND_PROFILE = EditorProfile(
         SectionSpec("typography", "Typography", _legend_typography),
         SectionSpec("layout", "Layout", _legend_location),
         SectionSpec("frame", "Frame", _legend_frame),
+    ),
+    placement=EditorPlacement.SEMANTIC,
+    tree=TreePresentationSpec(
+        "Legend",
+        preview=_property_value("title"),
+        sort_bucket=20,
+        sort_key=_semantic_sort,
     ),
 )
 
@@ -455,6 +562,14 @@ AXES_PROFILE = EditorProfile(
                 "facecolor",
                 "visible",
             ),
+        ),
+    ),
+    placement=EditorPlacement.SEMANTIC,
+    tree=TreePresentationSpec(
+        _axes_label,
+        sort_bucket=0,
+        sort_key=lambda state: (
+            int(state.selector.get("index", state.order)),
         ),
     ),
 )
@@ -515,6 +630,43 @@ PROPERTY_PROFILE_KEYS = {
 
 def _property_profile(kind: ComponentKind) -> EditorProfile:
     title = kind.value.replace("_", " ").title()
+    presentations = {
+        ComponentKind.FIGURE: TreePresentationSpec(
+            "Figure",
+            preview=_property_value("name"),
+            sort_bucket=0,
+        ),
+        ComponentKind.AXIS: TreePresentationSpec(
+            _axis_label,
+            sort_bucket=0,
+            sort_key=_semantic_sort,
+        ),
+        ComponentKind.SPINE: TreePresentationSpec(
+            _spine_label,
+            sort_bucket=10,
+            sort_key=_semantic_sort,
+        ),
+        ComponentKind.TICK_GROUP: TreePresentationSpec(
+            _tick_label,
+            sort_bucket=10,
+            sort_key=_semantic_sort,
+        ),
+        ComponentKind.TICK_LABEL_GROUP: TreePresentationSpec(
+            _tick_label,
+            sort_bucket=0,
+            sort_key=_semantic_sort,
+        ),
+        ComponentKind.GRID: TreePresentationSpec(
+            _grid_label,
+            sort_bucket=20,
+            sort_key=_semantic_sort,
+        ),
+    }
+    placement = (
+        EditorPlacement.FIGURE
+        if kind is ComponentKind.FIGURE
+        else EditorPlacement.SEMANTIC
+    )
     return EditorProfile(
         f"{kind.value}:properties",
         title,
@@ -525,6 +677,8 @@ def _property_profile(kind: ComponentKind) -> EditorProfile:
                 _properties(*PROPERTY_PROFILE_KEYS[kind]),
             ),
         ),
+        placement=placement,
+        tree=presentations[kind],
     )
 
 
@@ -574,4 +728,6 @@ def register_production_profiles(editor_registry) -> None:
         role=ComponentRole.AXES,
     )
     for kind, profile in PROPERTY_PROFILES.items():
-        editor_registry.register_profile(kind, profile)
+        for role in ROLES_BY_KIND[kind]:
+            editor_registry.register_profile(kind, profile, role=role)
+    editor_registry.validate_production_profiles()

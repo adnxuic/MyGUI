@@ -8,11 +8,17 @@
   synchronization, and section disposal. Business deletion authority comes
   only from the Controller.
 - `EditorProfile` defines the profile key, title, ordered `SectionSpec`
-  records, visual `placement`, and dynamic `instance_label_prefix`.
+  records, an explicit visual `placement`, and a UI-only
+  `TreePresentationSpec`.
 - `EditorSection` provides `sync_from_controller()` and `dispose()` lifecycle methods.
 - `PropertySection` generates a selected, ordered subset of Controller `PropertySpec` editors. It blocks signals during synchronization, rolls rejected values back, injects the application `ColorLibrary`, and reports one Message Bar result per operation.
-- `ComponentEditorBase` remains the generic all-properties fallback for unregistered component kinds and tests.
-- `register_production_profiles(editor_registry)` installs every first-party kind/role profile. `EditorRegistry.register_profile(kind, profile, role=...)` remains available for extensions.
+- `ComponentEditorBase` remains an explicit generic all-properties fallback
+  for tests and non-production tooling. Production profile coverage is
+  validated and cannot silently fall back.
+- `EditorKey` is the exact `(ComponentKind, ComponentRole)` pair used by
+  profiles and toolboxes. `register_production_profiles(editor_registry)`
+  installs and validates every first-party pair; duplicate, missing, invalid,
+  or ambiguous registrations fail before a Canvas is published.
 - `ComponentEditorManager.create(component_or_id, context=..., parent=..., remover=...)` is the production creation entry. It resolves through `EditorRegistry`, tracks every visible Inspector, synchronizes Registry changes, and disposes the Inspector before removal.
 
 Callers access role-specific controls explicitly with
@@ -28,18 +34,22 @@ role-specific modification widgets:
 - `FigureInspectorHost` owns the project-to-Figure Inspector mapping and
   handles the empty-project state.
 - `FigureInspectorPanel` owns Figure-level elements and the Axes Inspector
-  selection for one Figure.
+  panels for one Figure.
 - `AxesInspectorPanel` combines the semantic Axes pages with Chart and
   Element Inspector stacks.
-- `AxesSemanticInspectorPanel` contains the General, X/Y Axis, Spines,
-  Ticks/Grid, Title/Labels, and Legend pages.
-- `InspectorToolBox` owns an ordered accordion of visible Inspectors for one
-  component role. Every `InspectorHeader` stores its own stable
-  `component_id`; no Qt `QToolBox` child-button discovery is used.
+- `AxesSemanticInspectorPanel` creates the selected fixed semantic Inspector
+  on demand and caches it by stable component ID.
+- `InspectorToolBox` owns an internal stable-ID stack of dynamic Inspectors
+  for one component role. It does not render instance or role navigation
+  labels.
 
-Canvas and window code use the containers' add, find, show, remove, and
-toolbox lookup methods. Layout stacks and toolbox dictionaries are private
-implementation details.
+The Figure root is created eagerly. Axes and dynamic Inspectors are created
+when selected and are then reused; opening an Axes no longer constructs all
+of its hidden semantic Inspectors. Canvas and window code use the containers'
+add, show, remove, and toolbox lookup methods. `show_component(component_id)`
+is both the lazy ensure and public navigation path. Query-only `inspector()`
+never creates a widget. Layout stacks and toolbox dictionaries are private
+implementation details; the Components tree never reads them.
 
 ## Line profiles
 
@@ -78,42 +88,42 @@ Legend remains a `LegendController`. It reuses the content editor for `title` an
 
 ## Axes layout
 
-The Axes editor keeps the existing navigation and provides six scrollable pages:
+Every Axes, Axis, Spine, Tick, Tick Label, Grid, Title, Axis Label, and Legend
+has its own Inspector. Selecting its stable ID in the Components tree opens
+only that Inspector. Axes properties include palette, limits, scale,
+autoscale, position, aspect, face color, and visibility. The Palette section
+derives its current label and color strip from the Axes `color_cycle` and
+Figure `style`; its source selector applies either the current Style default
+or a named user-selected palette through `AxesCommandService`.
 
-1. General: palette, limits, scale, autoscale, position, aspect, face color, and visibility.
-2. X/Y Axis: the semantic X and Y Axis Controllers.
-3. Spines: bottom, top, left, and right semantic Spine Controllers.
-4. Ticks/Grid: X/Y major and minor Tick, Tick Label, and Grid Controllers.
-5. Title/Labels: Title, X Label, and Y Label Text Controllers.
-6. Legend: the semantic Legend Controller.
+Every Inspector binds Controller properties; the UI does not directly mutate
+Matplotlib artists.
 
-Every page binds Controller properties; the UI does not directly mutate Matplotlib artists. The General page's Palette section derives its current label and color strip from the Axes `color_cycle` and Figure `style`. Its source selector applies either the current Style default or a named user-selected palette through `AxesCommandService`.
-
-Closing an Inspector or its Manager disposes each Section exactly once.
+Closing or directly removing an Inspector, ToolBox, Stack, Axes Panel,
+Figure Panel, Host, or Manager recursively disposes each Section exactly once.
 Repository, TeX, MATLAB, and asynchronous fitting callbacks are detached or
 invalidated before the QWidget is removed.
 
+Section construction is transactional. If a later factory fails, every
+earlier Section is disposed in reverse order. A cleanup failure in one
+Section cannot prevent the remaining callbacks from being detached.
+
 ## Component and Axes deletion
 
-Only a component instance label owns the instance context menu. `Delete
-Component` targets the stable `component_id` associated with that exact
-label; right-clicking the Inspector content does not infer a target from the
-current page.
-
-Role navigation labels such as `function curve`, `data plot`, and `text`
-provide `Batch Delete...`. The selection dialog lists `(component_id,
-display_label)` entries, checks all entries initially, supports Select All and
+The Components tree is the only deletion entry. `Delete Component` targets
+the clicked stable `component_id`. `Batch Delete Same Type...` lists only
+removable Components with the same `parent_id`, kind, and role as the clicked
+Component. The dialog checks all entries initially, supports Select All and
 Clear All, and disables `Delete (0)` until at least one entry is selected.
-Single-instance and batch actions both call
+Single and batch actions both call
 `ComponentDeletionService.delete_many(component_ids)`, a thin adapter over
 `ComponentRegistry.delete_transaction()`. The Controller's runtime
 `DeletionPolicy` is the only permission source. A failed transaction restores
-the same Controller, Matplotlib artist, Locator binding, Editor, Header,
-label order, current page, callbacks, and pending updates; it publishes no
+the same Controller, Matplotlib artist, Locator binding, Inspector, tree
+selection, callbacks, and pending updates; it publishes no
 cleanup or lifecycle event. A successful commit alone emits `REMOVED`, after
 which `ComponentEditorManager` disposes and removes the Inspector. The
-completed action produces one Message Bar result. Removing the last instance
-removes its empty role toolbox and navigation button.
+completed action produces one Message Bar result.
 
 Deleting a palette-backed Line or Scatter also releases its palette slot by
 replacing the parent Axes `color_cycle` state inside the same transaction.
@@ -121,17 +131,17 @@ The next creation reuses an available deleted color without recoloring
 survivors. A custom one-off color does not affect the palette cursor, and a
 failed deletion restores the exact pre-action cursor.
 
-Axes navigation labels provide `Delete Axes`. After confirmation,
+An Axes tree node provides `Delete Axes`. After confirmation,
 `AxesCommandService.delete_axes(axes_id)` removes the Axes artist and its
 complete semantic/dynamic subtree. Surviving Axes retain their component IDs
 and subplot `layout_group`/`slot`, while `order`, selector `index`, and
-`axe1...axeN` labels become contiguous. The next Axes at the deleted position
+`Axes 1...Axes N` labels become contiguous. The next Axes at the deleted position
 is selected, or the preceding Axes when the last position was removed. An
-empty Figure enters the No Axes state. Figure itself is closed through its
-project tab, not through Component deletion.
+empty Figure selects its Figure root Inspector. Figure itself is closed
+through its project tab, not through Component deletion.
 
 Axes reindex state and the target subtree are submitted in the same Registry
-transaction. Until commit, the existing Axes Panel, button, current page,
+transaction. Until commit, the existing Axes Panel, current Inspector,
 current Axes, shared/twinned links, and Matplotlib observer state remain
 untouched. The Canvas updates its Axes-ID map and navigation only after the
 committed `REMOVED` events and does not perform a second redraw.

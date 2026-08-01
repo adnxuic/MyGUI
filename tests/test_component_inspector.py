@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication
+from Qt_core import QApplication, QWidget
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
@@ -39,11 +39,15 @@ from code.widgets.fig_control_window.component_editors import (
     ComponentInspector,
     DataReferenceInput,
     EditorContext,
+    EditorProfile,
     EditorPlacement,
     EditorRegistry,
+    EditorSection,
     InterpolationOptionsInput,
     LineAppearanceSection,
     MessagePresenter,
+    SectionSpec,
+    TreePresentationSpec,
     register_production_profiles,
 )
 from code.widgets.fig_control_window.component_editors.profiles import (
@@ -357,7 +361,6 @@ class ComponentInspectorTests(unittest.TestCase):
             TEXT_PROFILE.sections,
         )
         self.assertIs(TEXT_PROFILE.placement, EditorPlacement.ELEMENT)
-        self.assertEqual(TEXT_PROFILE.instance_label_prefix, "text")
         self.assertIs(
             SEMANTIC_TEXT_PROFILE.placement,
             EditorPlacement.SEMANTIC,
@@ -496,7 +499,7 @@ class ComponentInspectorTests(unittest.TestCase):
             "New X",
         )
 
-    def test_axes_panel_uses_scrollable_semantic_inspector_pages(self):
+    def test_axes_panel_lazily_caches_semantic_component_inspectors(self):
         figure = Figure()
         FigureCanvasAgg(figure)
         axes = figure.subplots()
@@ -513,47 +516,120 @@ class ComponentInspectorTests(unittest.TestCase):
         )
         panel = AxesSemanticInspectorPanel(controller, context)
         try:
-            self.assertEqual(
-                tuple(
-                    panel.section_toolbox.itemText(index)
-                    for index in range(panel.section_toolbox.count())
-                ),
-                (
-                    "General",
-                    "X/Y Axis",
-                    "Spines",
-                    "Ticks/Grid",
-                    "Title/Labels",
-                    "Legend",
-                ),
-            )
-            self.assertTrue(
-                all(
-                    page.widgetResizable()
-                    for page in panel.section_pages
+            semantic = [
+                item
+                for item in registry.descendants(
+                    controller.component_id
                 )
-            )
-            self.assertTrue(
-                isinstance(panel.general_inspector, ComponentInspector)
-            )
-            self.assertTrue(
-                all(
-                    isinstance(
-                        context.editor_manager.editor(
-                            controller.component_id
-                        ),
-                        ComponentInspector,
-                    )
-                    for controller in registry
-                    if controller.state.kind not in {
-                        ComponentKind.FIGURE,
-                        ComponentKind.LINE,
-                        ComponentKind.SCATTER,
-                    }
+                if item.state.kind not in {
+                    ComponentKind.LINE,
+                    ComponentKind.SCATTER,
+                }
+                and not (
+                    item.state.kind is ComponentKind.TEXT
+                    and item.state.role is ComponentRole.TEXT
                 )
-            )
+            ]
+            expected_ids = {controller.component_id}
+            self.assertEqual(set(panel.component_ids()), expected_ids)
+            expected_ids.update(item.component_id for item in semantic)
+            for component_id in expected_ids:
+                self.assertTrue(panel.show_component(component_id))
+                self.assertEqual(
+                    panel.current_component_id(),
+                    component_id,
+                )
+                self.assertIsInstance(
+                    panel.inspector(component_id),
+                    ComponentInspector,
+                )
+            self.assertEqual(set(panel.component_ids()), expected_ids)
         finally:
             panel.close()
+            context.editor_manager.close()
+
+    def test_profile_validation_rejects_ambiguous_registration(self):
+        profile = EditorProfile(
+            "test",
+            "Test",
+            (SectionSpec("properties", "Properties", lambda *_args: QWidget()),),
+            placement=EditorPlacement.FIGURE,
+            tree=TreePresentationSpec("Test"),
+        )
+        editor_registry = EditorRegistry()
+        editor_registry.register_profile(
+            ComponentKind.FIGURE,
+            profile,
+            role=ComponentRole.FIGURE,
+        )
+        with self.assertRaisesRegex(ValueError, "Duplicate Editor profile"):
+            editor_registry.register_profile(
+                ComponentKind.FIGURE,
+                profile,
+                role=ComponentRole.FIGURE,
+            )
+        with self.assertRaisesRegex(ValueError, "missing"):
+            editor_registry.validate_production_profiles()
+        with self.assertRaisesRegex(ValueError, "unique"):
+            EditorProfile(
+                "invalid",
+                "Invalid",
+                (
+                    SectionSpec("same", "One", lambda *_args: QWidget()),
+                    SectionSpec("same", "Two", lambda *_args: QWidget()),
+                ),
+                placement=EditorPlacement.SEMANTIC,
+                tree=TreePresentationSpec("Invalid"),
+            )
+
+    def test_section_factory_failure_disposes_prior_subscriptions(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        controller = registry.find_one(kind=ComponentKind.FIGURE)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        baseline = len(registry._event_subscribers)
+
+        class TrackingSection(QWidget, EditorSection):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self._unsubscribe = registry.subscribe(lambda _event: None)
+
+            def dispose(self):
+                if self._unsubscribe is not None:
+                    self._unsubscribe()
+                    self._unsubscribe = None
+
+        profile = EditorProfile(
+            "failure",
+            "Failure",
+            (
+                SectionSpec(
+                    "tracking",
+                    "Tracking",
+                    lambda _controller, _context, parent: TrackingSection(parent),
+                ),
+                SectionSpec(
+                    "failure",
+                    "Failure",
+                    lambda *_args: (_ for _ in ()).throw(
+                        RuntimeError("injected section failure")
+                    ),
+                ),
+            ),
+            placement=EditorPlacement.FIGURE,
+            tree=TreePresentationSpec("Failure"),
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "section failure"):
+                ComponentInspector(
+                    controller,
+                    context=context,
+                    profile=profile,
+                )
+            self.assertEqual(len(registry._event_subscribers), baseline)
+        finally:
             context.editor_manager.close()
 
 

@@ -15,7 +15,9 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
 1. Confirm the application starts maximized with the native Windows title bar and only one taskbar window.
 2. Confirm the dark command bar and bottom Message/State Bar span the full window width.
 3. Confirm the left workspace and right figure workspace touch through a visible splitter with no desktop showing between them.
-4. Drag both workbench splitters, hide and restore the table, restart the application, and confirm the splitter/table preferences restore.
+4. Drag both workbench splitters. Switch between Table and Components,
+   click the active page again to hide the Explorer, restart, and confirm the
+   splitter, page, and visibility preferences restore.
 5. Use Settings > `Reset workspace layout` and confirm the default proportions return and the Message Bar reports success in green.
 6. With no project, confirm the figure empty state directs the user to Style; create a project and confirm the empty state is replaced by its canvas tab.
 7. Resize a restored window through 960x600, 1280x720, 1366x768, and 1920x1080; confirm the command gallery uses overflow instead of clipping and the canvas remains visible.
@@ -40,7 +42,10 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 9. Change method-specific interpolation options and confirm the curve redraws.
 10. Change interpolation X/Y data sources from the right-side panel and confirm only current-project data is listed.
 11. Create a SciPy fitting curve, run `poly2`, and confirm the result area shows coefficients and goodness metrics.
-12. Switch between Function Curve, Data Plot, Fit Curve, and Interpolation. Confirm each Inspector uses the same Basic, Marker, and Advanced line appearance fields in the same order, including line style and marker fields for Interpolation.
+12. Select Function Curve, Data Plot, Fit Curve, and Interpolation nodes in
+    the Components tree. Confirm exactly one Inspector is visible and each
+    uses the same Basic, Marker, and Advanced line appearance fields in the
+    same order, including line style and marker fields for Interpolation.
 13. In Fit Curve, confirm Data Source, Fit Operations, Fit Result, Display Range, and Appearance are separate sections. Changing X/Y must request a manual refit rather than silently recomputing.
 14. Edit Title, X Label, Y Label, and free Text. Confirm they show the same Content, Typography, Rotation and Alignment, Position, and Rendering sections; only free Text offers deletion.
 15. Open Legend with no plotted handles, then with plotted handles. Switch between a preset and a custom coordinate location, change columns and frame properties, and confirm rebuilding the legend keeps its title, font size, location, columns, and frame state.
@@ -48,7 +53,9 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     updates immediately. Then modify axis range, axis labels, label font size,
     bottom spine state, and legend position; the Bottom Spine action must
     replace the previous Message Bar text with one green success message.
-17. Narrow the Inspector until vertical scrolling is required. Visit all six Axes pages and confirm controls remain reachable without expanding the main window.
+17. Narrow the Inspector until vertical scrolling is required. Select Axes,
+    Axis, Spine, Tick, Grid, Title, Label, and Legend tree nodes and confirm
+    each exact Inspector remains reachable without expanding the main window.
 18. Add a text element and edit its content, font, size, and position.
 19. Save the current project, open it in a fresh workspace, and confirm plot, scatter, interpolation, fitting result, axes state, text, and Inspector values restore.
 20. Right-click the canvas tab, rename the project, and confirm existing charts and fitting data references still redraw.
@@ -57,25 +64,26 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 23. Open a second different project and confirm it coexists with the current project.
 24. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
 25. Enter invalid expression, data reference, color, range, and interpolation values. Confirm each failed operation restores the last valid control and artist state and reports exactly one red Message Bar error.
-26. Add two Function Curves. Right-click the first instance label while the
-    second is selected and delete it; confirm only the clicked curve,
+26. Add two Function Curves. Right-click the first tree node while the second
+    is selected and delete it; confirm only the clicked curve,
     Inspector, and artist disappear and one green result is shown.
-27. Right-click the `function curve` role label. Confirm the batch dialog
+27. Right-click a Function Curve tree node and choose
+    `Batch Delete Same Type...`. Confirm the batch dialog
     starts fully selected, `Clear All` disables `Delete (0)`, partial
     selection deletes only checked instances, and deleting all removes the
-    empty role navigation.
+    corresponding tree nodes.
     With a color palette active, delete the middle of three palette-colored
     charts and confirm the next creation previews the released middle color;
     surviving chart colors must not change.
     Repeat with an injected or otherwise reproducible failure and confirm the
-    original artists, labels, expanded page, callbacks, and Inspector objects
+    original artists, tree selection/expansion, callbacks, and Inspector objects
     and palette cursor remain in place; only one red result is shown.
 28. Create three Axes and delete the first, middle, and last in separate runs.
     Confirm the dialog reports the cascade count, stable surviving IDs and
-    subplot slots persist after save/open, labels remain `axe1...axeN`, and
-    deleting the last Axes shows No Axes. On a forced failure, confirm the
+    subplot slots persist after save/open, labels remain `Axes 1...Axes N`,
+    and deleting the last Axes shows the Figure root Inspector. On a forced failure, confirm the
     Figure Axes order, current Axes, shared/twinned links, Axes Panel, and
-    navigation buttons do not change and no intermediate removal is visible.
+    tree selection do not change and no intermediate removal is visible.
 29. Save one of two projects while its tab is in the background and confirm
     the file contains that project. Modify a saved project through the Table,
     Component Inspector, and toolbar zoom, then close its tab and verify

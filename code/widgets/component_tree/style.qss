@@ -1,0 +1,46 @@
+QFrame#component_tree_host
+{
+    background-color: {{COLOR_SURFACE}};
+    border: 0px;
+}
+
+QLineEdit#component_tree_search
+{
+    min-height: 28px;
+    padding: 0px 8px;
+    color: {{COLOR_TEXT_PRIMARY}};
+    background-color: {{COLOR_CONTENT_BACKGROUND}};
+    border: 1px solid #d1d5db;
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QLineEdit#component_tree_search:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{COLOR_FOCUS}};
+}
+
+QTreeView#component_tree_view
+{
+    color: {{COLOR_TEXT_PRIMARY}};
+    background-color: {{COLOR_SURFACE}};
+    border: 0px;
+    outline: 0px;
+    alternate-background-color: {{COLOR_CONTENT_BACKGROUND}};
+}
+
+QTreeView#component_tree_view::item
+{
+    min-height: 26px;
+    padding: 1px 4px;
+}
+
+QTreeView#component_tree_view::item:selected
+{
+    color: {{COLOR_TEXT_ON_DARK}};
+    background-color: {{COLOR_ACCENT}};
+}
+
+QTreeView#component_tree_view::item:hover:!selected
+{
+    background-color: #e5e7eb;
+}

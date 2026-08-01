@@ -1,11 +1,13 @@
-"""Provide project actions and integration shortcuts in the left column."""
+"""Provide project actions and Explorer shortcuts in the left activity rail."""
+
+import os
 
 from Qt_core import *
+
 from code.widgets import qss_func
 from code.widgets.left_column.py_setting_dialog import PySettingDialog
 from code.widgets.theme import COLORS
 
-import os
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
@@ -23,60 +25,108 @@ def _tinted_icon(icon_path, color):
 
 
 class PyLeftColumn(QFrame):
-    """Provide the py left column Qt widget."""
+    """Provide the left activity rail Qt widget."""
 
-    def __init__(self, table, fig_control_window):
+    explorerModeRequested = Signal(str)
+
+    def __init__(self):
         super().__init__()
-        self.table = table
-        self.fig_control_window = fig_control_window
         self.setting_dialog = None
         self._reset_layout_callback = None
 
         self.setObjectName("left_column")
-        qss_file = qss_func.qss_loader(qss_path)
-        self.setStyleSheet(qss_file)
+        self.setStyleSheet(qss_func.qss_loader(qss_path))
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
 
-        # 图表按钮
-        self.table_button = QPushButton(QIcon("pictures/icons/tables.svg"), "")
-        self.table_button.setObjectName("table_button")
-        self.table_button.setToolTip("Show or hide the table workspace")
-        self.table_button.setAccessibleName("Toggle table workspace")
-        self.table_button.setCheckable(True)
-        self.table_button.setChecked(True)
-        self.table_button.toggled.connect(self.the_button_was_toggled)
-        self._update_table_icon(True)
+        self.table_button = self._explorer_button(
+            "table_button",
+            "pictures/icons/tables.svg",
+            "Show or hide the table workspace",
+            "Toggle table workspace",
+            "table",
+        )
         self.layout.addWidget(self.table_button)
 
-        # 添加弹性空间
+        self.components_button = self._explorer_button(
+            "components_button",
+            "pictures/icons/ComTree.svg",
+            "Show or hide the Components tree",
+            "Toggle Components tree",
+            "components",
+        )
+        self.layout.addWidget(self.components_button)
         self.layout.addStretch(1)
 
-
-        # 设置按钮
-        self.setting_button = QPushButton(QIcon("pictures/icons/setting.svg"), "")
+        self.setting_button = QPushButton(
+            QIcon("pictures/icons/setting.svg"),
+            "",
+        )
         self.setting_button.setObjectName("setting_button")
         self.setting_button.setToolTip("Open settings")
         self.setting_button.setAccessibleName("Open settings")
         self.setting_button.setIcon(
-            _tinted_icon("pictures/icons/setting.svg", COLORS["text_primary"])
+            _tinted_icon(
+                "pictures/icons/setting.svg",
+                COLORS["text_primary"],
+            )
         )
         self.setting_button.clicked.connect(self.show_setting_dialog)
         self.layout.addWidget(self.setting_button)
 
+        self.set_explorer_state("table", True)
 
-    def the_button_was_toggled(self, checked):
-        """Synchronize the button appearance after its checked state changes."""
+    def _explorer_button(
+        self,
+        object_name: str,
+        icon_path: str,
+        tooltip: str,
+        accessible_name: str,
+        mode: str,
+    ) -> QPushButton:
+        button = QPushButton(QIcon(icon_path), "")
+        button.setObjectName(object_name)
+        button.setToolTip(tooltip)
+        button.setAccessibleName(accessible_name)
+        button.setCheckable(True)
+        button.clicked.connect(
+            lambda _checked=False, target=mode:
+            self.explorerModeRequested.emit(target)
+        )
+        return button
 
-        self.table.setVisible(checked)
+    def set_explorer_state(self, mode: str, visible: bool) -> None:
+        """Synchronize activity buttons with the Explorer state."""
 
-        self._update_table_icon(checked)
-
-    def _update_table_icon(self, checked):
-        color = COLORS["text_on_dark"] if checked else COLORS["text_primary"]
-        self.table_button.setIcon(_tinted_icon("pictures/icons/tables.svg", color))
+        active = {
+            "table": bool(visible and mode == "table"),
+            "components": bool(visible and mode == "components"),
+        }
+        for button, key, path in (
+            (
+                self.table_button,
+                "table",
+                "pictures/icons/tables.svg",
+            ),
+            (
+                self.components_button,
+                "components",
+                "pictures/icons/ComTree.svg",
+            ),
+        ):
+            button.setChecked(active[key])
+            button.setIcon(
+                _tinted_icon(
+                    path,
+                    (
+                        COLORS["text_on_dark"]
+                        if active[key]
+                        else COLORS["text_primary"]
+                    ),
+                )
+            )
 
     def show_setting_dialog(self):
         """Show setting dialog."""

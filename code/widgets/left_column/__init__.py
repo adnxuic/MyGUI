@@ -1,3 +1,6 @@
-"""Expose the left column package."""
+"""Expose the left activity rail and Explorer host."""
 
-from . py_left_column import PyLeftColumn
+from .explorer import ExplorerMode, LeftExplorerHost
+from .py_left_column import PyLeftColumn
+
+__all__ = ["ExplorerMode", "LeftExplorerHost", "PyLeftColumn"]

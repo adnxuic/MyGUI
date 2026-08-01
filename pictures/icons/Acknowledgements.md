@@ -52,3 +52,5 @@
 <a href="https://iconscout.com/icons/open" class="text-underline font-size-sm" target="_blank">Open</a> by <a href="https://iconscout.com/contributors/lafs" class="text-underline font-size-sm">LAFS</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
 
 <a href="https://iconscout.com/icons/save" class="text-underline font-size-sm" target="_blank">save</a> by <a href="https://iconscout.com/contributors/eva-icons" class="text-underline font-size-sm">Akveo</a> on <a href="https://iconscout.com" class="text-underline font-size-sm">IconScout</a></br>
+
+<a href="https://iconscout.com/icons/file-tree" class="text-underline font-size-sm" target="_blank">file tree</a> by <a href="https://iconscout.com/contributors/brajaomar" class="text-underline font-size-sm" target="_blank">Braja Omar Justico</a>

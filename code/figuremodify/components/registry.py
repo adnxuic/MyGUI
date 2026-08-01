@@ -41,6 +41,25 @@ _TICK_LEVELS = frozenset({"major", "minor"})
 _CHART_KINDS = frozenset({ComponentKind.LINE, ComponentKind.SCATTER})
 
 
+class ComponentRegistrationTransaction:
+    """Collect external rollback work for one component creation batch."""
+
+    def __init__(self) -> None:
+        self._rollback_callbacks: list[Callable[[], None]] = []
+
+    def on_rollback(self, callback: Callable[[], None]) -> None:
+        if not callable(callback):
+            raise TypeError("Registration rollback callback must be callable.")
+        self._rollback_callbacks.append(callback)
+
+    def _rollback(self) -> None:
+        for callback in reversed(self._rollback_callbacks):
+            try:
+                callback()
+            except Exception:
+                continue
+
+
 class ComponentRegistry:
     """Owns controllers, their hierarchy and coalesced redraw work."""
 
@@ -61,8 +80,15 @@ class ComponentRegistry:
                 frozenset[ComponentEventKind] | None,
             ]
         ] = []
+        self._batch_subscribers: list[
+            tuple[
+                Callable[[tuple[ComponentEvent, ...]], None],
+                frozenset[ComponentEventKind] | None,
+            ]
+        ] = []
         self._transaction_depth = 0
         self._event_buffer: list[ComponentEvent] = []
+        self._registration_active = False
 
     def __len__(self) -> int:
         return len(self._controllers)
@@ -161,6 +187,34 @@ class ComponentRegistry:
             result.append(controller)
             queue.extend(self.children(controller.component_id))
         return self._ordered(result)
+
+    def ancestor(
+        self,
+        component_id: str,
+        *,
+        kind: ComponentKind | str | None = None,
+        include_self: bool = True,
+    ) -> ComponentController[Any] | None:
+        """Return the nearest matching ancestor with cycle protection."""
+
+        kind_value = ComponentKind(kind) if kind is not None else None
+        cursor: str | None = str(component_id)
+        if not include_self:
+            cursor = self.get(cursor).state.parent_id
+        visited: set[str] = set()
+        while cursor is not None:
+            if cursor in visited:
+                raise ComponentValidationError(
+                    "Component tree contains an ancestor cycle."
+                )
+            visited.add(cursor)
+            controller = self._controllers.get(cursor)
+            if controller is None:
+                return None
+            if kind_value is None or controller.state.kind is kind_value:
+                return controller
+            cursor = controller.state.parent_id
+        return None
 
     def query(
         self,
@@ -742,6 +796,32 @@ class ComponentRegistry:
 
         return unsubscribe
 
+    def subscribe_batches(
+        self,
+        callback: Callable[[tuple[ComponentEvent, ...]], None],
+        *,
+        kinds: Iterable[ComponentEventKind | str] | None = None,
+    ) -> Callable[[], None]:
+        """Subscribe once per committed logical event batch."""
+
+        if not callable(callback):
+            raise TypeError("Component batch subscriber must be callable.")
+        kind_filter = (
+            None
+            if kinds is None
+            else frozenset(ComponentEventKind(kind) for kind in kinds)
+        )
+        registration = (callback, kind_filter)
+        self._batch_subscribers.append(registration)
+
+        def unsubscribe() -> None:
+            try:
+                self._batch_subscribers.remove(registration)
+            except ValueError:
+                pass
+
+        return unsubscribe
+
     def clear(self, *, delete_targets: bool = False) -> None:
         """Remove all owned entries and detach their callbacks."""
 
@@ -810,6 +890,60 @@ class ComponentRegistry:
             self._transaction_depth -= 1
             if self._transaction_depth == 0:
                 self._flush_events()
+
+    @contextmanager
+    def registration_transaction(
+        self,
+    ) -> Iterator[ComponentRegistrationTransaction]:
+        """Atomically publish newly registered components and UI resources."""
+
+        if self._registration_active:
+            raise RuntimeError("Nested component registration is not supported.")
+        self._registration_active = True
+        transaction = ComponentRegistrationTransaction()
+        existing_ids = set(self._controllers)
+        original_children = defaultdict(
+            set,
+            {parent: set(children) for parent, children in self._children.items()},
+        )
+        original_pending = dict(self._pending)
+        event_start = len(self._event_buffer)
+        self._transaction_depth += 1
+        self._batch_depth += 1
+        succeeded = False
+        try:
+            yield transaction
+            self.validate_tree()
+            if self._batch_depth == 1:
+                self.flush_updates()
+            succeeded = True
+        except Exception:
+            transaction._rollback()
+            new_ids = set(self._controllers) - existing_ids
+            for component_id in reversed(
+                [
+                    controller.component_id
+                    for controller in self.query()
+                    if controller.component_id in new_ids
+                ]
+            ):
+                controller = self._controllers.pop(component_id, None)
+                if controller is None:
+                    continue
+                self.locator.unbind(component_id)
+                self._cleanup_callbacks.pop(component_id, None)
+                controller._registry = None
+                controller._deleted = True
+            self._children = original_children
+            self._pending = original_pending
+            del self._event_buffer[event_start:]
+            raise
+        finally:
+            self._batch_depth -= 1
+            self._transaction_depth -= 1
+            self._registration_active = False
+        if succeeded and self._transaction_depth == 0:
+            self._flush_events()
 
     def flush_updates(self) -> None:
         """Apply all redraw impacts accumulated by the current batch."""
@@ -1346,6 +1480,19 @@ class ComponentRegistry:
                     # Runtime/editor observers are isolated from Controller
                     # commits just like cleanup callbacks.
                     continue
+        committed = tuple(events)
+        for callback, kinds in tuple(self._batch_subscribers):
+            selected = (
+                committed
+                if kinds is None
+                else tuple(event for event in committed if event.kind in kinds)
+            )
+            if not selected:
+                continue
+            try:
+                callback(selected)
+            except Exception:
+                continue
 
     @staticmethod
     def _ordered(

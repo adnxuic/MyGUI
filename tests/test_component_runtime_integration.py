@@ -244,10 +244,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
     def test_first_curve_autoscale_syncs_axes_controller_and_common_editor(self):
         axes = self.canvas.current_axes
         controller = self.canvas.current_axes_controller
-        common = (
-            self.canvas.figure_inspector
-            .find_axes_inspector(axes)
-            .semantic_panel.general_inspector
+        common = self.canvas.figure_inspector.axes_inspector(
+            controller.component_id
+        ).inspector(
+            controller.component_id
         )
 
         self.canvas.add_curve(
@@ -297,10 +297,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
     def test_first_scatter_autoscale_keeps_collection_limits(self):
         axes = self.canvas.current_axes
         controller = self.canvas.current_axes_controller
-        common = (
-            self.canvas.figure_inspector
-            .find_axes_inspector(axes)
-            .semantic_panel.general_inspector
+        common = self.canvas.figure_inspector.axes_inspector(
+            controller.component_id
+        ).inspector(
+            controller.component_id
         )
 
         self.canvas.add_scatter(
@@ -349,10 +349,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         line_pair, _valid_pair = self._set_source_data()
         first_axes = self.canvas.current_axes
         first_controller = self.canvas.current_axes_controller
-        first_common = (
-            self.canvas.figure_inspector
-            .find_axes_inspector(first_axes)
-            .semantic_panel.general_inspector
+        first_common = self.canvas.figure_inspector.axes_inspector(
+            first_controller.component_id
+        ).inspector(
+            first_controller.component_id
         )
         first_limits = (
             tuple(first_axes.get_xlim()),
@@ -362,10 +362,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         self.canvas.add_axes()
         second_axes = self.canvas.current_axes
         second_controller = self.canvas.current_axes_controller
-        second_common = (
-            self.canvas.figure_inspector
-            .find_axes_inspector(second_axes)
-            .semantic_panel.general_inspector
+        second_common = self.canvas.figure_inspector.axes_inspector(
+            second_controller.component_id
+        ).inspector(
+            second_controller.component_id
         )
         self.canvas.add_plot(
             line_pair.x,
@@ -487,6 +487,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             kind=ComponentKind.SPINE,
             selector={"name": "bottom"},
         )
+        self.assertTrue(self.canvas.select_component(bottom_spine.component_id))
         bottom = self.canvas.component_editor_manager.editor(
             bottom_spine.component_id
         )
@@ -636,13 +637,11 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.y_ref,
             object_id=object_id,
         )
-        axes_inspector = self.canvas.figure_inspector.find_axes_inspector(
-            self.canvas.current_axes
+        axes_inspector = self.canvas.figure_inspector.axes_inspector(
+            self.canvas.current_axes_component_id
         )
-        toolbox = axes_inspector.ensure_component_toolbox(
-            ComponentKind.LINE,
-            ComponentRole.DATA_PLOT,
-            "data plot",
+        toolbox = axes_inspector.component_toolbox(
+            (ComponentKind.LINE, ComponentRole.DATA_PLOT),
         )
         self.assertEqual(toolbox.count(), 1)
 
@@ -1012,10 +1011,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                     restored.component_registry.get(axes["id"])
                 )
                 restored_axes = restored_axes_controller.resolve_target()
-                restored_common = (
-                    restored.figure_inspector
-                    .find_axes_inspector(restored_axes)
-                    .semantic_panel.general_inspector
+                restored_common = restored.figure_inspector.axes_inspector(
+                    restored_axes_controller.component_id
+                ).inspector(
+                    restored_axes_controller.component_id
                 )
                 np.testing.assert_allclose(
                     restored_axes_controller.state.properties["xlim"],

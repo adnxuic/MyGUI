@@ -68,6 +68,7 @@ def make_text_controller(figure, text_artist):
         )
     )
     registry.register(controller, target=text_artist, require_parent=False)
+    controller.sync_from_target()
     service = TextRenderService(registry)
     editor_registry = EditorRegistry()
     register_production_profiles(editor_registry)
@@ -616,14 +617,10 @@ class OptionalDependencyTests(unittest.TestCase):
                 )
 
             text_artist = canvas.current_axes.texts[-1]
-            axes_inspector = canvas.figure_inspector.find_axes_inspector(
-                canvas.current_axes
+            axes_inspector = canvas.figure_inspector.axes_inspector(
+                canvas.current_axes_component_id
             )
-            text_widget = axes_inspector.ensure_component_toolbox(
-                ComponentKind.TEXT,
-                ComponentRole.TEXT,
-                "text",
-            ).widget(0)
+            text_widget = axes_inspector.inspector(text_artist.get_gid())
             controller = canvas.component_registry.get(
                 text_artist.get_gid()
             )

@@ -1,28 +1,5 @@
-QToolBox::tab {
-    background: #EBECF0;
-    border-radius: 5px;
-    font-size: 16px;
-    color: #6d6868;
-}
-
-QToolBox::tab:selected {
-    background: #0281ff;
-    font: bold;
-    color: white;
-}
-
-QToolButton#inspector_toolbox_header {
-    background: #EBECF0;
-    border: none;
-    border-radius: 5px;
-    padding: 6px;
-    font-size: 16px;
-    color: #6d6868;
-    text-align: left;
-}
-
-QToolButton#inspector_toolbox_header:checked {
-    background: #0281ff;
-    font-weight: bold;
-    color: white;
+QFrame#axes_semantic_inspector_panel,
+QFrame#inspector_toolbox {
+    border: 0px;
+    background: transparent;
 }

@@ -12,10 +12,9 @@ from Qt_core import (
     QEvent,
     QFileDialog,
     QMessageBox,
-    QPoint,
 )
 
-from code import status_messages
+from code import status_messages, tex_config
 from code.figuremodify.components import (
     ComponentEventKind,
     ComponentKind,
@@ -27,12 +26,10 @@ from code.project_io import (
     project_snapshot,
     restore_project_snapshot,
 )
-from code.widgets.fig_control_window.component_editors.dialogs import (
+from code.widgets.component_tree.dialogs import (
     ComponentBatchDeleteDialog,
 )
-from code.widgets.fig_control_window.figure_inspector import (
-    _run_batch_delete_dialog,
-)
+from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from main import MainWindow
 
 
@@ -79,12 +76,11 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             "second",
             object_id="curve-second",
         )
-        inspector = self.canvas.figure_inspector.find_axes_inspector(
-            self.canvas.current_axes
+        inspector = self.canvas.figure_inspector.axes_inspector(
+            self.canvas.current_axes_component_id
         )
         toolbox = inspector.component_toolbox(
-            ComponentKind.LINE,
-            ComponentRole.FUNCTION_CURVE,
+            (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE),
         )
         return inspector, toolbox
 
@@ -112,32 +108,38 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
             self.app.processEvents()
 
-    def test_instance_delete_uses_the_explicit_header_target_once(self):
+    def test_tree_delete_flow_uses_the_explicit_component_once(self):
         _inspector, toolbox = self._add_curves()
-        first = self.canvas.component_editor_manager.editor("curve-first")
         second = self.canvas.component_editor_manager.editor("curve-second")
-        toolbox.setCurrentWidget(second)
-        first_header = toolbox.header("curve-first")
+        host = self.window.component_tree_host
+        self.assertTrue(self.canvas.select_component("curve-first"))
         messages = []
         status_messages.set_status_handler(
             lambda text, level: messages.append((text, level))
         )
 
-        with mock.patch.object(
-            toolbox,
-            "_confirm_header_delete",
-            return_value=True,
-        ):
-            first_header.customContextMenuRequested.emit(QPoint())
+        fallback = host._fallback_component("curve-first")
+        self.assertTrue(
+            self.canvas.delete_component_group(
+                ("curve-first",),
+                "function curve",
+            )
+        )
+        host._select_after_delete(fallback)
 
         self.assertNotIn("curve-first", self.canvas.component_registry)
         self.assertIn("curve-second", self.canvas.component_registry)
         self.assertIs(toolbox.currentWidget(), second)
+        self.assertEqual(self.canvas.current_component_id, "curve-second")
+        self.assertEqual(host.tree.selected_component_id(), "curve-second")
         self.assertEqual(toolbox.count(), 1)
         self.assertEqual(len(messages), 1)
 
     def test_role_dialog_partial_selection_deletes_only_checked_instance(self):
-        inspector, toolbox = self._add_curves()
+        _inspector, toolbox = self._add_curves()
+        host = self.window.component_tree_host
+        state = self.canvas.component_registry.get("curve-first").state
+        self.canvas.select_component("curve-first")
 
         def accept_partial(dialog):
             dialog._checkboxes[1].setChecked(False)
@@ -148,20 +150,13 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             "exec",
             new=accept_partial,
         ):
-            _run_batch_delete_dialog(
-                inspector,
-                toolbox,
-                "function curve",
-                self.canvas.delete_component_group,
-            )
+            host._run_batch_delete(state)
         self.app.processEvents()
 
         self.assertNotIn("curve-first", self.canvas.component_registry)
         self.assertIn("curve-second", self.canvas.component_registry)
-        self.assertEqual(
-            toolbox.inspector_entries(),
-            [("curve-second", "curve1")],
-        )
+        self.assertEqual(toolbox.component_ids(), ("curve-second",))
+        self.assertEqual(self.canvas.current_component_id, "curve-second")
 
     def test_batch_delete_rolls_back_artists_ids_and_inspectors_on_failure(self):
         inspector, toolbox = self._add_curves()
@@ -176,11 +171,14 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         second_editor = self.canvas.component_editor_manager.editor(
             "curve-second"
         )
-        first_header = toolbox.header("curve-first")
-        second_header = toolbox.header("curve-second")
         current = toolbox.currentWidget()
         original_lines = tuple(self.canvas.current_axes.lines)
-        original_entries = toolbox.inspector_entries()
+        original_entries = toolbox.component_ids()
+        self.canvas.select_component("curve-second")
+        original_selection = self.canvas.current_component_id
+        original_tree_selection = (
+            self.window.component_tree_host.tree.selected_component_id()
+        )
         original_project = project_snapshot(
             self.window.figure_window,
             canvas=self.canvas,
@@ -230,15 +228,17 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             self.canvas.component_editor_manager.editor("curve-second"),
             second_editor,
         )
-        self.assertIs(toolbox.header("curve-first"), first_header)
-        self.assertIs(toolbox.header("curve-second"), second_header)
         self.assertIs(toolbox.currentWidget(), current)
-        self.assertEqual(toolbox.inspector_entries(), original_entries)
+        self.assertEqual(toolbox.component_ids(), original_entries)
         self.assertEqual(toolbox.count(), 2)
+        self.assertEqual(self.canvas.current_component_id, original_selection)
+        self.assertEqual(
+            self.window.component_tree_host.tree.selected_component_id(),
+            original_tree_selection,
+        )
         self.assertIs(
             inspector.component_toolbox(
-                ComponentKind.LINE,
-                ComponentRole.FUNCTION_CURVE,
+                (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE),
             ),
             toolbox,
         )
@@ -346,59 +346,131 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             palette.colors[1],
         )
 
-    def test_inspector_add_failure_rolls_back_accordion_and_manager_tracking(self):
+    def test_inspector_add_failure_rolls_back_stack_and_manager_tracking(self):
         _inspector, toolbox = self._add_curves()
-        original_entries = toolbox.inspector_entries()
+        registry = self.canvas.component_registry
+        original_entries = toolbox.component_ids()
         original_current = toolbox.currentWidget()
-        original_headers = tuple(
-            toolbox.header(component_id)
-            for component_id, _label in original_entries
-        )
-        original_insert = toolbox.main_layout.insertWidget
-        calls = 0
+        original_lines = tuple(self.canvas.current_axes.lines)
+        original_snapshot = self.canvas.component_snapshot()
+        original_selection = self.canvas.current_component_id
+        original_pending = dict(registry._pending)
+        events = []
+        unsubscribe = registry.subscribe(events.append)
+        original_add = toolbox.inspector_stack.addWidget
 
-        def fail_body_insert(*args, **kwargs):
-            nonlocal calls
-            calls += 1
-            result = original_insert(*args, **kwargs)
-            if calls == 2:
-                raise RuntimeError("injected accordion insertion failure")
-            return result
+        def fail_stack_add(*args, **kwargs):
+            original_add(*args, **kwargs)
+            raise RuntimeError("injected stack insertion failure")
 
-        with mock.patch.object(
-            toolbox.main_layout,
-            "insertWidget",
-            side_effect=fail_body_insert,
-        ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "accordion insertion",
+        try:
+            with mock.patch.object(
+                toolbox.inspector_stack,
+                "addWidget",
+                side_effect=fail_stack_add,
             ):
-                self.canvas.add_curve(
-                    "x**3",
-                    0.0,
-                    1.0,
-                    ":",
-                    "#778899",
-                    "third",
-                    object_id="curve-third",
-                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "stack insertion",
+                ):
+                    self.canvas.add_curve(
+                        "x**3",
+                        0.0,
+                        1.0,
+                        ":",
+                        "#778899",
+                        "third",
+                        object_id="curve-third",
+                    )
+        finally:
+            unsubscribe()
         self.app.processEvents()
 
-        self.assertEqual(toolbox.inspector_entries(), original_entries)
+        self.assertEqual(toolbox.component_ids(), original_entries)
         self.assertIs(toolbox.currentWidget(), original_current)
-        self.assertEqual(
-            tuple(
-                toolbox.header(component_id)
-                for component_id, _label in original_entries
-            ),
-            original_headers,
-        )
         self.assertIsNone(
             self.canvas.component_editor_manager.editor("curve-third")
         )
+        self.assertNotIn("curve-third", registry)
+        self.assertEqual(tuple(self.canvas.current_axes.lines), original_lines)
+        self.assertEqual(self.canvas.component_snapshot(), original_snapshot)
+        self.assertEqual(self.canvas.current_component_id, original_selection)
+        self.assertEqual(registry._pending, original_pending)
+        self.assertEqual(events, [])
 
-    def test_full_role_delete_removes_empty_toolbox_and_navigation(self):
+    def test_axes_inspector_failure_rolls_back_complete_axes_subtree(self):
+        registry = self.canvas.component_registry
+        original_snapshot = self.canvas.component_snapshot()
+        original_axes = tuple(self.canvas.fig.axes)
+        original_map = dict(self.canvas._axes_component_ids)
+        original_allocated = set(self.canvas._allocated_component_ids)
+        original_selection = (
+            self.canvas.current_axes_component_id,
+            self.canvas.current_component_id,
+        )
+        original_panel_ids = set(
+            self.canvas.figure_inspector._axes_panels
+        )
+        events = []
+        unsubscribe = registry.subscribe(events.append)
+        try:
+            with mock.patch.object(
+                self.canvas.figure_inspector,
+                "add_axes_inspector",
+                side_effect=RuntimeError("injected Axes Inspector failure"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Axes Inspector"):
+                    self.canvas.add_axes()
+        finally:
+            unsubscribe()
+
+        self.assertEqual(tuple(self.canvas.fig.axes), original_axes)
+        self.assertEqual(self.canvas._axes_component_ids, original_map)
+        self.assertEqual(
+            self.canvas._allocated_component_ids, original_allocated
+        )
+        self.assertEqual(self.canvas.component_snapshot(), original_snapshot)
+        self.assertEqual(
+            (
+                self.canvas.current_axes_component_id,
+                self.canvas.current_component_id,
+            ),
+            original_selection,
+        )
+        self.assertEqual(
+            set(self.canvas.figure_inspector._axes_panels),
+            original_panel_ids,
+        )
+        self.assertEqual(events, [])
+
+    def test_direct_panel_removal_recursively_disposes_cached_sections(self):
+        baseline = len(tex_config._TEX_STATE_LISTENERS)
+        axes_id = self.canvas.current_axes_component_id
+        self.canvas.add_text(
+            0.2,
+            0.3,
+            "listener",
+            "DejaVu Sans",
+            10,
+            object_id="listener-text",
+        )
+        self.assertEqual(len(tex_config._TEX_STATE_LISTENERS), baseline + 1)
+        self.assertIsNotNone(
+            self.canvas.component_editor_manager.editor("listener-text")
+        )
+
+        self.assertTrue(
+            self.canvas.figure_inspector.remove_axes_inspector(axes_id)
+        )
+        self.assertFalse(
+            self.canvas.figure_inspector.remove_axes_inspector(axes_id)
+        )
+        self.assertEqual(len(tex_config._TEX_STATE_LISTENERS), baseline)
+        self.assertIsNone(
+            self.canvas.component_editor_manager.editor("listener-text")
+        )
+
+    def test_full_role_delete_removes_empty_internal_toolbox(self):
         inspector, _toolbox = self._add_curves()
 
         self.assertTrue(
@@ -411,8 +483,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
 
         self.assertIsNone(
             inspector.component_toolbox(
-                ComponentKind.LINE,
-                ComponentRole.FUNCTION_CURVE,
+                (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE),
             )
         )
         self.assertEqual(
@@ -437,12 +508,20 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             ComponentRole.MINOR_TICK_LABEL,
             ComponentRole.GRID,
         }
+        controllers = [
+            controller
+            for controller in self.canvas.component_registry.query()
+            if controller.state.role in fixed_roles
+        ]
+        for controller in controllers:
+            self.assertTrue(
+                self.canvas.select_component(controller.component_id)
+            )
         editors = [
             self.canvas.component_editor_manager.editor(
                 controller.component_id
             )
-            for controller in self.canvas.component_registry.query()
-            if controller.state.role in fixed_roles
+            for controller in controllers
         ]
 
         self.assertTrue(editors)
@@ -554,10 +633,9 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         panel = self.canvas.figure_inspector.axes_inspector(
             target.component_id
         )
-        button = next(
-            entry[2]
-            for entry in self.canvas.figure_inspector._axes_entries
-            if entry[0] == target.component_id
+        self.assertTrue(self.canvas.select_component(target.component_id))
+        tree_selection = (
+            self.window.component_tree_host.tree.selected_component_id()
         )
         original_figure_axes = tuple(self.canvas.fig.axes)
         original_stack = dict(self.canvas.fig._axstack._axes)
@@ -621,13 +699,13 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 ),
                 panel,
             )
-            self.assertIs(
-                next(
-                    entry[2]
-                    for entry in self.canvas.figure_inspector._axes_entries
-                    if entry[0] == target.component_id
-                ),
-                button,
+            self.assertEqual(
+                self.canvas.figure_inspector.current_component_id(),
+                target.component_id,
+            )
+            self.assertEqual(
+                self.window.component_tree_host.tree.selected_component_id(),
+                tree_selection,
             )
             self.assertEqual(
                 self.canvas.component_snapshot(),
@@ -676,7 +754,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             self.canvas.fig._axobservers.disconnect(observer_id)
             self.canvas.canva.release_mouse(target_axes)
 
-    def test_deleting_last_axes_enters_no_axes_state(self):
+    def test_deleting_last_axes_selects_figure_root_inspector(self):
         axes_id = self.canvas.current_axes_component_id
 
         with mock.patch.object(
@@ -691,7 +769,11 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertIsNone(self.canvas.current_axes_component_id)
         self.assertIs(
             self.canvas.figure_inspector.current_panel(),
-            self.canvas.figure_inspector.no_axes_state,
+            self.canvas.figure_inspector.root_inspector,
+        )
+        self.assertEqual(
+            self.canvas.current_component_id,
+            self.canvas.root_component_id,
         )
 
     def test_axes_delete_round_trips_through_schema_v6(self):
@@ -804,6 +886,89 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         figure_window.mark_canvas_clean(self.canvas)
         self.canvas.current_axes.set_xlim(2.0, 5.0)
         self.assertTrue(figure_window.is_canvas_dirty(self.canvas))
+
+    def test_project_construction_failure_before_tab_publication_is_clean(self):
+        figure_window = self.window.figure_window
+        before_projects = set(self.window.repository.projects)
+        before_subtables = set(self.window.table._subtables)
+        before_canvases = dict(figure_window.canvas)
+        before_tabs = figure_window.tabwindow.count()
+        before_panels = figure_window.figure_inspector_host._figure_stack.count()
+        created = []
+
+        def construct(*args, **kwargs):
+            canvas = PyFigureCanvas(*args, **kwargs)
+            created.append(canvas)
+            return canvas
+
+        with (
+            mock.patch(
+                "code.widgets.figure_canvas.py_figure_window.PyFigureCanvas",
+                side_effect=construct,
+            ),
+            mock.patch.object(
+                figure_window.figure_inspector_host,
+                "add_figure_inspector",
+                side_effect=RuntimeError("injected Inspector panel failure"),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "panel failure"):
+                figure_window.add_figure(
+                    width=4,
+                    height=3,
+                    dpi=100,
+                    canva_name="FailedBeforeTab",
+                    style="default",
+                )
+
+        self.assertEqual(set(self.window.repository.projects), before_projects)
+        self.assertEqual(set(self.window.table._subtables), before_subtables)
+        self.assertEqual(figure_window.canvas, before_canvases)
+        self.assertEqual(figure_window.tabwindow.count(), before_tabs)
+        self.assertEqual(
+            figure_window.figure_inspector_host._figure_stack.count(),
+            before_panels,
+        )
+        self.assertEqual(len(created), 1)
+        self.assertTrue(created[0]._disposed)
+        self.assertTrue(created[0].component_editor_manager._closed)
+
+    def test_project_construction_failure_after_tab_insertion_is_clean(self):
+        figure_window = self.window.figure_window
+        before_projects = set(self.window.repository.projects)
+        before_subtables = set(self.window.table._subtables)
+        before_canvases = dict(figure_window.canvas)
+        before_tabs = figure_window.tabwindow.count()
+        before_panels = figure_window.figure_inspector_host._figure_stack.count()
+        original_add_tab = figure_window.tabwindow.addTab
+
+        def add_then_fail(*args, **kwargs):
+            original_add_tab(*args, **kwargs)
+            raise RuntimeError("injected tab publication failure")
+
+        with mock.patch.object(
+            figure_window.tabwindow,
+            "addTab",
+            side_effect=add_then_fail,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "tab publication"):
+                figure_window.add_figure(
+                    width=4,
+                    height=3,
+                    dpi=100,
+                    canva_name="FailedAfterTab",
+                    style="default",
+                )
+
+        self.assertEqual(set(self.window.repository.projects), before_projects)
+        self.assertEqual(set(self.window.table._subtables), before_subtables)
+        self.assertEqual(figure_window.canvas, before_canvases)
+        self.assertEqual(figure_window.tabwindow.count(), before_tabs)
+        self.assertEqual(
+            figure_window.figure_inspector_host._figure_stack.count(),
+            before_panels,
+        )
+        self.assertIs(figure_window.current_canva, self.canvas)
 
     def test_targeted_background_save_writes_the_requested_project(self):
         first = self.canvas
@@ -939,6 +1104,10 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertNotIn(project_id, figure_window._clean_fingerprints)
         self.assertNotIn(project_id, self.window.repository.projects)
         self.assertNotIn(project_id, self.window.table._subtables)
+        self.assertNotIn(
+            project_id,
+            self.window.component_tree_host._sessions,
+        )
         self.assertIsNone(figure_window.current_canva)
         self.assertIsNone(self.window.table.current_project_id)
 

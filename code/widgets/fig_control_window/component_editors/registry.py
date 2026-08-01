@@ -5,18 +5,21 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from Qt_core import QWidget
+from code.figuremodify.components import (
+    ComponentKind,
+    ComponentRole,
+    ROLES_BY_KIND,
+)
 
 from .base import ComponentEditorBase
 from .inspector import ComponentInspector, EditorProfile
 
 
-class EditorRegistry:
-    """Map ``(component kind, role)`` pairs to reusable editor classes.
+EditorKey = tuple[ComponentKind, ComponentRole]
 
-    A kind-only registration remains the fallback for all roles of that kind.
-    This lets line-like components share the generic property editor while
-    fit/interpolation/data roles opt into specialized editors.
-    """
+
+class EditorRegistry:
+    """Map exact kind/role pairs to profiles and optional fallback editors."""
 
     def __init__(self, fallback: type[ComponentEditorBase] = ComponentEditorBase):
         self.fallback = fallback
@@ -24,10 +27,7 @@ class EditorRegistry:
             tuple[str, str | None],
             type[QWidget] | Callable,
         ] = {}
-        self._profiles: dict[
-            tuple[str, str | None],
-            EditorProfile,
-        ] = {}
+        self._profiles: dict[EditorKey, EditorProfile] = {}
 
     @staticmethod
     def _value_key(value) -> str:
@@ -101,32 +101,83 @@ class EditorRegistry:
             None if role is None else self._value_key(role),
         )
         self._editors.pop(key, None)
-        self._profiles.pop(key, None)
+        if role is not None:
+            self._profiles.pop(
+                (ComponentKind(kind), ComponentRole(role)),
+                None,
+            )
 
     def register_profile(
         self,
-        kind: str,
+        kind: ComponentKind | str,
         profile: EditorProfile,
         *,
-        role=None,
+        role: ComponentRole | str,
     ) -> None:
-        """Register profile."""
+        """Register one exact production ``(kind, role)`` profile."""
 
-        key = (
-            self._kind_key(kind),
-            None if role is None else self._value_key(role),
-        )
+        key = (ComponentKind(kind), ComponentRole(role))
+        if key in self._profiles:
+            raise ValueError(
+                "Duplicate Editor profile for "
+                f"{key[0].value}/{key[1].value}."
+            )
         self._profiles[key] = profile
+
+    def profile_for(
+        self,
+        kind: ComponentKind | str,
+        role: ComponentRole | str,
+    ) -> EditorProfile | None:
+        """Return an exact profile without creating an Inspector."""
+
+        return self._profiles.get((ComponentKind(kind), ComponentRole(role)))
 
     def resolve_profile(self, component) -> EditorProfile | None:
         """Return the editor profile registered for a component."""
 
-        kind = self.component_kind(component)
-        role = self.component_role(component)
-        return self._profiles.get(
-            (kind, role),
-            self._profiles.get((kind, None)),
+        try:
+            kind = ComponentKind(self.component_kind(component))
+            role = ComponentRole(self.component_role(component))
+        except ValueError:
+            return None
+        return self._profiles.get((kind, role))
+
+    def validate_production_profiles(self) -> None:
+        """Fail fast unless every schema-v6 kind/role has one profile."""
+
+        expected = {
+            (kind, role)
+            for kind, roles in ROLES_BY_KIND.items()
+            for role in roles
+        }
+        missing = sorted(
+            expected - set(self._profiles),
+            key=lambda item: (item[0].value, item[1].value),
         )
+        unexpected = sorted(
+            set(self._profiles) - expected,
+            key=lambda item: (item[0].value, item[1].value),
+        )
+        if missing or unexpected:
+            details = []
+            if missing:
+                details.append(
+                    "missing "
+                    + ", ".join(
+                        f"{kind.value}/{role.value}"
+                        for kind, role in missing
+                    )
+                )
+            if unexpected:
+                details.append(
+                    "unexpected "
+                    + ", ".join(
+                        f"{kind.value}/{role.value}"
+                        for kind, role in unexpected
+                    )
+                )
+            raise ValueError("Invalid production Editor profiles: " + "; ".join(details))
 
     def resolve(self, component):
         """Resolve the requested object, returning no value when it is unavailable."""

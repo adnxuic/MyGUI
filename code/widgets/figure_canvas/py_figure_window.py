@@ -63,6 +63,7 @@ class PyFigureWindow(QFrame):
         figure_inspector_host: FigureInspectorHost | None = None,
         repository: TableRepository | None = None,
         color_library: ColorLibrary | None = None,
+        component_tree_host=None,
     ):
         super().__init__()
 
@@ -71,6 +72,7 @@ class PyFigureWindow(QFrame):
         self.setStyleSheet(qss_file)
 
         self.figure_inspector_host = figure_inspector_host
+        self.component_tree_host = component_tree_host
         if repository is None:
             raise ValueError("PyFigureWindow requires a TableRepository.")
         self.repository = repository
@@ -142,33 +144,68 @@ class PyFigureWindow(QFrame):
         project_name = validate_component_name(canva_name or self._default_project_name(), "Project name")
         if self.has_project_name(project_name):
             raise ValueError(f"Project already exists: {project_name}")
+        created_project_id = None
         if self.table is not None and create_table:
             self.table.create_project_table(project_name)
+            created_project_id = self.repository.project_by_name(
+                project_name
+            ).id
         project = self.repository.project_by_name(project_name)
+        canva = None
+        inspector_added = False
+        target_index = self.tabwindow.count()
+        try:
+            canva = PyFigureCanvas(
+                self,
+                width=width,
+                height=height,
+                dpi=dpi,
+                style=style,
+                repository=self.repository,
+                project_id=project.id,
+                project_name=project_name,
+                project_path=project_path,
+                color_library=self.color_library,
+                component_tree=component_tree,
+            )
+            figure_inspector = self.figure_inspector_host.add_figure_inspector(
+                canva.component_registry.get(canva.root_component_id),
+                canva.editor_context,
+                self.color_library,
+            )
+            inspector_added = True
+            canva.set_figure_inspector(figure_inspector)
 
-        canva = PyFigureCanvas(
-            self,
-            width=width,
-            height=height,
-            dpi=dpi,
-            style=style,
-            repository=self.repository,
-            project_id=project.id,
-            project_name=project_name,
-            project_path=project_path,
-            color_library=self.color_library,
-            component_tree=component_tree,
-        )
-        self.canvas[project.id] = canva
+            blocked = self.tabwindow.blockSignals(True)
+            try:
+                added_index = self.tabwindow.addTab(canva, project_name)
+                if added_index < 0:
+                    raise RuntimeError("Could not add the Figure project tab.")
+                self.canvas[project.id] = canva
+                self.tabwindow.setCurrentWidget(canva)
+            finally:
+                self.tabwindow.blockSignals(blocked)
+        except Exception:
+            self.canvas.pop(project.id, None)
+            if canva is not None:
+                index = self.tabwindow.indexOf(canva)
+                if index >= 0:
+                    self.tabwindow.removeTab(index)
+            if inspector_added:
+                self.figure_inspector_host.remove_figure_inspector(
+                    target_index
+                )
+            if canva is not None:
+                canva.dispose()
+                canva.setParent(None)
+                canva.deleteLater()
+            if created_project_id is not None and self.table is not None:
+                self.table.remove_project_table(created_project_id)
+            self.change_current_canvas()
+            self._update_empty_state()
+            raise
 
-        figure_inspector = (
-            self.figure_inspector_host.add_figure_inspector()
-        )
-        canva.set_figure_inspector(figure_inspector)
-
-        self.tabwindow.addTab(canva, project_name)
-
-        self.tabwindow.setCurrentWidget(canva)
+        self.change_current_canvas()
         self._update_empty_state()
 
     @staticmethod
@@ -230,6 +267,8 @@ class PyFigureWindow(QFrame):
             self.current_figure_inspector = None
             if self.figure_inspector_host is not None:
                 self.figure_inspector_host.show_empty_state()
+            if self.component_tree_host is not None:
+                self.component_tree_host.set_canvas(None)
             if self.table is not None:
                 self.table.switch_to_table(None)
             return
@@ -239,6 +278,8 @@ class PyFigureWindow(QFrame):
             )
         )
         project_id = getattr(self.current_canva, "project_id", None)
+        if self.component_tree_host is not None:
+            self.component_tree_host.set_canvas(self.current_canva)
         if self.table is not None:
             self.table.switch_to_table(project_id)
 
@@ -271,6 +312,12 @@ class PyFigureWindow(QFrame):
     def clear_figures(self):
         """Clear figures."""
 
+        project_ids = [
+            str(self.tabwindow.widget(index).project_id)
+            for index in range(self.tabwindow.count())
+            if getattr(self.tabwindow.widget(index), "project_id", None)
+            is not None
+        ]
         while self.tabwindow.count():
             widget = self.tabwindow.widget(0)
             self.tabwindow.removeTab(0)
@@ -282,6 +329,10 @@ class PyFigureWindow(QFrame):
         self.current_canva = None
         self.current_figure_inspector = None
         self._update_empty_state()
+        if self.component_tree_host is not None:
+            self.component_tree_host.set_canvas(None)
+            for project_id in project_ids:
+                self.component_tree_host.forget_project(project_id)
         if self.figure_inspector_host is not None:
             self.figure_inspector_host.clear_figure_inspectors()
 
@@ -316,6 +367,8 @@ class PyFigureWindow(QFrame):
             self._clean_fingerprints.pop(project_id, None)
         canvas.deleteLater()
         self.change_current_canvas()
+        if project_id is not None and self.component_tree_host is not None:
+            self.component_tree_host.forget_project(project_id)
         return True
 
     def close_project_at(self, index: int) -> bool:

@@ -1,4 +1,4 @@
-"""Small Controller-free dialogs used by component Inspector containers."""
+"""Controller-free dialogs owned by Components tree navigation."""
 
 from __future__ import annotations
 
@@ -24,8 +24,7 @@ class ComponentBatchDeleteDialog(QDialog):
 
         layout = QVBoxLayout(self)
         description = QLabel(
-            f"Select the {role_label} components to delete.",
-            self,
+            f"Select the {role_label} components to delete.", self
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -58,8 +57,7 @@ class ComponentBatchDeleteDialog(QDialog):
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel, self)
         self.delete_button = self.buttons.addButton(
-            "Delete",
-            QDialogButtonBox.AcceptRole,
+            "Delete", QDialogButtonBox.AcceptRole
         )
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)

@@ -9,6 +9,7 @@ QFrame#left_column
 }
 
 QPushButton#table_button,
+QPushButton#components_button,
 QPushButton#setting_button
 {
     min-width: 40px;
@@ -24,24 +25,28 @@ QPushButton#setting_button
 }
 
 QPushButton#table_button:hover,
+QPushButton#components_button:hover,
 QPushButton#setting_button:hover
 {
     background-color: #e5e7eb;
 }
 
 QPushButton#table_button:focus,
+QPushButton#components_button:focus,
 QPushButton#setting_button:focus
 {
     border-color: {{COLOR_FOCUS}};
 }
 
-QPushButton#table_button:checked
+QPushButton#table_button:checked,
+QPushButton#components_button:checked
 {
     background-color: {{COLOR_ACCENT}};
     border-color: {{COLOR_ACCENT}};
 }
 
-QPushButton#table_button:checked:focus
+QPushButton#table_button:checked:focus,
+QPushButton#components_button:checked:focus
 {
     border-color: {{COLOR_FOCUS}};
 }

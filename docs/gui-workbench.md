@@ -7,9 +7,12 @@ MyGUI uses one native desktop window with a full-width application command bar, 
 - The application starts maximized and uses the operating system title bar, resize borders, minimize/maximize controls, and snap behavior.
 - The command bar spans the window. Its first row selects `style`, `layout`, `chart`, or `element`; the second row contains the corresponding action gallery.
 - `workspace_splitter` divides the left workspace from the figure workspace. Its first-run ratio is approximately 45/55 and the figure workspace keeps at least 400 logical pixels when space permits.
-- `table_control_splitter` divides the project table from the figure inspector. Its first-run sizes are 420/240 logical pixels.
+- `explorer_control_splitter` divides the active Explorer page from the
+  figure inspector. Its first-run sizes are 420/240 logical pixels.
 - The activity rails are 44 logical pixels wide. The bottom Message/State Bar is 28 logical pixels high.
-- The table activity button hides or restores the table without collapsing the inspector or figure workspace.
+- Table and Components buttons switch the shared Explorer page. Clicking the
+  active button again hides the Explorer; opening either page restores its
+  last visible width.
 - Inspector sections remain independently scrollable when a restored or narrow window cannot show the complete form. TeX and MATLAB pages use the same bounded-scroll behavior, so switching tools does not resize the shell.
 - Component editing uses one profile-driven Inspector shell. Line charts share the same appearance groups; Text, Title, and Axis Labels share the same text sections; Legend keeps its Controller-specific layout and frame sections.
 
@@ -17,22 +20,27 @@ MyGUI uses one native desktop window with a full-width application command bar, 
 
 Workbench preferences are stored in the versioned `workspaceLayout` `QSettings` group:
 
-- `version`: layout settings version; currently `1`.
+- `version`: layout settings version; currently `2`.
 - `outerSplitterSizes`: left-workspace and figure-workspace sizes.
-- `innerSplitterSizes`: table and inspector sizes.
-- `tableVisible`: table activity-button state.
+- `innerSplitterSizes`: Explorer and Inspector sizes.
+- `explorerMode`: last visible page, `table` or `components`.
+- `explorerVisible`: whether the Explorer is expanded.
 
 Window geometry is not stored because every application launch starts maximized. Missing, malformed, obsolete, or unusable layout values fall back to the first-run sizes. The Settings dialog's reset action clears this group and reapplies the defaults.
+Version-1 `tableVisible` is migrated to the Table page and the equivalent
+Explorer visibility.
 
 These settings are application preferences. They are not written to `.mygui.json` project files, and opening a project does not replace them.
 
 ## Empty states and command galleries
 
 - With no project, the figure workspace explains that a style must be selected to create a project; the existing Style workflow remains the creation path.
-- Empty inspector states explain when a project, axes, or editable object is required.
+- With a project but no Axes, the Figure root Inspector remains available.
 - Style, Layout, Chart, and Element use action toolbars. Qt moves actions that do not fit into the toolbar overflow menu.
 - Style, Layout, Text, and Settings dialogs are created on first use, parented to the main window, and reused. Chart dialogs are recreated so their data choices reflect the current project.
-- The Axes Inspector keeps the existing navigation as six scrollable pages: General, X/Y Axis, Spines, Ticks/Grid, Title/Labels, and Legend. Every region binds its semantic Controller directly.
+- The Components tree is the only Component navigation. It opens one exact
+  stable-ID Inspector at a time; every Inspector binds its Controller
+  directly.
 - Chart creation dialogs reuse controller-free line appearance, data reference, and interpolation-option inputs. Accepting a dialog still delegates component creation to the active canvas.
 
 ## Project tab close and application exit

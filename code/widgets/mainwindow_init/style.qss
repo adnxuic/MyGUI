@@ -12,14 +12,14 @@ QWidget#left_workspace
 }
 
 QSplitter#workspace_splitter::handle,
-QSplitter#table_control_splitter::handle
+QSplitter#explorer_control_splitter::handle
 {
     background-color: #d1d5db;
     width: 6px;
 }
 
 QSplitter#workspace_splitter::handle:hover,
-QSplitter#table_control_splitter::handle:hover
+QSplitter#explorer_control_splitter::handle:hover
 {
     background-color: {{COLOR_ACCENT}};
 }

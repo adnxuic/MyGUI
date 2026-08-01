@@ -9,6 +9,7 @@ from code.figuremodify.components import FitCurveController
 from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
 from .context import EditorContext
+from .inspector import EditorSection
 
 from code import status_messages
 from code.database import ColumnRef, matlab_adapter
@@ -605,7 +606,7 @@ class FitDomainSection(QFrame):
                 pass
 
 
-class FitSectionProxy(QFrame):
+class FitSectionProxy(QFrame, EditorSection):
     """Place one view of a shared fit coordinator into an Inspector section."""
 
     PARTS = {"actions", "result", "range"}

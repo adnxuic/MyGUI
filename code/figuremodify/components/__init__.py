@@ -57,7 +57,7 @@ from .models import (
     UpdateImpact,
     XYData,
 )
-from .registry import ComponentRegistry
+from .registry import ComponentRegistrationTransaction, ComponentRegistry
 
 __all__ = [
     "CONTROLLER_TYPES",
@@ -81,6 +81,7 @@ __all__ = [
     "ComponentLocator",
     "ComponentNotFoundError",
     "ComponentRegistry",
+    "ComponentRegistrationTransaction",
     "ComponentMutation",
     "ComponentNotice",
     "ComponentRole",
