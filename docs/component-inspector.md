@@ -5,8 +5,9 @@
 ## Core types
 
 - `ComponentInspector(controller, context, profile)` owns section layout,
-  synchronization, and section disposal. Business deletion authority comes
-  only from the Controller.
+  synchronization, and section disposal. Physical deletion delegates to the
+  Canvas `DeletionCoordinator`; the Inspector does not delete Registry or
+  Matplotlib state directly.
 - `EditorProfile` defines the profile key, title, ordered `SectionSpec`
   records, an explicit visual `placement`, and a UI-only
   `TreePresentationSpec`.
@@ -110,20 +111,27 @@ Section cannot prevent the remaining callbacks from being detached.
 
 ## Component and Axes deletion
 
-The Components tree is the only deletion entry. `Delete Component` targets
-the clicked stable `component_id`. `Batch Delete Same Type...` lists only
-removable Components with the same `parent_id`, kind, and role as the clicked
-Component. The dialog checks all entries initially, supports Select All and
-Clear All, and disables `Delete (0)` until at least one entry is selected.
-Single and batch actions both call
-`ComponentDeletionService.delete_many(component_ids)`, a thin adapter over
-`ComponentRegistry.delete_transaction()`. The Controller's runtime
-`DeletionPolicy` is the only permission source. A failed transaction restores
-the same Controller, Matplotlib artist, Locator binding, Inspector, tree
-selection, callbacks, and pending updates; it publishes no
-cleanup or lifecycle event. A successful commit alone emits `REMOVED`, after
-which `ComponentEditorManager` disposes and removes the Inspector. The
-completed action produces one Message Bar result.
+`Delete Component`, batch deletion, Axes deletion, Inspector deletion, and
+table-dependency cascades all submit a `DeletionRequest` to the Canvas
+`DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
+IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
+exact `DeletionHandlerRegistry` entry, and produces a runtime-only
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v6.
+
+The batch dialog uses the source tree's exact numbered instance labels and
+shows each stable ID. It lists the complete matching cohort regardless of the
+current search, starts fully selected, supports partial selection, and disables
+`Delete (0)`. On acceptance it revalidates every original candidate before an
+all-or-none commit.
+
+Before mutation, the coordinator prepares the fallback Inspector and
+reversibly detaches any affected Axes Panel. The Registry then stages survivor
+state, artists, Locator bindings, a complete tree projection, and schema-v6
+validation. A failed transaction restores the same Controller, artist,
+Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
+palette cursor, and selection; it publishes no cleanup or lifecycle event. A
+successful commit alone emits one Registry batch, one redraw, one selection
+change when needed, and one green or warning Message Bar result.
 
 Deleting a palette-backed Line or Scatter also releases its palette slot by
 replacing the parent Axes `color_cycle` state inside the same transaction.
@@ -131,9 +139,9 @@ The next creation reuses an available deleted color without recoloring
 survivors. A custom one-off color does not affect the palette cursor, and a
 failed deletion restores the exact pre-action cursor.
 
-An Axes tree node provides `Delete Axes`. After confirmation,
-`AxesCommandService.delete_axes(axes_id)` removes the Axes artist and its
-complete semantic/dynamic subtree. Surviving Axes retain their component IDs
+An Axes tree node provides `Delete Axes`. After confirmation, its composite
+deletion handler removes the Axes artist and complete semantic/dynamic subtree.
+Surviving Axes retain their component IDs
 and subplot `layout_group`/`slot`, while `order`, selector `index`, and
 `Axes 1...Axes N` labels become contiguous. The next Axes at the deleted position
 is selected, or the preceding Axes when the last position was removed. An
@@ -144,10 +152,9 @@ another cell. Figure itself is closed through its project tab, not through
 Component deletion.
 
 Axes reindex state and the target subtree are submitted in the same Registry
-transaction. Until commit, the existing Axes Panel, current Inspector,
-current Axes, shared/twinned links, and Matplotlib observer state remain
-untouched. The Canvas updates its Axes-ID map and navigation only after the
-committed `REMOVED` events and does not perform a second redraw.
+transaction. The Axes Panel is detached reversibly before the domain stage and
+disposed only after commit. The Canvas publishes its prepared Axes-ID map and
+authoritative fallback selection without a second navigation pass or redraw.
 
 Title, Axis Label, Legend, Axis, Spine, Tick, Tick Label, and Grid states never
 offer physical deletion. Their existing Controller behavior uses `visible`

@@ -104,7 +104,14 @@ class ColorIntegrationTests(unittest.TestCase):
     def test_delete_and_dependency_restore_rebuild_safe_color_targets(self):
         self._add_all_chart_types()
         axes_id = self.canvas.current_axes_component_id
+        original_axes_state = self.canvas.component_registry.get(
+            axes_id
+        ).state.clone()
         snapshots = self.canvas.dependent_records({self.x_ref})
+        self.assertEqual(
+            [state.id for state in snapshots.axes_states],
+            [axes_id],
+        )
         self.canvas.remove_data_dependents(snapshots)
         self.assertEqual(
             len(
@@ -117,6 +124,12 @@ class ColorIntegrationTests(unittest.TestCase):
             1,
         )
         self.canvas.restore_data_dependents(snapshots)
+        self.assertEqual(
+            self.canvas.component_registry.get(axes_id).state.properties[
+                "color_cycle"
+            ],
+            original_axes_state.properties["color_cycle"],
+        )
         self.assertEqual(
             len(
                 self.canvas.component_registry.query(

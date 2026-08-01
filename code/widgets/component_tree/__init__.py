@@ -10,7 +10,7 @@ from .nodes import (
     GroupNodeKey,
     TreeNodeKey,
 )
-from .dialogs import ComponentBatchDeleteDialog
+from .dialogs import ComponentBatchDeleteDialog, DeleteCandidate
 from .view import ComponentTreeView
 
 __all__ = [
@@ -25,4 +25,5 @@ __all__ = [
     "ComponentTreeModel",
     "ComponentTreeView",
     "ComponentBatchDeleteDialog",
+    "DeleteCandidate",
 ]

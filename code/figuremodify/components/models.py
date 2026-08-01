@@ -507,6 +507,7 @@ class ComponentBatchChange:
     committed: bool
     notices: tuple[ComponentNotice, ...] = ()
     message: str = ""
+    rollback_complete: bool = True
 
     @property
     def ok(self) -> bool:

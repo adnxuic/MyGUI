@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, replace
+from enum import Enum
 import re
 import warnings
 from collections.abc import Callable, Iterable
@@ -24,6 +25,7 @@ from code.database.safe_expression import evaluate_curve_expression
 from code.figuremodify.components import (
     AxesController,
     ChangeStatus,
+    CONTROLLER_TYPES,
     ComponentBatchChange,
     ComponentChange,
     ComponentKind,
@@ -32,7 +34,9 @@ from code.figuremodify.components import (
     ComponentRegistry,
     ComponentRole,
     ComponentState,
+    ComponentValidationError,
     DataPlotController,
+    DeletionPolicy,
     FitCurveController,
     FunctionCurveController,
     InterpolationController,
@@ -93,9 +97,227 @@ def _warning(message: str) -> ComponentNotice:
     return ComponentNotice(MessageLevel.WARNING, message)
 
 
+class DeleteReason(str, Enum):
+    """Describe the runtime workflow that requested physical deletion."""
+
+    SINGLE = "single"
+    BATCH = "batch"
+    AXES = "axes"
+    DATA_DEPENDENCY = "data_dependency"
+    PROGRAMMATIC = "programmatic"
+
+
+@dataclass(frozen=True, slots=True)
+class DeletionRequest:
+    """Identify one atomic physical-deletion request by stable IDs."""
+
+    component_ids: tuple[str, ...]
+    anchor_id: str | None = None
+    reason: DeleteReason = DeleteReason.PROGRAMMATIC
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "component_ids",
+            tuple(dict.fromkeys(str(item) for item in self.component_ids)),
+        )
+        object.__setattr__(
+            self,
+            "anchor_id",
+            str(self.anchor_id) if self.anchor_id is not None else None,
+        )
+        object.__setattr__(self, "reason", DeleteReason(self.reason))
+
+
+@dataclass(frozen=True, slots=True)
+class ColorCycleDeletionEffect:
+    """Declare that deletion releases an ordered Axes palette slot."""
+
+
+@dataclass(frozen=True, slots=True)
+class DeletionHandler:
+    """Declare physical ownership and explicit cross-component effects."""
+
+    owns_subtree: bool = False
+    effects: tuple[object, ...] = ()
+
+
+class DeletionHandlerRegistry:
+    """Resolve one explicit deletion contract for every removable Editor key."""
+
+    def __init__(self) -> None:
+        self._handlers: dict[
+            tuple[ComponentKind, ComponentRole],
+            DeletionHandler,
+        ] = {}
+
+    def register(
+        self,
+        kind: ComponentKind,
+        role: ComponentRole,
+        handler: DeletionHandler,
+    ) -> None:
+        key = (ComponentKind(kind), ComponentRole(role))
+        if key in self._handlers:
+            raise ValueError(
+                f"Duplicate deletion handler for {key[0].value}/{key[1].value}."
+            )
+        self._handlers[key] = handler
+
+    def resolve(self, controller) -> DeletionHandler | None:
+        state = controller.state
+        return self._handlers.get((state.kind, state.role))
+
+    def validate(self, expected) -> None:
+        expected_keys = set(expected)
+        actual_keys = set(self._handlers)
+        missing = sorted(
+            expected_keys - actual_keys,
+            key=lambda item: (item[0].value, item[1].value),
+        )
+        unexpected = sorted(
+            actual_keys - expected_keys,
+            key=lambda item: (item[0].value, item[1].value),
+        )
+        if not missing and not unexpected:
+            return
+        details = []
+        if missing:
+            details.append(
+                "missing "
+                + ", ".join(
+                    f"{kind.value}/{role.value}" for kind, role in missing
+                )
+            )
+        if unexpected:
+            details.append(
+                "unexpected "
+                + ", ".join(
+                    f"{kind.value}/{role.value}" for kind, role in unexpected
+                )
+            )
+        raise ValueError("Invalid production deletion handlers: " + "; ".join(details))
+
+
+def production_deletion_handlers() -> DeletionHandlerRegistry:
+    """Build and validate the first-party physical-deletion contracts."""
+
+    handlers = DeletionHandlerRegistry()
+    handlers.register(
+        ComponentKind.AXES,
+        ComponentRole.AXES,
+        DeletionHandler(owns_subtree=True),
+    )
+    palette_leaf = DeletionHandler(effects=(ColorCycleDeletionEffect(),))
+    for role in (
+        ComponentRole.LINE,
+        ComponentRole.FUNCTION_CURVE,
+        ComponentRole.DATA_PLOT,
+        ComponentRole.FIT_CURVE,
+        ComponentRole.INTERPOLATION,
+    ):
+        handlers.register(ComponentKind.LINE, role, palette_leaf)
+    handlers.register(ComponentKind.SCATTER, ComponentRole.SCATTER, palette_leaf)
+    handlers.register(
+        ComponentKind.TEXT,
+        ComponentRole.TEXT,
+        DeletionHandler(),
+    )
+    handlers.validate(
+        key
+        for key, controller_type in CONTROLLER_TYPES.items()
+        if controller_type.DELETION_POLICY is DeletionPolicy.REMOVE
+    )
+    return handlers
+
+
+@dataclass(frozen=True, slots=True)
+class DeletionPlan:
+    """Prepared, validated runtime-only deletion state."""
+
+    requested_ids: tuple[str, ...]
+    root_ids: tuple[str, ...]
+    removed_ids: tuple[str, ...]
+    state_replacements: tuple[ComponentState, ...]
+    fallback_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DeletionOutcome:
+    """Report one committed deletion or its complete/incomplete rollback."""
+
+    committed: bool
+    rollback_complete: bool
+    removed_ids: tuple[str, ...] = ()
+    selected_component_id: str | None = None
+    changes: tuple[ComponentChange, ...] = ()
+    notices: tuple[ComponentNotice, ...] = ()
+    message: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.committed and all(change.ok for change in self.changes)
+
+    def as_batch_change(self) -> ComponentBatchChange:
+        return ComponentBatchChange(
+            self.changes,
+            self.committed,
+            notices=self.notices,
+            message=self.message,
+            rollback_complete=self.rollback_complete,
+        )
+
+
+@dataclass(slots=True)
+class PreparedDeletion:
+    """Execute an already validated deletion plan exactly once."""
+
+    service: "ComponentDeletionService"
+    request: DeletionRequest
+    plan: DeletionPlan
+    _executed: bool = False
+
+    def set_fallback(self, component_id: str | None) -> None:
+        if self._executed:
+            raise RuntimeError("A committed deletion plan cannot be changed.")
+        self.plan = replace(
+            self.plan,
+            fallback_id=(
+                str(component_id) if component_id is not None else None
+            ),
+        )
+
+    def execute(
+        self,
+        *,
+        verifier: Callable[[], None] | None = None,
+    ) -> DeletionOutcome:
+        if self._executed:
+            raise RuntimeError("Prepared deletion has already been executed.")
+        self._executed = True
+        result = self.service.registry.delete_transaction(
+            self.plan.root_ids,
+            state_replacements=self.plan.state_replacements,
+            verifier=verifier,
+        )
+        return DeletionOutcome(
+            committed=result.committed,
+            rollback_complete=result.rollback_complete,
+            removed_ids=self.plan.removed_ids if result.committed else (),
+            selected_component_id=(
+                self.plan.fallback_id if result.committed else None
+            ),
+            changes=result.changes,
+            notices=result.notices,
+            message=result.message,
+        )
+
+
 def _color_cycle_replacements_for_deletion(
     registry: ComponentRegistry,
     component_ids: Iterable[str],
+    *,
+    is_palette_component: Callable[[Any], bool] | None = None,
 ) -> tuple[ComponentState, ...]:
     """Release palette slots consumed by chart components being removed.
 
@@ -133,10 +355,15 @@ def _color_cycle_replacements_for_deletion(
             for controller in registry.descendants(component_id)
         )
 
+    is_palette_component = is_palette_component or (
+        lambda controller: {"color", "data"}.issubset(
+            controller.capabilities()
+        )
+    )
     deleted_by_axes: dict[str, list[Any]] = {}
     for component_id in removed_ids:
         controller = registry.get(component_id)
-        if not {"color", "data"}.issubset(controller.capabilities()):
+        if not is_palette_component(controller):
             continue
         parent_id = controller.state.parent_id
         if parent_id is None or parent_id in removed_ids:
@@ -163,8 +390,9 @@ def _color_cycle_replacements_for_deletion(
         for controller in registry.query(
             parent_id=axes_id,
             recursive=True,
-            capabilities={"color", "data"},
         ):
+            if not is_palette_component(controller):
+                continue
             if controller.component_id in removed_ids:
                 continue
             try:
@@ -216,6 +444,48 @@ def _color_cycle_replacements_for_deletion(
     return tuple(replacements)
 
 
+def _axes_replacements_for_deletion(
+    registry: ComponentRegistry,
+    removed_ids: Iterable[str],
+) -> tuple[ComponentState, ...]:
+    """Keep surviving Axes order/selectors contiguous without moving layout."""
+
+    removed = set(str(component_id) for component_id in removed_ids)
+    if not any(
+        component_id in registry
+        and registry.get(component_id).state.kind is ComponentKind.AXES
+        for component_id in removed
+    ):
+        return ()
+    registry.validate_tree()
+    remaining = sorted(
+        (
+            controller
+            for controller in registry.query(kind=ComponentKind.AXES)
+            if controller.component_id not in removed
+        ),
+        key=lambda controller: int(
+            controller.state.selector.get("index", controller.state.order)
+        ),
+    )
+    replacements = []
+    for index, controller in enumerate(remaining):
+        cached_state = controller.state
+        if (
+            cached_state.order == index
+            and cached_state.selector.get("index") == index
+        ):
+            continue
+        live_state = controller.read_state(strict=True)
+        replacements.append(
+            live_state.clone(
+                order=index,
+                selector={"index": index},
+            )
+        )
+    return tuple(replacements)
+
+
 def _column_ref(value: ColumnRef | dict[str, Any]) -> ColumnRef:
     return value if isinstance(value, ColumnRef) else ColumnRef.from_dict(value)
 
@@ -261,48 +531,6 @@ class AxesCommandService:
             role=role,
             selector=selector,
             recursive=recursive,
-        )
-
-    def delete_axes(self, axes_id: str) -> ComponentBatchChange:
-        """Delete one Axes subtree and keep remaining semantic indexes valid."""
-
-        try:
-            self._axes(axes_id)
-            self.registry.validate_tree()
-            remaining = sorted(
-                (
-                    controller
-                    for controller in self.registry.query(
-                        kind=ComponentKind.AXES
-                    )
-                    if controller.component_id != axes_id
-                ),
-                key=lambda controller: int(
-                    controller.state.selector.get(
-                        "index", controller.state.order
-                    )
-                ),
-            )
-            replacements = []
-            for index, controller in enumerate(remaining):
-                cached_state = controller.state
-                if (
-                    cached_state.order == index
-                    and cached_state.selector.get("index") == index
-                ):
-                    continue
-                live_state = controller.read_state(strict=True)
-                replacements.append(
-                    live_state.clone(
-                        order=index,
-                        selector={"index": index},
-                    )
-                )
-        except Exception as exc:
-            return ComponentBatchChange((), False, message=str(exc))
-        return self.registry.delete_transaction(
-            (axes_id,),
-            state_replacements=replacements,
         )
 
     def set_label_style(
@@ -1173,27 +1401,181 @@ class TextRenderService:
 
 
 class ComponentDeletionService:
-    """Submit dynamic component deletion to the Registry transaction."""
+    """Prepare and commit every production physical deletion."""
 
-    def __init__(self, registry: ComponentRegistry):
-        self.registry = registry
-
-    def delete_many(
+    def __init__(
         self,
-        component_ids: Iterable[str],
-    ) -> ComponentBatchChange:
-        """Delete selected components as one identity-preserving transaction."""
+        registry: ComponentRegistry,
+        *,
+        handlers: DeletionHandlerRegistry | None = None,
+    ):
+        self.registry = registry
+        self.handlers = handlers or production_deletion_handlers()
 
-        ids = tuple(
-            dict.fromkeys(str(component_id) for component_id in component_ids)
+    def _palette_component(self, controller) -> bool:
+        handler = self.handlers.resolve(controller)
+        return bool(
+            handler
+            and any(
+                isinstance(effect, ColorCycleDeletionEffect)
+                for effect in handler.effects
+            )
         )
-        return self.registry.delete_transaction(
-            ids,
-            state_replacements=_color_cycle_replacements_for_deletion(
+
+    def prepare(self, request: DeletionRequest) -> PreparedDeletion:
+        """Validate IDs, ownership, subtree coverage, and survivor effects."""
+
+        if not isinstance(request, DeletionRequest):
+            raise TypeError("Deletion preparation requires DeletionRequest.")
+        requested = request.component_ids
+        requested_controllers = {
+            component_id: self.registry.get(component_id)
+            for component_id in requested
+        }
+        requested_set = set(requested)
+        roots: list[str] = []
+        for component_id in requested:
+            controller = requested_controllers[component_id]
+            if controller.DELETION_POLICY is not DeletionPolicy.REMOVE:
+                raise ComponentValidationError(
+                    f"Component {component_id!r} uses deletion policy "
+                    f"{controller.DELETION_POLICY.value!r}."
+                )
+            parent_id = controller.state.parent_id
+            visited: set[str] = set()
+            while parent_id is not None and parent_id not in requested_set:
+                if parent_id in visited:
+                    raise ComponentValidationError(
+                        "Component tree contains an ancestor cycle."
+                    )
+                visited.add(parent_id)
+                parent = (
+                    self.registry.get(parent_id)
+                    if parent_id in self.registry
+                    else None
+                )
+                parent_id = parent.state.parent_id if parent is not None else None
+            if parent_id is None:
+                roots.append(component_id)
+
+        removed: set[str] = set()
+        postorder: list[str] = []
+
+        def collect(component_id: str, visiting: set[str]) -> None:
+            if component_id in visiting:
+                raise ComponentValidationError(
+                    "Component tree contains a deletion cycle."
+                )
+            if component_id in removed:
+                return
+            visiting.add(component_id)
+            children = sorted(
+                self.registry.children(component_id),
+                key=lambda child: (child.state.order, child.component_id),
+            )
+            for child in children:
+                collect(child.component_id, visiting)
+            visiting.remove(component_id)
+            removed.add(component_id)
+            postorder.append(component_id)
+
+        for component_id in roots:
+            collect(component_id, set())
+
+        for component_id in roots:
+            controller = requested_controllers[component_id]
+            handler = self.handlers.resolve(controller)
+            if handler is None:
+                state = controller.state
+                raise ComponentValidationError(
+                    "No deletion handler is registered for "
+                    f"{state.kind.value}/{state.role.value}."
+                )
+            owns_descendants = False
+            for item_id in removed:
+                if item_id == component_id:
+                    continue
+                parent_id = self.registry.get(item_id).state.parent_id
+                visited: set[str] = set()
+                while parent_id is not None and parent_id not in visited:
+                    if parent_id == component_id:
+                        owns_descendants = True
+                        break
+                    visited.add(parent_id)
+                    parent = (
+                        self.registry.get(parent_id)
+                        if parent_id in self.registry
+                        else None
+                    )
+                    parent_id = (
+                        parent.state.parent_id if parent is not None else None
+                    )
+                if owns_descendants:
+                    break
+            if owns_descendants and not handler.owns_subtree:
+                raise ComponentValidationError(
+                    f"Leaf deletion handler for {component_id!r} cannot own "
+                    "registered child components."
+                )
+
+        replacements = [
+            *_axes_replacements_for_deletion(self.registry, removed),
+            *_color_cycle_replacements_for_deletion(
                 self.registry,
-                ids,
+                roots,
+                is_palette_component=self._palette_component,
             ),
+        ]
+        replacement_by_id: dict[str, ComponentState] = {}
+        for state in replacements:
+            previous = replacement_by_id.get(state.id)
+            if previous is not None and previous != state:
+                raise ComponentValidationError(
+                    f"Conflicting deletion effects for {state.id!r}."
+                )
+            replacement_by_id[state.id] = state
+        plan = DeletionPlan(
+            requested_ids=requested,
+            root_ids=tuple(roots),
+            removed_ids=tuple(postorder),
+            state_replacements=tuple(replacement_by_id.values()),
         )
+        return PreparedDeletion(self, request, plan)
+
+    def delete(
+        self,
+        request: DeletionRequest,
+        *,
+        verifier: Callable[[], None] | None = None,
+    ) -> DeletionOutcome:
+        """Prepare and atomically execute one deletion request."""
+
+        try:
+            prepared = self.prepare(request)
+        except Exception as exc:
+            return DeletionOutcome(
+                committed=False,
+                rollback_complete=True,
+                message=str(exc),
+            )
+        return prepared.execute(verifier=verifier)
+
+@dataclass(frozen=True, slots=True)
+class ComponentDependencySnapshot:
+    """Runtime-only Undo snapshot for dependents and parent palettes."""
+
+    component_states: tuple[ComponentState, ...]
+    axes_states: tuple[ComponentState, ...] = ()
+    selected_component_id: str | None = None
+
+    def __bool__(self) -> bool:
+        return bool(self.component_states)
+
+    def __len__(self) -> int:
+        return len(self.component_states)
+
+    def __iter__(self):
+        return iter(self.component_states)
 
 
 class ComponentDependencyService:
@@ -1204,9 +1586,11 @@ class ComponentDependencyService:
         registry: ComponentRegistry,
         *,
         restore_state: Callable[[ComponentState], Any],
+        deletion_service: ComponentDeletionService | None = None,
     ):
         self.registry = registry
         self.restore_state = restore_state
+        self.deletion_service = deletion_service or ComponentDeletionService(registry)
 
     @staticmethod
     def _refs(state: ComponentState) -> set[ColumnRef]:
@@ -1226,41 +1610,95 @@ class ComponentDependencyService:
 
         requested = set(refs)
         return [
-            controller.state
+            controller.state.clone()
             for controller in self.registry.query(
                 capabilities={"data_reference"}
             )
             if self._refs(controller.state).intersection(requested)
         ]
 
-    def delete_states(
+    def capture(
         self,
-        snapshots: Iterable[ComponentState],
-    ) -> ComponentBatchChange:
-        """Delete table dependents through the shared physical transaction."""
+        refs: Iterable[ColumnRef],
+        *,
+        selected_component_id: str | None = None,
+    ) -> ComponentDependencySnapshot:
+        """Capture dependents and their exact parent Axes palette state."""
 
-        ids = tuple(
-            state.id
-            for state in snapshots
-            if state.id in self.registry
+        states = tuple(self.dependent_states(refs))
+        axes_ids = {
+            ancestor.component_id
+            for state in states
+            if (
+                ancestor := self.registry.ancestor(
+                    state.id,
+                    kind=ComponentKind.AXES,
+                )
+            )
+            is not None
+        }
+        axes_states = tuple(
+            self.registry.get(component_id).state.clone()
+            for component_id in sorted(axes_ids)
         )
-        return self.registry.delete_transaction(
-            ids,
-            state_replacements=_color_cycle_replacements_for_deletion(
-                self.registry,
-                ids,
+        return ComponentDependencySnapshot(
+            states,
+            axes_states,
+            selected_component_id=(
+                str(selected_component_id)
+                if selected_component_id is not None
+                else None
             ),
         )
 
+    def delete_states(
+        self,
+        snapshots: ComponentDependencySnapshot | Iterable[ComponentState],
+    ) -> ComponentBatchChange:
+        """Delete table dependents through the shared physical transaction."""
+
+        states = (
+            snapshots.component_states
+            if isinstance(snapshots, ComponentDependencySnapshot)
+            else tuple(snapshots)
+        )
+        ids = tuple(
+            state.id
+            for state in states
+            if state.id in self.registry
+        )
+        return self.deletion_service.delete(
+            DeletionRequest(ids, reason=DeleteReason.DATA_DEPENDENCY)
+        ).as_batch_change()
+
     def restore_states(
         self,
-        snapshots: Iterable[ComponentState],
+        snapshots: ComponentDependencySnapshot | Iterable[ComponentState],
     ) -> None:
-        """Restore states."""
+        """Restore stable IDs, data refs, and parent palette cursors."""
 
+        states = (
+            snapshots.component_states
+            if isinstance(snapshots, ComponentDependencySnapshot)
+            else tuple(snapshots)
+        )
         for state in sorted(
-            snapshots,
+            states,
             key=lambda item: (item.order, item.id),
         ):
             if state.id not in self.registry:
                 self.restore_state(state.clone())
+        if isinstance(snapshots, ComponentDependencySnapshot):
+            for axes_state in snapshots.axes_states:
+                if axes_state.id not in self.registry:
+                    raise ComponentValidationError(
+                        f"Parent Axes {axes_state.id!r} is unavailable."
+                    )
+                change = self.registry.get(axes_state.id).apply_state(
+                    axes_state.clone()
+                )
+                if not change.ok:
+                    raise ComponentValidationError(
+                        change.message
+                        or f"Could not restore Axes {axes_state.id!r}."
+                    )

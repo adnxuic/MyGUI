@@ -11,7 +11,7 @@ class ComponentTreeView(QTreeView):
     """Single-selection tree that emits requests for real Components only."""
 
     componentSelected = Signal(str)
-    componentContextMenuRequested = Signal(str, QPoint)
+    componentContextMenuRequested = Signal(object, QPoint)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -38,11 +38,10 @@ class ComponentTreeView(QTreeView):
         index = self.indexAt(position)
         if not index.isValid():
             return
-        component_id = index.data(COMPONENT_ID_ROLE)
-        if component_id:
-            self.setCurrentIndex(index)
+        node_key = index.data(NODE_KEY_ROLE)
+        if node_key is not None:
             self.componentContextMenuRequested.emit(
-                str(component_id), self.viewport().mapToGlobal(position)
+                node_key, self.viewport().mapToGlobal(position)
             )
 
     def selected_component_id(self) -> str | None:

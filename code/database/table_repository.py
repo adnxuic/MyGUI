@@ -72,14 +72,17 @@ class TableMutationCommand(QUndoCommand):
         """Reapply this table mutation."""
 
         with self.repository.transaction(self.project_id):
-            self.redo_action()
+            if self.redo_action() is False:
+                self.setObsolete(True)
+                return
             self.repository.record_change(self._change_set())
 
     def undo(self) -> None:
         """Reverse this table mutation."""
 
         with self.repository.transaction(self.project_id):
-            self.undo_action()
+            if self.undo_action() is False:
+                return
             self.repository.record_change(self._change_set())
 
 

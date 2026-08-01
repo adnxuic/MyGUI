@@ -6,7 +6,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QDialog, QModelIndex, Qt
+from Qt_core import QApplication, QDialog, QModelIndex, QMessageBox, Qt
 
 from code.figuremodify.components import (
     ComponentKind,
@@ -70,6 +70,42 @@ class ComponentTreeTests(unittest.TestCase):
             ):
                 return index
         return QModelIndex()
+
+    @staticmethod
+    def _menu_type(selected_text: str | None):
+        class Action:
+            def __init__(self, text):
+                self._text = text
+
+            def text(self):
+                return self._text
+
+        class Menu:
+            def __init__(self, *_args, **_kwargs):
+                self._actions = []
+
+            def addAction(self, text):
+                action = Action(text)
+                self._actions.append(action)
+                return action
+
+            def isEmpty(self):
+                return not self._actions
+
+            def actions(self):
+                return list(self._actions)
+
+            def exec(self, _position):
+                return next(
+                    (
+                        action
+                        for action in self._actions
+                        if action.text() == selected_text
+                    ),
+                    None,
+                )
+
+        return Menu
 
     def test_model_preserves_real_parent_ids_behind_ui_only_groups(self):
         registry = self.canvas.component_registry
@@ -672,6 +708,219 @@ class ComponentTreeTests(unittest.TestCase):
             },
             {"curve-a", "curve-b"},
         )
+
+    def test_proxy_right_click_selects_and_deletes_exact_hit_component(self):
+        for component_id, expression in (
+            ("right-click-a", "x"),
+            ("right-click-b", "x**2"),
+        ):
+            self.canvas.add_curve(
+                expression, 0.0, 1.0, "-", "#112233",
+                "same preview", object_id=component_id,
+            )
+        host = self.window.component_tree_host
+        self.assertTrue(self.canvas.select_component("right-click-a"))
+        host.tree.expand_component_path("right-click-b")
+        host.show()
+        self.app.processEvents()
+        source_index = host.model.index_for_component("right-click-b")
+        proxy_index = host.proxy_model.mapFromSource(source_index)
+        position = host.tree.visualRect(proxy_index).center()
+
+        with mock.patch(
+            "code.widgets.component_tree.component_tree.QMenu",
+            self._menu_type("Delete Component"),
+        ), mock.patch.object(
+            host,
+            "_confirm_single_delete",
+            return_value=True,
+        ):
+            host.tree._context_menu_requested(position)
+        self.app.processEvents()
+
+        self.assertIn("right-click-a", self.canvas.component_registry)
+        self.assertNotIn("right-click-b", self.canvas.component_registry)
+        self.assertEqual(self.canvas.current_component_id, "right-click-a")
+
+    def test_group_right_click_and_failed_inspector_never_open_menu(self):
+        for component_id in ("menu-a", "menu-b"):
+            self.canvas.add_curve(
+                "x", 0.0, 1.0, "-", "#112233",
+                "same", object_id=component_id,
+            )
+        host = self.window.component_tree_host
+        axes_id = self.canvas.current_axes_component_id
+        group = self._group_index(host.model, axes_id, "Function Curves")
+        proxy_group = host.proxy_model.mapFromSource(group)
+        host.tree.expand_component_path("menu-a")
+        host.show()
+        self.app.processEvents()
+        with mock.patch(
+            "code.widgets.component_tree.component_tree.QMenu",
+            self._menu_type(None),
+        ):
+            host.tree._context_menu_requested(
+                host.tree.visualRect(proxy_group).center()
+            )
+
+        self.assertTrue(self.canvas.select_component("menu-a"))
+        self.assertTrue(
+            self.canvas.figure_inspector.remove_component_inspector("menu-b")
+        )
+        original_show = self.canvas.figure_inspector.show_component
+
+        def fail_target(component_id):
+            if component_id == "menu-b":
+                raise RuntimeError("injected Inspector open failure")
+            return original_show(component_id)
+
+        proxy_target = host.proxy_model.mapFromSource(
+            host.model.index_for_component("menu-b")
+        )
+        with mock.patch.object(
+            self.canvas.figure_inspector,
+            "show_component",
+            side_effect=fail_target,
+        ), mock.patch(
+            "code.widgets.component_tree.component_tree.QMenu",
+            side_effect=AssertionError("menu must not be constructed"),
+        ):
+            host.tree._context_menu_requested(
+                host.tree.visualRect(proxy_target).center()
+            )
+        self.assertEqual(self.canvas.current_component_id, "menu-a")
+        self.assertEqual(host.tree.selected_component_id(), "menu-a")
+
+    def test_filtered_batch_uses_full_cohort_and_precise_instance_labels(self):
+        for component_id, expression in (
+            ("filtered-a", "x"),
+            ("filtered-b", "x**2"),
+            ("filtered-c", "x**3"),
+        ):
+            self.canvas.add_curve(
+                expression, 0.0, 1.0, "-", "#112233",
+                "same", object_id=component_id,
+            )
+        host = self.window.component_tree_host
+        host.search_input.setText("curve2")
+        self.app.processEvents()
+        candidates = host._batch_candidates(
+            self.canvas.component_registry.get("filtered-b").state
+        )
+        self.assertEqual(
+            [candidate.component_id for candidate in candidates],
+            ["filtered-a", "filtered-b", "filtered-c"],
+        )
+        self.assertEqual(len({item.instance_label for item in candidates}), 3)
+        self.assertTrue(all(item.parent_label for item in candidates))
+
+        captured = []
+
+        def reject_dialog(dialog):
+            captured.extend(dialog.candidates)
+            return QDialog.Rejected
+
+        host.tree.expand_component_path("filtered-b")
+        host.show()
+        self.app.processEvents()
+        proxy_index = host.proxy_model.mapFromSource(
+            host.model.index_for_component("filtered-b")
+        )
+        with mock.patch(
+            "code.widgets.component_tree.component_tree.QMenu",
+            self._menu_type("Batch Delete Same Type..."),
+        ), mock.patch.object(
+            ComponentBatchDeleteDialog,
+            "exec",
+            new=reject_dialog,
+        ):
+            host._show_context_menu(
+                host.model.index_for_component("filtered-b").data(
+                    NODE_KEY_ROLE
+                ),
+                host.tree.mapToGlobal(host.tree.rect().center()),
+            )
+        self.assertEqual(
+            [candidate.component_id for candidate in captured],
+            ["filtered-a", "filtered-b", "filtered-c"],
+        )
+        self.assertEqual(host.proxy_model.query, "curve2")
+
+    def test_single_delete_confirmation_names_instance_id_and_defaults_cancel(self):
+        self.canvas.add_curve(
+            "x", 0.0, 1.0, "-", "#112233",
+            "confirm", object_id="confirm-curve",
+        )
+        host = self.window.component_tree_host
+
+        def inspect_cancel(message):
+            self.assertIn("confirm-curve", message.informativeText())
+            self.assertEqual(message.defaultButton().text(), "Cancel")
+            self.assertIn(
+                host._source_label("confirm-curve"),
+                message.text(),
+            )
+            return 0
+
+        with mock.patch.object(QMessageBox, "exec", new=inspect_cancel):
+            self.assertFalse(host._confirm_single_delete("confirm-curve"))
+
+    def test_deletion_fallback_never_crosses_an_interleaved_role(self):
+        self.canvas.add_curve(
+            "x", 0.0, 1.0, "-", "#112233",
+            "first", object_id="cohort-a",
+        )
+        self.canvas.add_text(
+            0.2, 0.3, "other role", "DejaVu Sans", 10,
+            object_id="cohort-text",
+        )
+        self.canvas.add_curve(
+            "x**2", 0.0, 1.0, "--", "#445566",
+            "second", object_id="cohort-b",
+        )
+        axes_id = self.canvas.current_axes_component_id
+
+        self.assertTrue(self.canvas.select_component("cohort-a"))
+        self.assertTrue(
+            self.canvas.delete_component_group(("cohort-a",), "function curve")
+        )
+        self.assertEqual(self.canvas.current_component_id, "cohort-b")
+
+        self.assertTrue(
+            self.canvas.delete_component_group(("cohort-b",), "function curve")
+        )
+        self.assertEqual(self.canvas.current_component_id, axes_id)
+        self.assertIn("cohort-text", self.canvas.component_registry)
+
+    def test_batch_revalidation_rejects_changed_original_cohort(self):
+        for component_id in ("revalidate-a", "revalidate-b"):
+            self.canvas.add_curve(
+                "x", 0.0, 1.0, "-", "#112233",
+                component_id, object_id=component_id,
+            )
+        host = self.window.component_tree_host
+        state = self.canvas.component_registry.get("revalidate-a").state
+        original_candidates = host._batch_candidates(state)
+        calls = 0
+
+        def changing_candidates(_state):
+            nonlocal calls
+            calls += 1
+            return original_candidates if calls == 1 else original_candidates[:1]
+
+        with mock.patch.object(
+            host,
+            "_batch_candidates",
+            side_effect=changing_candidates,
+        ), mock.patch.object(
+            ComponentBatchDeleteDialog,
+            "exec",
+            return_value=QDialog.Accepted,
+        ):
+            host._run_batch_delete(state)
+
+        self.assertIn("revalidate-a", self.canvas.component_registry)
+        self.assertIn("revalidate-b", self.canvas.component_registry)
 
 
 if __name__ == "__main__":

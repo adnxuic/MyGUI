@@ -29,6 +29,7 @@ from code.project_io import (
 from code.widgets.component_tree.dialogs import (
     ComponentBatchDeleteDialog,
 )
+from code.widgets.component_tree.model import ComponentTreeModel
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from main import MainWindow
 
@@ -215,14 +216,13 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             lambda text, level: messages.append((text, level))
         )
 
-        fallback = host._fallback_component("curve-first")
         self.assertTrue(
             self.canvas.delete_component_group(
                 ("curve-first",),
                 "function curve",
             )
         )
-        host._select_after_delete(fallback)
+        self.app.processEvents()
 
         self.assertNotIn("curve-first", self.canvas.component_registry)
         self.assertIn("curve-second", self.canvas.component_registry)
@@ -231,6 +231,47 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertEqual(host.tree.selected_component_id(), "curve-second")
         self.assertEqual(toolbox.count(), 1)
         self.assertEqual(len(messages), 1)
+
+    def test_successful_delete_publishes_one_batch_refresh_draw_selection_message(self):
+        self._add_curves()
+        self.assertTrue(self.canvas.select_component("curve-first"))
+        self.app.processEvents()
+        registry_batches = []
+        tree_refreshes = []
+        selections = []
+        messages = []
+        unsubscribe = self.canvas.component_registry.subscribe_batches(
+            registry_batches.append
+        )
+        self.window.component_tree_host.model.refreshed.connect(
+            lambda: tree_refreshes.append(True)
+        )
+        self.canvas.componentSelectionChanged.connect(selections.append)
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+        try:
+            with mock.patch.object(
+                self.canvas.canva,
+                "draw_idle",
+                wraps=self.canvas.canva.draw_idle,
+            ) as draw_idle:
+                self.assertTrue(
+                    self.canvas.delete_component_group(
+                        ("curve-first",),
+                        "function curve",
+                    )
+                )
+            self.app.processEvents()
+        finally:
+            unsubscribe()
+
+        self.assertEqual(len(registry_batches), 1)
+        self.assertEqual(tree_refreshes, [True])
+        draw_idle.assert_called_once_with()
+        self.assertEqual(selections, ["curve-second"])
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "success")
 
     def test_role_dialog_partial_selection_deletes_only_checked_instance(self):
         _inspector, toolbox = self._add_curves()
@@ -863,6 +904,63 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))
             assert_unchanged()
+
+            with mock.patch.object(
+                self.canvas.figure_inspector,
+                "ensure_component",
+                side_effect=RuntimeError("injected fallback Inspector failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            with mock.patch.object(
+                self.canvas.figure_inspector,
+                "take_axes_inspector",
+                side_effect=RuntimeError("injected Panel detach failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            with mock.patch.object(
+                ComponentTreeModel,
+                "validate_registry_projection",
+                side_effect=RuntimeError("injected projection failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            with mock.patch.object(
+                self.canvas.deletion_coordinator,
+                "_candidate_axes_map",
+                side_effect=RuntimeError("injected Axes map failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            with mock.patch(
+                "code.widgets.figure_canvas.deletion_coordinator.normalize_v6_figure",
+                side_effect=RuntimeError("injected schema failure"),
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
+
+            original_unbind = registry.locator.unbind
+            unbind_calls = 0
+
+            def fail_first_unbind(component_id):
+                nonlocal unbind_calls
+                unbind_calls += 1
+                original_unbind(component_id)
+                if unbind_calls == 1:
+                    raise RuntimeError("injected Locator failure")
+
+            with mock.patch.object(
+                registry.locator,
+                "unbind",
+                side_effect=fail_first_unbind,
+            ):
+                self.assertFalse(self.canvas.delete_axes(target.component_id))
+            assert_unchanged()
         finally:
             unsubscribe()
             self.canvas.fig._axobservers.disconnect(observer_id)
@@ -889,6 +987,27 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             self.canvas.current_component_id,
             self.canvas.root_component_id,
         )
+
+    def test_deleting_last_axes_ignores_surviving_figure_text_for_fallback(self):
+        axes_id = self.canvas.current_axes_component_id
+        self.canvas.add_global_text(
+            0.1,
+            0.1,
+            "survives",
+            "DejaVu Sans",
+            10,
+            object_id="surviving-figure-text",
+        )
+        self.assertTrue(self.canvas.select_component(axes_id))
+
+        self.assertTrue(self.canvas.delete_axes(axes_id))
+
+        self.assertIn("surviving-figure-text", self.canvas.component_registry)
+        self.assertEqual(
+            self.canvas.current_component_id,
+            self.canvas.root_component_id,
+        )
+        self.assertIsNone(self.canvas.current_axes_component_id)
 
     def test_axes_delete_round_trips_through_schema_v6(self):
         axes = self._replace_with_two_by_two_axes()

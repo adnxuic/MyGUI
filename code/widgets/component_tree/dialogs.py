@@ -3,8 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from Qt_core import *
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteCandidate:
+    """UI-only identity and presentation for one batch deletion candidate."""
+
+    component_id: str
+    instance_label: str
+    parent_label: str
+    cohort_key: tuple[str | None, str, str, str]
+
+    def __iter__(self):
+        """Retain convenient two-value unpacking for UI callers."""
+
+        yield self.component_id
+        yield self.instance_label
 
 
 class ComponentBatchDeleteDialog(QDialog):
@@ -12,7 +29,7 @@ class ComponentBatchDeleteDialog(QDialog):
 
     def __init__(
         self,
-        entries: Iterable[tuple[str, str]],
+        entries: Iterable[DeleteCandidate | tuple[str, str]],
         *,
         role_label: str,
         parent=None,
@@ -21,10 +38,35 @@ class ComponentBatchDeleteDialog(QDialog):
         self.setWindowTitle(f"Delete {role_label.title()} Components")
         self.setModal(True)
         self._checkboxes: list[QCheckBox] = []
+        self._id_labels: list[QLabel] = []
+        self.candidates = tuple(
+            entry
+            if isinstance(entry, DeleteCandidate)
+            else DeleteCandidate(
+                str(entry[0]),
+                str(entry[1]),
+                "",
+                (None, "", "", "remove"),
+            )
+            for entry in entries
+        )
 
         layout = QVBoxLayout(self)
+        parent_labels = {
+            candidate.parent_label
+            for candidate in self.candidates
+            if candidate.parent_label
+        }
+        scope = (
+            f" under {next(iter(parent_labels))}"
+            if len(parent_labels) == 1
+            else ""
+        )
         description = QLabel(
-            f"Select the {role_label} components to delete.", self
+            f"All {len(self.candidates)} matching {role_label} components"
+            f"{scope} are listed, including items hidden by tree search. "
+            "Select the instances to delete; the operation is all-or-none.",
+            self,
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -40,13 +82,23 @@ class ComponentBatchDeleteDialog(QDialog):
         list_frame = QFrame(self)
         list_layout = QVBoxLayout(list_frame)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        for component_id, label in entries:
-            checkbox = QCheckBox(str(label), list_frame)
-            checkbox.setProperty("component_id", str(component_id))
+        for candidate in self.candidates:
+            row = QHBoxLayout()
+            checkbox = QCheckBox(candidate.instance_label, list_frame)
+            checkbox.setProperty("component_id", candidate.component_id)
+            checkbox.setToolTip(
+                f"{candidate.parent_label}\nStable ID: {candidate.component_id}"
+            )
             checkbox.setChecked(True)
             checkbox.toggled.connect(self._selection_changed)
             self._checkboxes.append(checkbox)
-            list_layout.addWidget(checkbox)
+            stable_id = QLabel(candidate.component_id, list_frame)
+            stable_id.setObjectName("delete_candidate_id")
+            stable_id.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            self._id_labels.append(stable_id)
+            row.addWidget(checkbox, 1)
+            row.addWidget(stable_id)
+            list_layout.addLayout(row)
         list_layout.addStretch()
 
         scroll = QScrollArea(self)

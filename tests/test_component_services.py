@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import matplotlib
 import numpy as np
@@ -293,6 +293,38 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertEqual(tuple(self.axes.lines), original)
         self.assertIs(self.axes.lines[1], lines[1])
         self.assertIs(self.axes.lines[2], lines[2])
+
+    def test_delete_transaction_reports_failed_rollback_compensation(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "rollback-incomplete",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        original_rollback = controller.rollback_remove
+
+        def restore_then_report_failure(handle):
+            original_rollback(handle)
+            raise RuntimeError("synthetic rollback hook failure")
+
+        with patch.object(
+            controller,
+            "rollback_remove",
+            side_effect=restore_then_report_failure,
+        ):
+            result = self.registry.delete_transaction(
+                (controller.component_id,),
+                verifier=lambda: (_ for _ in ()).throw(
+                    RuntimeError("synthetic verifier failure")
+                ),
+            )
+
+        self.assertFalse(result.ok)
+        self.assertFalse(result.rollback_complete)
+        self.assertIn("Rollback was incomplete", result.message)
+        self.assertIs(self.registry.get(controller.component_id), controller)
+        self.assertIs(controller.resolve_target(), line)
+        self.assertIn(line, self.axes.lines)
 
     def test_delete_transaction_keeps_commit_when_repaint_fails(self):
         line, = self.axes.plot([0, 1], [1, 2])

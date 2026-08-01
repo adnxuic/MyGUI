@@ -110,13 +110,17 @@ class AxesSemanticInspectorPanel(QFrame):
         )
         if component_id is None:
             return False
-        dispose = getattr(inspector, "dispose", None)
-        if callable(dispose):
-            dispose()
         self._inspectors.pop(component_id, None)
         self.inspector_stack.removeWidget(inspector)
         inspector.setParent(None)
-        inspector.deleteLater()
+        try:
+            dispose = getattr(inspector, "dispose", None)
+            if callable(dispose):
+                dispose()
+        except Exception:
+            pass
+        finally:
+            inspector.deleteLater()
         return True
 
     def show_component(self, component_id: str) -> bool:
@@ -151,11 +155,8 @@ class AxesSemanticInspectorPanel(QFrame):
     def remove_component(self, component_id: str) -> bool:
         """Remove one cached Inspector by stable component ID."""
 
-        for toolbox in tuple(self._toolboxes.values()):
-            inspector = toolbox.inspector(component_id)
-            if inspector is not None:
-                return toolbox.remove_inspector(inspector)
-        return False
+        inspector = self._inspectors.get(str(component_id))
+        return self.remove_inspector(inspector) if inspector is not None else False
 
     def dispose(self) -> None:
         """Recursively release every cached semantic Inspector."""
@@ -225,22 +226,29 @@ class InspectorToolBox(QFrame):
         index = self.indexOf(inspector)
         if index < 0:
             return False
-        dispose = getattr(inspector, "dispose", None)
-        if callable(dispose):
-            dispose()
         component_id, _candidate = self._entries.pop(index)
         self._entry_by_id.pop(component_id, None)
         was_current = self.inspector_stack.currentWidget() is inspector
         self.inspector_stack.removeWidget(inspector)
         inspector.setParent(None)
-        inspector.deleteLater()
         if was_current and self._entries:
             next_index = min(index, len(self._entries) - 1)
             self.inspector_stack.setCurrentWidget(
                 self._entries[next_index][1]
             )
+        try:
+            dispose = getattr(inspector, "dispose", None)
+            if callable(dispose):
+                dispose()
+        except Exception:
+            pass
+        finally:
+            inspector.deleteLater()
         if not self._entries and callable(self._empty_callback):
-            self._empty_callback()
+            try:
+                self._empty_callback()
+            except Exception:
+                pass
         return True
 
     def count(self) -> int:
@@ -359,9 +367,13 @@ class _ComponentInspectorStack(QFrame):
         self.toolbox_stack.removeWidget(toolbox)
         if was_current:
             self.toolbox_stack.setCurrentWidget(self.empty_state)
-        toolbox.dispose()
         toolbox.setParent(None)
-        toolbox.deleteLater()
+        try:
+            toolbox.dispose()
+        except Exception:
+            pass
+        finally:
+            toolbox.deleteLater()
         return True
 
     def inspector(self, component_id: str):
@@ -370,6 +382,15 @@ class _ComponentInspectorStack(QFrame):
             if inspector is not None:
                 return inspector
         return None
+
+    def remove_component(self, component_id: str) -> bool:
+        """Remove one cached Inspector through its owning toolbox."""
+
+        for toolbox in tuple(self._toolboxes.values()):
+            inspector = toolbox.inspector(component_id)
+            if inspector is not None:
+                return toolbox.remove_inspector(inspector)
+        return False
 
     def current_component_id(self) -> str | None:
         toolbox = self.toolbox_stack.currentWidget()

@@ -72,6 +72,14 @@ class ComponentLocator:
         self._targets.pop(component_id, None)
         self._strong_targets.pop(component_id, None)
 
+    def bound_target(self, component_id: str) -> Any | None:
+        """Return only an explicit ID binding, without semantic resolution."""
+
+        return self._targets.get(
+            component_id,
+            self._strong_targets.get(component_id),
+        )
+
     def register_resolver(
         self,
         kind: ComponentKind | str,

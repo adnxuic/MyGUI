@@ -123,6 +123,35 @@ class GuiDataFlowV4Tests(unittest.TestCase):
             1,
         )
 
+    def test_dependency_failure_keeps_table_and_undo_stack_unchanged(self):
+        canvas, view, x_ref, y_ref = self.add_project()
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(
+            pair.x,
+            pair.y,
+            "-",
+            2,
+            "black",
+            "plot",
+            x_ref,
+            y_ref,
+            object_id="failed-dependent",
+        )
+        view.setCurrentIndex(view.table_model.index(0, 0))
+        undo_stack = self.window.repository.undo_stack(canvas.project_id)
+        original_count = undo_stack.count()
+
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes), patch.object(
+            canvas,
+            "remove_data_dependents",
+            return_value=False,
+        ):
+            view.delete_column()
+
+        self.assertTrue(self.window.repository.has_ref(x_ref))
+        self.assertIn("failed-dependent", canvas.component_registry)
+        self.assertEqual(undo_stack.count(), original_count)
+
     def test_incompatible_type_change_cascades_and_undo_restores(self):
         canvas, view, x_ref, y_ref = self.add_project()
         pair = self.window.repository.line_pair(x_ref, y_ref)

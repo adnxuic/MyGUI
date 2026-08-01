@@ -524,6 +524,14 @@ class ComponentRegistry:
             component_id: controller.state
             for component_id, controller in removed_controllers.items()
         }
+        locator_targets = {
+            component_id: target
+            for component_id in postorder_ids
+            if (
+                target := self.locator.bound_target(component_id)
+            )
+            is not None
+        }
         rollback_snapshots: dict[
             str,
             tuple[ComponentState, Any, dict[str, Any]],
@@ -536,6 +544,7 @@ class ComponentRegistry:
         original_controllers = self._controllers
         original_children = self._children
         staged_tree = False
+        unbinding_ids: list[str] = []
 
         self._transaction_depth += 1
         self._batch_depth += 1
@@ -601,6 +610,11 @@ class ComponentRegistry:
                 self.validate_tree()
             if verifier is not None:
                 verifier()
+            for component_id in postorder_ids:
+                # Record the attempted ID first: a fault-injection wrapper may
+                # remove the binding and then raise.
+                unbinding_ids.append(component_id)
+                self.locator.unbind(component_id)
         except Exception as exc:
             if failure is None:
                 state = (
@@ -627,14 +641,22 @@ class ComponentRegistry:
                     int(getattr(item[1], "index", 0)),
                 ),
             )
+            rollback_errors: list[str] = []
             for controller, handle in rollback_handles:
                 try:
                     controller.rollback_remove(handle)
-                except Exception:
-                    # A rollback hook is required to be idempotent.  Continue
-                    # restoring Registry state even if a faulty future hook
-                    # violates that contract.
-                    continue
+                except Exception as rollback_exc:
+                    rollback_errors.append(
+                        f"{controller.component_id}: artist rollback failed "
+                        f"({rollback_exc})"
+                    )
+                    try:
+                        self._force_restore_removal_handle(handle)
+                    except Exception as force_exc:
+                        rollback_errors.append(
+                            f"{controller.component_id}: forced artist "
+                            f"restoration failed ({force_exc})"
+                        )
             for component_id in rollback_snapshots:
                 try:
                     original_controllers[
@@ -642,8 +664,22 @@ class ComponentRegistry:
                     ]._restore_transaction_snapshot(
                         rollback_snapshots[component_id]
                     )
-                except Exception:
-                    continue
+                except Exception as rollback_exc:
+                    rollback_errors.append(
+                        f"{component_id}: state rollback failed "
+                        f"({rollback_exc})"
+                    )
+                    try:
+                        controller = original_controllers[component_id]
+                        type(controller)._restore_transaction_snapshot(
+                            controller,
+                            rollback_snapshots[component_id],
+                        )
+                    except Exception as force_exc:
+                        rollback_errors.append(
+                            f"{component_id}: forced state restoration failed "
+                            f"({force_exc})"
+                        )
             # Axis limit/scale restoration may disable autoscaling on a
             # shared sibling.  Restore that cross-Axes flag only after every
             # affected Axes has received its other original properties.
@@ -659,16 +695,61 @@ class ComponentRegistry:
                         spec,
                         deepcopy(raw["autoscale_on"]),
                     )
-                except Exception:
+                except Exception as rollback_exc:
+                    rollback_errors.append(
+                        f"{component_id}: autoscale rollback failed "
+                        f"({rollback_exc})"
+                    )
+                    try:
+                        type(controller)._write_property(
+                            controller,
+                            controller.resolve_target(),
+                            spec,
+                            deepcopy(raw["autoscale_on"]),
+                        )
+                    except Exception as force_exc:
+                        rollback_errors.append(
+                            f"{component_id}: forced autoscale restoration "
+                            f"failed ({force_exc})"
+                        )
+            for component_id in reversed(unbinding_ids):
+                if component_id not in locator_targets:
                     continue
+                try:
+                    self.locator.bind(
+                        component_id,
+                        locator_targets[component_id],
+                    )
+                except Exception as rollback_exc:
+                    rollback_errors.append(
+                        f"{component_id}: Locator rollback failed "
+                        f"({rollback_exc})"
+                    )
+                    try:
+                        target = locator_targets[component_id]
+                        self.locator._targets[component_id] = target
+                    except TypeError:
+                        self.locator._strong_targets[component_id] = target
+                    except Exception as force_exc:
+                        rollback_errors.append(
+                            f"{component_id}: forced Locator restoration "
+                            f"failed ({force_exc})"
+                        )
             self._pending = prior_pending
             del self._event_buffer[event_start:]
             self._batch_depth -= 1
             self._transaction_depth -= 1
+            message = failure.message
+            if rollback_errors:
+                message = (
+                    f"{message} Rollback was incomplete: "
+                    + "; ".join(rollback_errors)
+                ).strip()
             return ComponentBatchChange(
                 tuple(changes),
                 False,
-                message=failure.message,
+                message=message,
+                rollback_complete=not rollback_errors,
             )
 
         survivor_events = self._event_buffer[event_start:]
@@ -677,7 +758,6 @@ class ComponentRegistry:
         for component_id in postorder_ids:
             controller = removed_controllers[component_id]
             controller._deleted = True
-            self.locator.unbind(component_id)
         for controller, handle in handles:
             try:
                 controller._finalize_remove(handle)
@@ -727,6 +807,40 @@ class ComponentRegistry:
             True,
             notices=tuple(notices),
         )
+
+    @staticmethod
+    def _force_restore_removal_handle(handle) -> None:
+        """Rebuild a detached artist container from its in-memory handle."""
+
+        if hasattr(handle, "localaxes") and hasattr(handle, "stack_axes"):
+            figure = handle.figure
+            target = handle.target
+            figure._localaxes[:] = handle.localaxes
+            figure._axstack._axes = dict(handle.stack_axes)
+            figure.stale = handle.stale
+            target.stale = handle.target_stale
+            target.stale_callback = handle.stale_callback
+            target.figure = figure
+            target.axes = target
+            canvas = figure.canvas
+            if canvas is not None and hasattr(canvas, "mouse_grabber"):
+                canvas.mouse_grabber = handle.mouse_grabber
+            handle.detached = False
+            return
+        owner = handle.owner
+        target = handle.target
+        if target not in owner:
+            owner.insert(min(handle.index, len(owner)), target)
+        handle.detached = False
+        target.stale_callback = handle.stale_callback
+        if handle.axes is not None:
+            target.axes = handle.axes
+            if handle.axes_stale is not None:
+                handle.axes.stale = handle.axes_stale
+        if handle.figure is not None:
+            target.figure = handle.figure
+            if handle.figure_stale is not None:
+                handle.figure.stale = handle.figure_stale
 
     def add_cleanup_callback(
         self,

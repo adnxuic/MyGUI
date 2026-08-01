@@ -18,12 +18,16 @@ from code.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
     ComponentDeletionService,
+    ComponentDependencySnapshot,
     ComponentDependencyService,
+    DeleteReason,
+    DeletionRequest,
     FitService,
     FunctionCurveService,
     InterpolationService,
     TextRenderService,
 )
+from code.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
 from code.figuremodify.components import (
     AxesController,
     ComponentEvent,
@@ -155,12 +159,14 @@ class PyFigureCanvas(QWidget):
             self.component_registry,
             self.editor_registry,
         )
+        self.deletion_service = ComponentDeletionService(
+            self.component_registry
+        )
+        self.deletion_coordinator = DeletionCoordinator(self)
         self.dependency_service = ComponentDependencyService(
             self.component_registry,
             restore_state=self._restore_component_state,
-        )
-        self.deletion_service = ComponentDeletionService(
-            self.component_registry
+            deletion_service=self.deletion_service,
         )
         self.editor_context = EditorContext(
             registry=self.component_registry,
@@ -174,7 +180,7 @@ class PyFigureCanvas(QWidget):
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
             dependency_service=self.dependency_service,
-            deletion_service=self.deletion_service,
+            delete_command=self.delete_components,
         )
         self.root_component_id = self._component_id("figure")
         source_root = self._source_component_state(self.root_component_id)
@@ -746,96 +752,14 @@ class PyFigureCanvas(QWidget):
             raise IndexError(f"Invalid axes index: {axes_index}") from exc
         self.update_current_axes(controller)
 
-    def request_delete_axes(self, axes_id: str) -> bool:
-        """Confirm and delete one Axes subtree."""
-
-        try:
-            controller = self.component_registry.get(axes_id)
-        except Exception as exc:
-            status_messages.show_error(str(exc))
-            return False
-        state = controller.state
-        descendants = self.component_registry.descendants(axes_id)
-        dynamic_count = sum(
-            item.DELETION_POLICY is DeletionPolicy.REMOVE
-            for item in descendants
-        )
-        label = f"Axes {int(state.selector.get('index', 0)) + 1}"
-        dynamic_detail = (
-            f", including {dynamic_count} chart/free-text"
-            if dynamic_count
-            else ""
-        )
-        response = QMessageBox.question(
-            self,
-            "Delete Axes",
-            (
-                f"Delete {label} and its {len(descendants)} child "
-                f"components{dynamic_detail}? This action cannot be undone."
-            ),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if response != QMessageBox.Yes:
-            return False
-        return self.delete_axes(axes_id)
-
     def delete_axes(self, axes_id: str) -> bool:
-        """Delete an Axes through the domain service and synchronize its UI."""
+        """Delete an Axes through the unified deletion coordinator."""
 
-        try:
-            target_controller = self.component_registry.get(axes_id)
-            target_state = target_controller.state
-            target_axes = target_controller.resolve_target()
-        except Exception as exc:
-            status_messages.show_error(str(exc))
-            return False
-        deleted_index = int(target_state.selector.get("index", 0))
-        previous_current = self.current_axes_component_id
-        result = self.axes_commands.delete_axes(axes_id)
-        if not result.ok:
-            self.message_presenter.discard_pending()
-            return self.message_presenter.present(result)
-
-        self._axes_component_ids.pop(target_axes, None)
-        if self.figure_inspector is not None:
-            self.figure_inspector.remove_axes_inspector(axes_id)
-
-        surviving = sorted(
-            self.component_registry.query(kind=ComponentKind.AXES),
-            key=lambda controller: int(controller.state.selector["index"]),
-        )
-        self._axes_component_ids = {
-            controller.resolve_target(): controller.component_id
-            for controller in surviving
-        }
-        surviving_ids = {
-            controller.component_id for controller in surviving
-        }
-        if (
-            previous_current != axes_id
-            and previous_current in surviving_ids
-        ):
-            next_id = previous_current
-        elif surviving:
-            next_id = surviving[min(deleted_index, len(surviving) - 1)].component_id
-        else:
-            next_id = None
-        self.current_axes_component_id = None
-        if next_id is not None:
-            self.update_current_axes(next_id)
-        elif self.root_component_id in self.component_registry:
-            self.select_component(self.root_component_id)
-        try:
-            self.component_registry.validate_tree()
-            normalize_v6_figure(self.component_snapshot())
-        except Exception as exc:
-            self.message_presenter.discard_pending()
-            status_messages.show_error(str(exc))
-            return False
-        return self.message_presenter.present(
-            result,
-            success="Axes deleted.",
+        return self.delete_components(
+            (axes_id,),
+            anchor_id=axes_id,
+            reason=DeleteReason.AXES,
+            role_label="axes",
         )
 
     def redraw(self):
@@ -973,21 +897,34 @@ class PyFigureCanvas(QWidget):
         component_ids,
         role_label: str = "component",
     ) -> bool:
-        """Delete selected visible components and present one batch result."""
+        """Delete selected components through the single production entry."""
 
         ids = tuple(dict.fromkeys(str(item) for item in component_ids))
-        result = self.deletion_service.delete_many(ids)
-        if not result.ok:
-            # Rollback may reapply a restored state and queue a generic
-            # Controller success.  The batch failure is the sole result for
-            # this user action.
-            self.message_presenter.discard_pending()
-        return self.message_presenter.present(
-            result,
-            success=(
-                f"{len(ids)} {role_label} component"
-                f"{'' if len(ids) == 1 else 's'} deleted."
-            ),
+        return self.delete_components(
+            ids,
+            anchor_id=ids[0] if ids else None,
+            reason=(DeleteReason.SINGLE if len(ids) == 1 else DeleteReason.BATCH),
+            role_label=role_label,
+        )
+
+    def delete_components(
+        self,
+        component_ids,
+        *,
+        anchor_id: str | None = None,
+        reason: DeleteReason | str = DeleteReason.PROGRAMMATIC,
+        role_label: str = "component",
+    ) -> bool:
+        """Submit a stable-ID deletion request to the Canvas coordinator."""
+
+        request = DeletionRequest(
+            tuple(str(item) for item in component_ids),
+            anchor_id=anchor_id,
+            reason=DeleteReason(reason),
+        )
+        return self.deletion_coordinator.delete(
+            request,
+            role_label=role_label,
         )
 
     def _next_layout_group(self) -> int:
@@ -1507,10 +1444,13 @@ class PyFigureCanvas(QWidget):
         with mpl_style.context(self.component_style):
             self.fig.savefig(filename, dpi=save_dpi)
 
-    def dependent_records(self, refs: set[ColumnRef]) -> list[ComponentState]:
+    def dependent_records(self, refs: set[ColumnRef]) -> ComponentDependencySnapshot:
         """Return Controller snapshots for table-deletion undo."""
 
-        return self.dependency_service.dependent_states(refs)
+        return self.dependency_service.capture(
+            refs,
+            selected_component_id=self.current_component_id,
+        )
 
     def _restore_component_state(self, state: ComponentState):
         """Materialize one dynamic v6 component and reapply its full state."""
@@ -1659,19 +1599,60 @@ class PyFigureCanvas(QWidget):
 
     def remove_data_dependents(
         self,
-        snapshots: list[ComponentState],
-    ) -> None:
+        snapshots: ComponentDependencySnapshot,
+        request: DeletionRequest | None = None,
+    ) -> bool:
         """Remove components captured before a table mutation."""
 
-        self.dependency_service.delete_states(snapshots)
+        if request is None:
+            request = self.prepare_data_dependents(snapshots)
+        ids = request.component_ids
+        if not ids:
+            return True
+        return self.deletion_coordinator.delete(
+            request,
+            role_label="dependent",
+            present_success=False,
+        )
+
+    def prepare_data_dependents(
+        self,
+        snapshots: ComponentDependencySnapshot,
+    ) -> DeletionRequest:
+        """Preflight one Canvas before any cross-Canvas commit begins."""
+
+        expected = tuple(state.id for state in snapshots.component_states)
+        missing = [
+            component_id
+            for component_id in expected
+            if component_id not in self.component_registry
+        ]
+        if missing:
+            raise ValueError(
+                "Dependent components changed before deletion: "
+                + ", ".join(missing)
+            )
+        request = DeletionRequest(
+            expected,
+            anchor_id=expected[0] if expected else None,
+            reason=DeleteReason.DATA_DEPENDENCY,
+        )
+        self.deletion_service.prepare(request)
+        return request
 
     def restore_data_dependents(
         self,
-        snapshots: list[ComponentState],
+        snapshots: ComponentDependencySnapshot,
     ) -> None:
         """Restore components captured before a table mutation."""
 
-        self.dependency_service.restore_states(snapshots)
+        try:
+            self.dependency_service.restore_states(snapshots)
+            target = snapshots.selected_component_id
+            if target is not None and target in self.component_registry:
+                self.select_component(target)
+        finally:
+            self.message_presenter.discard_pending()
 
     def restore_component_tree(
         self,

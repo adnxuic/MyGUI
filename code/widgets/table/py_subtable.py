@@ -608,12 +608,16 @@ class TableView(QTableView):
         dependency_redo, dependency_undo = dependency_actions
 
         def redo():
-            dependency_redo()
+            if dependency_redo() is False:
+                return False
             self.sheet.remove_column(schema.id)
+            return True
 
         def undo():
             self.sheet.restore_column(index, deepcopy(schema), values.copy(deep=True))
-            dependency_undo()
+            if dependency_undo() is False:
+                return False
+            return True
 
         self.repository.push(self.project_id, TableMutationCommand(
             "Delete column", self.repository, self.project_id, redo, undo,
@@ -711,14 +715,18 @@ class TableView(QTableView):
         old_values = self.sheet.frame[schema.id].copy(deep=True)
 
         def redo():
-            dependency_redo()
+            if dependency_redo() is False:
+                return False
             schema.type = resolved
             self.sheet.frame[schema.id] = converted.copy(deep=True)
+            return True
 
         def undo():
             schema.type = old_type
             self.sheet.frame[schema.id] = old_values.copy(deep=True)
-            dependency_undo()
+            if dependency_undo() is False:
+                return False
+            return True
 
         self.repository.push(self.project_id, TableMutationCommand(
             "Change column type", self.repository, self.project_id, redo, undo,
@@ -1041,10 +1049,12 @@ class PySubTable(QFrame):
                 self.tabWidget.setCurrentIndex(min(preferred, len(self.project.sheets) - 1))
 
         def redo():
-            dependency_redo()
+            if dependency_redo() is False:
+                return False
             self.project.sheets.pop(sheet.id, None)
             self._build_tabs()
             select_nearest_sheet(original_index)
+            return True
 
         def undo():
             items = list(self.project.sheets.items())
@@ -1053,7 +1063,9 @@ class PySubTable(QFrame):
             self.project.sheets.update(items)
             self._build_tabs()
             self.tabWidget.setCurrentIndex(original_index)
-            dependency_undo()
+            if dependency_undo() is False:
+                return False
+            return True
 
         self.repository.push(self.project_id, TableMutationCommand(
             "Delete sheet", self.repository, self.project_id, redo, undo,

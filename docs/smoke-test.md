@@ -65,13 +65,17 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 24. Try opening the same project twice and confirm the second open is rejected without changing the workspace.
 25. Enter invalid expression, data reference, color, range, and interpolation values. Confirm each failed operation restores the last valid control and artist state and reports exactly one red Message Bar error.
 26. Add two Function Curves. Right-click the first tree node while the second
-    is selected and delete it; confirm only the clicked curve,
-    Inspector, and artist disappear and one green result is shown.
+    is selected and delete it; confirm the lightweight dialog names the first
+    curve and its stable ID, defaults to Cancel, and only that clicked curve,
+    Inspector, and artist disappear after confirmation with one green result.
 27. Right-click a Function Curve tree node and choose
     `Batch Delete Same Type...`. Confirm the batch dialog
     starts fully selected, `Clear All` disables `Delete (0)`, partial
     selection deletes only checked instances, and deleting all removes the
-    corresponding tree nodes.
+    corresponding tree nodes. Give multiple curves the same preview and
+    confirm their numbered labels remain distinct. Filter to one curve and
+    confirm the dialog still lists the complete same-parent/type cohort and
+    states that search does not narrow deletion scope.
     With a color palette active, delete the middle of three palette-colored
     charts and confirm the next creation previews the released middle color;
     surviving chart colors must not change.
@@ -87,6 +91,8 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     root Inspector. On a forced failure, confirm the Figure Axes order,
     current Axes, shared/twinned links, Axes Panel, tree selection, and layout
     do not change and no intermediate removal is visible.
+    Add a Figure-level free Text before deleting the final Axes and confirm
+    fallback still selects the Figure root rather than crossing to Text.
 29. Save one of two projects while its tab is in the background and confirm
     the file contains that project. Modify a saved project through the Table,
     Component Inspector, and toolbar zoom, then close its tab and verify

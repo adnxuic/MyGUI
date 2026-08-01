@@ -423,7 +423,7 @@ class EditorContext:
     fitting: object
     text_rendering: object
     dependency_service: object | None = None
-    deletion_service: object | None = None
+    delete_command: Callable[..., bool] | None = None
 
     @property
     def repository(self):

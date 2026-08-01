@@ -202,19 +202,18 @@ class ComponentInspector(QFrame):
                 sync()
 
     def delete_object(self):
-        """Delete object."""
+        """Delegate physical deletion to the Canvas-owned command."""
 
         if not self.can_delete:
             return False
-        service = getattr(self.context, "deletion_service", None)
-        result = (
-            service.delete_many((self.controller.component_id,))
-            if service is not None
-            else self.context.registry.delete(self.controller.component_id)
-        )
-        return self.context.messages.present(
-            result,
-            success=f"{self.profile.title} deleted.",
+        command = getattr(self.context, "delete_command", None)
+        if not callable(command):
+            return False
+        return command(
+            (self.controller.component_id,),
+            anchor_id=self.controller.component_id,
+            reason="single",
+            role_label=self.profile.title,
         )
 
     def dispose(self) -> None:

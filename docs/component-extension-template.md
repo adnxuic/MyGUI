@@ -15,6 +15,10 @@ schema-v6 project behavior.
 3. Put cross-component, repository, or render-sensitive work in a domain
    Service. Inspector code submits to the Controller or Service and never
    mutates Matplotlib directly.
+4. For `REMOVE`, register one exact `DeletionHandler` for the Editor key.
+   Compose `ColorCycleDeletionEffect` only for palette-backed components. A
+   leaf handler must have no registered children; a composite handler owns
+   and tests its complete child-artist removal coverage.
 
 ## Creation
 
@@ -75,3 +79,7 @@ preview, and sort behavior. No tree or container source edit is required.
 - Deletion, data refresh semantics, stable-ID save/open, and schema-v6
   round-trip are covered without persisting Profiles, typed tree keys,
   Section expansion, QWidget state, or callbacks.
+- Single and batch deletion cover exact right-click targeting, full cohorts
+  under search, same-cohort fallback, one Registry batch/redraw/message, and
+  fault injection at artist, survivor state, Locator, Panel, fallback
+  Inspector, tree/schema verification, and rollback compensation stages.

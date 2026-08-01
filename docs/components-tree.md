@@ -88,15 +88,25 @@ model resets never select the first visible row as a side effect.
 Right-click actions are determined by the Controller deletion policy:
 
 - Figure and fixed semantic Components have no physical delete action.
-- Axes use the confirmation flow and `AxesCommandService`.
-- removable Line, Scatter, and free Text Components use
-  `ComponentDeletionService`.
+- Axes and removable Line, Scatter, and free Text Components use the same
+  Canvas `DeletionCoordinator` entry.
 - `Batch Delete Same Type...` includes only removable siblings with the same
-  `parent_id`, kind, and role.
+  `parent_id`, kind, role, and `REMOVE` policy. Search changes only what is
+  visible; it never narrows this business cohort.
 
-After confirmation, fallback is calculated from the actual deletion set and
-moves to the next surviving sibling, previous sibling, nearest surviving
-ancestor, or Figure root. A failed transaction leaves Registry state, Matplotlib
-artists, Inspectors, and selection unchanged. The first release does not
-support drag reparenting, drag ordering, inline rename, visibility icons, or
-canvas highlighting.
+The view sends the typed node hit by the pointer without changing selection.
+The Host opens that exact Component Inspector first and suppresses the menu if
+selection fails. A single-delete confirmation names the displayed instance and
+stable ID and defaults to Cancel. Batch rows use the source model's numbered
+instance labels, show stable IDs, start fully selected, and support Select All,
+Clear All, and partial selection. Confirmation revalidates the complete cohort;
+any missing, moved, or policy-changed candidate rejects the whole request.
+
+After commit, fallback is calculated once from the actual deletion set: keep a
+surviving current selection, otherwise choose the next or previous survivor in
+the same cohort, then the parent, nearest surviving ancestor, or Figure root.
+The Host never overwrites this result. A failed transaction leaves Registry
+state, Matplotlib artists and ordering, Locator bindings, Inspector identities,
+palette cursors, tree projection, and selection unchanged and shows one red
+result. The first release does not support drag reparenting, drag ordering,
+inline rename, visibility icons, or canvas highlighting.

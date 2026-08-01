@@ -84,6 +84,21 @@ class ComponentTreeModel(QAbstractItemModel):
                 else registry.subscribe(self._component_event)
             )
 
+    @classmethod
+    def validate_registry_projection(cls, registry, editor_registry=None) -> None:
+        """Build and validate a candidate projection without publishing it."""
+
+        candidate = cls()
+        try:
+            candidate.registry = registry
+            candidate.editor_registry = editor_registry
+            candidate.presentation = TreePresentationResolver(editor_registry)
+            candidate._build_projection()
+        finally:
+            candidate.registry = None
+            candidate.editor_registry = None
+            candidate.deleteLater()
+
     def dispose(self) -> None:
         self._detach_registry()
         self.registry = None

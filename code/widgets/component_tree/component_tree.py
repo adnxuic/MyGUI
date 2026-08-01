@@ -12,12 +12,13 @@ from code.figuremodify.components import (
     ComponentState,
     DeletionPolicy,
 )
+from code import status_messages
 from code.widgets import qss_func
 from code.widgets.common_widget.py_empty_state import PyEmptyState
 
-from .dialogs import ComponentBatchDeleteDialog
+from .dialogs import ComponentBatchDeleteDialog, DeleteCandidate
 from .model import ComponentTreeFilterProxyModel, ComponentTreeModel
-from .nodes import TreeNodeKey
+from .nodes import ComponentNodeKey, TreeNodeKey
 from .view import ComponentTreeView
 
 
@@ -254,44 +255,19 @@ class ComponentTreeHost(QFrame):
             self._select_tree_only(component_id)
             self.tree.expand_component_path(component_id)
 
-    def _fallback_component(
-        self,
-        component_id: str,
-        deleting: set[str] | None = None,
-    ) -> str | None:
-        if self._canvas is None:
-            return None
-        registry = self._canvas.component_registry
-        if component_id not in registry:
-            return self._canvas.root_component_id
-        deleting = set(deleting or {component_id})
-        state = registry.get(component_id).state
-        siblings = list(self.model.children_ids(state.parent_id))
-        try:
-            index = siblings.index(component_id)
-        except ValueError:
-            index = -1
-        for candidate in siblings[index + 1 :]:
-            if candidate in registry and candidate not in deleting:
-                return candidate
-        for candidate in reversed(siblings[:index]):
-            if candidate in registry and candidate not in deleting:
-                return candidate
-        parent_id = state.parent_id
-        visited: set[str] = set()
-        while parent_id is not None and parent_id in deleting:
-            if parent_id in visited or parent_id not in registry:
-                parent_id = None
-                break
-            visited.add(parent_id)
-            parent_id = registry.get(parent_id).state.parent_id
-        return parent_id or self._canvas.root_component_id
-
     def _show_context_menu(
-        self, component_id: str, global_position: QPoint
+        self, node_key: TreeNodeKey, global_position: QPoint
     ) -> None:
         canvas = self._canvas
+        if not isinstance(node_key, ComponentNodeKey):
+            return
+        component_id = node_key.component_id
         if canvas is None or component_id not in canvas.component_registry:
+            return
+        previous = canvas.current_component_id
+        if not canvas.select_component(component_id):
+            if previous is not None:
+                self._select_tree_only(previous)
             return
         controller = canvas.component_registry.get(component_id)
         state = controller.state
@@ -310,26 +286,66 @@ class ComponentTreeHost(QFrame):
         if action is None:
             return
         if action is delete_action:
-            fallback = self._fallback_component(component_id, {component_id})
-            succeeded = (
-                canvas.request_delete_axes(component_id)
-                if state.kind is ComponentKind.AXES
-                else canvas.delete_component_group(
-                    (component_id,), state.role.value.replace("_", " ")
+            if not self._confirm_single_delete(component_id):
+                return
+            if state.kind is ComponentKind.AXES:
+                canvas.delete_axes(component_id)
+            else:
+                canvas.delete_components(
+                    (component_id,),
+                    anchor_id=component_id,
+                    reason="single",
+                    role_label=state.role.value.replace("_", " "),
                 )
-            )
-            if succeeded:
-                self._select_after_delete(fallback)
             return
         if action is batch_action:
             self._run_batch_delete(state)
 
+    def _source_label(self, component_id: str) -> str:
+        index = self.model.index_for_component(component_id)
+        return str(self.model.data(index, Qt.DisplayRole) or component_id)
+
+    def _confirm_single_delete(self, component_id: str) -> bool:
+        canvas = self._canvas
+        controller = canvas.component_registry.get(component_id)
+        label = self._source_label(component_id)
+        detail = ""
+        if controller.state.kind is ComponentKind.AXES:
+            descendants = canvas.component_registry.descendants(component_id)
+            detail = f" and its {len(descendants)} child components"
+        message = QMessageBox(self)
+        message.setWindowTitle("Delete Component")
+        message.setIcon(QMessageBox.Warning)
+        message.setText(f"Delete {label}{detail}?")
+        message.setInformativeText(
+            f"Stable ID: {component_id}\nThis action cannot be undone."
+        )
+        delete_button = message.addButton(
+            "Delete", QMessageBox.DestructiveRole
+        )
+        cancel_button = message.addButton(QMessageBox.Cancel)
+        message.setDefaultButton(cancel_button)
+        message.exec()
+        return message.clickedButton() is delete_button
+
     def _batch_candidates(
         self, state: ComponentState
-    ) -> list[tuple[str, str]]:
+    ) -> list[DeleteCandidate]:
         registry = self._canvas.component_registry
         candidates = []
-        for controller in registry.children(state.parent_id):
+        parent_label = (
+            self._source_label(state.parent_id)
+            if state.parent_id is not None
+            else "Figure"
+        )
+        cohort_key = (
+            state.parent_id,
+            state.kind.value,
+            state.role.value,
+            DeletionPolicy.REMOVE.value,
+        )
+        for component_id in self.model.children_ids(state.parent_id):
+            controller = registry.get(component_id)
             candidate = controller.state
             if (
                 candidate.kind is state.kind
@@ -337,16 +353,19 @@ class ComponentTreeHost(QFrame):
                 and controller.DELETION_POLICY is DeletionPolicy.REMOVE
             ):
                 candidates.append(
-                    (
+                    DeleteCandidate(
                         candidate.id,
-                        self.model.component_display_label(candidate),
+                        self._source_label(candidate.id),
+                        parent_label,
+                        cohort_key,
                     )
                 )
         return candidates
 
     def _run_batch_delete(self, state: ComponentState) -> None:
+        original_candidates = self._batch_candidates(state)
         dialog = ComponentBatchDeleteDialog(
-            self._batch_candidates(state),
+            original_candidates,
             role_label=state.role.value.replace("_", " "),
             parent=self,
         )
@@ -355,21 +374,22 @@ class ComponentTreeHost(QFrame):
         dialog.deleteLater()
         if not selected:
             return
-        fallback = self._fallback_component(state.id, set(selected))
-        succeeded = self._canvas.delete_component_group(
-            selected, state.role.value.replace("_", " ")
-        )
-        if succeeded and state.id in selected:
-            self._select_after_delete(fallback)
-
-    def _select_after_delete(self, fallback: str | None) -> None:
-        canvas = self._canvas
-        if canvas is None:
+        try:
+            current_candidates = self._batch_candidates(state)
+        except Exception:
+            current_candidates = []
+        if current_candidates != original_candidates:
+            status_messages.show_error(
+                "The component group changed while the deletion dialog was "
+                "open. Nothing was deleted."
+            )
             return
-        registry = canvas.component_registry
-        target = fallback if fallback in registry else canvas.root_component_id
-        if target in registry:
-            canvas.select_component(target)
+        self._canvas.delete_components(
+            selected,
+            anchor_id=state.id,
+            reason="batch",
+            role_label=state.role.value.replace("_", " "),
+        )
 
     def closeEvent(self, event):
         self.dispose()

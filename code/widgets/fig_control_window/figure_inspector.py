@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 from typing import Optional
 
@@ -28,6 +29,16 @@ from code.widgets.qss_func import qss_loader
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "style.qss")
+
+
+@dataclass(slots=True)
+class AxesInspectorRemoval:
+    """Reversible detachment token for one Axes Inspector panel."""
+
+    component_id: str
+    panel: "AxesInspectorPanel"
+    index: int
+    was_current: bool
 
 
 class AxesInspectorPanel(QFrame):
@@ -222,9 +233,15 @@ class AxesInspectorPanel(QFrame):
         if self._disposed:
             return
         self._disposed = True
-        self.semantic_panel.dispose()
-        self._chart_stack.dispose()
-        self._element_stack.dispose()
+        for container in (
+            self.semantic_panel,
+            self._chart_stack,
+            self._element_stack,
+        ):
+            try:
+                container.dispose()
+            except Exception:
+                pass
 
     def closeEvent(self, event):
         self.dispose()
@@ -376,17 +393,67 @@ class FigureInspectorPanel(QFrame):
     def remove_axes_inspector(self, component_id: str) -> bool:
         """Remove the Axes panel associated with a stable component ID."""
 
-        component_id = str(component_id)
-        panel = self._axes_panels.pop(component_id, None)
-        if panel is None:
+        handle = self.take_axes_inspector(component_id)
+        if handle is None:
             return False
-        panel.dispose()
-        self._inspector_stack.removeWidget(panel)
-        panel.setParent(None)
-        panel.deleteLater()
+        self.finalize_axes_inspector_removal(handle)
+        return True
+
+    def take_axes_inspector(
+        self,
+        component_id: str,
+    ) -> AxesInspectorRemoval | None:
+        """Detach an Axes panel without disposing it so failure can restore it."""
+
+        component_id = str(component_id)
+        panel = self._axes_panels.get(component_id)
+        if panel is None:
+            return None
+        index = self._inspector_stack.indexOf(panel)
+        was_current = self._inspector_stack.currentWidget() is panel
+        try:
+            self._axes_panels.pop(component_id)
+            self._inspector_stack.removeWidget(panel)
+        except Exception:
+            self._axes_panels[component_id] = panel
+            if self._inspector_stack.indexOf(panel) < 0:
+                self._inspector_stack.insertWidget(max(0, index), panel)
+            if was_current:
+                self._inspector_stack.setCurrentWidget(panel)
+            raise
         if self._inspector_stack.currentWidget() is None:
             self._inspector_stack.setCurrentWidget(self.root_inspector)
-        return True
+        return AxesInspectorRemoval(component_id, panel, index, was_current)
+
+    def restore_axes_inspector(
+        self,
+        handle: AxesInspectorRemoval,
+    ) -> None:
+        """Restore the exact detached Axes panel and its stack position."""
+
+        if handle.component_id in self._axes_panels:
+            return
+        self._inspector_stack.insertWidget(
+            max(0, min(handle.index, self._inspector_stack.count())),
+            handle.panel,
+        )
+        self._axes_panels[handle.component_id] = handle.panel
+        if handle.was_current:
+            self._inspector_stack.setCurrentWidget(handle.panel)
+
+    @staticmethod
+    def finalize_axes_inspector_removal(
+        handle: AxesInspectorRemoval,
+    ) -> None:
+        """Dispose a panel only after the business deletion has committed."""
+
+        try:
+            handle.panel.dispose()
+        except Exception:
+            pass
+        finally:
+            handle.panel.setParent(None)
+            handle.panel.deleteLater()
 
     def axes_inspector(self, component_id: str):
         return self._axes_panels.get(str(component_id))
@@ -441,6 +508,43 @@ class FigureInspectorPanel(QFrame):
             return False
         self._inspector_stack.setCurrentWidget(panel)
         return True
+
+    def ensure_component(self, component_id: str):
+        """Prepare one Inspector without changing the currently visible panel."""
+
+        component_id = str(component_id)
+        registry = self.context.registry
+        if component_id not in registry:
+            raise KeyError(component_id)
+        if component_id == self.root_component_id:
+            return self.root_inspector
+        controller = registry.get(component_id)
+        profile = self.context.editor_manager.editor_registry.resolve_profile(
+            controller
+        )
+        if profile is None:
+            raise ValueError(
+                f"Component {component_id!r} has no registered Editor profile."
+            )
+        if (
+            controller.state.parent_id == self.root_component_id
+            and profile.placement is EditorPlacement.ELEMENT
+        ):
+            return self._figure_elements_panel.ensure_component(component_id)
+        axes_controller = registry.ancestor(
+            component_id,
+            kind=ComponentKind.AXES,
+        )
+        panel = (
+            self._axes_panels.get(axes_controller.component_id)
+            if axes_controller is not None
+            else None
+        )
+        if panel is None:
+            raise ValueError(
+                f"Axes Inspector for component {component_id!r} is unavailable."
+            )
+        return panel.ensure_component(component_id)
 
     def inspector(self, component_id: str):
         """Return the visible-capable Inspector for a stable ID."""
@@ -501,10 +605,19 @@ class FigureInspectorPanel(QFrame):
             return
         self._disposed = True
         for panel in tuple(self._axes_panels.values()):
-            panel.dispose()
+            try:
+                panel.dispose()
+            except Exception:
+                pass
         self._axes_panels.clear()
-        self._figure_elements_panel.dispose()
-        self.root_inspector.dispose()
+        for inspector in (
+            self._figure_elements_panel,
+            self.root_inspector,
+        ):
+            try:
+                inspector.dispose()
+            except Exception:
+                pass
 
     def closeEvent(self, event):
         self.dispose()
@@ -589,7 +702,10 @@ class FigureInspectorHost(QFrame):
         for index in range(self._figure_stack.count() - 1, 0, -1):
             widget = self._figure_stack.widget(index)
             if isinstance(widget, FigureInspectorPanel):
-                widget.dispose()
+                try:
+                    widget.dispose()
+                except Exception:
+                    pass
             self._figure_stack.removeWidget(widget)
             widget.setParent(None)
             widget.deleteLater()

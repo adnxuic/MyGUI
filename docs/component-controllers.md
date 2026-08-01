@@ -32,6 +32,9 @@ The public value types are:
   declared by each Controller type.
 - `RemovalHandle`: runtime-only capture of the exact target, owner, position,
   callbacks, and update subject used by reversible physical removal.
+- `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
+  `DeletionOutcome`: runtime-only two-phase deletion values; they are never
+  serialized into `ComponentState` or schema v6.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -73,10 +76,11 @@ therefore does not create a user-facing success message.
 `ComponentLocator` weakly binds stable artists by component ID. Axes, Axis, Spine, Text, and stable Line/Scatter targets can also resolve through their parent and selector. Tick, Tick Label, Grid, and Legend Controllers resolve semantically each time because Matplotlib may recreate their underlying artists.
 
 Deletion is a Registry structure transaction. It prepares every removable
-root, buffers survivor changes and events, detaches the original
-artist/Axes reversibly, validates the candidate tree, and commits only after
-all checks pass. Failure restores the same Controllers, targets, Locator
-bindings, Matplotlib container order, pending updates, and Controller state;
+root, buffers survivor changes and events, detaches the original artist/Axes
+and Locator bindings reversibly, validates the Registry tree plus supplied
+candidate verifiers, and commits only after all checks pass. Failure restores
+the same Controllers, targets, Locator bindings, Matplotlib container order,
+pending updates, and Controller state;
 cleanup and lifecycle listeners see no intermediate event. Success marks and
 unbinds the removed subtree, runs cleanup, emits child-first `REMOVED`
 events, publishes survivor `CHANGED` events, and schedules at most one paint
@@ -136,9 +140,12 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 - `InterpolationService`: validated interpolation configuration and refresh;
 - `FitService`: persistent fit results, manual-refit generations, and display-range updates;
 - `TextRenderService`: synchronous render verification with rollback and glyph warnings;
-- `ComponentDeletionService`: dynamic-component adapter that composes
-  palette-slot release state with `ComponentRegistry.delete_transaction()`;
-- `ComponentDependencyService`: query/delete/restore of table-bound component snapshots.
+- `ComponentDeletionService`: stable-ID planning, subtree ownership checks,
+  explicit handler resolution, Axes reindexing, and palette deletion effects;
+- `DeletionHandlerRegistry`: one exact physical-deletion contract for every
+  production `REMOVE` Controller key, validated during Canvas startup;
+- `ComponentDependencyService`: capture/delete/restore of table-bound
+  component snapshots together with exact parent Axes palette state.
 
 These services do not maintain parallel project records. `ComponentRegistry` and `ComponentState` are the only runtime truth. The visible panels receive an `EditorContext`, call Controllers/services directly, and are synchronized or removed through committed Registry events. `Py*Modify` façade classes are not part of the architecture.
 
@@ -212,14 +219,17 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    the normal Matplotlib artist-list handle.
 4. Add stable binding or a semantic resolver in `ComponentLocator`. Prefer semantic selectors for Matplotlib objects that may be recreated.
 5. Register the `(kind, role)` to Controller mapping in `CONTROLLER_TYPES`.
-6. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
-7. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-8. Extend v6 serialization, strict validation, v4/v5 migration, and direct v6 project round-trip coverage when the component is persistent.
-9. Register an exact `EditorProfile` with explicit placement,
+6. If the policy is `REMOVE`, register exactly one `DeletionHandler` for the
+   same key. Leaf handlers reject registered children; a composite handler
+   must own the full subtree and declare palette effects explicitly.
+7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
+8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
+9. Extend v6 serialization, strict validation, v4/v5 migration, and direct v6 project round-trip coverage when the component is persistent.
+10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the
    application `ColorLibrary`, and keep QWidget state out of `ComponentState`.
-10. Add Controller contract tests for resolve, read/write, rejection
+11. Add Controller contract tests for resolve, read/write, rejection
     rollback, snapshot/restore, deletion policy, same-object removal rollback,
     event invisibility, and coalesced redraw.
 

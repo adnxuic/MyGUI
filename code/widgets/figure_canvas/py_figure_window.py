@@ -5,6 +5,7 @@ import json
 from typing import Any, Optional
 
 from Qt_core import *
+from code import status_messages
 from code.database import ColumnRef, TableRepository, validate_component_name
 from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from code.widgets.fig_control_window.figure_inspector import (
@@ -435,12 +436,44 @@ class PyFigureWindow(QFrame):
             return False
 
         def redo():
-            for canvas, snapshots in captured:
-                canvas.remove_data_dependents(snapshots)
+            prepared = []
+            try:
+                for canvas, snapshots in captured:
+                    prepared.append(
+                        (
+                            canvas,
+                            snapshots,
+                            canvas.prepare_data_dependents(snapshots),
+                        )
+                    )
+            except Exception as exc:
+                status_messages.show_error(str(exc))
+                return False
+            committed = []
+            for canvas, snapshots, request in prepared:
+                if canvas.remove_data_dependents(snapshots, request):
+                    committed.append((canvas, snapshots))
+                    continue
+                rollback_errors = []
+                for committed_canvas, committed_snapshots in reversed(committed):
+                    try:
+                        committed_canvas.restore_data_dependents(
+                            committed_snapshots
+                        )
+                    except Exception as exc:
+                        rollback_errors.append(str(exc))
+                if rollback_errors:
+                    status_messages.show_error(
+                        "Dependent deletion failed and cross-canvas rollback "
+                        "was incomplete: " + "; ".join(rollback_errors)
+                    )
+                return False
+            return True
 
         def undo():
             for canvas, snapshots in captured:
                 canvas.restore_data_dependents(snapshots)
+            return True
 
         return redo, undo
 

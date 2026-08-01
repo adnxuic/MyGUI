@@ -72,15 +72,23 @@ Scope: this file applies to the whole repository.
 - Use Registry batch event contexts and batch subscriptions for compound operations. Axes creation/deletion, project restore, and other logical batches should cause one tree projection rebuild and one final refresh, while preserving persisted Axes state.
 - Stage project creation and restore before publication. Prepare the Canvas, Inspector hierarchy, tree session, project fingerprints, and subscriptions before adding official mappings or tabs. Failures before or after tab insertion must clean up by stable object/project ID rather than scanning tabs or matching display names.
 
+## Component Deletion Rules
+
+- Every newly supported Figure component must make an explicit deletion decision as part of the same feature: fixed semantic components use a non-removable policy and hide instead of deleting; genuinely removable components use `REMOVE` and must be fully integrated with the deletion transaction architecture before publication.
+- Route every production deletion entry through `DeletionCoordinator` with a `DeletionRequest`; Tree single/batch deletion, Inspector deletion, Axes deletion, and data-dependency cascades must not directly call Registry or Controller physical-delete primitives.
+- Register exactly one deletion handler for every production `EditorKey` whose Controller exposes `REMOVE`. Declare whether the handler owns a subtree, reject Registry children from leaf handlers, and explicitly compose side effects such as `ColorCycleDeletionEffect`; do not infer deletion behavior from property names or Matplotlib artist type.
+- Treat deletion as an all-or-nothing prepared transaction. Include artists, Controllers, Locator bindings, survivor states, Axes maps, Inspector containers, tree/schema validation, palette cursors, and authoritative selection in the snapshot and rollback contract. Publish lifecycle events, redraw, selection, and one Message Bar result only after commit.
+- New removable components must participate in precise instance labeling, same-parent/kind/role batch cohorts, candidate revalidation, and Coordinator-owned post-delete selection. Search filtering is display-only and must not reduce the deletion business scope.
+
 ## New Figure Component Checklist
 
 - Prefer an existing `ComponentKind` and `ComponentRole`. Adding a kind, role, or persisted property is a separate schema migration task with validation, rollback, and save/open round-trip coverage.
-- Implement `ComponentState`, Controller, explicit deletion policy, property/data validation, Locator binding, and any domain Service first. Fixed semantic components hide; only genuinely removable components expose deletion.
+- Implement `ComponentState`, Controller, explicit deletion policy, property/data validation, Locator binding, and any domain Service first. Fixed semantic components hide; only genuinely removable components expose deletion. For every new `REMOVE` component, add its exact `DeletionHandlerRegistry` declaration and prove that Canvas startup deletion-handler validation succeeds.
 - Resolve all applicable line, marker, fill, text, and color defaults from the current authoritative Figure style. Show exposed defaults in a Controller-free creation input, create the Matplotlib artist under the same style context, and synchronize Controller state from the artist before registration.
 - Reuse the injected `ColorLibrary`. For ordered chart colors, call `ColorCycleState.peek()` for the candidate and `commit()` only after the full registration transaction succeeds. Explicit user values and the active Axes palette take precedence.
 - Register one exact `EditorProfile` per supported `EditorKey`, with explicit `EditorPlacement`, reusable `EditorSection` factories, unique `SectionSpec` keys, and a complete UI-only `TreePresentationSpec`. A new supported component must not require edits to tree grouping or container dispatch code.
 - Route all edits through Controllers or Services. Continue using `TextRenderService.apply_many()` for one logical render-sensitive text edit, keep Legend on `LegendController`/Axes commands, and preserve Plot/Interpolation/Fit data-reference refresh semantics.
-- Cover successful creation, empty data where valid, lazy Inspector reuse, deletion, data-source refresh, every failure rollback stage, stable-ID schema-v6 save/open, and the absence of Profile/Section/tree UI state from persisted files. Document the final feature and parameters under `docs/`; keep only current limitations in `codex_handoff/`.
+- Cover successful creation, empty data where valid, lazy Inspector reuse, single and same-cohort batch deletion, data-dependency deletion where applicable, data-source refresh, every failure rollback stage, stable-ID schema-v6 save/open, and the absence of Profile/Section/tree UI state from persisted files. Deletion tests must assert exact artist/Controller/Inspector/Locator identity on rollback, correct palette and selection restoration, and no partial events or success messages. Document the final feature and parameters under `docs/`; keep only current limitations in `codex_handoff/`.
 
 ## Component Verification Baseline
 
