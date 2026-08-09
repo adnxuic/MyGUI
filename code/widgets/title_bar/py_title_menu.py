@@ -8,6 +8,10 @@ from code.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton,
 from code.widgets.title_bar.py_action_gallery import ResponsiveActionGallery
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
+from code.widgets.title_bar.titlebar_dialog.axes_layout_input import (
+    axes_layout_presets,
+    normalized_layout_icon,
+)
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     element_action_specs,
@@ -487,10 +491,9 @@ class LegacySelectorLayoutMenuBar(QFrame):
 
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
-        # 读取可用的样式
-        style_json_path = os.path.join(current_path, 'available_layout.json')
-        with open(style_json_path, 'r') as json_file:
-            self.available_layout_dict = json.load(json_file)
+        self.available_layout_dict = {
+            preset.key: preset for preset in axes_layout_presets()
+        }
 
         self.setObjectName("selector_menu")
 
@@ -499,11 +502,20 @@ class LegacySelectorLayoutMenuBar(QFrame):
 
         self.button_dict = {}
 
-        for index, (layout, value) in enumerate(self.available_layout_dict.items()):
-            dialog = PyLayoutDialog(dialog_name=layout, figure_window=figure_window, layout=value)
-            button = StaticSelectButton(layout, f'pictures/icons/layout_images/{layout}.svg', layout,
-                                        f'pictures/icons/layout_images/{layout}.svg', dialog)
-            self.button_dict[layout] = button
+        for index, preset in enumerate(self.available_layout_dict.values()):
+            dialog = PyLayoutDialog(
+                dialog_name=preset.label,
+                figure_window=figure_window,
+                preset_key=preset.key,
+            )
+            button = StaticSelectButton(
+                preset.label,
+                preset.icon_path,
+                preset.label,
+                preset.icon_path,
+                dialog,
+            )
+            self.button_dict[preset.key] = button
             if index < 8:
                 self.layout.addWidget(button)
 
@@ -591,21 +603,30 @@ class SelectorLayoutMenuBar(ResponsiveActionGallery):
 
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
-        layout_json_path = os.path.join(current_path, "available_layout.json")
-        with open(layout_json_path, "r", encoding="utf-8") as json_file:
-            self.available_layout_dict = json.load(json_file)
+        self.available_layout_dict = {
+            preset.key: preset for preset in axes_layout_presets()
+        }
 
-        for layout_name, value in self.available_layout_dict.items():
-            self.add_dialog_action(
-                layout_name,
-                f"pictures/icons/layout_images/{layout_name}.svg",
-                lambda parent, layout_name=layout_name, value=value: PyLayoutDialog(
-                    dialog_name=layout_name,
+        for preset in self.available_layout_dict.values():
+            action = self.add_dialog_action(
+                preset.label,
+                normalized_layout_icon(preset.icon_path),
+                lambda parent, preset=preset: PyLayoutDialog(
+                    dialog_name=preset.label,
                     figure_window=figure_window,
-                    layout=value,
+                    preset_key=preset.key,
                     parent=parent,
                 ),
+                reuse_dialog=False,
             )
+            action.setText(preset.toolbar_label)
+            action.setToolTip(preset.label)
+            button = self.toolbar.widgetForAction(action)
+            if button is not None:
+                button.setObjectName("layout_template_button")
+                button.setFixedSize(112, 60)
+                button.setAccessibleName(preset.label)
+                button.setToolTip(preset.label)
 
 
 class SelectorChartMenuBar(ResponsiveActionGallery):

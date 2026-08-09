@@ -144,11 +144,11 @@ class ProjectIoTests(unittest.TestCase):
         }), encoding="utf-8")
         with self.assertRaisesRegex(
             ValueError,
-            "supported versions are v4, v5, v6, v7, and v8",
+            "supported versions are v4, v5, v6, v7, v8, and v9",
         ):
             load_project_file(self.path)
 
-    def test_schema_v4_migrates_through_v5_v6_v7_to_v8(self):
+    def test_schema_v4_migrates_through_v5_v6_v7_v8_to_v9(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -164,7 +164,7 @@ class ProjectIoTests(unittest.TestCase):
 
         migrated = load_project_file(self.path)
         migrated_legacy = v6_figure_to_legacy(migrated["figure"])
-        self.assertEqual(migrated["schema_version"], 8)
+        self.assertEqual(migrated["schema_version"], 9)
         self.assertEqual(
             self.component(migrated, "data_plot")["data"]["preprocess"],
             {"x_expression": "x", "y_expression": "y"},

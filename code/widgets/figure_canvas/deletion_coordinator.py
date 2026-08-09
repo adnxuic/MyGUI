@@ -10,7 +10,7 @@ from code.figuremodify.component_services import (
     DeletionRequest,
 )
 from code.figuremodify.components import ComponentKind, DeletionPolicy
-from code.figuremodify.components.serialization import normalize_v8_figure
+from code.figuremodify.components.serialization import normalize_v9_figure
 from code.widgets.component_tree.model import ComponentTreeModel
 from code.widgets.component_tree.presentation import TreePresentationResolver
 
@@ -114,6 +114,11 @@ class DeletionCoordinator:
 
         previous_component_id = canvas.current_component_id
         previous_axes_id = canvas.current_axes_component_id
+        deleted_axes_count = sum(
+            canvas.component_registry.get(component_id).state.kind
+            is ComponentKind.AXES
+            for component_id in prepared.plan.root_ids
+        )
         panel = canvas.figure_inspector
         axes_handles = []
         fallback_inspector_existed = bool(
@@ -190,7 +195,7 @@ class DeletionCoordinator:
                 canvas.component_registry,
                 canvas.editor_registry,
             )
-            normalize_v8_figure(canvas.component_snapshot())
+            normalize_v9_figure(canvas.validate_component_snapshot())
             candidate_axes_map = self._candidate_axes_map()
 
         try:
@@ -231,6 +236,7 @@ class DeletionCoordinator:
                     )
                 )
         canvas._axes_component_ids = candidate_axes_map
+        canvas.axes_layout_service.restore_runtime_relationships(refresh=True)
         fallback_axes_id = canvas._axes_ancestor_id(fallback_id)
         canvas.current_axes_component_id = (
             fallback_axes_id
@@ -250,13 +256,12 @@ class DeletionCoordinator:
         presenter.discard_pending()
         if not present_success:
             return True
-        count = len(request.component_ids)
-        success = (
-            "Axes deleted."
-            if role_label.casefold() == "axes" and count == 1
-            else (
+        count = deleted_axes_count or len(request.component_ids)
+        if role_label.casefold() == "axes":
+            success = "Axes deleted." if count == 1 else f"{count} Axes deleted."
+        else:
+            success = (
                 f"{count} {role_label} component"
                 f"{'' if count == 1 else 's'} deleted."
             )
-        )
         return presenter.present(outcome.as_batch_change(), success=success)

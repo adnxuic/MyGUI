@@ -492,6 +492,107 @@ class FigureController(ContainerController):
         }
         super().__init__(state, **kwargs)
 
+    def _validate_data(self, state: ComponentState) -> None:
+        """Accept legacy empty data or the schema-v9 layout collection."""
+
+        if not state.data:
+            return
+        _exact_data_fields(state, {"layouts"})
+        layouts = state.data.get("layouts")
+        if not isinstance(layouts, list):
+            raise ComponentValidationError("Figure layouts must be an array.")
+        layout_ids: set[str] = set()
+        for raw in layouts:
+            if not isinstance(raw, dict):
+                raise ComponentValidationError("Each Figure layout must be an object.")
+            expected = {
+                "id",
+                "nrows",
+                "ncols",
+                "width_ratios",
+                "height_ratios",
+                "margins",
+                "spacing",
+            }
+            if set(raw) != expected:
+                raise ComponentValidationError(
+                    f"Figure layout fields must be {sorted(expected)!r}."
+                )
+            layout_id = raw.get("id")
+            if not isinstance(layout_id, str) or not layout_id.strip():
+                raise ComponentValidationError("Figure layout id is invalid.")
+            if layout_id in layout_ids:
+                raise ComponentValidationError("Figure layout ids must be unique.")
+            layout_ids.add(layout_id)
+            nrows = raw.get("nrows")
+            ncols = raw.get("ncols")
+            if any(
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not 1 <= value <= 6
+                for value in (nrows, ncols)
+            ):
+                raise ComponentValidationError(
+                    "Figure layout rows and columns must be between 1 and 6."
+                )
+            width_ratios = raw.get("width_ratios")
+            height_ratios = raw.get("height_ratios")
+            if (
+                not isinstance(width_ratios, list)
+                or len(width_ratios) != ncols
+                or not isinstance(height_ratios, list)
+                or len(height_ratios) != nrows
+            ):
+                raise ComponentValidationError(
+                    "Figure layout ratios must match its grid dimensions."
+                )
+            for value in (*width_ratios, *height_ratios):
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value))
+                    or float(value) <= 0
+                ):
+                    raise ComponentValidationError(
+                        "Figure layout ratios must be positive finite numbers."
+                    )
+            margins = raw.get("margins")
+            spacing = raw.get("spacing")
+            if not isinstance(margins, dict) or set(margins) != {
+                "left",
+                "right",
+                "bottom",
+                "top",
+            }:
+                raise ComponentValidationError("Figure layout margins are invalid.")
+            if not isinstance(spacing, dict) or set(spacing) != {
+                "wspace",
+                "hspace",
+            }:
+                raise ComponentValidationError("Figure layout spacing is invalid.")
+            try:
+                left = float(margins["left"])
+                right = float(margins["right"])
+                bottom = float(margins["bottom"])
+                top = float(margins["top"])
+                wspace = float(spacing["wspace"])
+                hspace = float(spacing["hspace"])
+            except (TypeError, ValueError) as exc:
+                raise ComponentValidationError(
+                    "Figure layout geometry must contain numbers."
+                ) from exc
+            if not all(
+                math.isfinite(value)
+                for value in (left, right, bottom, top, wspace, hspace)
+            ):
+                raise ComponentValidationError(
+                    "Figure layout geometry must be finite."
+                )
+            if not 0 <= left < right <= 1 or not 0 <= bottom < top <= 1:
+                raise ComponentValidationError("Figure layout margins are invalid.")
+            if wspace < 0 or hspace < 0:
+                raise ComponentValidationError("Figure layout spacing is invalid.")
+
     def set_property_callback(self, callback) -> None:
         """Attach an optional host synchronizer without introducing Qt."""
 
@@ -526,6 +627,7 @@ class AxesController(ContainerController):
             tuple,
             (0.125, 0.11, 0.775, 0.77),
             editor="rectangle",
+            persistent=False,
             normalizer=_rectangle,
             getter=lambda axes: tuple(axes.get_position().bounds),
         ),
@@ -575,7 +677,22 @@ class AxesController(ContainerController):
             getter=lambda axes: _read_color(axes.get_facecolor()),
         ),
         PropertySpec("visible", bool, True, editor="check"),
-        PropertySpec("autoscale_on", bool, True, editor="check"),
+        PropertySpec(
+            "autoscalex_on",
+            bool,
+            True,
+            editor="check",
+            getter="get_autoscalex_on",
+            setter="set_autoscalex_on",
+        ),
+        PropertySpec(
+            "autoscaley_on",
+            bool,
+            True,
+            editor="check",
+            getter="get_autoscaley_on",
+            setter="set_autoscaley_on",
+        ),
         PropertySpec(
             "color_cycle",
             dict,
@@ -601,26 +718,58 @@ class AxesController(ContainerController):
             raise ComponentValidationError(
                 "Axes subplot data must be an object."
             )
-        expected = {"layout_group", "nrows", "ncols", "slot"}
+        legacy = {"layout_group", "nrows", "ncols", "slot"}
+        if set(subplot) == legacy:
+            for key in legacy:
+                value = subplot[key]
+                minimum = 0 if key == "layout_group" else 1
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or value < minimum
+                ):
+                    raise ComponentValidationError(
+                        f"Axes subplot {key} is invalid."
+                    )
+            if subplot["slot"] > subplot["nrows"] * subplot["ncols"]:
+                raise ComponentValidationError(
+                    "Axes subplot slot exceeds the layout size."
+                )
+            return
+
+        expected = {
+            "layout_id",
+            "row",
+            "column",
+            "layer",
+            "share_x_group",
+            "share_y_group",
+        }
         if set(subplot) != expected:
             raise ComponentValidationError(
-                "Axes subplot fields must be "
-                f"{sorted(expected)!r}."
+                f"Axes subplot fields must be {sorted(expected)!r}."
             )
-        for key in ("layout_group", "nrows", "ncols", "slot"):
+        if not isinstance(subplot["layout_id"], str) or not subplot[
+            "layout_id"
+        ].strip():
+            raise ComponentValidationError("Axes layout id is invalid.")
+        for key in ("row", "column"):
             value = subplot[key]
-            minimum = 0 if key == "layout_group" else 1
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value < minimum
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ComponentValidationError(f"Axes subplot {key} is invalid.")
+        if subplot["layer"] not in {"primary", "right_y"}:
+            raise ComponentValidationError("Axes subplot layer is invalid.")
+        for key in ("share_x_group", "share_y_group"):
+            value = subplot[key]
+            if value is not None and (
+                not isinstance(value, str) or not value.strip()
             ):
                 raise ComponentValidationError(
                     f"Axes subplot {key} is invalid."
                 )
-        if subplot["slot"] > subplot["nrows"] * subplot["ncols"]:
+        if subplot["layer"] == "right_y" and subplot["share_y_group"] is not None:
             raise ComponentValidationError(
-                "Axes subplot slot exceeds the layout size."
+                "A right Y Axes cannot join a shared Y group."
             )
 
     def _read_property(self, target: Axes, spec: PropertySpec) -> Any:
@@ -799,7 +948,19 @@ class AxisController(AxisComponentController):
         if spec.key == "scale":
             return target.get_scale()
         if spec.key == "ticks_position":
-            return target.get_ticks_position()
+            position = target.get_ticks_position()
+            if position != "unknown":
+                return position
+            ticks = target.get_major_ticks()
+            first_visible = any(tick.tick1line.get_visible() for tick in ticks)
+            second_visible = any(tick.tick2line.get_visible() for tick in ticks)
+            if first_visible and second_visible:
+                return "both"
+            if first_visible:
+                return "bottom" if axis_name == "x" else "left"
+            if second_visible:
+                return "top" if axis_name == "x" else "right"
+            return "none"
         if spec.key == "label_position":
             return target.get_label_position()
         if spec.key == "inverted":
@@ -1489,6 +1650,15 @@ class LegendController(ComponentController[Legend]):
             allow_none=True,
         ),
         PropertySpec("title", str, "", editor="text"),
+        PropertySpec(
+            "entry_scope",
+            str,
+            "axes",
+            editor="combo",
+            choices=("axes", "twin_pair"),
+            getter=lambda _legend: "axes",
+            setter=lambda _legend, _value: None,
+        ),
     )
     CAPABILITIES = frozenset({"legend", "font", "color"})
 
@@ -1496,6 +1666,7 @@ class LegendController(ComponentController[Legend]):
         self._fontsize_value = float(
             state.properties.get("fontsize", 10.0)
         )
+        self._entry_scope = str(state.properties.get("entry_scope", "axes"))
         super().__init__(state, **kwargs)
 
     def read_state(self, *, strict: bool = False) -> ComponentState:
@@ -1571,6 +1742,8 @@ class LegendController(ComponentController[Legend]):
         return super().apply_state(state)
 
     def _read_property(self, target: Legend, spec: PropertySpec) -> Any:
+        if spec.key == "entry_scope":
+            return self._entry_scope
         if spec.key == "location":
             location = getattr(target, "_loc", "best")
             if isinstance(location, int):
@@ -1635,6 +1808,9 @@ class LegendController(ComponentController[Legend]):
     def _write_property(
         self, target: Legend, spec: PropertySpec, value: Any
     ) -> None:
+        if spec.key == "entry_scope":
+            self._entry_scope = str(value)
+            return
         if spec.key == "location":
             target.set_loc(value)
             return

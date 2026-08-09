@@ -1,7 +1,61 @@
 {
-  "1_1":[1,1],
-  "1_2": [1,2],
-  "2_1": [2,1],
-  "2_2": [2,2],
-  "3_3": [3,3]
+  "single": {
+    "label": "Single Axes",
+    "toolbar_label": "Single",
+    "icon": "single.svg",
+    "rows": 1,
+    "columns": 1
+  },
+  "horizontal_compare": {
+    "label": "Horizontal Comparison",
+    "toolbar_label": "Horizontal",
+    "icon": "1_2.svg",
+    "rows": 1,
+    "columns": 2,
+    "share_y": "all",
+    "share_toggle": "y",
+    "outer_y_labels": true
+  },
+  "vertical_stack": {
+    "label": "Vertical Stack",
+    "toolbar_label": "Vertical",
+    "icon": "2_1.svg",
+    "rows": 2,
+    "columns": 1,
+    "share_x": "all",
+    "share_toggle": "x",
+    "outer_x_labels": true
+  },
+  "grid_2x2": {
+    "label": "2 × 2 Grid",
+    "toolbar_label": "2 × 2",
+    "icon": "2_2.svg",
+    "rows": 2,
+    "columns": 2
+  },
+  "grid_3x3": {
+    "label": "3 × 3 Grid",
+    "toolbar_label": "3 × 3",
+    "icon": "3_3.svg",
+    "rows": 3,
+    "columns": 3
+  },
+  "primary_right_y": {
+    "label": "Primary + Right Y",
+    "toolbar_label": "Dual Y",
+    "icon": "primary_right_y_icon.svg",
+    "rows": 1,
+    "columns": 1,
+    "right_y": true
+  },
+  "main_residual": {
+    "label": "Main Plot + Residual",
+    "toolbar_label": "Main + Residual",
+    "icon": "main_plot_residual.svg",
+    "rows": 2,
+    "columns": 1,
+    "height_ratios": [3, 1],
+    "share_x": "all",
+    "outer_x_labels": true
+  }
 }

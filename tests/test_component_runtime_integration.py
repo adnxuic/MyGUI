@@ -16,7 +16,7 @@ from code import status_messages
 from code.database import ColumnRef, ColumnType, TableChangeSet
 from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.components import ComponentKind, ComponentRole
-from code.figuremodify.components.serialization import validate_v8_figure
+from code.figuremodify.components.serialization import validate_v9_figure
 from code.figuremodify.style_base.color_models import PaletteDefinition
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
@@ -203,7 +203,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(registry.resolve_target(component_id))
 
         snapshot = self.canvas.component_snapshot()
-        validate_v8_figure(
+        validate_v9_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -902,7 +902,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                         ),
                         1,
                     )
-                validate_v8_figure(
+                validate_v9_figure(
                     restored.component_snapshot(),
                     self._available_refs(restored),
                     restored.project_id,
@@ -1032,7 +1032,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 framealpha=0.75,
                 title="Native legend",
             )
-            validate_v8_figure(
+            validate_v9_figure(
                 figure,
                 self._available_refs(),
                 self.canvas.project_id,
@@ -1280,7 +1280,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 loaded.close()
                 self.app.processEvents()
 
-    def test_new_axes_uses_max_persisted_layout_group(self):
+    def test_new_axes_uses_a_distinct_persisted_layout_id(self):
         first = next(
             controller
             for controller in self.canvas.component_registry.query(
@@ -1288,10 +1288,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             )
             if controller.state.selector["index"] == 0
         )
-        state = first.state
-        data = dict(state.data)
-        data["subplot"] = dict(data["subplot"], layout_group=9)
-        self.assertTrue(first.apply_state(state.clone(data=data)).ok)
+        first_layout_id = first.state.data["subplot"]["layout_id"]
 
         self.canvas.add_axes()
 
@@ -1302,11 +1299,14 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             )
             if controller.state.selector["index"] == 1
         )
+        second_layout_id = second.state.data["subplot"]["layout_id"]
+        self.assertNotEqual(second_layout_id, first_layout_id)
+        figure = self.canvas.component_registry.get(self.canvas.root_component_id)
         self.assertEqual(
-            second.state.data["subplot"]["layout_group"],
-            10,
+            {item["id"] for item in figure.state.data["layouts"]},
+            {first_layout_id, second_layout_id},
         )
-        validate_v8_figure(
+        validate_v9_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

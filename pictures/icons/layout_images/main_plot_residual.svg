@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L10,6 L1,11" fill="none" stroke="#3f4246" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- transparent background -->
+
+  <!-- Main plot frame -->
+  <rect x="210" y="231" width="604" height="331" rx="35"
+        fill="none" stroke="#151617" stroke-width="14"/>
+  <rect x="214" y="235" width="596" height="323" rx="31"
+        fill="none" stroke="#474b4f" stroke-width="6"/>
+
+  <!-- Axes -->
+  <path d="M297 515 L297 282"
+        fill="none" stroke="#3f4246" stroke-width="9"
+        stroke-linecap="round" marker-end="url(#arrow)" filter="url(#softShadow)"/>
+  <path d="M278 493 L724 493"
+        fill="none" stroke="#3f4246" stroke-width="9"
+        stroke-linecap="round" marker-end="url(#arrow)" filter="url(#softShadow)"/>
+
+  <!-- Fitted curve -->
+  <path d="M334 446
+           C368 447, 393 445, 410 439
+           C449 430, 486 421, 513 408
+           C551 390, 576 373, 600 359
+           C635 339, 663 326, 692 319
+           C708 315, 724 312, 739 309"
+        fill="none" stroke="#3f4246" stroke-width="10"
+        stroke-linecap="round" stroke-linejoin="round" filter="url(#softShadow)"/>
+
+  <!-- Main-plot points -->
+  <g stroke="#151617" stroke-width="4">
+    <circle cx="410" cy="439" r="15" fill="#44484c"/>
+    <circle cx="410" cy="439" r="7"  fill="#ffd27a" stroke="none"/>
+
+    <circle cx="513" cy="408" r="15" fill="#44484c"/>
+    <circle cx="513" cy="408" r="7"  fill="#ffd27a" stroke="none"/>
+
+    <circle cx="600" cy="359" r="15" fill="#44484c"/>
+    <circle cx="600" cy="359" r="7"  fill="#ffd27a" stroke="none"/>
+
+    <circle cx="692" cy="319" r="15" fill="#44484c"/>
+    <circle cx="692" cy="319" r="7"  fill="#ffd27a" stroke="none"/>
+  </g>
+
+  <!-- Residual frame -->
+  <rect x="210" y="615" width="604" height="166" rx="34"
+        fill="none" stroke="#151617" stroke-width="14"/>
+  <rect x="214" y="619" width="596" height="158" rx="30"
+        fill="none" stroke="#474b4f" stroke-width="6"/>
+
+  <!-- Residual zero line -->
+  <path d="M266 698 L758 698"
+        fill="none" stroke="#44484c" stroke-width="9"
+        stroke-linecap="round" filter="url(#softShadow)"/>
+
+  <!-- Residual points -->
+  <g fill="#4a4e52" stroke="#151617" stroke-width="3">
+    <circle cx="341" cy="669" r="10"/>
+    <circle cx="448" cy="659" r="10"/>
+    <circle cx="500" cy="681" r="10"/>
+    <circle cx="600" cy="666" r="10"/>
+    <circle cx="661" cy="682" r="10"/>
+
+    <circle cx="400" cy="722" r="10"/>
+    <circle cx="575" cy="723" r="10"/>
+    <circle cx="712" cy="724" r="10"/>
+  </g>
+</svg>

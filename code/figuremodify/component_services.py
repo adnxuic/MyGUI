@@ -501,6 +501,122 @@ def _axes_replacements_for_deletion(
     return tuple(replacements)
 
 
+def _expand_primary_twin_deletions(
+    registry: ComponentRegistry,
+    component_ids: Iterable[str],
+) -> tuple[str, ...]:
+    """Include a right-Y sibling when its primary Axes is deleted."""
+
+    expanded = list(dict.fromkeys(str(item) for item in component_ids))
+    axes = tuple(registry.query(kind=ComponentKind.AXES))
+    for component_id in tuple(expanded):
+        controller = registry.get(component_id)
+        if controller.state.kind is not ComponentKind.AXES:
+            continue
+        subplot = controller.state.data.get("subplot", {})
+        if subplot.get("layer") != "primary":
+            continue
+        key = (
+            subplot.get("layout_id"),
+            subplot.get("row"),
+            subplot.get("column"),
+        )
+        for sibling in axes:
+            sibling_subplot = sibling.state.data.get("subplot", {})
+            sibling_key = (
+                sibling_subplot.get("layout_id"),
+                sibling_subplot.get("row"),
+                sibling_subplot.get("column"),
+            )
+            if sibling_key == key and sibling_subplot.get("layer") == "right_y":
+                if sibling.component_id not in expanded:
+                    expanded.append(sibling.component_id)
+                break
+    return tuple(expanded)
+
+
+def _layout_replacements_for_deletion(
+    registry: ComponentRegistry,
+    removed_ids: Iterable[str],
+) -> tuple[ComponentState, ...]:
+    """Repair persisted v9 layout/share/legend state for Axes survivors."""
+
+    removed = set(str(component_id) for component_id in removed_ids)
+    surviving_axes = tuple(
+        controller
+        for controller in registry.query(kind=ComponentKind.AXES)
+        if controller.component_id not in removed
+    )
+    group_counts: dict[tuple[str, str], int] = {}
+    for controller in surviving_axes:
+        subplot = controller.state.data.get("subplot", {})
+        for dimension, key in (("x", "share_x_group"), ("y", "share_y_group")):
+            group = subplot.get(key)
+            if group is not None:
+                group_counts[(dimension, str(group))] = (
+                    group_counts.get((dimension, str(group)), 0) + 1
+                )
+
+    replacements: list[ComponentState] = []
+    right_cells = {
+        (
+            controller.state.data["subplot"].get("layout_id"),
+            controller.state.data["subplot"].get("row"),
+            controller.state.data["subplot"].get("column"),
+        )
+        for controller in surviving_axes
+        if controller.state.data.get("subplot", {}).get("layer") == "right_y"
+    }
+    for controller in surviving_axes:
+        state = controller.state
+        subplot = deepcopy(state.data.get("subplot", {}))
+        changed = False
+        for dimension, key in (("x", "share_x_group"), ("y", "share_y_group")):
+            group = subplot.get(key)
+            if group is not None and group_counts.get((dimension, str(group)), 0) < 2:
+                subplot[key] = None
+                changed = True
+        if changed:
+            data = deepcopy(state.data)
+            data["subplot"] = subplot
+            replacements.append(state.clone(data=data))
+
+        if subplot.get("layer") != "primary":
+            continue
+        cell = (subplot.get("layout_id"), subplot.get("row"), subplot.get("column"))
+        if cell in right_cells:
+            continue
+        for child in registry.children(controller.component_id):
+            child_state = child.state
+            if (
+                child_state.kind is ComponentKind.LEGEND
+                and child_state.role is ComponentRole.LEGEND
+                and child_state.properties.get("entry_scope") == "twin_pair"
+            ):
+                properties = deepcopy(child_state.properties)
+                properties["entry_scope"] = "axes"
+                replacements.append(child_state.clone(properties=properties))
+                break
+
+    used_layouts = {
+        controller.state.data.get("subplot", {}).get("layout_id")
+        for controller in surviving_axes
+    }
+    for figure in registry.query(kind=ComponentKind.FIGURE):
+        state = figure.state
+        layouts = state.data.get("layouts")
+        if not isinstance(layouts, list):
+            continue
+        filtered = [
+            deepcopy(item)
+            for item in layouts
+            if item.get("id") in used_layouts
+        ]
+        if filtered != layouts:
+            replacements.append(state.clone(data={"layouts": filtered}))
+    return tuple(replacements)
+
+
 def _column_ref(value: ColumnRef | dict[str, Any]) -> ColumnRef:
     return value if isinstance(value, ColumnRef) else ColumnRef.from_dict(value)
 
@@ -646,6 +762,11 @@ class AxesCommandService:
         if not isinstance(axes, Axes):
             raise ValueError("Axes target is unavailable.")
         handles, labels = axes.get_legend_handles_labels()
+        peer = getattr(axes, "_mygui_merged_legend_peer", None)
+        if isinstance(peer, Axes) and peer in axes.figure.axes:
+            peer_handles, peer_labels = peer.get_legend_handles_labels()
+            handles = [*handles, *peer_handles]
+            labels = [*labels, *peer_labels]
         legend = axes.legend(handles, labels)
         self.registry.locator.bind(controller.component_id, legend)
         return controller, legend
@@ -1520,7 +1641,10 @@ class ComponentDeletionService:
 
         if not isinstance(request, DeletionRequest):
             raise TypeError("Deletion preparation requires DeletionRequest.")
-        requested = request.component_ids
+        requested = _expand_primary_twin_deletions(
+            self.registry,
+            request.component_ids,
+        )
         requested_controllers = {
             component_id: self.registry.get(component_id)
             for component_id in requested
@@ -1613,6 +1737,7 @@ class ComponentDeletionService:
 
         replacements = [
             *_axes_replacements_for_deletion(self.registry, removed),
+            *_layout_replacements_for_deletion(self.registry, removed),
             *_color_cycle_replacements_for_deletion(
                 self.registry,
                 roots,
@@ -1620,13 +1745,20 @@ class ComponentDeletionService:
             ),
         ]
         replacement_by_id: dict[str, ComponentState] = {}
+        changed_fields: dict[str, dict[str, Any]] = {}
         for state in replacements:
-            previous = replacement_by_id.get(state.id)
-            if previous is not None and previous != state:
-                raise ComponentValidationError(
-                    f"Conflicting deletion effects for {state.id!r}."
-                )
-            replacement_by_id[state.id] = state
+            base = self.registry.get(state.id).state
+            pending = changed_fields.setdefault(state.id, {})
+            for field in ("parent_id", "order", "selector", "properties", "data"):
+                value = getattr(state, field)
+                if value == getattr(base, field):
+                    continue
+                if field in pending and pending[field] != value:
+                    raise ComponentValidationError(
+                        f"Conflicting deletion effects for {state.id!r}."
+                    )
+                pending[field] = deepcopy(value)
+            replacement_by_id[state.id] = base.clone(**pending)
         plan = DeletionPlan(
             requested_ids=requested,
             root_ids=tuple(roots),

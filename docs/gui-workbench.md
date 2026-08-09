@@ -37,7 +37,7 @@ These settings are application preferences. They are not written to `.mygui.json
 - With no project, the figure workspace explains that a style must be selected to create a project; the existing Style workflow remains the creation path.
 - With a project but no Axes, the Figure root Inspector remains available.
 - Style, Layout, Chart, and Element use action toolbars. Qt moves actions that do not fit into the toolbar overflow menu.
-- Style, Layout, Text, and Settings dialogs are created on first use, parented to the main window, and reused. Chart dialogs are recreated so their data choices reflect the current project.
+- Style and Settings dialogs are created on first use, parented to the main window, and reused. Layout, Chart, and Element creation dialogs are recreated so their Figure, Axes, and data choices reflect the current project.
 - The Components tree is the only Component navigation. It opens one exact
   stable-ID Inspector at a time; every Inspector binds its Controller
   directly.
@@ -50,7 +50,7 @@ Project` and `Close Project` therefore operate on the clicked tab without
 switching a background project.
 
 Each project has a runtime clean fingerprint made from its full typed Table
-snapshot and normalized schema-v8 component tree. A new project has no clean
+snapshot and normalized schema-v9 component tree. A new project has no clean
 baseline and is dirty. Loading or completing an atomic save establishes the
 baseline. Table edits, project rename, Component changes, Undo, and
 Matplotlib toolbar view changes are detected by comparing a fresh snapshot;

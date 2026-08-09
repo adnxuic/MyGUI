@@ -46,7 +46,7 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 
 ## Project Files
 
-Interpolation records are saved as schema-v8 `line/interpolation` components.
+Interpolation records are saved as schema-v9 `line/interpolation` components.
 Each record has a stable `object_id`, `x_ref`, `y_ref`, and `preprocess`, plus
 these interpolation parameters:
 

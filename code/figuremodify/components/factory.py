@@ -11,6 +11,8 @@ from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
 from matplotlib.figure import Figure
 
+from code.figuremodify.axes_layout import stable_layout_id, stable_share_group
+
 from .controllers import (
     AxesController,
     AxisLabelController,
@@ -38,29 +40,155 @@ def _random_id(_path: str) -> str:
     return str(uuid4())
 
 
-def _subplot_data(
-    axes: Axes, index: int, layout_group: int
-) -> dict[str, Any]:
-    data: dict[str, Any] = {
-        "layout_group": layout_group,
-        "nrows": 1,
-        "ncols": 1,
-        "slot": 1,
-    }
-    get_subplotspec = getattr(axes, "get_subplotspec", None)
-    if not callable(get_subplotspec):
-        return {"subplot": data}
-    try:
-        subplot_spec = get_subplotspec()
-        grid_spec = subplot_spec.get_gridspec()
-        data.update(
-            nrows=int(grid_spec.nrows),
-            ncols=int(grid_spec.ncols),
-            slot=int(subplot_spec.num1) + 1,
+def _v9_layout_records(
+    figure: Figure,
+    figure_id: str,
+) -> tuple[list[dict[str, Any]], dict[Axes, dict[str, Any]]]:
+    """Describe an existing regular Figure with schema-v9 layout records."""
+
+    groups: dict[int, list[tuple[int, Axes, Any, int, int]]] = {}
+    standalone: list[tuple[int, Axes]] = []
+    for index, axes in enumerate(figure.axes):
+        try:
+            subplot_spec = axes.get_subplotspec()
+            grid_spec = subplot_spec.get_gridspec()
+            if len(subplot_spec.rowspan) != 1 or len(subplot_spec.colspan) != 1:
+                raise ValueError
+            groups.setdefault(id(grid_spec), []).append(
+                (
+                    index,
+                    axes,
+                    grid_spec,
+                    int(subplot_spec.rowspan.start),
+                    int(subplot_spec.colspan.start),
+                )
+            )
+        except (AttributeError, TypeError, ValueError):
+            standalone.append((index, axes))
+
+    definitions: list[dict[str, Any]] = []
+    records: dict[Axes, dict[str, Any]] = {}
+    group_number = 0
+    for entries in groups.values():
+        grid_spec = entries[0][2]
+        layout_id = stable_layout_id(figure_id, group_number)
+        group_number += 1
+        params = grid_spec.get_subplot_params(figure)
+        width_ratios = grid_spec.get_width_ratios() or [1.0] * int(grid_spec.ncols)
+        height_ratios = grid_spec.get_height_ratios() or [1.0] * int(grid_spec.nrows)
+        definitions.append(
+            {
+                "id": layout_id,
+                "nrows": int(grid_spec.nrows),
+                "ncols": int(grid_spec.ncols),
+                "width_ratios": [float(value) for value in width_ratios],
+                "height_ratios": [float(value) for value in height_ratios],
+                "margins": {
+                    "left": float(params.left),
+                    "right": float(params.right),
+                    "bottom": float(params.bottom),
+                    "top": float(params.top),
+                },
+                "spacing": {
+                    "wspace": float(params.wspace),
+                    "hspace": float(params.hspace),
+                },
+            }
         )
-    except (AttributeError, TypeError, ValueError):
-        pass
-    return {"subplot": data}
+        by_cell: dict[tuple[int, int], list[tuple[int, Axes]]] = {}
+        for index, axes, _grid, row, column in entries:
+            by_cell.setdefault((row, column), []).append((index, axes))
+        for (row, column), members in by_cell.items():
+            ordered_members = sorted(members)
+            if len(ordered_members) > 2:
+                raise ValueError(
+                    "An existing Figure cell cannot contain more than one right Y Axes."
+                )
+            if len(ordered_members) == 2:
+                primary_axes = ordered_members[0][1]
+                secondary_axes = ordered_members[1][1]
+                if not primary_axes.get_shared_x_axes().joined(
+                    primary_axes,
+                    secondary_axes,
+                ):
+                    raise ValueError(
+                        "Overlapping existing Axes must form a supported right Y twin pair."
+                    )
+            for offset, (_index, axes) in enumerate(ordered_members):
+                layer = "primary" if offset == 0 else "right_y"
+                records[axes] = {
+                    "subplot": {
+                        "layout_id": layout_id,
+                        "row": row,
+                        "column": column,
+                        "layer": layer,
+                        "share_x_group": None,
+                        "share_y_group": None,
+                    }
+                }
+
+        for dimension, field in (("x", "share_x_group"), ("y", "share_y_group")):
+            remaining = {axes for _index, axes, _grid, _row, _column in entries}
+            groups_for_dimension: list[set[Axes]] = []
+            while remaining:
+                anchor = remaining.pop()
+                grouper = (
+                    anchor.get_shared_x_axes()
+                    if dimension == "x"
+                    else anchor.get_shared_y_axes()
+                )
+                connected = {anchor}
+                changed = True
+                while changed:
+                    changed = False
+                    for candidate in tuple(remaining):
+                        if any(grouper.joined(member, candidate) for member in connected):
+                            connected.add(candidate)
+                            remaining.remove(candidate)
+                            changed = True
+                groups_for_dimension.append(connected)
+            for number, members in enumerate(groups_for_dimension):
+                if len(members) < 2:
+                    continue
+                group_id = stable_share_group(
+                    layout_id,
+                    dimension,
+                    f"import-{number}",
+                )
+                for axes in members:
+                    records[axes]["subplot"][field] = group_id
+
+    for index, axes in standalone:
+        layout_id = stable_layout_id(figure_id, group_number)
+        group_number += 1
+        left, bottom, width, height = axes.get_position().bounds
+        definitions.append(
+            {
+                "id": layout_id,
+                "nrows": 1,
+                "ncols": 1,
+                "width_ratios": [1.0],
+                "height_ratios": [1.0],
+                "margins": {
+                    "left": float(left),
+                    "right": float(left + width),
+                    "bottom": float(bottom),
+                    "top": float(bottom + height),
+                },
+                "spacing": {"wspace": 0.2, "hspace": 0.2},
+            }
+        )
+        records[axes] = {
+            "subplot": {
+                "layout_id": layout_id,
+                "row": 0,
+                "column": 0,
+                "layer": "primary",
+                "share_x_group": None,
+                "share_y_group": None,
+            }
+        }
+    return definitions, records
 
 
 def create_semantic_children(
@@ -229,6 +357,7 @@ def register_figure_components(
     result = registry or ComponentRegistry()
     make_id = id_factory or _random_id
     figure_id = root_id or make_id("figure")
+    layout_definitions, subplot_records = _v9_layout_records(figure, figure_id)
     figure_state = ComponentState(
         id=figure_id,
         kind=ComponentKind.FIGURE,
@@ -236,6 +365,7 @@ def register_figure_components(
         order=0,
         selector={"scope": "figure"},
         properties=FigureController.default_properties(),
+        data={"layouts": layout_definitions},
     )
     figure_controller = FigureController(figure_state)
     result.register(figure_controller, target=figure)
@@ -262,17 +392,10 @@ def register_figure_components(
         controller.sync_from_target()
         text.set_gid(text_id)
 
-    layout_groups: dict[int, int] = {}
     chart_order = 0
     for axes_index, axes in enumerate(figure.axes):
         path = f"figure/axes/{axes_index}"
         axes_id = make_id(path)
-        try:
-            grid_key = id(axes.get_subplotspec().get_gridspec())
-        except (AttributeError, TypeError):
-            grid_key = id(axes)
-        if grid_key not in layout_groups:
-            layout_groups[grid_key] = len(layout_groups)
         axes_state = ComponentState(
             id=axes_id,
             kind=ComponentKind.AXES,
@@ -281,7 +404,7 @@ def register_figure_components(
             order=axes_index,
             selector={"index": axes_index},
             properties=AxesController.default_properties(),
-            data=_subplot_data(axes, axes_index, layout_groups[grid_key]),
+            data=subplot_records[axes],
         )
         axes_controller = AxesController(axes_state)
         result.register(axes_controller, target=axes)

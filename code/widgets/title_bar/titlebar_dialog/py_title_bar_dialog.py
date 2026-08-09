@@ -1,142 +1,212 @@
-"""Provide shared title-bar dialog shells."""
+"""Provide shared title-bar dialogs for Figure and Axes creation."""
+
+from __future__ import annotations
+
+import os
 
 from Qt_core import *
 
-from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
-
+from code import status_messages
 from code.widgets import qss_func
-import os
+from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from code.widgets.theme import COLORS
+from code.widgets.title_bar.titlebar_dialog.axes_layout_input import (
+    AxesLayoutInput,
+    axes_layout_preset,
+    normalized_layout_icon,
+)
+
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 qss_path = os.path.join(current_path, "dialog_style.qss")
 
 
 class PyStyleDialog(QDialog):
-    """Provide the py style dialog Qt widget."""
+    """Collect the basic values used to create one Figure project."""
 
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.style = dialog_name
-
         self.setObjectName("style_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
-        self.setStyleSheet(qss_file)
-
+        self.setStyleSheet(qss_func.qss_loader(qss_path))
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon("pictures/icons/style.svg"))
-
-        self.layout = QVBoxLayout()
-
         self.figure_window = figure_window
 
-        # 传入Figure创建函数的数据
-        self.wight_label = QLabel("宽度")
-        self.height_label = QLabel("高度")
-        self.dpi_label = QLabel("DPI")
-        self.canva_name_label = QLabel("图表名称")
+        self.layout = QVBoxLayout()
+        self.width_line = QLineEdit("6.4")
+        self.height_line = QLineEdit("4.8")
+        self.dpi_line = QLineEdit("100")
+        self.canva_name_line = QLineEdit(str(dialog_name or "Figure"))
+        for label, control in (
+            ("Width", self.width_line),
+            ("Height", self.height_line),
+            ("DPI", self.dpi_line),
+            ("Figure name", self.canva_name_line),
+        ):
+            self.layout.addWidget(QLabel(label))
+            self.layout.addWidget(control)
 
-        self.width_line = QLineEdit()
-        self.height_line = QLineEdit()
-        self.dpi_line = QLineEdit()
-        self.canva_name_line = QLineEdit()
-
-        # 设置默认值
-        self.width_line.setText("6.4")
-        self.height_line.setText("4.8")
-        self.dpi_line.setText("100")
-        self.canva_name_line.setText(dialog_name)
-
-        self.layout.addWidget(self.wight_label)
-        self.layout.addWidget(self.width_line)
-        self.layout.addWidget(self.height_label)
-        self.layout.addWidget(self.height_line)
-        self.layout.addWidget(self.dpi_label)
-        self.layout.addWidget(self.dpi_line)
-        self.layout.addWidget(self.canva_name_label)
-        self.layout.addWidget(self.canva_name_line)
-
-        # 确定和取消按钮
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("Create")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
-        self.button_layout = QHBoxLayout()
-        self.button_layout.addStretch(1)
-        self.button_layout.addWidget(self.ok_button)
-        self.button_layout.addWidget(self.cancel_button)
-        self.layout.addLayout(self.button_layout)
-
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(self.ok_button)
+        buttons.addWidget(self.cancel_button)
+        self.layout.addLayout(buttons)
         self.setLayout(self.layout)
 
     def accept(self):
-        """Validate the inputs and accept the dialog when they are usable."""
-
-        width = float(self.width_line.text())
-        height = float(self.height_line.text())
-        dpi = int(self.dpi_line.text())
-        canva_name = self.canva_name_line.text()
+        """Validate the inputs and create the Figure."""
 
         try:
-            self.figure_window.add_figure(width=width, height=height, dpi=dpi,
-                                          style=self.style, canva_name=canva_name)
+            self.figure_window.add_figure(
+                width=float(self.width_line.text()),
+                height=float(self.height_line.text()),
+                dpi=int(self.dpi_line.text()),
+                style=self.style,
+                canva_name=self.canva_name_line.text(),
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Create Project", str(exc))
             return
-
         super().accept()
-
-    def reject(self):
-        """Reject the dialog without applying its pending inputs."""
-
-        super().reject()
 
 
 class PyLayoutDialog(QDialog):
-    """Provide the py layout dialog Qt widget."""
+    """Create or safely edit one persisted scientific Axes layout."""
 
-    def __init__(self, dialog_name=None, figure_window=None, layout=None, parent=None):
+    def __init__(
+        self,
+        dialog_name=None,
+        figure_window=None,
+        preset_key: str | None = None,
+        parent=None,
+        *,
+        layout_id: str | None = None,
+    ):
         super().__init__(parent)
         self.setObjectName("layout_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
-        self.setStyleSheet(qss_file)
-
-        self.setWindowTitle(dialog_name)
-        self.setWindowIcon(QIcon("pictures/icons/layout.svg"))
-
+        self.setStyleSheet(qss_func.qss_loader(qss_path))
         self.figure_window: PyFigureWindow = figure_window
+        self.layout_id = str(layout_id) if layout_id is not None else None
+        self.preset_key = None if self.layout_id else str(preset_key or "single")
+        preset = None if self.layout_id else axes_layout_preset(self.preset_key)
+        self.setWindowTitle(
+            "Edit Axes layout"
+            if self.layout_id
+            else str(dialog_name or preset.label)
+        )
+        self.setWindowIcon(
+            normalized_layout_icon(
+                "pictures/icons/layout.svg",
+                canvas_size=64,
+                tint=COLORS["text_primary"],
+            )
+            if preset is None
+            else normalized_layout_icon(preset.icon_path, canvas_size=64)
+        )
 
-        self.layout_value = layout
+        canvas = getattr(figure_window, "current_canva", None)
+        definition = None
+        occupied = None
+        twins = None
+        relationship_summary = None
+        if self.layout_id is not None:
+            if canvas is None:
+                raise ValueError("No Figure is available for layout editing.")
+            definition = canvas.axes_layout_service.layout_definition(self.layout_id)
+            occupied = set()
+            twins = set()
+            shared_x = False
+            shared_y = False
+            controllers = canvas.axes_layout_service.axes_for_layout(self.layout_id)
+            for controller in controllers:
+                subplot = controller.state.data["subplot"]
+                cell = (int(subplot["row"]), int(subplot["column"]))
+                if subplot["layer"] == "primary":
+                    occupied.add(cell)
+                    shared_x = shared_x or bool(subplot.get("share_x_group"))
+                    shared_y = shared_y or bool(subplot.get("share_y_group"))
+                elif subplot["layer"] == "right_y":
+                    twins.add(cell)
+            relationships = []
+            if shared_x:
+                relationships.append("shared X")
+            if shared_y:
+                relationships.append("shared Y")
+            if twins:
+                relationships.append(f"{len(twins)} right-Y Axes")
+            if not relationships:
+                relationships.append("independent Axes")
+            relationship_summary = (
+                f'{int(definition["nrows"])} × {int(definition["ncols"])} · '
+                f'{len(occupied)} primary Axes · {" · ".join(relationships)}'
+            )
 
         self.layout = QVBoxLayout()
+        self.input = AxesLayoutInput(
+            color_library=figure_window.color_library,
+            preset_key=self.preset_key,
+            default_view=(
+                canvas.axes_layout_service.creation_view_defaults()
+                if canvas is not None
+                else None
+            ),
+            edit_definition=definition,
+            occupied_cells=occupied,
+            twin_cells=twins,
+            relationship_summary=relationship_summary,
+            parent=self,
+        )
+        if canvas is not None:
+            self.input.constrained_input.setChecked(
+                bool(canvas.fig.get_constrained_layout())
+            )
+        self.layout.addWidget(self.input)
 
-        # 确定和取消按钮
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("Apply" if self.layout_id else "Create")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
+        self.input.validity_changed.connect(self._sync_accept_enabled)
         self.button_layout = QHBoxLayout()
         self.button_layout.addStretch(1)
         self.button_layout.addWidget(self.ok_button)
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
-
         self.setLayout(self.layout)
+        self.resize(720, 620)
+        self._sync_accept_enabled(*self.input.refresh_validation())
+
+    def _sync_accept_enabled(self, valid: bool, _message: str) -> None:
+        """Keep submission unavailable while inline validation fails."""
+
+        self.ok_button.setEnabled(bool(valid))
 
     def accept(self):
-        # 如果current_canva为空，弹出警告
-        """Validate the inputs and accept the dialog when they are usable."""
+        """Submit the controller-free request to the Canvas layout service."""
 
-        if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+        canvas = self.figure_window.current_canva
+        if canvas is None:
+            status_messages.show_error("Create a Figure before adding a layout.")
             return
-
-        self.figure_window.current_canva.add_axes(nrows=self.layout_value[0], ncols=self.layout_value[1])
+        try:
+            spec = self.input.spec()
+            if self.layout_id is None:
+                component_ids = canvas.create_axes_layout(spec)
+                message = f"Created layout with {len(component_ids)} Axes."
+            else:
+                component_ids = canvas.update_axes_layout(spec)
+                message = f"Updated layout for {len(component_ids)} Axes."
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return
+        if self.input.records_recent_color:
+            self.figure_window.color_library.record_recent(
+                self.input.selected_color
+            )
+        status_messages.show_success(message)
         super().accept()
-
-    def reject(self):
-        """Reject the dialog without applying its pending inputs."""
-
-        super().reject()
-
-
-

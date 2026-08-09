@@ -712,33 +712,34 @@ class ComponentRegistry:
             # affected Axes has received its other original properties.
             for component_id, snapshot in rollback_snapshots.items():
                 controller = original_controllers[component_id]
-                spec = controller.property_specs().get("autoscale_on")
                 raw = snapshot[2]
-                if spec is None or "autoscale_on" not in raw:
-                    continue
-                try:
-                    controller._write_property(
-                        controller.resolve_target(),
-                        spec,
-                        deepcopy(raw["autoscale_on"]),
-                    )
-                except Exception as rollback_exc:
-                    rollback_errors.append(
-                        f"{component_id}: autoscale rollback failed "
-                        f"({rollback_exc})"
-                    )
+                for key in ("autoscalex_on", "autoscaley_on", "autoscale_on"):
+                    spec = controller.property_specs().get(key)
+                    if spec is None or key not in raw:
+                        continue
                     try:
-                        type(controller)._write_property(
-                            controller,
+                        controller._write_property(
                             controller.resolve_target(),
                             spec,
-                            deepcopy(raw["autoscale_on"]),
+                            deepcopy(raw[key]),
                         )
-                    except Exception as force_exc:
+                    except Exception as rollback_exc:
                         rollback_errors.append(
-                            f"{component_id}: forced autoscale restoration "
-                            f"failed ({force_exc})"
+                            f"{component_id}: {key} rollback failed "
+                            f"({rollback_exc})"
                         )
+                        try:
+                            type(controller)._write_property(
+                                controller,
+                                controller.resolve_target(),
+                                spec,
+                                deepcopy(raw[key]),
+                            )
+                        except Exception as force_exc:
+                            rollback_errors.append(
+                                f"{component_id}: forced {key} restoration "
+                                f"failed ({force_exc})"
+                            )
             for component_id in reversed(unbinding_ids):
                 if component_id not in locator_targets:
                     continue

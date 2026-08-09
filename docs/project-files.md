@@ -1,13 +1,13 @@
 # MyGUI Project Files
 
-MyGUI project files use JSON schema version 8. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading migrates supported older files to v8 in memory, and every subsequent save writes v8.
+MyGUI project files use JSON schema version 9. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading migrates supported older files to v9 in memory, and every subsequent save writes v9.
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 8,
+  "schema_version": 9,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -18,7 +18,7 @@ MyGUI project files use JSON schema version 8. One file contains one project, it
 ```
 
 - `schema` is always `mygui-project`.
-- `schema_version` is always `8` after migration, loading, or saving.
+- `schema_version` is always `9` after migration, loading, or saving.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -84,14 +84,17 @@ The controlled kind/role combinations are:
 
 `figure.root_component_id` identifies the sole parentless `figure/figure` record. Its properties include `name`, `style`, `size_inches`, `dpi`, `facecolor`, `edgecolor`, `frameon`, and `constrained_layout`. The saved `style` supplies defaults only for components created later; every existing component restores from its concrete saved properties.
 
+The Figure root stores `data.layouts`. Each record contains a stable `id`, grid dimensions, positive row/column ratios, normalized margins, and non-negative horizontal/vertical spacing.
+
 Each `axes/axes` child stores:
 
-- `properties.position`: `[left, bottom, width, height]`.
 - `properties.xlim` and `properties.ylim`: two-number ranges.
 - `properties.xscale` and `properties.yscale`: Matplotlib scale names.
-- `properties.aspect`, `facecolor`, `visible`, and `autoscale_on`.
+- `properties.aspect`, `facecolor`, `visible`, `autoscalex_on`, and `autoscaley_on`.
 - `properties.color_cycle`: JSON `null` or a complete color-cycle snapshot.
-- `data.subplot`: `layout_group`, positive `nrows`/`ncols`, and one-based `slot`.
+- `data.subplot`: stable `layout_id`, zero-based `row`/`column`, `layer` (`primary` or `right_y`), and nullable `share_x_group` / `share_y_group` identifiers.
+
+Axes position is derived from its Figure layout rather than persisted as an independently editable property.
 
 Every Axes contains fixed semantic children:
 
@@ -125,7 +128,7 @@ Role-specific `data` fields are:
 
 Free Text, Title, and Axis Label records share Text properties: `text`, `position`, `color`, `fontsize`, `fontfamily`, `fontweight`, `fontstyle`, `rotation`, horizontal/vertical alignment, `usetex`, `alpha`, and `visible`.
 
-Legend properties use `location`, `ncols`, `fontsize`, frame colors/state, `framealpha`, `title`, and `visible`.
+Legend properties use `location`, `ncols`, `fontsize`, frame colors/state, `framealpha`, `title`, `visible`, and `entry_scope` (`axes` or `twin_pair`).
 
 An `in_axes` record is a removable child of a main Axes and uses
 `selector: {"object_id": component_id}`. Both roles persist normalized parent
@@ -159,7 +162,7 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v8.
+snapshot only and does not change schema v9.
 
 ## Stable IDs and migration
 
@@ -170,15 +173,18 @@ Existing Plot, Scatter, Fit, and Interpolation `object_id` values are retained. 
 - v6 is strictly normalized and migrated without loss to v7.
 - v7 is migrated to v8 by adding identity preprocessing to every Plot,
   Scatter, Interpolation, and Fit component.
-- v8 is normalized and validated directly, including embedded inset images
-  and preprocessing expressions.
+- v8 is migrated to v9 by replacing numeric subplot batches with Figure-level
+  layout definitions, splitting X/Y autoscale state, and adding Legend entry
+  scope. Saved Axes positions are used to infer migration geometry.
+- v9 is normalized and validated directly, including layout/link consistency,
+  embedded inset images, and preprocessing expressions.
 - v1-v3 and unknown versions are rejected.
 
 Migration functions operate on deep copies and do not modify the supplied dictionary.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
-Legend directly from the v8 tree. Zoom mirrors receive one final batch refresh
+Legend directly from the v9 tree. Zoom mirrors receive one final batch refresh
 after their sources exist. Restore does not
 create legacy chart arrays or Modifier records as an intermediate runtime
 format. The Registry tree is subsequently the source for every save.
@@ -189,7 +195,7 @@ Before Table or Figure application state changes, the loader validates:
 
 - exactly one Figure root matching `root_component_id`;
 - unique component IDs, known kind/role pairs, existing parents, an acyclic connected hierarchy, and unique semantic selectors;
-- required fixed Axes children and valid subplot groups;
+- required fixed Axes children, valid layout cells, twin pairs, and consistent shared-axis groups;
 - property/data JSON types, finite numbers, normalized colors, and unique chart order values;
 - data references, compatible column types, preprocessing expressions,
   interpolation methods, and fitting engines.
@@ -202,4 +208,4 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v8.
+are not added to schema v9.

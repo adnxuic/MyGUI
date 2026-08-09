@@ -51,7 +51,7 @@ error and leave the controls, component state, and artist unchanged.
 
 ## Project data
 
-Each data-backed component stores the following schema-v8 object inside its
+Each data-backed component stores the following schema-v9 object inside its
 role-specific `data` record:
 
 ```json

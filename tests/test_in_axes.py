@@ -18,8 +18,10 @@ from code.figuremodify.components import (
     decode_in_axes_image,
 )
 from code.figuremodify.components.serialization import (
+    legacy_figure_to_v6,
     normalize_v6_figure,
-    validate_v7_figure,
+    v6_figure_to_legacy,
+    validate_v9_figure,
 )
 from code.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
@@ -431,11 +433,11 @@ class InAxesTests(unittest.TestCase):
         self.assertIn(rectangle, parent.patches)
         self.assertTrue(all(item in parent.patches for item in connectors))
 
-    def test_schema_v7_validation_and_v6_migration(self):
+    def test_schema_v9_validation_and_v6_migration(self):
         self.canvas.add_in_axes(self.zoom_spec())
         self.canvas.add_in_axes(self.image_spec())
         figure = self.canvas.component_snapshot()
-        validate_v7_figure(
+        validate_v9_figure(
             figure,
             {},
             self.project.id,
@@ -529,7 +531,7 @@ class InAxesTests(unittest.TestCase):
         for candidate, message in invalid:
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, message):
-                    validate_v7_figure(
+                    validate_v9_figure(
                         candidate,
                         {},
                         self.project.id,
@@ -545,6 +547,10 @@ class InAxesTests(unittest.TestCase):
             for component in without_insets["components"]
             if component["kind"] != "in_axes"
         ]
+        v6_without_insets = legacy_figure_to_v6(
+            v6_figure_to_legacy(without_insets),
+            self.project.id,
+        )
         legacy_project = {
             "schema": "mygui-project",
             "schema_version": 6,
@@ -553,11 +559,14 @@ class InAxesTests(unittest.TestCase):
                 "name": self.project.name,
             },
             "table": self.repository.snapshot(self.project.id),
-            "figure": without_insets,
+            "figure": v6_without_insets,
         }
         migrated = migrate_project_snapshot(legacy_project)
-        self.assertEqual(migrated["schema_version"], 8)
-        self.assertEqual(migrated["figure"], without_insets)
+        self.assertEqual(migrated["schema_version"], 9)
+        self.assertEqual(
+            migrated["figure"]["root_component_id"],
+            without_insets["root_component_id"],
+        )
 
 
 if __name__ == "__main__":

@@ -79,6 +79,9 @@ def _values_equal(left: Any, right: Any) -> bool:
 def _refresh_legend(axes: Axes) -> None:
     """Rebuild an axes legend while retaining its user-visible state."""
 
+    owner = getattr(axes, "_mygui_merged_legend_owner", None)
+    if isinstance(owner, Axes):
+        axes = owner
     legend = axes.get_legend()
     if legend is None:
         return
@@ -101,6 +104,11 @@ def _refresh_legend(axes: Axes) -> None:
         )
     )
     handles, labels = axes.get_legend_handles_labels()
+    peer = getattr(axes, "_mygui_merged_legend_peer", None)
+    if isinstance(peer, Axes) and peer in axes.figure.axes:
+        peer_handles, peer_labels = peer.get_legend_handles_labels()
+        handles = [*handles, *peer_handles]
+        labels = [*labels, *peer_labels]
     legend.remove()
     if not handles:
         return

@@ -54,8 +54,12 @@ from code.figuremodify.components import (
 )
 from code.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v8_figure,
+    migrate_v8_figure_to_v9,
+    normalize_v9_figure,
+    validate_v9_figure,
 )
+from code.figuremodify.axes_layout import AxesLayoutSpec
+from code.figuremodify.axes_layout_service import AxesLayoutService
 from code.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
     InAxesCreateSpec,
@@ -133,6 +137,7 @@ class PyFigureCanvas(QWidget):
                  color_library: ColorLibrary | None = None,
                  component_tree: dict[str, Any] | None = None):
         super().__init__(parent)
+        self.figure_window = parent if hasattr(parent, "current_canva") else None
         if repository is None or project_id is None:
             raise ValueError("PyFigureCanvas requires a repository and project id.")
         self.repository = repository
@@ -145,6 +150,19 @@ class PyFigureCanvas(QWidget):
         self._restoring_component_tree_now = False
         self._selection_repair_pending = False
         self.color_library = color_library or ColorLibrary(parent=self)
+        if isinstance(component_tree, dict):
+            axes_records = [
+                item
+                for item in component_tree.get("components", ())
+                if isinstance(item, dict) and item.get("kind") == "axes"
+            ]
+            if axes_records and "layout_group" in axes_records[0].get(
+                "data", {}
+            ).get("subplot", {}):
+                component_tree = migrate_v8_figure_to_v9(
+                    component_tree,
+                    project_id,
+                )
         self._component_id_overrides = self._component_paths_from_tree(
             component_tree
         )
@@ -166,6 +184,7 @@ class PyFigureCanvas(QWidget):
         self.editor_registry.validate_production_profiles()
         self.component_editor_registry = self.editor_registry
         self.axes_commands = AxesCommandService(self.component_registry)
+        self.axes_layout_service = AxesLayoutService(self)
         self.function_curve_service = FunctionCurveService(
             self.component_registry
         )
@@ -213,6 +232,7 @@ class PyFigureCanvas(QWidget):
             messages=self.message_presenter,
             editor_manager=self.component_editor_manager,
             axes_commands=self.axes_commands,
+            axes_layout=self.axes_layout_service,
             function_curves=self.function_curve_service,
             chart_data=self.chart_data_service,
             interpolation=self.interpolation_service,
@@ -241,6 +261,7 @@ class PyFigureCanvas(QWidget):
                 order=0,
                 selector={"scope": "figure"},
                 properties=root_properties,
+                data={"layouts": []},
             )
         else:
             root_state = source_root
@@ -559,10 +580,7 @@ class PyFigureCanvas(QWidget):
         axe: Axes,
         axes_index: int,
         *,
-        nrows: int,
-        ncols: int,
-        slot: int,
-        layout_group: int,
+        subplot: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
         axes_path = f"figure/axes/{axes_index}"
         axes_id = self._component_id(axes_path)
@@ -578,16 +596,11 @@ class PyFigureCanvas(QWidget):
                 "ylim": [float(value) for value in axe.get_ylim()],
                 "xscale": axe.get_xscale(),
                 "yscale": axe.get_yscale(),
+                "autoscalex_on": bool(axe.get_autoscalex_on()),
+                "autoscaley_on": bool(axe.get_autoscaley_on()),
                 "color_cycle": None,
             },
-            data={
-                "subplot": {
-                    "layout_group": int(layout_group),
-                    "nrows": int(nrows),
-                    "ncols": int(ncols),
-                    "slot": int(slot),
-                }
-            },
+            data={"subplot": deepcopy(subplot)},
         )
         axes_controller = AxesController(axes_state, target=axe)
         axes_controller.sync_from_target(strict=True)
@@ -829,6 +842,7 @@ class PyFigureCanvas(QWidget):
             self._selection_unsubscribe = None
         self.message_presenter.close()
         self.component_editor_manager.close()
+        self.axes_layout_service.dispose()
         self.in_axes_service.dispose()
 
     def closeEvent(self, event):
@@ -1302,23 +1316,6 @@ class PyFigureCanvas(QWidget):
             role_label=role_label,
         )
 
-    def _next_layout_group(self) -> int:
-        """Return an unused layout group without assuming persisted IDs are dense."""
-
-        layout_groups = []
-        for controller in self.component_registry.query(
-            kind=ComponentKind.AXES
-        ):
-            subplot = controller.state.data.get("subplot")
-            if not isinstance(subplot, dict):
-                continue
-            layout_group = subplot.get("layout_group")
-            if isinstance(layout_group, int) and not isinstance(
-                layout_group, bool
-            ):
-                layout_groups.append(layout_group)
-        return max(layout_groups, default=-1) + 1
-
     # Add axes
     def add_axes(
         self,
@@ -1326,73 +1323,27 @@ class PyFigureCanvas(QWidget):
         ncols=1,
         slots: list[int] | tuple[int, ...] | None = None,
     ):
-        """Add axes."""
+        """Add a compatibility regular grid through the layout service."""
 
-        start_index = len(self.fig.axes)
-        layout_group = self._next_layout_group()
-        if slots is None:
-            subplot_slots = list(range(1, int(nrows) * int(ncols) + 1))
-        else:
-            subplot_slots = [int(slot) for slot in slots]
-            if (
-                not subplot_slots
-                or len(set(subplot_slots)) != len(subplot_slots)
-                or any(
-                    not 1 <= slot <= int(nrows) * int(ncols)
-                    for slot in subplot_slots
-                )
-            ):
-                raise ValueError("Subplot slots are invalid.")
-        first_axes = None
-        first_controller = None
-        allocated_ids_before = set(self._allocated_component_ids)
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.on_rollback(
-                lambda: setattr(
-                    self,
-                    "_allocated_component_ids",
-                    allocated_ids_before,
-                )
+        return self.create_axes_layout(
+            AxesLayoutSpec.grid(
+                int(nrows),
+                int(ncols),
+                slots=(tuple(int(slot) for slot in slots) if slots is not None else None),
+                cell_view=self.axes_layout_service.creation_view_defaults(),
+                constrained_layout=bool(self.fig.get_constrained_layout()),
             )
-            with mpl_style.context(self.component_style):
-                for i, slot in enumerate(subplot_slots):
-                    axe = self.fig.add_subplot(nrows, ncols, slot)
-                    transaction.on_rollback(
-                        lambda target=axe: self._remove_created_artist(target)
-                    )
-                    axes_index = start_index + i
-                    axes_id, _component_controllers = self._register_axes_components(
-                        axe,
-                        axes_index,
-                        nrows=nrows,
-                        ncols=ncols,
-                        slot=slot,
-                        layout_group=layout_group,
-                    )
-                    transaction.on_rollback(
-                        lambda target=axe: self._axes_component_ids.pop(
-                            target, None
-                        )
-                    )
-                    axes_controller = self.component_registry.get(axes_id)
-                    self.figure_inspector.add_axes_inspector(
-                        axes_controller,
-                        self.editor_context,
-                        self.color_library,
-                    )
-                    transaction.on_rollback(
-                        lambda target_id=axes_id:
-                        self.figure_inspector.remove_axes_inspector(target_id)
-                    )
+        )
 
-                    if i == 0:
-                        first_axes = axe
-                        first_controller = axes_controller
+    def create_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
+        """Create a validated Axes layout through the domain service."""
 
-        if first_axes is not None:
-            self.update_current_axes(first_controller)
+        return self.axes_layout_service.create(spec)
 
-        self.redraw()
+    def update_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
+        """Safely update geometry for an existing persisted layout."""
+
+        return self.axes_layout_service.update_geometry(spec)
 
     # Add custom curve
     def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str,
@@ -2350,7 +2301,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v8_figure(source)
+        source = normalize_v9_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -2363,33 +2314,7 @@ class PyFigureCanvas(QWidget):
             ),
             key=lambda state: int(state.selector["index"]),
         )
-        grouped: dict[int, list[ComponentState]] = {}
-        for state in axes_states:
-            subplot = state.data["subplot"]
-            grouped.setdefault(
-                int(subplot["layout_group"]),
-                [],
-            ).append(state)
-        for _group, group_states in sorted(
-            grouped.items(),
-            key=lambda item: min(
-                int(state.selector["index"])
-                for state in item[1]
-            ),
-        ):
-            first = group_states[0].data["subplot"]
-            ordered_group = sorted(
-                group_states,
-                key=lambda state: int(state.selector["index"]),
-            )
-            self.add_axes(
-                int(first["nrows"]),
-                int(first["ncols"]),
-                slots=[
-                    int(state.data["subplot"]["slot"])
-                    for state in ordered_group
-                ],
-            )
+        self.axes_layout_service.materialize(axes_states)
 
         dynamic_states = [
             state
@@ -2556,6 +2481,7 @@ class PyFigureCanvas(QWidget):
                         legend,
                     )
         apply_states(legend_states)
+        self.axes_layout_service.restore_runtime_relationships(refresh=True)
         self.component_registry.validate_tree()
         if tex_fallback:
             status_messages.show_warning(
@@ -2592,7 +2518,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the v8 component tree used by project persistence."""
+        """Return the canonical v9 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -2612,4 +2538,22 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v8_figure(snapshot)
+        return normalize_v9_figure(snapshot)
+
+    def validate_component_snapshot(self) -> dict[str, Any]:
+        """Validate and return the current complete schema-v9 Figure tree."""
+
+        snapshot = self.component_snapshot()
+        project = self.repository.project(self.project_id)
+        available_refs = {
+            ColumnRef(project.id, sheet.id, column.id): column.type
+            for sheet in project.sheets.values()
+            for column in sheet.columns
+        }
+        validate_v9_figure(
+            snapshot,
+            available_refs,
+            self.project_id,
+            self.project_name,
+        )
+        return snapshot

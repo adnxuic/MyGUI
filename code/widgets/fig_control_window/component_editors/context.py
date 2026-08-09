@@ -422,6 +422,7 @@ class EditorContext:
     interpolation: object
     fitting: object
     text_rendering: object
+    axes_layout: object | None = None
     in_axes: object | None = None
     dependency_service: object | None = None
     delete_command: Callable[..., bool] | None = None

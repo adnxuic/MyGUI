@@ -34,6 +34,7 @@ from .inputs import (
 )
 from .profiles import register_production_profiles
 from .sections import (
+    AxesLayoutSection,
     DataReferenceSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
@@ -70,6 +71,7 @@ __all__ = [
     "LineAppearanceInput",
     "MultiSeriesDataReferenceInput",
     "register_production_profiles",
+    "AxesLayoutSection",
     "DataReferenceSection",
     "ImageInAxesSourceSection",
     "PropertySection",

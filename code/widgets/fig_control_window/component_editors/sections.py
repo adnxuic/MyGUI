@@ -205,6 +205,68 @@ class PropertySection(ComponentEditorBase, EditorSection):
             binding.cancel()
 
 
+class AxesLayoutSection(QWidget, EditorSection):
+    """Show immutable Axes relationships and open safe geometry editing."""
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.summary_label = QLabel(self)
+        self.summary_label.setWordWrap(True)
+        layout.addWidget(self.summary_label)
+        self.edit_button = QPushButton("Edit layout geometry…", self)
+        self.edit_button.clicked.connect(self.edit_layout)
+        layout.addWidget(self.edit_button)
+        self.sync_from_controller()
+
+    def sync_from_controller(self) -> None:
+        """Refresh the persisted relationship summary."""
+
+        subplot = self.controller.state.data.get("subplot", {})
+        layer = "Right Y" if subplot.get("layer") == "right_y" else "Primary"
+        shared = []
+        if subplot.get("share_x_group"):
+            shared.append("shared X")
+        if subplot.get("share_y_group"):
+            shared.append("shared Y")
+        relationship = ", ".join(shared) if shared else "independent axes"
+        self.summary_label.setText(
+            f"Cell {int(subplot.get('row', 0)) + 1}, "
+            f"{int(subplot.get('column', 0)) + 1} · {layer} · {relationship}.\n"
+            "Cell occupancy, sharing, and twin relationships are fixed after creation."
+        )
+
+    def edit_layout(self) -> None:
+        """Open the shared layout dialog for this Axes' stable layout id."""
+
+        subplot = self.controller.state.data.get("subplot", {})
+        layout_id = subplot.get("layout_id")
+        if not layout_id:
+            status_messages.show_error("This Axes has no editable layout record.")
+            return
+        try:
+            from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import (
+                PyLayoutDialog,
+            )
+
+            canvas = self.context.axes_layout.canvas
+            figure_window = canvas.figure_window
+            if figure_window is None:
+                raise ValueError("The Figure window is unavailable.")
+            dialog = PyLayoutDialog(
+                "Edit Axes layout",
+                figure_window,
+                parent=self,
+                layout_id=str(layout_id),
+            )
+            dialog.exec()
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+
+
 class ImageInAxesSourceSection(QWidget, EditorSection):
     """Replace one embedded image through the authoritative inset Service."""
 
@@ -723,6 +785,9 @@ class LegendLocationSection(QWidget, EditorSection):
         self.legend_position_combobox = QComboBox(self)
         self.legend_position_combobox.addItems(self.PRESETS)
         self.legend_position_combobox.addItem("Custom coordinates")
+        self.entry_scope_input = QComboBox(self)
+        self.entry_scope_input.addItem("This Axes", "axes")
+        self.entry_scope_input.addItem("Primary + right Y", "twin_pair")
 
         row = QHBoxLayout()
         self.legend_x_pos = QDoubleSpinBox(self)
@@ -743,6 +808,8 @@ class LegendLocationSection(QWidget, EditorSection):
         ncols_row.addWidget(self.ncols_input)
 
         self.layout.addWidget(self.visible_input)
+        self.layout.addWidget(QLabel("Legend entries", self))
+        self.layout.addWidget(self.entry_scope_input)
         self.layout.addWidget(self.legend_position_combobox)
         self.layout.addLayout(row)
         self.layout.addLayout(ncols_row)
@@ -752,6 +819,12 @@ class LegendLocationSection(QWidget, EditorSection):
         )
         self.ncols_input.valueChanged.connect(
             lambda value: self._apply("ncols", int(value))
+        )
+        self.entry_scope_input.currentIndexChanged.connect(
+            lambda _index: self._apply(
+                "entry_scope",
+                self.entry_scope_input.currentData(),
+            )
         )
         self.legend_position_combobox.currentTextChanged.connect(
             self.set_legend_position
@@ -776,7 +849,13 @@ class LegendLocationSection(QWidget, EditorSection):
 
     def _apply(self, key: str, value):
         self._ensure_target()
-        result = self.controller.set_property(key, value)
+        if key == "entry_scope":
+            result = self.context.axes_layout.set_legend_scope(
+                self.controller.state.parent_id,
+                str(value),
+            )
+        else:
+            result = self.controller.set_property(key, value)
         if not self.context.messages.present(
             result,
             success="Legend layout updated.",
@@ -824,6 +903,7 @@ class LegendLocationSection(QWidget, EditorSection):
             self.legend_x_pos,
             self.legend_y_pos,
             self.ncols_input,
+            self.entry_scope_input,
         )
         blockers = [QSignalBlocker(control) for control in controls]
         try:
@@ -831,6 +911,28 @@ class LegendLocationSection(QWidget, EditorSection):
                 bool(properties.get("visible", False))
             )
             self.ncols_input.setValue(int(properties.get("ncols", 1)))
+            scope = str(properties.get("entry_scope", "axes"))
+            self.entry_scope_input.setCurrentIndex(
+                max(0, self.entry_scope_input.findData(scope))
+            )
+            axes = self.context.registry.get(self.controller.state.parent_id)
+            subplot = axes.state.data.get("subplot", {})
+            twin_available = False
+            if subplot.get("layer") == "primary" and subplot.get("layout_id"):
+                twin_available = any(
+                    candidate.state.data.get("subplot", {}).get("layout_id")
+                    == subplot.get("layout_id")
+                    and candidate.state.data.get("subplot", {}).get("row")
+                    == subplot.get("row")
+                    and candidate.state.data.get("subplot", {}).get("column")
+                    == subplot.get("column")
+                    and candidate.state.data.get("subplot", {}).get("layer")
+                    == "right_y"
+                    for candidate in self.context.registry.query(
+                        kind=ComponentKind.AXES
+                    )
+                )
+            self.entry_scope_input.setEnabled(twin_available)
             location = properties.get("location", "best")
             if isinstance(location, (tuple, list)) and len(location) == 2:
                 self.legend_position_combobox.setCurrentText(

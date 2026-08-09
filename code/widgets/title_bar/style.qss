@@ -118,6 +118,20 @@ QToolButton#select_button
     padding: 1px {{SPACE_XS}}px;
 }
 
+/*
+ * Layout templates use one visual cell.  The dimensions below are content-box
+ * values: horizontal padding plus the two-pixel border make the rendered
+ * button exactly 112 x 60 pixels after Qt applies the stylesheet.  The width
+ * keeps the longest compact label visible without sacrificing alignment.
+ */
+QToolBar#selector_toolbar QToolButton#layout_template_button
+{
+    min-width: 100px;
+    max-width: 100px;
+    min-height: 54px;
+    max-height: 54px;
+}
+
 QToolBar#selector_toolbar QToolButton:hover,
 QToolButton#select_button:hover
 {

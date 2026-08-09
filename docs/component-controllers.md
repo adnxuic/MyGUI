@@ -34,7 +34,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v8.
+  serialized into `ComponentState` or schema v9.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -107,14 +107,14 @@ Matplotlib receives one Axes-change notification only after commit.
 | Controller family | Roles | Persistent properties |
 | --- | --- | --- |
 | `FigureController` | Figure | `name`, `style`, `size_inches`, `dpi`, `facecolor`, `edgecolor`, `frameon`, `constrained_layout` |
-| `AxesController` | Axes | `position`, `xlim`, `ylim`, `xscale`, `yscale`, `aspect`, `facecolor`, `visible`, `autoscale_on`, `color_cycle` |
+| `AxesController` | Axes | `xlim`, `ylim`, `xscale`, `yscale`, `aspect`, `facecolor`, `visible`, `autoscalex_on`, `autoscaley_on`, `color_cycle` |
 | `XAxisController`, `YAxisController` | X/Y Axis | `visible`, `scale`, `ticks_position`, `label_position`, `inverted` |
 | `SpineController` | Spine | `visible`, `color`, `linewidth`, `linestyle`, `position`, `bounds`, `alpha` |
 | `TickGroupController` | Major/Minor Tick | `visible`, `direction`, `length`, `width`, `color`, `pad` |
 | `TickLabelGroupController` | Major/Minor Tick Label | `visible`, `color`, `fontsize`, `rotation`, `fontfamily`, `pad` |
 | `GridController` | Grid | `visible`, `color`, `linestyle`, `linewidth`, `alpha` |
 | `TextController` | Title, Axis Label, Text | `text`, `visible`, `position`, `color`, `fontsize`, `fontfamily`, `fontweight`, `fontstyle`, `rotation`, alignment, `usetex`, `alpha` |
-| `LegendController` | Legend | `visible`, `location`, `ncols`, `fontsize`, `frameon`, `facecolor`, `edgecolor`, `framealpha`, `title` |
+| `LegendController` | Legend | `visible`, `location`, `ncols`, `fontsize`, `frameon`, `facecolor`, `edgecolor`, `framealpha`, `title`, `entry_scope` |
 | `LineController` | Line and all curve roles | `label`, `color`, `linestyle`, `linewidth`, marker properties, `alpha`, `visible`, `zorder` |
 | `ScatterController` | Scatter | `label`, `color`, `edgecolor`, `size`, `marker`, `linewidth`, `alpha`, `visible`, `zorder` |
 

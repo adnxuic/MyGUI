@@ -8,6 +8,7 @@ from Qt_core import *
 
 
 DialogFactory = Callable[[QWidget | None], QDialog]
+IconSource = str | QIcon
 
 
 class LazyDialogAction(QAction):
@@ -16,13 +17,13 @@ class LazyDialogAction(QAction):
     def __init__(
         self,
         text: str,
-        icon_path: str,
+        icon: IconSource,
         dialog_factory: DialogFactory,
         parent: QObject,
         *,
         reuse_dialog: bool = True,
     ):
-        super().__init__(QIcon(icon_path), text, parent)
+        super().__init__(QIcon(icon), text, parent)
         self.setToolTip(text)
         self.setStatusTip(text)
         self._dialog_factory = dialog_factory
@@ -131,7 +132,7 @@ class ResponsiveActionGallery(QFrame):
     def add_dialog_action(
         self,
         name: str,
-        icon_path: str,
+        icon: IconSource,
         dialog_factory: DialogFactory,
         *,
         reuse_dialog: bool = True,
@@ -140,7 +141,7 @@ class ResponsiveActionGallery(QFrame):
 
         action = LazyDialogAction(
             name,
-            icon_path,
+            icon,
             dialog_factory,
             self,
             reuse_dialog=reuse_dialog,

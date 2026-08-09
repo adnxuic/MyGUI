@@ -85,14 +85,17 @@ Title, X Label, Y Label, and free Text share the following ordered sections:
 
 All render-sensitive Text properties use `TextRenderService`. `apply_many()` accepts multiple `(controller, property_patch)` pairs, applies them in one Registry transaction, performs one render verification per Figure, and rolls back every target if validation or rendering fails. Free Text may be deleted; semantic Title and Axis Label Controllers are hidden with `visible` and are not removed.
 
-Legend remains a `LegendController`. It reuses the content editor for `title` and the typography editor for `fontsize`, then adds `location`, `ncols`, `visible`, `frameon`, `facecolor`, `edgecolor`, and `framealpha`. Preset and two-coordinate custom locations are supported. Editing an absent Legend first asks `AxesCommandService` to create its runtime artist.
+Legend remains a `LegendController`. It reuses the content editor for `title` and the typography editor for `fontsize`, then adds `location`, `ncols`, `visible`, `frameon`, `facecolor`, `edgecolor`, `framealpha`, and twin `entry_scope`. Preset and two-coordinate custom locations are supported. Editing an absent Legend first asks `AxesCommandService` to create its runtime artist.
 
 ## Axes layout
 
 Every Axes, Axis, Spine, Tick, Tick Label, Grid, Title, Axis Label, and Legend
 has its own Inspector. Selecting its stable ID in the Components tree opens
-only that Inspector. Axes properties include palette, limits, scale,
-autoscale, position, aspect, face color, and visibility. The Palette section
+only that Inspector. Axes properties include layout relationship, palette,
+limits, scale, independent X/Y autoscale, aspect, face color, and visibility.
+The layout section opens stable-ID geometry editing; position remains derived
+from the persisted Figure layout. Shared limits, scales, autoscale flags, and
+Axis inversion are applied to the complete persisted sharing group. The Palette section
 derives its current label and color strip from the Axes `color_cycle` and
 Figure `style`; its source selector applies either the current Style default
 or a named user-selected palette through `AxesCommandService`.
@@ -116,7 +119,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v8.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v9.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -126,7 +129,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v8
+state, artists, Locator bindings, a complete tree projection, and schema-v9
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -141,8 +144,8 @@ failed deletion restores the exact pre-action cursor.
 
 An Axes tree node provides `Delete Axes`. After confirmation, its composite
 deletion handler removes the Axes artist and complete semantic/dynamic subtree.
-Surviving Axes retain their component IDs
-and subplot `layout_group`/`slot`, while `order`, selector `index`, and
+Surviving Axes retain their component IDs and persisted layout cell/layer,
+while `order`, selector `index`, and
 `Axes 1...Axes N` labels become contiguous. The next Axes at the deleted position
 is selected, or the preceding Axes when the last position was removed. An
 empty Figure selects its Figure root Inspector. Deleting one cell from a
@@ -170,4 +173,4 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v8. Inspector profiles, section expansion, and Qt widgets are never serialized, and the Legend profile introduces no new persistent fields.
+The project format uses schema v9. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope` is business state; profile and widget state remain UI-only.

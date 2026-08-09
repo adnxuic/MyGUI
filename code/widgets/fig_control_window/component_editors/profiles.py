@@ -21,6 +21,7 @@ from .inspector import (
     TreePresentationSpec,
 )
 from .sections import (
+    AxesLayoutSection,
     DataReferenceSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
@@ -46,6 +47,64 @@ def _properties(*keys: str):
         )
 
     return factory
+
+
+def _axes_limits(controller, context, parent):
+    def apply(properties):
+        key, value = next(iter(properties.items()))
+        if key.startswith("x") or key == "autoscalex_on":
+            dimension = "x"
+        else:
+            dimension = "y"
+        kwargs = {}
+        if key in {"xlim", "ylim"}:
+            kwargs["limits"] = value
+        elif key in {"xscale", "yscale"}:
+            kwargs["scale"] = value
+        else:
+            kwargs["autoscale"] = value
+        return context.axes_layout.apply_linked_axis(
+            controller.component_id,
+            dimension,
+            **kwargs,
+        )
+
+    return PropertySection(
+        controller,
+        context=context,
+        property_keys=(
+            "xlim", "ylim", "xscale", "yscale",
+            "autoscalex_on", "autoscaley_on",
+        ),
+        apply_properties=apply,
+        parent=parent,
+    )
+
+
+def _axes_layout(controller, context, parent):
+    return AxesLayoutSection(controller, context=context, parent=parent)
+
+
+def _axis_properties(controller, context, parent):
+    def apply(properties):
+        key, value = next(iter(properties.items()))
+        if key not in {"scale", "inverted"}:
+            return controller.set_property(key, value)
+        dimension = str(controller.state.selector["axis"])
+        kwargs = {key: value}
+        return context.axes_layout.apply_linked_axis(
+            controller.state.parent_id,
+            dimension,
+            **kwargs,
+        )
+
+    return PropertySection(
+        controller,
+        context=context,
+        property_keys=PROPERTY_PROFILE_KEYS[ComponentKind.AXIS],
+        apply_properties=apply,
+        parent=parent,
+    )
 
 
 def _line_appearance(controller, context, parent):
@@ -639,23 +698,17 @@ AXES_PROFILE = EditorProfile(
     "axes",
     "Axes",
     (
+        SectionSpec("layout", "Layout relationship", _axes_layout),
         SectionSpec("palette", "Palette", _palette),
         SectionSpec(
             "limits",
             "Limits and scale",
-            _properties(
-                "xlim",
-                "ylim",
-                "xscale",
-                "yscale",
-                "autoscale_on",
-            ),
+            _axes_limits,
         ),
         SectionSpec(
             "appearance",
             "Appearance",
             _properties(
-                "position",
                 "aspect",
                 "facecolor",
                 "visible",
@@ -765,6 +818,11 @@ def _property_profile(kind: ComponentKind) -> EditorProfile:
         if kind is ComponentKind.FIGURE
         else EditorPlacement.SEMANTIC
     )
+    factory = (
+        _axis_properties
+        if kind is ComponentKind.AXIS
+        else _properties(*PROPERTY_PROFILE_KEYS[kind])
+    )
     return EditorProfile(
         f"{kind.value}:properties",
         title,
@@ -772,7 +830,7 @@ def _property_profile(kind: ComponentKind) -> EditorProfile:
             SectionSpec(
                 "properties",
                 "Properties",
-                _properties(*PROPERTY_PROFILE_KEYS[kind]),
+                factory,
             ),
         ),
         placement=placement,

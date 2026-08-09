@@ -114,10 +114,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             target = controller.resolve_target()
             subplot_spec = target.get_subplotspec()
             target_bounds = bounds(controller)
-            self.assertEqual(
-                tuple(controller.state.properties["position"]),
-                target_bounds,
-            )
+            self.assertNotIn("position", controller.state.properties)
             before[controller.component_id] = {
                 "bounds": target_bounds,
                 "subplot": controller.state.data["subplot"].copy(),
@@ -173,10 +170,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 bounds(controller), expected["bounds"]
             ):
                 self.assertAlmostEqual(actual, original, places=12)
-            self.assertEqual(
-                tuple(controller.state.properties["position"]),
-                bounds(controller),
-            )
+            self.assertNotIn("position", controller.state.properties)
         self.assertEqual(
             len({bounds(controller) for controller in remaining}),
             len(remaining),
@@ -938,7 +932,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "code.widgets.figure_canvas.deletion_coordinator.normalize_v8_figure",
+                "code.widgets.figure_canvas.deletion_coordinator.normalize_v9_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))

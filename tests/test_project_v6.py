@@ -230,7 +230,7 @@ class ProjectV6Tests(unittest.TestCase):
         self.assertIsNone(v5["figure"]["axes"][0]["color_cycle"])
         self.assertEqual(v5["figure"]["curves"][0]["color_order"], 0)
         self.assertEqual(v5["figure"]["plots"][0]["color_order"], 1)
-        self.assertEqual(migrated["schema_version"], 8)
+        self.assertEqual(migrated["schema_version"], 9)
         self.assertEqual(
             self.component(migrated, "data_plot")["data"]["preprocess"],
             {"x_expression": "x", "y_expression": "y"},

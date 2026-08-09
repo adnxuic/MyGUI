@@ -1,10 +1,11 @@
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QDialog, QFrame, QMainWindow, QToolButton
+from Qt_core import QApplication, QDialog, QFrame, QMainWindow, QRegion, QToolButton
 
 from code.widgets.left_column.py_left_column import PyLeftColumn
 from code.widgets.left_column.py_setting_dialog import PySettingDialog
@@ -16,6 +17,9 @@ from code.widgets.title_bar.py_title_menu import (
     SelectorStyleMenuBar,
 )
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog
+from code.widgets.title_bar.titlebar_dialog.axes_layout_input import (
+    axes_layout_presets,
+)
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     PyInAxesDialog,
     PyTextDialog,
@@ -38,7 +42,61 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 5, 5, 2])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 7, 5, 2])
+            layout_bar = bars[1]
+            presets = axes_layout_presets()
+            self.assertEqual(
+                tuple(layout_bar.action_dict),
+                tuple(preset.label for preset in presets),
+            )
+            self.assertEqual(
+                tuple(preset.icon for preset in presets),
+                (
+                    "single.svg",
+                    "1_2.svg",
+                    "2_1.svg",
+                    "2_2.svg",
+                    "3_3.svg",
+                    "primary_right_y_icon.svg",
+                    "main_plot_residual.svg",
+                ),
+            )
+            self.assertEqual(
+                tuple(action.text() for action in layout_bar.action_dict.values()),
+                (
+                    "Single",
+                    "Horizontal",
+                    "Vertical",
+                    "2 × 2",
+                    "3 × 3",
+                    "Dual Y",
+                    "Main + Residual",
+                ),
+            )
+            self.assertTrue(
+                all(
+                    not layout_bar.action_dict[preset.label].icon().isNull()
+                    for preset in presets
+                )
+            )
+            self.assertFalse(
+                Path("pictures/icons/layout_images/1_1.svg").exists()
+            )
+            for action in layout_bar.action_dict.values():
+                button = layout_bar.toolbar.widgetForAction(action)
+                self.assertEqual(button.objectName(), "layout_template_button")
+                self.assertEqual(
+                    (button.minimumWidth(), button.maximumWidth()),
+                    (112, 112),
+                )
+                self.assertEqual(
+                    (button.minimumHeight(), button.maximumHeight()),
+                    (60, 60),
+                )
+                bounds = QRegion(
+                    action.icon().pixmap(40, 40).mask()
+                ).boundingRect()
+                self.assertEqual(max(bounds.width(), bounds.height()), 34)
             created_dialogs = {
                 id(widget) for widget in self.app.topLevelWidgets() if isinstance(widget, QDialog)
             }
@@ -70,6 +128,31 @@ class CommandGalleryTests(unittest.TestCase):
             host.close()
             self.app.processEvents()
 
+    def test_layout_gallery_buttons_remain_uniform_after_qss_polish(self):
+        from main import MainWindow
+
+        host = MainWindow()
+        host.resize(1280, 720)
+        host.showNormal()
+        host.title_bar.stacklayout_bottom.setCurrentIndex(1)
+        self.app.processEvents()
+        self.app.processEvents()
+        bar = host.title_bar.selector_layout_bar
+        buttons = [
+            bar.toolbar.widgetForAction(action)
+            for action in bar.action_dict.values()
+        ]
+        try:
+            self.assertTrue(all(button.isVisible() for button in buttons))
+            self.assertEqual(
+                {(button.width(), button.height()) for button in buttons},
+                {(112, 60)},
+            )
+            self.assertEqual({button.geometry().top() for button in buttons}, {4})
+        finally:
+            host.close()
+            self.app.processEvents()
+
     def test_text_creation_dialog_is_rebuilt_for_each_trigger(self):
         host = QMainWindow()
         bar = SelectorElementMenuBar()
@@ -82,6 +165,31 @@ class CommandGalleryTests(unittest.TestCase):
 
             self.assertEqual(execute.call_count, 2)
             self.assertIsNone(action.dialog)
+        finally:
+            host.close()
+            self.app.processEvents()
+
+    def test_layout_action_passes_the_semantic_preset_key(self):
+        figure_window = Mock()
+        figure_window.current_canva = None
+        figure_window.color_library = ColorLibrary()
+        host = QMainWindow()
+        bar = SelectorLayoutMenuBar(figure_window=figure_window)
+        host.setCentralWidget(bar)
+        try:
+            with patch(
+                "code.widgets.title_bar.py_title_menu.PyLayoutDialog"
+            ) as dialog_type:
+                bar.action_dict["Horizontal Comparison"].trigger()
+
+            dialog_type.assert_called_once_with(
+                dialog_name="Horizontal Comparison",
+                figure_window=figure_window,
+                preset_key="horizontal_compare",
+                parent=host,
+            )
+            dialog_type.return_value.exec.assert_called_once_with()
+            dialog_type.return_value.deleteLater.assert_called_once_with()
         finally:
             host.close()
             self.app.processEvents()

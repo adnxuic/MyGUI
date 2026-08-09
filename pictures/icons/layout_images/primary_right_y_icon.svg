@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512" height="384" viewBox="0 0 512 384">
+  <!-- Transparent background -->
+  <defs>
+    <style>
+      .axis {
+        fill: none;
+        stroke: #3F4A54;
+        stroke-width: 10;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .right-axis {
+        fill: none;
+        stroke: #FF8A00;
+        stroke-width: 10;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .primary {
+        fill: none;
+        stroke: #2F80ED;
+        stroke-width: 12;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .secondary {
+        fill: none;
+        stroke: #FF8A00;
+        stroke-width: 10;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 16 14;
+      }
+    </style>
+  </defs>
+
+  <!-- Left Y axis and bottom X axis -->
+  <path class="axis" d="M82 308 L82 68"/>
+  <path class="axis" d="M82 308 L446 308"/>
+
+  <!-- Arrow heads -->
+  <path class="axis" d="M67 86 L82 67 L97 86"/>
+  <path class="axis" d="M428 293 L447 308 L428 323"/>
+
+  <!-- Right Y axis -->
+  <path class="right-axis" d="M432 286 L432 72"/>
+  <path class="right-axis" d="M417 90 L432 71 L447 90"/>
+
+  <!-- Primary curve -->
+  <path class="primary"
+        d="M104 278
+           C142 270, 164 232, 190 188
+           C214 148, 247 126, 278 146
+           C308 165, 322 213, 352 242
+           C378 267, 405 277, 421 278"/>
+
+  <!-- Right-Y curve -->
+  <path class="secondary"
+        d="M112 289
+           C168 270, 221 238, 270 207
+           C318 177, 365 135, 420 92"/>
+</svg>

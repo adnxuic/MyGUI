@@ -112,11 +112,22 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     do not change and no intermediate removal is visible.
     Add a Figure-level free Text before deleting the final Axes and confirm
     fallback still selects the Figure root rather than crossing to Text.
-29. Save one of two projects while its tab is in the background and confirm
+29. Confirm Layout shows Single Axes, Horizontal Comparison, Vertical Stack,
+    2 × 2 Grid, 3 × 3 Grid, Primary + Right Y, and Main Plot + Residual with
+    their matching icons. Create each template and confirm its dialog does not
+    repeat the template, row/column, or occupied-cell choices. For Horizontal
+    Comparison, disable and re-enable Share Y axis; repeat with Share X axis in
+    Vertical Stack. Confirm independent/shared behavior and label visibility
+    follow the switch. Confirm 2 × 2 and 3 × 3 remain independent.
+30. Open `Edit layout geometry…`, change ratios, margins, and spacing, and
+    confirm Axes artists and Component IDs remain unchanged. Confirm the edit
+    dialog shows a persisted relationship summary without creation-only Axes,
+    template, occupancy, sharing, or twin controls.
+31. Save one of two projects while its tab is in the background and confirm
     the file contains that project. Modify a saved project through the Table,
     Component Inspector, and toolbar zoom, then close its tab and verify
     Save/Discard/Cancel, Save As cancellation, and save failure behavior.
-30. Exit with multiple dirty projects. Confirm any Cancel or failed save
+32. Exit with multiple dirty projects. Confirm any Cancel or failed save
     aborts exit without closing a project, while an earlier successful save
     remains clean.
 

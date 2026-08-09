@@ -11,6 +11,7 @@ from uuid import NAMESPACE_URL, uuid5
 from code.database import ColumnRef, ColumnType, DataPreprocessSpec
 from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.style_base.color_models import ColorCycleState, normalize_color
+from code.figuremodify.axes_layout import stable_layout_id
 
 from .controllers import controller_type_for, decode_in_axes_image
 from .errors import ComponentValidationError
@@ -791,6 +792,189 @@ def normalize_v8_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def normalize_v9_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a schema-v9 Figure with persisted Axes relationships."""
+
+    return _normalize_component_figure(
+        figure_snapshot,
+        allow_in_axes=True,
+    )
+
+
+def migrate_v8_figure_to_v9(
+    figure_snapshot: dict[str, Any],
+    project_id: str,
+) -> dict[str, Any]:
+    """Convert v8 subplot batches into deterministic v9 layout records."""
+
+    figure = normalize_v8_figure(figure_snapshot)
+    components = _expect_list(figure.get("components"), "figure.components")
+    roots = [item for item in components if item.get("kind") == "figure"]
+    if len(roots) != 1:
+        raise ValueError("Schema v8 Figure must contain one Figure root.")
+
+    legacy_groups: dict[int, list[dict[str, Any]]] = {}
+    for raw in components:
+        if raw.get("kind") != "axes":
+            continue
+        subplot = _expect_dict(
+            _expect_dict(raw.get("data"), "figure.components[].data").get("subplot"),
+            "figure.components[].data.subplot",
+        )
+        group = _require_int(
+            subplot.get("layout_group"),
+            "figure.components[].data.subplot.layout_group",
+        )
+        legacy_groups.setdefault(group, []).append(raw)
+
+    definitions: dict[int, dict[str, Any]] = {}
+    for group, entries in legacy_groups.items():
+        first_subplot = entries[0]["data"]["subplot"]
+        nrows = _require_int(first_subplot.get("nrows"), "subplot.nrows", 1)
+        ncols = _require_int(first_subplot.get("ncols"), "subplot.ncols", 1)
+        positions: dict[tuple[int, int], tuple[float, float, float, float]] = {}
+        for entry in entries:
+            subplot = entry["data"]["subplot"]
+            if subplot.get("nrows") != nrows or subplot.get("ncols") != ncols:
+                raise ValueError(f"Invalid schema-v8 layout group {group}.")
+            slot = _require_int(subplot.get("slot"), "subplot.slot", 1)
+            raw_position = entry.get("properties", {}).get("position")
+            if isinstance(raw_position, list) and len(raw_position) == 4:
+                try:
+                    position = tuple(float(value) for value in raw_position)
+                except (TypeError, ValueError):
+                    continue
+                if all(math.isfinite(value) for value in position):
+                    index = slot - 1
+                    positions[(index // ncols, index % ncols)] = position
+
+        if positions:
+            left = min(value[0] for value in positions.values())
+            right = max(value[0] + value[2] for value in positions.values())
+            bottom = min(value[1] for value in positions.values())
+            top = max(value[1] + value[3] for value in positions.values())
+            widths = [
+                max(
+                    (value[2] for (row, col), value in positions.items() if col == column),
+                    default=(right - left) / ncols,
+                )
+                for column in range(ncols)
+            ]
+            heights = [
+                max(
+                    (value[3] for (row, col), value in positions.items() if row == target_row),
+                    default=(top - bottom) / nrows,
+                )
+                for target_row in range(nrows)
+            ]
+            column_lefts = {
+                column: min(value[0] for (row, col), value in positions.items() if col == column)
+                for column in range(ncols)
+                if any(col == column for _row, col in positions)
+            }
+            horizontal_gaps = [
+                column_lefts[column + 1] - column_lefts[column] - widths[column]
+                for column in range(ncols - 1)
+                if column in column_lefts and column + 1 in column_lefts
+            ]
+            row_bottoms = {
+                target_row: min(value[1] for (row, col), value in positions.items() if row == target_row)
+                for target_row in range(nrows)
+                if any(row == target_row for row, _col in positions)
+            }
+            vertical_gaps = [
+                row_bottoms[row] - row_bottoms[row + 1] - heights[row + 1]
+                for row in range(nrows - 1)
+                if row in row_bottoms and row + 1 in row_bottoms
+            ]
+            average_width = sum(widths) / len(widths)
+            average_height = sum(heights) / len(heights)
+            wspace = (
+                max(0.0, sum(horizontal_gaps) / len(horizontal_gaps) / average_width)
+                if horizontal_gaps and average_width > 0
+                else 0.2
+            )
+            hspace = (
+                max(0.0, sum(vertical_gaps) / len(vertical_gaps) / average_height)
+                if vertical_gaps and average_height > 0
+                else 0.2
+            )
+        else:
+            left, right, bottom, top = 0.125, 0.9, 0.11, 0.88
+            widths, heights = [1.0] * ncols, [1.0] * nrows
+            wspace = hspace = 0.2
+        definitions[group] = {
+            "id": stable_layout_id(project_id, group),
+            "nrows": nrows,
+            "ncols": ncols,
+            "width_ratios": widths,
+            "height_ratios": heights,
+            "margins": {"left": left, "right": right, "bottom": bottom, "top": top},
+            "spacing": {"wspace": wspace, "hspace": hspace},
+        }
+
+    for raw in components:
+        if raw.get("kind") != "axes":
+            continue
+        data = _expect_dict(raw.get("data"), "figure.components[].data")
+        subplot = _expect_dict(data.get("subplot"), "figure.components[].data.subplot")
+        group = _require_int(
+            subplot.get("layout_group"),
+            "figure.components[].data.subplot.layout_group",
+        )
+        nrows = _require_int(
+            subplot.get("nrows"),
+            "figure.components[].data.subplot.nrows",
+            1,
+        )
+        ncols = _require_int(
+            subplot.get("ncols"),
+            "figure.components[].data.subplot.ncols",
+            1,
+        )
+        layout_id = definitions[group]["id"]
+        previous = definitions[group]
+        if (
+            int(previous["nrows"]) != nrows
+            or int(previous["ncols"]) != ncols
+        ):
+            raise ValueError(f"Invalid schema-v8 layout group {group}.")
+        slot = _require_int(
+            subplot.get("slot"),
+            "figure.components[].data.subplot.slot",
+            1,
+        )
+        index = slot - 1
+        raw["data"] = {
+            "subplot": {
+                "layout_id": layout_id,
+                "row": index // ncols,
+                "column": index % ncols,
+                "layer": "primary",
+                "share_x_group": None,
+                "share_y_group": None,
+            }
+        }
+        properties = _expect_dict(
+            raw.get("properties"), "figure.components[].properties"
+        )
+        properties.pop("position", None)
+        autoscale = bool(properties.pop("autoscale_on", True))
+        properties["autoscalex_on"] = autoscale
+        properties["autoscaley_on"] = autoscale
+
+    roots[0]["data"] = {
+        "layouts": [definitions[key] for key in sorted(definitions)]
+    }
+    for raw in components:
+        if raw.get("kind") == "legend":
+            properties = _expect_dict(
+                raw.get("properties"), "figure.components[].properties"
+            )
+            properties["entry_scope"] = "axes"
+    return normalize_v9_figure(figure)
+
+
 def _canonical_json_value(value: Any, path: str) -> Any:
     if isinstance(value, tuple):
         return [
@@ -950,25 +1134,65 @@ def _validate_component_properties(
     elif kind == "axes":
         _require_pair(properties.get("xlim"), f"{path}.properties.xlim")
         _require_pair(properties.get("ylim"), f"{path}.properties.ylim")
-        _require_quad(properties.get("position"), f"{path}.properties.position")
+        if schema_version < 9:
+            _require_quad(properties.get("position"), f"{path}.properties.position")
         _require_string(properties.get("xscale"), f"{path}.properties.xscale", nonempty=True)
         _require_string(properties.get("yscale"), f"{path}.properties.yscale", nonempty=True)
         aspect = properties.get("aspect")
         if not isinstance(aspect, str):
             _require_number(aspect, f"{path}.properties.aspect", positive=True)
         _require_bool(properties.get("visible"), f"{path}.properties.visible")
-        _require_bool(properties.get("autoscale_on"), f"{path}.properties.autoscale_on")
+        if schema_version >= 9:
+            _require_bool(
+                properties.get("autoscalex_on"),
+                f"{path}.properties.autoscalex_on",
+            )
+            _require_bool(
+                properties.get("autoscaley_on"),
+                f"{path}.properties.autoscaley_on",
+            )
+        else:
+            _require_bool(
+                properties.get("autoscale_on"),
+                f"{path}.properties.autoscale_on",
+            )
         try:
             ColorCycleState.from_dict(properties.get("color_cycle"))
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Invalid project field {path}.properties.color_cycle: {exc}") from exc
         subplot = _expect_dict(data.get("subplot"), f"{path}.data.subplot")
-        _require_int(subplot.get("layout_group"), f"{path}.data.subplot.layout_group")
-        nrows = _require_int(subplot.get("nrows"), f"{path}.data.subplot.nrows", 1)
-        ncols = _require_int(subplot.get("ncols"), f"{path}.data.subplot.ncols", 1)
-        slot = _require_int(subplot.get("slot"), f"{path}.data.subplot.slot", 1)
-        if slot > nrows * ncols:
-            raise ValueError(f"Invalid subplot slot at {path}.data.subplot.slot.")
+        if schema_version >= 9:
+            _require_string(
+                subplot.get("layout_id"),
+                f"{path}.data.subplot.layout_id",
+                nonempty=True,
+            )
+            _require_int(subplot.get("row"), f"{path}.data.subplot.row")
+            _require_int(subplot.get("column"), f"{path}.data.subplot.column")
+            if subplot.get("layer") not in {"primary", "right_y"}:
+                raise ValueError(f"Invalid subplot layer at {path}.data.subplot.layer.")
+            for key in ("share_x_group", "share_y_group"):
+                value = subplot.get(key)
+                if value is not None:
+                    _require_string(
+                        value,
+                        f"{path}.data.subplot.{key}",
+                        nonempty=True,
+                    )
+            if (
+                subplot.get("layer") == "right_y"
+                and subplot.get("share_y_group") is not None
+            ):
+                raise ValueError(
+                    f"Invalid right-Y share group at {path}.data.subplot."
+                )
+        else:
+            _require_int(subplot.get("layout_group"), f"{path}.data.subplot.layout_group")
+            nrows = _require_int(subplot.get("nrows"), f"{path}.data.subplot.nrows", 1)
+            ncols = _require_int(subplot.get("ncols"), f"{path}.data.subplot.ncols", 1)
+            slot = _require_int(subplot.get("slot"), f"{path}.data.subplot.slot", 1)
+            if slot > nrows * ncols:
+                raise ValueError(f"Invalid subplot slot at {path}.data.subplot.slot.")
     elif kind == "axis":
         _require_bool(properties.get("visible"), f"{path}.properties.visible")
         _require_string(properties.get("scale"), f"{path}.properties.scale", nonempty=True)
@@ -1094,6 +1318,13 @@ def _validate_component_properties(
         ) <= 1:
             raise ValueError(f"Invalid project field {path}.properties.framealpha.")
         _require_string(properties.get("title"), f"{path}.properties.title")
+        if schema_version >= 9 and properties.get("entry_scope") not in {
+            "axes",
+            "twin_pair",
+        }:
+            raise ValueError(
+                f"Invalid project field {path}.properties.entry_scope."
+            )
     elif kind == "in_axes":
         bounds = _require_quad(properties.get("bounds"), f"{path}.properties.bounds")
         if bounds[2] <= 0 or bounds[3] <= 0:
@@ -1236,8 +1467,19 @@ def _validate_component_properties(
     # selector, marker, range, or property type.
     try:
         runtime_component = component
-        if schema_version < 8 and role in DATA_ROLES:
+        if schema_version < 9 and kind in {"axes", "legend"}:
             runtime_component = deepcopy(component)
+            runtime_properties = runtime_component["properties"]
+            if kind == "axes":
+                runtime_properties.pop("position", None)
+                autoscale = bool(runtime_properties.pop("autoscale_on", True))
+                runtime_properties["autoscalex_on"] = autoscale
+                runtime_properties["autoscaley_on"] = autoscale
+            else:
+                runtime_properties["entry_scope"] = "axes"
+        if schema_version < 8 and role in DATA_ROLES:
+            if runtime_component is component:
+                runtime_component = deepcopy(component)
             runtime_component["data"]["preprocess"] = DataPreprocessSpec().to_dict()
         state = ComponentState.from_dict(runtime_component)
         controller_type = controller_type_for(state)
@@ -1246,8 +1488,9 @@ def _validate_component_properties(
             for key, spec in controller_type.property_specs().items()
             if spec.persistent
         }
-        missing_properties = set(specs) - set(properties)
-        unknown_properties = set(properties) - set(specs)
+        runtime_properties = runtime_component["properties"]
+        missing_properties = set(specs) - set(runtime_properties)
+        unknown_properties = set(runtime_properties) - set(specs)
         if missing_properties or unknown_properties:
             details = []
             if missing_properties:
@@ -1262,7 +1505,7 @@ def _validate_component_properties(
                 "property keys are invalid: " + ", ".join(details)
             )
         for key, spec in specs.items():
-            spec.normalize(properties[key])
+            spec.normalize(runtime_properties[key])
         # Controller construction performs family-specific selector and
         # cross-property validation without resolving a Matplotlib target.
         controller_type(state)
@@ -1272,7 +1515,7 @@ def _validate_component_properties(
         ) from exc
 
     expected_data_fields = {
-        "figure": set(),
+        "figure": {"layouts"} if schema_version >= 9 else set(),
         "axes": {"subplot"},
         "x_axis": set(),
         "y_axis": set(),
@@ -1580,20 +1823,131 @@ def _validate_component_figure(
     for axes in axes_components:
         _require_fixed_axes_components(axes, children)
 
-    layout_groups: dict[int, list[tuple[int, dict[str, Any]]]] = {}
-    for axes in axes_components:
-        subplot = axes["data"]["subplot"]
-        layout_groups.setdefault(subplot["layout_group"], []).append(
-            (axes["selector"]["index"], subplot)
-        )
-    for group, entries in layout_groups.items():
-        shapes = {(entry["nrows"], entry["ncols"]) for _index, entry in entries}
-        slots = [entry["slot"] for _index, entry in entries]
-        if len(shapes) != 1 or len(slots) != len(set(slots)):
-            raise ValueError(f"Invalid subplot layout group {group}.")
-        indexes = sorted(index for index, _entry in entries)
-        if indexes != list(range(indexes[0], indexes[0] + len(indexes))):
-            raise ValueError(f"Subplot layout group {group} must use contiguous axes indexes.")
+    if schema_version >= 9:
+        layout_records = roots[0]["data"]["layouts"]
+        layouts = {record["id"]: record for record in layout_records}
+        if len(layouts) != len(layout_records):
+            raise ValueError("Figure layout ids must be unique.")
+        occupied: dict[tuple[str, int, int], dict[str, dict[str, Any]]] = {}
+        share_x: dict[str, list[dict[str, Any]]] = {}
+        share_y: dict[str, list[dict[str, Any]]] = {}
+        used_layouts: set[str] = set()
+        for axes in axes_components:
+            subplot = axes["data"]["subplot"]
+            layout_id = subplot["layout_id"]
+            layout = layouts.get(layout_id)
+            if layout is None:
+                raise ValueError(
+                    f"Axes {axes['id']} references an unknown Figure layout."
+                )
+            used_layouts.add(layout_id)
+            row = subplot["row"]
+            column = subplot["column"]
+            if row >= layout["nrows"] or column >= layout["ncols"]:
+                raise ValueError(
+                    f"Axes {axes['id']} lies outside its Figure layout."
+                )
+            cell = occupied.setdefault((layout_id, row, column), {})
+            layer = subplot["layer"]
+            if layer in cell:
+                raise ValueError(
+                    f"Figure layout cell {row + 1},{column + 1} has duplicate {layer} Axes."
+                )
+            cell[layer] = axes
+            if subplot["share_x_group"] is not None:
+                share_x.setdefault(subplot["share_x_group"], []).append(axes)
+            if subplot["share_y_group"] is not None:
+                share_y.setdefault(subplot["share_y_group"], []).append(axes)
+
+        if set(layouts) != used_layouts:
+            raise ValueError("Every Figure layout must contain at least one Axes.")
+
+        def axis_state(axes: dict[str, Any], dimension: str) -> dict[str, Any]:
+            role = f"{dimension}_axis"
+            return next(
+                child
+                for child in children.get(axes["id"], [])
+                if child["kind"] == "axis" and child["role"] == role
+            )
+
+        for (layout_id, row, column), layers in occupied.items():
+            primary = layers.get("primary")
+            secondary = layers.get("right_y")
+            if primary is None:
+                raise ValueError(
+                    f"Figure layout cell {row + 1},{column + 1} has no primary Axes."
+                )
+            if secondary is not None:
+                primary_x = primary["data"]["subplot"]["share_x_group"]
+                secondary_x = secondary["data"]["subplot"]["share_x_group"]
+                if primary_x is None or primary_x != secondary_x:
+                    raise ValueError("Twin Axes must share one stable X group.")
+                if secondary["selector"]["index"] <= primary["selector"]["index"]:
+                    raise ValueError("A right Y Axes must follow its primary Axes.")
+            for layer, axes in layers.items():
+                legend = next(
+                    child
+                    for child in children.get(axes["id"], [])
+                    if child["kind"] == "legend"
+                )
+                scope = legend["properties"].get("entry_scope", "axes")
+                if scope == "twin_pair" and (
+                    layer != "primary" or secondary is None
+                ):
+                    raise ValueError(
+                        "A twin-pair Legend requires a primary Axes with a right Y Axes."
+                    )
+
+        def validate_share_groups(
+            groups: dict[str, list[dict[str, Any]]],
+            dimension: str,
+        ) -> None:
+            properties = (
+                ("xlim", "xscale", "autoscalex_on")
+                if dimension == "x"
+                else ("ylim", "yscale", "autoscaley_on")
+            )
+            for group_id, members in groups.items():
+                if len(members) < 2:
+                    raise ValueError(
+                        f"Shared {dimension.upper()} group {group_id!r} has fewer than two Axes."
+                    )
+                if len(
+                    {
+                        member["data"]["subplot"]["layout_id"]
+                        for member in members
+                    }
+                ) != 1:
+                    raise ValueError("Shared Axes groups cannot cross Figure layouts.")
+                expected = tuple(members[0]["properties"][key] for key in properties)
+                expected_inverted = axis_state(members[0], dimension)[
+                    "properties"
+                ]["inverted"]
+                for member in members[1:]:
+                    actual = tuple(member["properties"][key] for key in properties)
+                    inverted = axis_state(member, dimension)["properties"]["inverted"]
+                    if actual != expected or inverted != expected_inverted:
+                        raise ValueError(
+                            f"Shared {dimension.upper()} Axes state is inconsistent."
+                        )
+
+        validate_share_groups(share_x, "x")
+        validate_share_groups(share_y, "y")
+    else:
+        layout_groups: dict[int, list[tuple[int, dict[str, Any]]]] = {}
+        for axes in axes_components:
+            subplot = axes["data"]["subplot"]
+            layout_groups.setdefault(subplot["layout_group"], []).append(
+                (axes["selector"]["index"], subplot)
+            )
+        for group, entries in layout_groups.items():
+            shapes = {(entry["nrows"], entry["ncols"]) for _index, entry in entries}
+            slots = [entry["slot"] for _index, entry in entries]
+            if len(shapes) != 1 or len(slots) != len(set(slots)):
+                raise ValueError(f"Invalid subplot layout group {group}.")
+            indexes = sorted(index for index, _entry in entries)
+            if indexes != list(range(indexes[0], indexes[0] + len(indexes))):
+                raise ValueError(f"Subplot layout group {group} must use contiguous axes indexes.")
 
     chart_orders = [
         component["order"]
@@ -1663,6 +2017,24 @@ def validate_v8_figure(
     )
 
 
+def validate_v9_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate a schema-v9 Figure with persisted Axes layouts and links."""
+
+    _validate_component_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=9,
+        allow_in_axes=True,
+    )
+
+
 def _component_children(
     components: Iterable[dict[str, Any]],
 ) -> dict[str | None, list[dict[str, Any]]]:
@@ -1694,13 +2066,41 @@ def v6_figure_to_legacy(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
         (component for component in components if component["kind"] == "axes"),
         key=lambda component: component["selector"].get("index", component["order"]),
     )
+    v9_layouts = {
+        item["id"]: item
+        for item in root.get("data", {}).get("layouts", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    layout_numbers = {
+        layout_id: index
+        for index, layout_id in enumerate(v9_layouts)
+    }
+    if any(
+        axes["data"].get("subplot", {}).get("layer") == "right_y"
+        for axes in axes_components
+    ):
+        raise ValueError("Legacy Figure export cannot represent right Y Axes.")
     axes_indexes = {
         component["id"]: int(component["selector"]["index"])
         for component in axes_components
     }
     layouts: dict[int, list[tuple[int, dict[str, Any]]]] = {}
     for axes in axes_components:
-        subplot = axes["data"]["subplot"]
+        raw_subplot = axes["data"]["subplot"]
+        if "layout_id" in raw_subplot:
+            definition = v9_layouts[raw_subplot["layout_id"]]
+            subplot = {
+                "layout_group": layout_numbers[raw_subplot["layout_id"]],
+                "nrows": int(definition["nrows"]),
+                "ncols": int(definition["ncols"]),
+                "slot": (
+                    int(raw_subplot["row"]) * int(definition["ncols"])
+                    + int(raw_subplot["column"])
+                    + 1
+                ),
+            }
+        else:
+            subplot = raw_subplot
         layouts.setdefault(int(subplot["layout_group"]), []).append(
             (axes_indexes[axes["id"]], subplot)
         )
@@ -1788,6 +2188,7 @@ def v6_figure_to_legacy(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
             if legend_component
             else {}
         )
+        legend_properties.pop("entry_scope", None)
         if "location" in legend_properties:
             legend_properties["loc"] = legend_properties.pop("location")
         label_family = x_label.get("fontfamily", y_label.get("fontfamily", ""))
@@ -1803,7 +2204,13 @@ def v6_figure_to_legacy(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
             "aspect": deepcopy(axes["properties"].get("aspect", "auto")),
             "facecolor": axes["properties"].get("facecolor", "#FFFFFF"),
             "visible": bool(axes["properties"].get("visible", True)),
-            "autoscale_on": bool(axes["properties"].get("autoscale_on", True)),
+            "autoscale_on": bool(
+                axes["properties"].get(
+                    "autoscale_on",
+                    axes["properties"].get("autoscalex_on", True)
+                    and axes["properties"].get("autoscaley_on", True),
+                )
+            ),
             "xlabel": str(x_label.get("text", "")),
             "ylabel": str(y_label.get("text", "")),
             "x_label": deepcopy(x_label),
