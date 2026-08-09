@@ -38,10 +38,18 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
    initially reads `Solid`, selecting `Dashed` creates a dashed line, and the
    Inspector shows the same style.
 7. Create a scatter chart using two saved data columns.
+   In Plot and Scatter, set X `fx` to `1/x` and Y `fx` to `y`; confirm the
+   reciprocal-X data is drawn. Enter an unsafe or malformed expression and
+   confirm all four source/formula controls and the artist roll back with one
+   red result. Include X = 0 and confirm one yellow filtered-row warning.
 8. Create an interpolation curve from saved data, change its method, set `Samples`, and confirm the curve redraws.
 9. Change method-specific interpolation options and confirm the curve redraws.
 10. Change interpolation X/Y data sources from the right-side panel and confirm only current-project data is listed.
 11. Create a SciPy fitting curve, run `poly2`, and confirm the result area shows coefficients and goodness metrics.
+    Change a Fit preprocessing expression while a fit is running; confirm the
+    old request cannot overwrite the changed source state, the previous curve
+    remains, and one yellow message requests a new fit. Refit and confirm its
+    displayed range follows transformed X.
 12. Select Function Curve, Data Plot, Fit Curve, and Interpolation nodes in
     the Components tree. Confirm exactly one Inspector is visible and each
     uses the same Basic, Marker, and Advanced line appearance fields in the
@@ -57,7 +65,7 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     Axis, Spine, Tick, Grid, Title, Label, and Legend tree nodes and confirm
     each exact Inspector remains reachable without expanding the main window.
 18. Add a text element and edit its content, font, size, and position.
-19. Save the current project, open it in a fresh workspace, and confirm plot, scatter, interpolation, fitting result, axes state, text, and Inspector values restore.
+19. Save the current project, open it in a fresh workspace, and confirm plot, scatter, interpolation, fitting result, preprocessing expressions, axes state, text, and Inspector values restore. Fit must restore its saved result without running an engine.
 20. Right-click the canvas tab, rename the project, and confirm existing charts and fitting data references still redraw.
 21. Right-click the sheet tab, rename the sheet, and confirm existing charts and fitting data references still redraw.
 22. Create a second project and confirm switching canvas tabs switches the visible table.

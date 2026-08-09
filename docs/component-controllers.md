@@ -34,7 +34,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v7.
+  serialized into `ComponentState` or schema v8.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -124,9 +124,14 @@ Role data is validated by the Controller as well as by project IO:
 
 - generic `line`: finite one-dimensional `x` and `y` arrays with equal length;
 - `function_curve`: a non-empty, safe expression using `x`, plus finite `x_start` and `x_stop`;
-- `data_plot` and `scatter`: complete `x_ref` and `y_ref` column references;
-- `interpolation`: references, a registered method, integer `k` from 1 through 5, `samples` from 2 through 100000, Boolean `lam_auto`, and a non-negative finite optional `lam`;
-- `fit_curve`: references, `Python` or `Matlab` engine, fit metadata, a safe optional display expression, and finite display bounds.
+- `data_plot` and `scatter`: complete `x_ref` and `y_ref` column references
+  plus the persisted X/Y `preprocess` expressions;
+- `interpolation`: references and preprocessing expressions, a registered
+  method, integer `k` from 1 through 5, `samples` from 2 through 100000,
+  Boolean `lam_auto`, and a non-negative finite optional `lam`;
+- `fit_curve`: references and preprocessing expressions, `Python` or `Matlab`
+  engine, fit metadata, a safe optional display expression, and finite display
+  bounds.
 
 An empty resolved data array is valid and keeps its Controller, editor, references, and project state. A malformed state or invalid replacement is rejected without changing the last valid artist or state.
 

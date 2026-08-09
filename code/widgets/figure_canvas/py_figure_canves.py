@@ -53,7 +53,7 @@ from code.figuremodify.components import (
 )
 from code.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v7_figure,
+    normalize_v8_figure,
 )
 from code.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
@@ -66,8 +66,10 @@ from code import tex_config
 from code import status_messages
 from code.database import (
     ColumnRef,
+    DataPreprocessSpec,
     TableChangeSet,
     TableRepository,
+    resolve_preprocessed_pair,
     validate_component_name,
 )
 from code.database.table_document import new_id
@@ -1126,9 +1128,19 @@ class PyFigureCanvas(QWidget):
     def add_plot(self, x, y, style, size, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
                  object_id: str | None = None,
                  color_order: int | None = None,
-                 *, linewidth: float | None = None):
+                 *, linewidth: float | None = None,
+                 preprocess: DataPreprocessSpec | dict[str, Any] | None = None):
         """Add plot."""
 
+        preprocess = DataPreprocessSpec.from_dict(preprocess)
+        pair = resolve_preprocessed_pair(
+            self.repository,
+            x_ref,
+            y_ref,
+            preprocess,
+            preserve_gaps=True,
+        )
+        x, y = pair.x, pair.y
         color = normalize_color(color)
         object_id = object_id or new_id()
         plot_kwargs = {
@@ -1161,6 +1173,7 @@ class PyFigureCanvas(QWidget):
                 {
                     "x_ref": x_ref.to_dict(),
                     "y_ref": y_ref.to_dict(),
+                    "preprocess": preprocess.to_dict(),
                 },
             )
             self._prepare_created_component(controller, transaction)
@@ -1171,9 +1184,19 @@ class PyFigureCanvas(QWidget):
     # Add scatter plot
     def add_scatter(self, x, y, size, color, marker, label, x_ref: ColumnRef, y_ref: ColumnRef,
                     object_id: str | None = None,
-                    color_order: int | None = None):
+                    color_order: int | None = None,
+                    preprocess: DataPreprocessSpec | dict[str, Any] | None = None):
         """Add scatter."""
 
+        preprocess = DataPreprocessSpec.from_dict(preprocess)
+        pair = resolve_preprocessed_pair(
+            self.repository,
+            x_ref,
+            y_ref,
+            preprocess,
+            preserve_gaps=False,
+        )
+        x, y = pair.x, pair.y
         color = normalize_color(color)
         object_id = object_id or new_id()
         with self.component_registry.registration_transaction() as transaction:
@@ -1201,6 +1224,7 @@ class PyFigureCanvas(QWidget):
                 {
                     "x_ref": x_ref.to_dict(),
                     "y_ref": y_ref.to_dict(),
+                    "preprocess": preprocess.to_dict(),
                 },
             )
             self._prepare_created_component(controller, transaction)
@@ -1214,9 +1238,19 @@ class PyFigureCanvas(QWidget):
                       fit_options=None, fit_result=None, expression: str = "",
                       x_start: float | None = None, x_stop: float | None = None,
                       style: str | None = None, object_id: str | None = None,
-                      color_order: int | None = None):
+                      color_order: int | None = None,
+                      preprocess: DataPreprocessSpec | dict[str, Any] | None = None):
         """Add fit curve."""
 
+        preprocess = DataPreprocessSpec.from_dict(preprocess)
+        pair = resolve_preprocessed_pair(
+            self.repository,
+            x_ref,
+            y_ref,
+            preprocess,
+            preserve_gaps=False,
+        )
+        x, y = pair.x, pair.y
         if engine not in {"Python", "Matlab"}:
             raise ValueError(f"Unsupported fitting engine: {engine}")
 
@@ -1246,9 +1280,13 @@ class PyFigureCanvas(QWidget):
         plot_kwargs = {"color": color, "label": label}
         if style is not None:
             plot_kwargs["linestyle"] = style
-        with mpl_style.context(self.component_style):
-            line, = self.current_axes.plot(line_x, line_y, **plot_kwargs)
         with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                line, = self.current_axes.plot(
+                    line_x,
+                    line_y,
+                    **plot_kwargs,
+                )
             transaction.on_rollback(
                 lambda: self._remove_created_artist(line)
             )
@@ -1267,6 +1305,7 @@ class PyFigureCanvas(QWidget):
                 {
                     "x_ref": x_ref.to_dict(),
                     "y_ref": y_ref.to_dict(),
+                    "preprocess": preprocess.to_dict(),
                     "engine": engine,
                     "fit_type": deepcopy(fit_type),
                     "fit_options": deepcopy(fit_options),
@@ -1286,41 +1325,57 @@ class PyFigureCanvas(QWidget):
                               color='black',
                               samples=DEFAULT_INTERPOLATION_SAMPLES,
                               lam=None, lam_auto=True, object_id: str | None = None,
-                              color_order: int | None = None, allow_empty: bool = False):
+                              color_order: int | None = None, allow_empty: bool = False,
+                              preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+                              announce: bool = True):
         """Add interpolate curve."""
 
+        preprocess = DataPreprocessSpec.from_dict(preprocess)
+        pair = resolve_preprocessed_pair(
+            self.repository,
+            x_ref,
+            y_ref,
+            preprocess,
+            preserve_gaps=False,
+        )
+        x, y = pair.x, pair.y
         color = normalize_color(color)
-        with mpl_style.context(self.component_style):
-            x_values = np.asarray(x)
-            y_values = np.asarray(y)
-            if allow_empty and (x_values.size == 0 or y_values.size == 0):
+        x_values = np.asarray(x)
+        y_values = np.asarray(y)
+        if allow_empty and (x_values.size == 0 or y_values.size == 0):
+            x_new = np.asarray([], dtype=float)
+            y_new = np.asarray([], dtype=float)
+        else:
+            try:
+                x_new, y_new = interpolate_curve(
+                    x_values,
+                    y_values,
+                    method,
+                    k=k,
+                    samples=samples,
+                    lam=lam,
+                    lam_auto=lam_auto,
+                )
+            except ValueError as exc:
+                if not allow_empty:
+                    status_messages.show_error(str(exc))
+                    return None
                 x_new = np.asarray([], dtype=float)
                 y_new = np.asarray([], dtype=float)
-            else:
-                try:
-                    x_new, y_new = interpolate_curve(
-                        x_values,
-                        y_values,
-                        method,
-                        k=k,
-                        samples=samples,
-                        lam=lam,
-                        lam_auto=lam_auto,
-                    )
-                except ValueError as exc:
-                    if not allow_empty:
-                        status_messages.show_error(str(exc))
-                        return None
-                    x_new = np.asarray([], dtype=float)
-                    y_new = np.asarray([], dtype=float)
-                    status_messages.show_warning(
-                        "Interpolation could not be recomputed from the "
-                        f"current source data ({exc}); an empty component "
-                        "was restored."
-                    )
-            line, = self.current_axes.plot(x_new, y_new, color=color, label=label)
+                status_messages.show_warning(
+                    "Interpolation could not be recomputed from the "
+                    f"current source data ({exc}); an empty component "
+                    "was restored."
+                )
         object_id = object_id or new_id()
         with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                line, = self.current_axes.plot(
+                    x_new,
+                    y_new,
+                    color=color,
+                    label=label,
+                )
             transaction.on_rollback(
                 lambda: self._remove_created_artist(line)
             )
@@ -1339,6 +1394,7 @@ class PyFigureCanvas(QWidget):
                 {
                     "x_ref": x_ref.to_dict(),
                     "y_ref": y_ref.to_dict(),
+                    "preprocess": preprocess.to_dict(),
                     "method": method,
                     "k": int(k),
                     "samples": int(samples),
@@ -1349,12 +1405,13 @@ class PyFigureCanvas(QWidget):
             self._prepare_created_component(controller, transaction)
         self._select_created_component(controller)
         self.redraw()
-        if x_new.size:
-            status_messages.show_success("Interpolation curve created.")
-        else:
-            status_messages.show_warning(
-                "Interpolation curve has no valid data yet; its editor and style were kept."
-            )
+        if announce:
+            if x_new.size:
+                status_messages.show_success("Interpolation curve created.")
+            else:
+                status_messages.show_warning(
+                    "Interpolation curve has no valid data yet; its editor and style were kept."
+                )
         return line
 
     # Add text
@@ -1635,10 +1692,13 @@ class PyFigureCanvas(QWidget):
         }:
             x_ref = ColumnRef.from_dict(data["x_ref"])
             y_ref = ColumnRef.from_dict(data["y_ref"])
-            pair = (
-                self.repository.line_pair(x_ref, y_ref)
-                if role is ComponentRole.DATA_PLOT
-                else self.repository.valid_pair(x_ref, y_ref)
+            preprocess = DataPreprocessSpec.from_dict(data["preprocess"])
+            pair = resolve_preprocessed_pair(
+                self.repository,
+                x_ref,
+                y_ref,
+                preprocess,
+                preserve_gaps=role is ComponentRole.DATA_PLOT,
             )
             if role is ComponentRole.DATA_PLOT:
                 self.add_plot(
@@ -1652,6 +1712,7 @@ class PyFigureCanvas(QWidget):
                     y_ref,
                     object_id=state.id,
                     color_order=state.order,
+                    preprocess=preprocess,
                 )
             elif role is ComponentRole.SCATTER:
                 self.add_scatter(
@@ -1665,6 +1726,7 @@ class PyFigureCanvas(QWidget):
                     y_ref,
                     object_id=state.id,
                     color_order=state.order,
+                    preprocess=preprocess,
                 )
             elif role is ComponentRole.INTERPOLATION:
                 self.add_interpolate_curve(
@@ -1685,6 +1747,8 @@ class PyFigureCanvas(QWidget):
                     object_id=state.id,
                     color_order=state.order,
                     allow_empty=True,
+                    preprocess=preprocess,
+                    announce=False,
                 )
             else:
                 self.add_fit_curve(
@@ -1704,6 +1768,7 @@ class PyFigureCanvas(QWidget):
                     style=properties.get("linestyle", "solid"),
                     object_id=state.id,
                     color_order=state.order,
+                    preprocess=preprocess,
                 )
         elif role is ComponentRole.TEXT:
             position = properties.get("position", (0.0, 0.0))
@@ -1827,7 +1892,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v7_figure(source)
+        source = normalize_v8_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -2069,7 +2134,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the v7 component tree used by project persistence."""
+        """Return the v8 component tree used by project persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -2089,4 +2154,4 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v7_figure(snapshot)
+        return normalize_v8_figure(snapshot)

@@ -20,10 +20,18 @@ Chart records store an `x_ref` and `y_ref`, each containing `project_id`, `sheet
 
 - Plot keeps row positions and masks incomplete X/Y rows, producing line gaps.
 - Scatter, interpolation, and fitting filter incomplete X/Y rows as pairs.
+- Plot, Scatter, Interpolation, and Fit store component-local X/Y preprocessing
+  expressions. Both expressions use the original aligned pair. Non-finite
+  transformed rows follow the same gap/filter rules as missing source values.
 - Trailing rows that are empty in both selected columns are ignored.
 - Interpolation and fitting reject an empty valid pair; Plot and Scatter clear their artists when no valid data remains.
 
 Repository mutations emit one `TableChangeSet`. Dependent objects read the committed data, and each canvas schedules at most one redraw per transaction.
+
+Plot and Scatter reapply their saved preprocessing expressions automatically.
+Interpolation reapplies them before recomputing the interpolation. Fit retains
+its saved curve and result until the user starts a new fit, which resolves the
+latest table values through the saved expressions.
 
 ## Editing commands
 

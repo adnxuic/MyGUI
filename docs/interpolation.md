@@ -23,7 +23,9 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 | --- | --- | --- |
 | `Method` | All interpolation curves | Selects the interpolation algorithm. |
 | `X Data` | All interpolation curves | Source table column for X values. Changing it recomputes the interpolation curve. |
+| `X expression` | All interpolation curves | Element-wise X preprocessing formula. Default is `x`. |
 | `Y Data` | All interpolation curves | Source table column for Y values. Changing it recomputes the interpolation curve. |
+| `Y expression` | All interpolation curves | Element-wise Y preprocessing formula. Default is `y`. |
 | `Samples` | All interpolation curves | Number of output points drawn on the chart. Default is `1000`; valid range is `2` to `100000`. |
 | `k` | `B样条插值` | B-spline degree. Valid range is `1` to `5`, and `k` must be smaller than the number of source data points. |
 | `Auto lambda` | `平滑样条` | Lets SciPy choose the smoothing lambda automatically. |
@@ -34,7 +36,9 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 ## Data Requirements
 
 - X and Y must be numeric columns. Their values are aligned by Table row.
-- Rows with a missing or non-finite X/Y value are filtered as a pair before interpolation.
+- Both preprocessing expressions read the original X/Y values and run before
+  interpolation.
+- Rows with a missing or non-finite source/transformed value are filtered as a pair before interpolation.
 - At least 2 source points are required for interpolation.
 - X values are sorted before interpolation.
 - Duplicate X values are rejected because they overspecify `y=f(x)`.
@@ -42,7 +46,9 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 
 ## Project Files
 
-Interpolation records are saved under the figure's `interpolates` collection. Each record has a stable `object_id`, `x_ref`, and `y_ref`, plus these interpolation parameters:
+Interpolation records are saved as schema-v8 `line/interpolation` components.
+Each record has a stable `object_id`, `x_ref`, `y_ref`, and `preprocess`, plus
+these interpolation parameters:
 
 | Field | Description |
 | --- | --- |

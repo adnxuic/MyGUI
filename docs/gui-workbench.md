@@ -50,7 +50,7 @@ Project` and `Close Project` therefore operate on the clicked tab without
 switching a background project.
 
 Each project has a runtime clean fingerprint made from its full typed Table
-snapshot and normalized schema-v7 component tree. A new project has no clean
+snapshot and normalized schema-v8 component tree. A new project has no clean
 baseline and is dirty. Loading or completing an atomic save establishes the
 baseline. Table edits, project rename, Component changes, Undo, and
 Matplotlib toolbar view changes are detected by comparing a fresh snapshot;

@@ -19,7 +19,12 @@ import numpy as np
 from matplotlib.axes import Axes
 
 from code import tex_config
-from code.database import ColumnRef
+from code.database import (
+    ColumnRef,
+    DataPreprocessSpec,
+    PreprocessedPair,
+    resolve_preprocessed_pair,
+)
 from code.database.interpolate_func import interpolate_curve
 from code.database.safe_expression import evaluate_curve_expression
 from code.figuremodify.components import (
@@ -915,17 +920,28 @@ class ChartDataService:
         ):
             raise ValueError("Chart data source was removed.")
 
-    def _pair(self, controller, x_ref, y_ref):
+    @staticmethod
+    def preprocess_for(controller) -> DataPreprocessSpec:
+        """Return the persisted preprocessing specification."""
+
+        return DataPreprocessSpec.from_dict(controller.state.data["preprocess"])
+
+    def _pair(self, controller, x_ref, y_ref, preprocess):
         self._validate_refs(x_ref, y_ref)
-        if isinstance(controller, DataPlotController):
-            return self.repository.line_pair(x_ref, y_ref)
-        return self.repository.valid_pair(x_ref, y_ref)
+        return resolve_preprocessed_pair(
+            self.repository,
+            x_ref,
+            y_ref,
+            preprocess,
+            preserve_gaps=isinstance(controller, DataPlotController),
+        )
 
     def set_refs(
         self,
         component,
         x_ref: ColumnRef | dict[str, Any],
         y_ref: ColumnRef | dict[str, Any],
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
     ) -> ComponentChange:
         """Set refs."""
 
@@ -940,22 +956,30 @@ class ChartDataService:
         try:
             x_ref = _column_ref(x_ref)
             y_ref = _column_ref(y_ref)
-            pair = self._pair(controller, x_ref, y_ref)
+            spec = DataPreprocessSpec.from_dict(
+                preprocess
+                if preprocess is not None
+                else controller.state.data["preprocess"]
+            )
+            pair = self._pair(controller, x_ref, y_ref, spec)
         except Exception as exc:
             return _rejected(controller, str(exc))
+        data = deepcopy(controller.state.data)
+        data.update(
+            x_ref=x_ref.to_dict(),
+            y_ref=y_ref.to_dict(),
+            preprocess=spec.to_dict(),
+        )
         change = controller.apply_role_data(
-            {
-                "x_ref": x_ref.to_dict(),
-                "y_ref": y_ref.to_dict(),
-            },
+            data,
             drawable=XYData(pair.x, pair.y),
         )
         notices = []
-        if pair.missing_count:
+        if pair.excluded_count:
             notices.append(
                 _warning(
-                    f"Ignored or masked {pair.missing_count} rows with "
-                    "missing values."
+                    f"Preprocessing ignored or masked {pair.excluded_count} "
+                    "rows with missing or non-finite values."
                 )
             )
         if change.status is ChangeStatus.EMPTY:
@@ -975,7 +999,12 @@ class ChartDataService:
             x_ref, y_ref = self.refs_for(controller)
         except Exception as exc:
             return _rejected(controller, str(exc))
-        return self.set_refs(controller, x_ref, y_ref)
+        return self.set_refs(
+            controller,
+            x_ref,
+            y_ref,
+            self.preprocess_for(controller),
+        )
 
     def refresh_affected(
         self,
@@ -1027,6 +1056,7 @@ class InterpolationService:
         samples: int,
         lam: float | None,
         lam_auto: bool,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
         preserve_on_failure: bool = True,
     ) -> ComponentChange:
         """Configure the service with its current registry dependencies."""
@@ -1044,10 +1074,22 @@ class InterpolationService:
                 or not self.repository.has_ref(y_ref)
             ):
                 raise ValueError("Interpolation data source was removed.")
-            pair = self.repository.valid_pair(x_ref, y_ref)
+            spec = DataPreprocessSpec.from_dict(
+                preprocess
+                if preprocess is not None
+                else controller.state.data["preprocess"]
+            )
+            pair = resolve_preprocessed_pair(
+                self.repository,
+                x_ref,
+                y_ref,
+                spec,
+                preserve_gaps=False,
+            )
             data = {
                 "x_ref": x_ref.to_dict(),
                 "y_ref": y_ref.to_dict(),
+                "preprocess": spec.to_dict(),
                 "method": str(method),
                 "k": int(k),
                 "samples": int(samples),
@@ -1086,11 +1128,11 @@ class InterpolationService:
             drawable=XYData(x_values, y_values),
         )
         notices = []
-        if pair.missing_count:
+        if pair.excluded_count:
             notices.append(
                 _warning(
-                    f"Interpolation ignored {pair.missing_count} rows "
-                    "with missing values."
+                    f"Preprocessing ignored {pair.excluded_count} rows "
+                    "with missing or non-finite values."
                 )
             )
         if change.status is ChangeStatus.EMPTY:
@@ -1120,6 +1162,7 @@ class InterpolationService:
             samples=data["samples"],
             lam=data["lam"],
             lam_auto=data["lam_auto"],
+            preprocess=data["preprocess"],
             preserve_on_failure=False,
         )
 
@@ -1141,6 +1184,7 @@ class FitService:
         component,
         x_ref: ColumnRef | dict[str, Any],
         y_ref: ColumnRef | dict[str, Any],
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
     ) -> ComponentChange:
         """Set sources."""
 
@@ -1157,15 +1201,54 @@ class FitService:
                 or not self.repository.has_ref(y_ref)
             ):
                 raise ValueError("Fit data source was removed.")
+            spec = DataPreprocessSpec.from_dict(
+                preprocess
+                if preprocess is not None
+                else controller.state.data["preprocess"]
+            )
+            pair = resolve_preprocessed_pair(
+                self.repository,
+                x_ref,
+                y_ref,
+                spec,
+                preserve_gaps=False,
+            )
         except Exception as exc:
             return _rejected(controller, str(exc))
         data = deepcopy(controller.state.data)
         data.update(
             x_ref=x_ref.to_dict(),
             y_ref=y_ref.to_dict(),
+            preprocess=spec.to_dict(),
         )
-        return controller.apply_mutation(
+        change = controller.apply_mutation(
             ComponentMutation(controller.component_id, data=data)
+        )
+        if change.changed:
+            self.cancel(controller.component_id)
+        message = "Fit preprocessing updated; run fitting to recompute."
+        if pair.excluded_count:
+            message = (
+                f"Fit preprocessing excluded {pair.excluded_count} rows; "
+                "run fitting to recompute."
+            )
+        return _notices(change, _warning(message)) if change.changed else change
+
+    def resolve_sources(self, component) -> PreprocessedPair:
+        """Resolve the current Fit sources without mutating the component."""
+
+        controller = _controller(
+            self.registry,
+            component,
+            FitCurveController,
+        )
+        data = controller.state.data
+        return resolve_preprocessed_pair(
+            self.repository,
+            _column_ref(data["x_ref"]),
+            _column_ref(data["y_ref"]),
+            DataPreprocessSpec.from_dict(data["preprocess"]),
+            preserve_gaps=False,
         )
 
     def next_request(self, component_id: str) -> int:

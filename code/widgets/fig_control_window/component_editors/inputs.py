@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from Qt_core import *
 
-from code.database import ColumnRef, ColumnType, TableChangeSet, TableRepository
+from code.database import (
+    ColumnRef,
+    ColumnType,
+    DataPreprocessSpec,
+    TableChangeSet,
+    TableRepository,
+)
 from code.database.interpolate_func import (
     DEFAULT_INTERPOLATION_SAMPLES,
     MAX_INTERPOLATION_SAMPLES,
@@ -49,10 +55,24 @@ class DataReferenceInput(QFrame):
         self.y_layout = QHBoxLayout()
         self.x_data_input = QComboBox(self)
         self.y_data_input = QComboBox(self)
+        self.x_expression_input = QLineEdit("x", self)
+        self.y_expression_input = QLineEdit("y", self)
+        expression_tooltip = (
+            "Safe preprocessing expression using the original x and y data. "
+            "Examples: 1/x, log10(y), y/x."
+        )
+        self.x_expression_input.setToolTip(expression_tooltip)
+        self.y_expression_input.setToolTip(expression_tooltip)
+        self.x_expression_input.setMinimumWidth(90)
+        self.y_expression_input.setMinimumWidth(90)
         self.x_layout.addWidget(QLabel("X Data:", self))
         self.x_layout.addWidget(self.x_data_input)
+        self.x_layout.addWidget(QLabel("fx:", self))
+        self.x_layout.addWidget(self.x_expression_input)
         self.y_layout.addWidget(QLabel("Y Data:", self))
         self.y_layout.addWidget(self.y_data_input)
+        self.y_layout.addWidget(QLabel("fx:", self))
+        self.y_layout.addWidget(self.y_expression_input)
         layout.addLayout(self.x_layout)
         layout.addLayout(self.y_layout)
 
@@ -166,11 +186,43 @@ class DataReferenceInput(QFrame):
         self._set_ref(self.y_data_input, y_ref)
         del x_blocker, y_blocker
 
+    def preprocess_values(self) -> dict[str, str]:
+        """Return the current unvalidated expression input values."""
+
+        return {
+            "x_expression": self.x_expression_input.text(),
+            "y_expression": self.y_expression_input.text(),
+        }
+
+    def get_preprocess_spec(self) -> DataPreprocessSpec:
+        """Return the validated preprocessing specification."""
+
+        return DataPreprocessSpec.from_dict(self.preprocess_values())
+
+    def set_preprocess(
+        self,
+        preprocess: DataPreprocessSpec | dict | None,
+    ) -> None:
+        """Synchronize expression controls without emitting edits."""
+
+        spec = DataPreprocessSpec.from_dict(preprocess)
+        x_blocker = QSignalBlocker(self.x_expression_input)
+        y_blocker = QSignalBlocker(self.y_expression_input)
+        self.x_expression_input.setText(spec.x_expression)
+        self.y_expression_input.setText(spec.y_expression)
+        del x_blocker, y_blocker
+
     def refs_connect(self, x_callback, y_callback) -> None:
         """Refresh selectors after their data-reference source changes."""
 
         self.x_data_input.currentIndexChanged.connect(x_callback)
         self.y_data_input.currentIndexChanged.connect(y_callback)
+
+    def expressions_connect(self, x_callback, y_callback) -> None:
+        """Apply expressions only after the user finishes editing a field."""
+
+        self.x_expression_input.editingFinished.connect(x_callback)
+        self.y_expression_input.editingFinished.connect(y_callback)
 
     def dispose(self) -> None:
         """Disconnect callbacks and release resources owned by this object."""

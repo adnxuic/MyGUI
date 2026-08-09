@@ -16,7 +16,7 @@ from code import status_messages
 from code.database import ColumnRef, ColumnType, TableChangeSet
 from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.components import ComponentKind, ComponentRole
-from code.figuremodify.components.serialization import validate_v6_figure
+from code.figuremodify.components.serialization import validate_v8_figure
 from code.figuremodify.style_base.color_models import PaletteDefinition
 from code.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
@@ -163,7 +163,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         self.canvas.current_axes.legend()
         return ids
 
-    def test_canvas_registers_complete_component_tree_and_valid_v6_snapshot(self):
+    def test_canvas_registers_complete_component_tree_and_valid_v8_snapshot(self):
         ids = self._add_all_runtime_components()
         registry = self.canvas.component_registry
         registry.validate_tree()
@@ -203,7 +203,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(registry.resolve_target(component_id))
 
         snapshot = self.canvas.component_snapshot()
-        validate_v6_figure(
+        validate_v8_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -301,6 +301,12 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             controller.component_id
         ).inspector(
             controller.component_id
+        )
+
+        self.sheet.set_block(
+            0,
+            0,
+            [[10.0, 100.0], [20.0, 200.0]],
         )
 
         self.canvas.add_scatter(
@@ -704,6 +710,53 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.x_ref,
         )
 
+    def test_plot_preprocessing_editor_applies_and_rolls_back_atomically(self):
+        line_pair, _valid_pair = self._set_source_data()
+        object_id = "preprocessing-editor-plot"
+        self.canvas.add_plot(
+            line_pair.x,
+            line_pair.y,
+            "-",
+            2.0,
+            "#123456",
+            "preprocessed",
+            self.x_ref,
+            self.y_ref,
+            object_id=object_id,
+        )
+        controller = self.canvas.component_registry.get(object_id)
+        line = controller.resolve_target()
+        widget = self.canvas.component_editor_manager.editor(object_id)
+        data_section = widget.section("data")
+        x_expression = data_section.data_choice_widget.x_expression_input
+
+        x_expression.setText("1/x")
+        self.assertTrue(data_section.x_expression_change())
+        self.assertEqual(
+            controller.state.data["preprocess"]["x_expression"],
+            "1/x",
+        )
+        self.assertTrue(np.isnan(float(line.get_xdata()[0])))
+        valid_x = np.asarray(line.get_xdata(), dtype=float)[1:]
+        np.testing.assert_allclose(valid_x, [1.0, 0.5, 1.0 / 3.0])
+        before_x = np.asarray(line.get_xdata()).copy()
+        events = []
+        handler = lambda message, level: events.append((message, level))
+        status_messages.set_status_handler(handler)
+        try:
+            x_expression.setText("__import__('os')")
+            self.assertFalse(data_section.x_expression_change())
+            self.assertEqual(x_expression.text(), "1/x")
+            self.assertEqual(
+                controller.state.data["preprocess"]["x_expression"],
+                "1/x",
+            )
+            np.testing.assert_array_equal(line.get_xdata(), before_x)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0][1], "error")
+        finally:
+            status_messages.clear_status_handler(handler)
+
     def test_failed_color_change_rolls_back_widget_and_success_is_green(self):
         line_pair, _valid_pair = self._set_source_data()
         object_id = "rollback-color-plot"
@@ -849,7 +902,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                         ),
                         1,
                     )
-                validate_v6_figure(
+                validate_v8_figure(
                     restored.component_snapshot(),
                     self._available_refs(restored),
                     restored.project_id,
@@ -942,6 +995,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 fontsize=14.0,
             )
             plot = component("data_plot")
+            plot["data"]["preprocess"] = {
+                "x_expression": "1/(x+1)",
+                "y_expression": "y",
+            }
             plot["properties"].update(
                 linewidth=4.25,
                 marker="s",
@@ -975,7 +1032,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 framealpha=0.75,
                 title="Native legend",
             )
-            validate_v6_figure(
+            validate_v8_figure(
                 figure,
                 self._available_refs(),
                 self.canvas.project_id,
@@ -1007,6 +1064,17 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                     item["id"]: item
                     for item in restored_figure["components"]
                 }
+                self.assertEqual(
+                    restored_by_id[plot["id"]]["data"]["preprocess"],
+                    plot["data"]["preprocess"],
+                )
+                restored_plot = restored.component_registry.resolve_target(
+                    plot["id"]
+                )
+                np.testing.assert_allclose(
+                    np.asarray(restored_plot.get_xdata(), dtype=float),
+                    [1.0, 0.5, 1.0 / 3.0, 0.25],
+                )
                 restored_axes_controller = (
                     restored.component_registry.get(axes["id"])
                 )
@@ -1238,7 +1306,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             second.state.data["subplot"]["layout_group"],
             10,
         )
-        validate_v6_figure(
+        validate_v8_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

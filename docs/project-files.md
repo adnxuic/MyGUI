@@ -1,13 +1,13 @@
 # MyGUI Project Files
 
-MyGUI project files use JSON schema version 7. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading migrates supported older files to v7 in memory, and every subsequent save writes v7.
+MyGUI project files use JSON schema version 8. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading migrates supported older files to v8 in memory, and every subsequent save writes v8.
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 7,
+  "schema_version": 8,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -18,7 +18,7 @@ MyGUI project files use JSON schema version 7. One file contains one project, it
 ```
 
 - `schema` is always `mygui-project`.
-- `schema_version` is always `7` after migration, loading, or saving.
+- `schema_version` is always `8` after migration, loading, or saving.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -116,10 +116,10 @@ Role-specific `data` fields are:
 | --- | --- |
 | `line` | finite, equal-length `x` and `y` arrays |
 | `function_curve` | `expression`, `x_start`, `x_stop` |
-| `data_plot` | `x_ref`, `y_ref` |
-| `scatter` | `x_ref`, `y_ref` |
-| `interpolation` | `x_ref`, `y_ref`, `method`, `k`, `samples`, `lam`, `lam_auto` |
-| `fit_curve` | `x_ref`, `y_ref`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
+| `data_plot` | `x_ref`, `y_ref`, `preprocess` |
+| `scatter` | `x_ref`, `y_ref`, `preprocess` |
+| `interpolation` | `x_ref`, `y_ref`, `preprocess`, `method`, `k`, `samples`, `lam`, `lam_auto` |
+| `fit_curve` | `x_ref`, `y_ref`, `preprocess`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
 | `in_axes_zoom` | no persisted data; mirrors are derived at runtime |
 | `in_axes_image` | `filename`, detected `mime_type`, original `payload_base64` bytes |
 
@@ -141,6 +141,12 @@ application state changes.
 
 `x_ref` and `y_ref` contain `project_id`, `sheet_id`, and `column_id`. The reference must resolve inside the same project. X accepts Number or Datetime columns; Y accepts Number columns.
 
+`preprocess` contains exactly `x_expression` and `y_expression`. Both are
+validated element-wise mathematical expressions over the fixed variables
+`x` and `y`; identity values are `x` and `y`. Date/time X references require
+the identity X expression and prohibit using `x` in the Y expression. See
+`data-preprocessing.md` for the expression and row-validity contract.
+
 Color properties are normalized to uppercase `#RRGGBB` or `#RRGGBBAA`. An Axes color-cycle snapshot is JSON `null` when no palette is active; otherwise it stores:
 
 - `palette.id`, `name`, `category`, and `source`;
@@ -153,7 +159,7 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v7.
+snapshot only and does not change schema v8.
 
 ## Stable IDs and migration
 
@@ -162,14 +168,17 @@ Existing Plot, Scatter, Fit, and Interpolation `object_id` values are retained. 
 - v4 is migrated to v5 first, adding missing color-cycle and color-order state.
 - v5 is then converted to the v6 component tree.
 - v6 is strictly normalized and migrated without loss to v7.
-- v7 is normalized and validated directly, including embedded inset images.
+- v7 is migrated to v8 by adding identity preprocessing to every Plot,
+  Scatter, Interpolation, and Fit component.
+- v8 is normalized and validated directly, including embedded inset images
+  and preprocessing expressions.
 - v1-v3 and unknown versions are rejected.
 
 Migration functions operate on deep copies and do not modify the supplied dictionary.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
-Legend directly from the v7 tree. Zoom mirrors receive one final batch refresh
+Legend directly from the v8 tree. Zoom mirrors receive one final batch refresh
 after their sources exist. Restore does not
 create legacy chart arrays or Modifier records as an intermediate runtime
 format. The Registry tree is subsequently the source for every save.
@@ -182,7 +191,8 @@ Before Table or Figure application state changes, the loader validates:
 - unique component IDs, known kind/role pairs, existing parents, an acyclic connected hierarchy, and unique semantic selectors;
 - required fixed Axes children and valid subplot groups;
 - property/data JSON types, finite numbers, normalized colors, and unique chart order values;
-- data references, compatible column types, interpolation methods, and fitting engines.
+- data references, compatible column types, preprocessing expressions,
+  interpolation methods, and fitting engines.
 
 Project writes use a temporary file followed by atomic replacement. If the operating system blocks replacement, saving fails and leaves the previous project file unchanged. `size_inches` and `dpi` remain document/export values; display device-pixel ratio does not alter them.
 
@@ -192,4 +202,4 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v7.
+are not added to schema v8.

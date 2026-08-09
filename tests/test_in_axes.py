@@ -146,8 +146,18 @@ class InAxesTests(unittest.TestCase):
             cycle_before,
         )
 
-        x_ref = ColumnRef(self.project.id, "sheet", "x")
-        y_ref = ColumnRef(self.project.id, "sheet", "y")
+        sheet = next(iter(self.project.sheets.values()))
+        sheet.set_block(0, 0, [[0.5, 0.75], [1.5, 2.5]])
+        x_ref = ColumnRef(
+            self.project.id,
+            sheet.id,
+            sheet.columns[0].id,
+        )
+        y_ref = ColumnRef(
+            self.project.id,
+            sheet.id,
+            sheet.columns[1].id,
+        )
         self.canvas.add_scatter(
             [0.5, 1.5],
             [0.75, 2.5],
@@ -546,7 +556,7 @@ class InAxesTests(unittest.TestCase):
             "figure": without_insets,
         }
         migrated = migrate_project_snapshot(legacy_project)
-        self.assertEqual(migrated["schema_version"], 7)
+        self.assertEqual(migrated["schema_version"], 8)
         self.assertEqual(migrated["figure"], without_insets)
 
 

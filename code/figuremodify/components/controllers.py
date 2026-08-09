@@ -32,6 +32,7 @@ from code.database.interpolate_func import (
     SMOOTHING_SPLINE_METHOD,
     interpolate_dict,
 )
+from code.database import DataPreprocessSpec
 from code.database.safe_expression import compile_math_expression
 
 from .base import ComponentController, RemovalHandle
@@ -2289,6 +2290,21 @@ class LineController(ComponentController[Line2D]):
         | UpdateImpact.REDRAW
     )
 
+    def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        if (
+            state.role
+            in {
+                ComponentRole.DATA_PLOT,
+                ComponentRole.INTERPOLATION,
+                ComponentRole.FIT_CURVE,
+            }
+            and "preprocess" not in state.data
+        ):
+            data = deepcopy(state.data)
+            data["preprocess"] = DataPreprocessSpec().to_dict()
+            state = state.clone(data=data)
+        super().__init__(state, **kwargs)
+
     def _validate_data(self, state: ComponentState) -> None:
         role = state.role
         if role is ComponentRole.LINE:
@@ -2314,9 +2330,10 @@ class LineController(ComponentController[Line2D]):
             _finite_number(state.data["x_stop"], "x_stop")
             return
         if role is ComponentRole.DATA_PLOT:
-            _exact_data_fields(state, {"x_ref", "y_ref"})
+            _exact_data_fields(state, {"x_ref", "y_ref", "preprocess"})
             _column_reference(state.data["x_ref"], "x_ref")
             _column_reference(state.data["y_ref"], "y_ref")
+            DataPreprocessSpec.from_dict(state.data["preprocess"])
             return
         if role is ComponentRole.INTERPOLATION:
             expected = {
@@ -2327,10 +2344,12 @@ class LineController(ComponentController[Line2D]):
                 "samples",
                 "lam",
                 "lam_auto",
+                "preprocess",
             }
             _exact_data_fields(state, expected)
             _column_reference(state.data["x_ref"], "x_ref")
             _column_reference(state.data["y_ref"], "y_ref")
+            DataPreprocessSpec.from_dict(state.data["preprocess"])
             method = state.data["method"]
             if method not in interpolate_dict:
                 raise ComponentValidationError(
@@ -2382,10 +2401,12 @@ class LineController(ComponentController[Line2D]):
                 "expression",
                 "x_start",
                 "x_stop",
+                "preprocess",
             }
             _exact_data_fields(state, expected)
             _column_reference(state.data["x_ref"], "x_ref")
             _column_reference(state.data["y_ref"], "y_ref")
+            DataPreprocessSpec.from_dict(state.data["preprocess"])
             if state.data["engine"] not in {"Python", "Matlab"}:
                 raise ComponentValidationError(
                     "Fitting engine must be Python or Matlab."
@@ -2727,6 +2748,10 @@ class ScatterController(CollectionController):
     DELETE_IMPACTS = LineController.DELETE_IMPACTS
 
     def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        if state.data and "preprocess" not in state.data:
+            data = deepcopy(state.data)
+            data["preprocess"] = DataPreprocessSpec().to_dict()
+            state = state.clone(data=data)
         self._marker_value = str(state.properties.get("marker", "o"))
         super().__init__(state, **kwargs)
 
@@ -2736,9 +2761,10 @@ class ScatterController(CollectionController):
         # their two stable column references.
         if not state.data:
             return
-        _exact_data_fields(state, {"x_ref", "y_ref"})
+        _exact_data_fields(state, {"x_ref", "y_ref", "preprocess"})
         _column_reference(state.data["x_ref"], "x_ref")
         _column_reference(state.data["y_ref"], "y_ref")
+        DataPreprocessSpec.from_dict(state.data["preprocess"])
 
     def _first_color(
         self, values: np.ndarray, fallback: str

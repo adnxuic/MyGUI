@@ -9,7 +9,12 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from code import tex_config
-from code.database import ColumnRef, TableChangeSet, TableRepository
+from code.database import (
+    ColumnRef,
+    DataPreprocessSpec,
+    TableChangeSet,
+    TableRepository,
+)
 from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.component_services import (
     AxesCommandService,
@@ -393,6 +398,9 @@ class ComponentInspectorTests(unittest.TestCase):
         method = tuple(interpolate_dict)[-1]
         try:
             references.set_refs(second, first)
+            references.set_preprocess(
+                DataPreprocessSpec("1/x", "y/x")
+            )
             options.set_options(
                 method=method,
                 samples=80,
@@ -404,6 +412,10 @@ class ComponentInspectorTests(unittest.TestCase):
             self.assertEqual(references.get_x_ref(), second)
             self.assertEqual(references.get_y_ref(), first)
             self.assertEqual(ref_events, [])
+            self.assertEqual(
+                references.get_preprocess_spec(),
+                DataPreprocessSpec("1/x", "y/x"),
+            )
             self.assertEqual(option_events, [])
             self.assertEqual(
                 options.options(),

@@ -77,8 +77,8 @@ def _chart_data_references(controller, context, parent):
         controller,
         context=context,
         apply_references=(
-            lambda target, x_ref, y_ref, _axis:
-            context.chart_data.set_refs(target, x_ref, y_ref)
+            lambda target, x_ref, y_ref, preprocess, _axis:
+            context.chart_data.set_refs(target, x_ref, y_ref, preprocess)
         ),
         success_message=(
             lambda axis:
@@ -93,8 +93,8 @@ def _fit_data_references(controller, context, parent):
         controller,
         context=context,
         apply_references=(
-            lambda target, x_ref, y_ref, _axis:
-            context.fitting.set_sources(target, x_ref, y_ref)
+            lambda target, x_ref, y_ref, preprocess, _axis:
+            context.fitting.set_sources(target, x_ref, y_ref, preprocess)
         ),
         success_message=(
             lambda axis:
@@ -106,12 +106,13 @@ def _fit_data_references(controller, context, parent):
 
 
 def _interpolation_data_references(controller, context, parent):
-    def apply(target, x_ref, y_ref, _axis):
+    def apply(target, x_ref, y_ref, preprocess, _axis):
         data = target.read_state().data
         return context.interpolation.configure(
             target,
             x_ref=x_ref,
             y_ref=y_ref,
+            preprocess=preprocess,
             method=data["method"],
             k=data["k"],
             samples=data["samples"],

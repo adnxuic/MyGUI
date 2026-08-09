@@ -28,14 +28,22 @@ The fit options dialog is non-modal. If the dialog is closed before a background
 | Parameter | Required | Description |
 | --- | --- | --- |
 | X Data | Yes | Source column for X values. |
+| X expression | Yes | Element-wise preprocessing formula. Default `x`. |
 | Y Data | Yes | Source column for Y values. |
+| Y expression | Yes | Element-wise preprocessing formula. Default `y`. |
 
 Rules:
 
 - X and Y must be non-empty.
 - X and Y must have the same length.
-- X and Y must contain finite numeric values.
+- X and Y preprocessing is evaluated from the original row-aligned values.
+- Rows with missing or non-finite transformed values are removed as pairs.
+- At least one finite transformed pair must remain.
 - Some models require stricter domains, such as positive or non-negative X values.
+
+Changing a source or preprocessing expression invalidates any running request
+and preserves the previous curve/result until the user explicitly fits again.
+The fit dialog range uses the minimum and maximum preprocessed X values.
 
 ## Fit Types
 
@@ -68,7 +76,7 @@ A failed fit does not update the plotted curve or result table.
 
 ## Project Files
 
-Fitting curves are saved in schema v7 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, fitting options, result data, expression, and evaluation range are stored in `data`.
+Fitting curves are saved in schema v8 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
 Saved records include a stable `object_id`, X/Y `ColumnRef` objects, fitting engine, fit type,
 advanced options when used, fit result, drawing expression, X range, style,
 color, and legend label.

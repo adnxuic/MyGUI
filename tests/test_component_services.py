@@ -5,11 +5,14 @@ import matplotlib
 import numpy as np
 from matplotlib.figure import Figure
 
-from code.database import ColumnRef, TableRepository
+from code.database import ColumnRef, DataPreprocessSpec, TableRepository
+from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
     ComponentDependencyService,
+    FitService,
+    InterpolationService,
 )
 from code.figuremodify.components import (
     ComponentEventKind,
@@ -24,6 +27,7 @@ from code.figuremodify.components import (
     FigureController,
     LegendController,
     LineController,
+    InterpolationController,
     ScatterController,
     TextController,
     TitleController,
@@ -74,6 +78,7 @@ class ComponentServiceTests(unittest.TestCase):
         data = {
             "x_ref": self.x_ref.to_dict(),
             "y_ref": self.y_ref.to_dict(),
+            "preprocess": DataPreprocessSpec().to_dict(),
         }
         if role is ComponentRole.FIT_CURVE:
             data.update(
@@ -491,6 +496,166 @@ class ComponentServiceTests(unittest.TestCase):
             np.isfinite(np.asarray(plot_line.get_ydata(), dtype=float)).any()
         )
         self.assertEqual(fit.state.data["expression"], "")
+
+    def test_chart_preprocessing_persists_filters_and_refreshes(self):
+        pair = self.repository.line_pair(self.x_ref, self.y_ref)
+        line, = self.axes.plot(pair.x, pair.y)
+        plot = self._line_controller(
+            "preprocessed-plot",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        service = ChartDataService(self.repository, self.registry)
+
+        result = service.set_refs(
+            plot,
+            self.x_ref,
+            self.y_ref,
+            DataPreprocessSpec("1/x", "y/x"),
+        )
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.notices)
+        self.assertEqual(
+            plot.state.data["preprocess"],
+            {"x_expression": "1/x", "y_expression": "y/x"},
+        )
+        np.testing.assert_allclose(
+            np.asarray(line.get_xdata(), dtype=float)[1:],
+            [1.0, 0.5],
+        )
+        np.testing.assert_allclose(
+            np.asarray(line.get_ydata(), dtype=float)[1:],
+            [2.0, 2.0],
+        )
+        self.assertTrue(np.isnan(float(line.get_xdata()[0])))
+
+        self.sheet.set_block(1, 0, [[4.0, 8.0]])
+        refreshed = service.refresh_affected({self.x_ref, self.y_ref})
+        self.assertEqual(len(refreshed), 1)
+        self.assertAlmostEqual(float(line.get_xdata()[1]), 0.25)
+        self.assertAlmostEqual(float(line.get_ydata()[1]), 2.0)
+
+    def test_fit_preprocessing_is_manual_and_invalidates_inflight_result(self):
+        pair = self.repository.valid_pair(self.x_ref, self.y_ref)
+        line, = self.axes.plot(pair.x, pair.y)
+        fit = self._line_controller(
+            "preprocessed-fit",
+            ComponentRole.FIT_CURVE,
+            line,
+        )
+        original_x = np.asarray(line.get_xdata()).copy()
+        service = FitService(self.repository, self.registry)
+        generation = service.next_request(fit.component_id)
+
+        result = service.set_sources(
+            fit,
+            self.x_ref,
+            self.y_ref,
+            DataPreprocessSpec("1/x", "y"),
+        )
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.notices)
+        self.assertFalse(
+            service.request_is_current(fit.component_id, generation)
+        )
+        np.testing.assert_array_equal(line.get_xdata(), original_x)
+        resolved = service.resolve_sources(fit)
+        np.testing.assert_allclose(resolved.x, [1.0, 0.5])
+        np.testing.assert_allclose(resolved.y, [2.0, 4.0])
+
+    def test_scatter_preprocessing_filters_nonfinite_rows(self):
+        pair = self.repository.valid_pair(self.x_ref, self.y_ref)
+        artist = self.axes.scatter(pair.x, pair.y)
+        scatter = ScatterController(
+            ComponentState(
+                id="preprocessed-scatter",
+                kind=ComponentKind.SCATTER,
+                role=ComponentRole.SCATTER,
+                selector={"object_id": "preprocessed-scatter"},
+                data={
+                    "x_ref": self.x_ref.to_dict(),
+                    "y_ref": self.y_ref.to_dict(),
+                    "preprocess": DataPreprocessSpec().to_dict(),
+                },
+            )
+        )
+        self.registry.register(
+            scatter,
+            target=artist,
+            require_parent=False,
+        )
+        service = ChartDataService(self.repository, self.registry)
+
+        result = service.set_refs(
+            scatter,
+            self.x_ref,
+            self.y_ref,
+            DataPreprocessSpec("1/x", "y"),
+        )
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.notices)
+        np.testing.assert_allclose(
+            np.asarray(artist.get_offsets(), dtype=float),
+            [[1.0, 2.0], [0.5, 4.0]],
+        )
+
+    def test_interpolation_runs_after_preprocessing_and_refreshes(self):
+        method = tuple(interpolate_dict)[2]
+        line, = self.axes.plot([], [])
+        interpolation = InterpolationController(
+            ComponentState(
+                id="preprocessed-interpolation",
+                kind=ComponentKind.LINE,
+                role=ComponentRole.INTERPOLATION,
+                selector={"object_id": "preprocessed-interpolation"},
+                data={
+                    "x_ref": self.x_ref.to_dict(),
+                    "y_ref": self.y_ref.to_dict(),
+                    "preprocess": DataPreprocessSpec().to_dict(),
+                    "method": method,
+                    "k": 3,
+                    "samples": 25,
+                    "lam": None,
+                    "lam_auto": True,
+                },
+            )
+        )
+        self.registry.register(
+            interpolation,
+            target=line,
+            require_parent=False,
+        )
+        service = InterpolationService(self.repository, self.registry)
+
+        result = service.configure(
+            interpolation,
+            x_ref=self.x_ref,
+            y_ref=self.y_ref,
+            preprocess=DataPreprocessSpec("x+1", "2*y"),
+            method=method,
+            k=3,
+            samples=25,
+            lam=None,
+            lam_auto=True,
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            interpolation.state.data["preprocess"],
+            {"x_expression": "x+1", "y_expression": "2*y"},
+        )
+        self.assertAlmostEqual(float(line.get_xdata()[0]), 1.0)
+        self.assertAlmostEqual(float(line.get_xdata()[-1]), 3.0)
+        self.assertAlmostEqual(float(line.get_ydata()[0]), 2.0)
+        self.assertAlmostEqual(float(line.get_ydata()[-1]), 8.0)
+
+        self.sheet.set_block(2, 1, [[10.0]])
+        refreshed = service.refresh(interpolation)
+        self.assertTrue(refreshed.ok)
+        self.assertAlmostEqual(float(line.get_ydata()[-1]), 20.0)
 
     def test_dependency_service_restores_exact_component_state(self):
         pair = self.repository.line_pair(self.x_ref, self.y_ref)

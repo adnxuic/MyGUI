@@ -246,6 +246,7 @@ class InterpolationSection(QFrame, EditorSection):
             self.controller,
             x_ref=x_ref,
             y_ref=y_ref,
+            preprocess=state.data["preprocess"],
             **options,
         )
         if not self.context.messages.present(

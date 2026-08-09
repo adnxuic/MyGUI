@@ -41,7 +41,7 @@ from .inspector import EditorSection
 
 ApplyProperties = Callable[[dict[str, object]], object]
 ApplyReferences = Callable[
-    [object, ColumnRef, ColumnRef, str],
+    [object, ColumnRef, ColumnRef, dict[str, str], str],
     object,
 ]
 
@@ -75,12 +75,17 @@ class DataReferenceSection(QWidget, EditorSection):
             parent=self,
         )
         self.data_choice_widget.set_refs(x_ref, y_ref)
+        self.data_choice_widget.set_preprocess(data["preprocess"])
         layout.addWidget(self.data_choice_widget)
         self.x_data_input = self.data_choice_widget.x_data_input
         self.y_data_input = self.data_choice_widget.y_data_input
         self.data_choice_widget.refs_connect(
             self.x_data_change,
             self.y_data_change,
+        )
+        self.data_choice_widget.expressions_connect(
+            self.x_expression_change,
+            self.y_expression_change,
         )
 
     def _message(self, axis: str) -> str:
@@ -98,6 +103,7 @@ class DataReferenceSection(QWidget, EditorSection):
             self.controller,
             x_ref,
             y_ref,
+            self.data_choice_widget.preprocess_values(),
             axis,
         )
         if not self.context.messages.present(
@@ -118,6 +124,16 @@ class DataReferenceSection(QWidget, EditorSection):
 
         return self._apply("y")
 
+    def x_expression_change(self) -> bool:
+        """Apply the completed X preprocessing expression edit."""
+
+        return self._apply("x")
+
+    def y_expression_change(self) -> bool:
+        """Apply the completed Y preprocessing expression edit."""
+
+        return self._apply("y")
+
     def sync_from_controller(self) -> None:
         """Refresh controls from authoritative Controller state."""
 
@@ -126,6 +142,7 @@ class DataReferenceSection(QWidget, EditorSection):
             ColumnRef.from_dict(data["x_ref"]),
             ColumnRef.from_dict(data["y_ref"]),
         )
+        self.data_choice_widget.set_preprocess(data["preprocess"])
 
     def dispose(self) -> None:
         """Disconnect callbacks and release resources owned by this object."""

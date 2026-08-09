@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
@@ -13,6 +14,7 @@ from code.database import ColumnRef, ColumnType
 from code.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
+    migrate_v7_to_v8,
     restore_project_snapshot,
     save_project_snapshot,
 )
@@ -142,11 +144,11 @@ class ProjectIoTests(unittest.TestCase):
         }), encoding="utf-8")
         with self.assertRaisesRegex(
             ValueError,
-            "supported versions are v4, v5, v6, and v7",
+            "supported versions are v4, v5, v6, v7, and v8",
         ):
             load_project_file(self.path)
 
-    def test_schema_v4_migrates_through_v5_v6_to_v7(self):
+    def test_schema_v4_migrates_through_v5_v6_v7_to_v8(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -162,10 +164,60 @@ class ProjectIoTests(unittest.TestCase):
 
         migrated = load_project_file(self.path)
         migrated_legacy = v6_figure_to_legacy(migrated["figure"])
-        self.assertEqual(migrated["schema_version"], 7)
+        self.assertEqual(migrated["schema_version"], 8)
+        self.assertEqual(
+            self.component(migrated, "data_plot")["data"]["preprocess"],
+            {"x_expression": "x", "y_expression": "y"},
+        )
         self.assertIsNone(migrated_legacy["axes"][0]["color_cycle"])
         self.assertEqual(migrated_legacy["plots"][0]["color_order"], 0)
         self.assertEqual(migrated_legacy["plots"][0]["color"], "#1F77B4")
+
+    def test_v7_to_v8_migration_is_pure_and_adds_identity_preprocessing(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        v7 = json.loads(self.path.read_text(encoding="utf-8"))
+        v7["schema_version"] = 7
+        for component in v7["figure"]["components"]:
+            component["data"].pop("preprocess", None)
+        original = deepcopy(v7)
+
+        migrated = migrate_v7_to_v8(v7)
+
+        self.assertEqual(v7, original)
+        self.assertEqual(migrated["schema_version"], 8)
+        self.assertEqual(
+            self.component(migrated, "data_plot")["data"]["preprocess"],
+            {"x_expression": "x", "y_expression": "y"},
+        )
+
+    def test_v8_rejects_unsafe_preprocessing_before_restore(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        self.component(raw, "data_plot")["data"]["preprocess"][
+            "x_expression"
+        ] = "__import__('os')"
+        self.path.write_text(json.dumps(raw), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "preprocess"):
+            load_project_file(self.path)
+
+    def test_v8_rejects_non_identity_datetime_preprocessing_before_restore(self):
+        _canvas, sheet = self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        plot_data = self.component(raw, "data_plot")["data"]
+        plot_data["x_ref"] = ColumnRef(
+            raw["project"]["id"],
+            sheet.id,
+            sheet.columns[2].id,
+        ).to_dict()
+        plot_data["preprocess"]["x_expression"] = "1/x"
+        self.path.write_text(json.dumps(raw), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "Date/time X data"):
+            load_project_file(self.path)
 
     def test_rgba_and_custom_palette_cursor_roundtrip(self):
         canvas, _sheet = self.build_project()

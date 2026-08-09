@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any, Iterable
 from uuid import NAMESPACE_URL, uuid5
 
-from code.database import ColumnRef, ColumnType
+from code.database import ColumnRef, ColumnType, DataPreprocessSpec
 from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.style_base.color_models import ColorCycleState, normalize_color
 
@@ -782,6 +782,15 @@ def normalize_v7_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def normalize_v8_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a schema-v8 Figure component tree."""
+
+    return _normalize_component_figure(
+        figure_snapshot,
+        allow_in_axes=True,
+    )
+
+
 def _canonical_json_value(value: Any, path: str) -> Any:
     if isinstance(value, tuple):
         return [
@@ -908,6 +917,7 @@ def _validate_component_properties(
     path: str,
     available_refs: dict[ColumnRef, ColumnType],
     project_id: str,
+    schema_version: int,
 ) -> None:
     kind = component["kind"]
     role = component["role"]
@@ -1180,6 +1190,16 @@ def _validate_component_properties(
             _validate_ref(
                 data.get("y_ref"), f"{path}.data.y_ref", project_id, available_refs, x_axis=False
             )
+            if schema_version >= 8:
+                try:
+                    preprocess = DataPreprocessSpec.from_dict(data.get("preprocess"))
+                    x_ref = ColumnRef.from_dict(data.get("x_ref"))
+                    if available_refs[x_ref] == ColumnType.DATETIME:
+                        preprocess.validate_datetime_x()
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"Invalid project field {path}.data.preprocess: {exc}"
+                    ) from exc
         if role == "line":
             x_values = _expect_list(data.get("x"), f"{path}.data.x")
             y_values = _expect_list(data.get("y"), f"{path}.data.y")
@@ -1215,7 +1235,11 @@ def _validate_component_properties(
     # or Figure state before a Controller later discovers an invalid enum,
     # selector, marker, range, or property type.
     try:
-        state = ComponentState.from_dict(component)
+        runtime_component = component
+        if schema_version < 8 and role in DATA_ROLES:
+            runtime_component = deepcopy(component)
+            runtime_component["data"]["preprocess"] = DataPreprocessSpec().to_dict()
+        state = ComponentState.from_dict(runtime_component)
         controller_type = controller_type_for(state)
         specs = {
             key: spec
@@ -1290,6 +1314,8 @@ def _validate_component_properties(
         "in_axes_zoom": set(),
         "in_axes_image": {"filename", "mime_type", "payload_base64"},
     }[role]
+    if schema_version >= 8 and role in DATA_ROLES:
+        expected_data_fields = set(expected_data_fields) | {"preprocess"}
     if set(data) != expected_data_fields:
         raise ValueError(
             f"Invalid project field {path}.data: expected fields "
@@ -1512,7 +1538,13 @@ def _validate_component_figure(
         if parent_id is not None and parent is None:
             raise ValueError(f"Unknown parent component at {path}.parent_id: {parent_id}")
         _validate_parent(component, parent, path)
-        _validate_component_properties(component, path, available_refs, project_id)
+        _validate_component_properties(
+            component,
+            path,
+            available_refs,
+            project_id,
+            schema_version,
+        )
         if parent_id is not None:
             children.setdefault(parent_id, []).append(component)
         selector_key = (
@@ -1609,6 +1641,24 @@ def validate_v7_figure(
         project_id,
         project_name,
         schema_version=7,
+        allow_in_axes=True,
+    )
+
+
+def validate_v8_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate a schema-v8 Figure with persisted data preprocessing."""
+
+    _validate_component_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=8,
         allow_in_axes=True,
     )
 

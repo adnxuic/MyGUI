@@ -182,13 +182,13 @@ class FitDomainSection(QFrame):
         x_ref = ColumnRef.from_dict(state.data["x_ref"])
         y_ref = ColumnRef.from_dict(state.data["y_ref"])
         try:
-            pair = self.repository.valid_pair(x_ref, y_ref)
+            pair = self.context.fitting.resolve_sources(self.controller)
         except (KeyError, ValueError) as exc:
             raise ValueError(str(exc)) from exc
         if pair.x.size == 0:
-            raise ValueError("X Data and Y Data have no valid row pairs.")
-        if pair.missing_count:
-            status_messages.show_warning(f"Fit ignored {pair.missing_count} rows with missing values.")
+            raise ValueError(
+                "X Data and Y Data have no valid row pairs after preprocessing."
+            )
         x_values = pair.x.tolist()
         y_values = pair.y.tolist()
         return (
@@ -198,6 +198,7 @@ class FitDomainSection(QFrame):
             y_values,
             min(x_values),
             max(x_values),
+            pair.excluded_count,
         )
 
     def open_fit_window(self, engine: str):
@@ -289,7 +290,15 @@ class FitDomainSection(QFrame):
 
         display_engine = self._engine_display_name(engine)
         try:
-            x_name, y_name, x_values, y_values, x_min, x_max = self._current_fit_data()
+            (
+                x_name,
+                y_name,
+                x_values,
+                y_values,
+                x_min,
+                x_max,
+                excluded_count,
+            ) = self._current_fit_data()
             fit_type_order, fit_options = dialog.fit_options_widget.fit_parameters()
         except ValueError as exc:
             status_messages.show_error(str(exc))
@@ -304,7 +313,16 @@ class FitDomainSection(QFrame):
             pass
         dialog.fit_button.setEnabled(False)
         dialog.fit_button.setText("Fitting...")
-        status_messages.show_message(f"{display_engine} fitting started.", "info")
+        if excluded_count:
+            status_messages.show_warning(
+                f"{display_engine} fitting started; preprocessing excluded "
+                f"{excluded_count} rows."
+            )
+        else:
+            status_messages.show_message(
+                f"{display_engine} fitting started.",
+                "info",
+            )
 
         matlab_adapter.matlab_logger().info(
             "%s fit request started request_id=%s fit_type=%s x_data=%s y_data=%s x_len=%s y_len=%s",

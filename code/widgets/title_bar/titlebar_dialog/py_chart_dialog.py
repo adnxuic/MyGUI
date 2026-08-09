@@ -12,7 +12,11 @@ from code.widgets.fig_control_window.component_editors import (
 )
 from code.widgets import qss_func
 
-from code.database import ColumnRef
+from code.database import (
+    ColumnRef,
+    DataPreprocessSpec,
+    resolve_preprocessed_pair,
+)
 from code.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
 )
@@ -30,19 +34,34 @@ def _selected_ref(combo: QComboBox) -> ColumnRef | None:
 
 
 def _selected_pair(figure_window: PyFigureWindow, x_input: QComboBox, y_input: QComboBox,
-                   *, line_mode: bool = False):
+                   preprocess=None, *, line_mode: bool = False):
     x_ref = _selected_ref(x_input)
     y_ref = _selected_ref(y_input)
     if x_ref is None or y_ref is None:
         raise ValueError("Please select X Data and Y Data.")
-    pair = figure_window.repository.line_pair(x_ref, y_ref) if line_mode else figure_window.repository.valid_pair(
-        x_ref, y_ref
+    spec = DataPreprocessSpec.from_dict(preprocess)
+    pair = resolve_preprocessed_pair(
+        figure_window.repository,
+        x_ref,
+        y_ref,
+        spec,
+        preserve_gaps=line_mode,
     )
     if not pair.valid_mask.any():
-        raise ValueError("X Data and Y Data have no valid row pairs.")
-    if pair.missing_count:
-        status_messages.show_warning(f"Ignored or masked {pair.missing_count} rows with missing values.")
-    return x_ref, y_ref, pair
+        raise ValueError(
+            "X Data and Y Data have no valid row pairs after preprocessing."
+        )
+    return x_ref, y_ref, pair, spec
+
+
+def _show_creation_result(name: str, pair) -> None:
+    if pair.excluded_count:
+        status_messages.show_warning(
+            f"{name} created; preprocessing ignored or masked "
+            f"{pair.excluded_count} rows."
+        )
+    else:
+        status_messages.show_success(f"{name} created.")
 
 
 def _new_color_input(figure_window: PyFigureWindow) -> ColorChoiceWidget:
@@ -269,11 +288,15 @@ class PyPlotDialog(QDialog):
             return
 
         try:
-            x_ref, y_ref, pair = _selected_pair(
-                self.figure_window, self.x_data_input, self.y_data_input, line_mode=True
+            x_ref, y_ref, pair, preprocess = _selected_pair(
+                self.figure_window,
+                self.x_data_input,
+                self.y_data_input,
+                self.data_reference_input.preprocess_values(),
+                line_mode=True,
             )
         except ValueError as exc:
-            QMessageBox.warning(self, 'Warning', str(exc))
+            status_messages.show_error(str(exc))
             return
 
         self.figure_window.current_canva.add_plot(x=pair.x, y=pair.y,
@@ -283,9 +306,11 @@ class PyPlotDialog(QDialog):
                                                   label=self.label_input.text(),
                                                   x_ref=x_ref,
                                                   y_ref=y_ref,
-                                                  linewidth=self.linewidth_input.value())
+                                                  linewidth=self.linewidth_input.value(),
+                                                  preprocess=preprocess)
 
         _commit_color_input(self.figure_window, self.color_input)
+        _show_creation_result("Plot", pair)
         super().accept()
 
     def reject(self):
@@ -369,11 +394,14 @@ class PyScatterDialog(QDialog):
             return
 
         try:
-            x_ref, y_ref, pair = _selected_pair(
-                self.figure_window, self.x_data_input, self.y_data_input
+            x_ref, y_ref, pair, preprocess = _selected_pair(
+                self.figure_window,
+                self.x_data_input,
+                self.y_data_input,
+                self.data_reference_input.preprocess_values(),
             )
         except ValueError as exc:
-            QMessageBox.warning(self, 'Warning', str(exc))
+            status_messages.show_error(str(exc))
             return
 
         self.figure_window.current_canva.add_scatter(x=pair.x, y=pair.y,
@@ -382,9 +410,11 @@ class PyScatterDialog(QDialog):
                                                      marker=self.style_input.currentText(),
                                                      label=self.label_input.text(),
                                                      x_ref=x_ref,
-                                                     y_ref=y_ref)
+                                                     y_ref=y_ref,
+                                                     preprocess=preprocess)
 
         _commit_color_input(self.figure_window, self.color_input)
+        _show_creation_result("Scatter", pair)
         super().accept()
 
     def reject(self):
@@ -459,11 +489,14 @@ class PyFitDialog(QDialog):
             return
 
         try:
-            x_ref, y_ref, pair = _selected_pair(
-                self.figure_window, self.x_data_input, self.y_data_input
+            x_ref, y_ref, pair, preprocess = _selected_pair(
+                self.figure_window,
+                self.x_data_input,
+                self.y_data_input,
+                self.data_reference_input.preprocess_values(),
             )
         except ValueError as exc:
-            QMessageBox.warning(self, 'Warning', str(exc))
+            status_messages.show_error(str(exc))
             return
 
         self.figure_window.current_canva.add_fit_curve(
@@ -473,9 +506,11 @@ class PyFitDialog(QDialog):
             label='fitting',
             x_ref=x_ref,
             y_ref=y_ref,
+            preprocess=preprocess,
         )
 
         _commit_color_input(self.figure_window, self.color_input)
+        _show_creation_result("Fit curve", pair)
         super().accept()
 
     def reject(self):
@@ -578,8 +613,11 @@ class PyInterpolationDialog(QDialog):
             return
 
         try:
-            x_ref, y_ref, pair = _selected_pair(
-                self.figure_window, self.x_data_input, self.y_data_input
+            x_ref, y_ref, pair, preprocess = _selected_pair(
+                self.figure_window,
+                self.x_data_input,
+                self.y_data_input,
+                self.data_reference_input.preprocess_values(),
             )
         except ValueError as exc:
             status_messages.show_error(str(exc))
@@ -591,13 +629,16 @@ class PyInterpolationDialog(QDialog):
             y=pair.y,
             x_ref=x_ref,
             y_ref=y_ref,
+            preprocess=preprocess,
             **options,
             color=self.color_input.color(),
+            announce=False,
         )
         if line is None:
             return
 
         _commit_color_input(self.figure_window, self.color_input)
+        _show_creation_result("Interpolation curve", pair)
         super().accept()
 
     def reject(self):
