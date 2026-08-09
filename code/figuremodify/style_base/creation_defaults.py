@@ -47,6 +47,19 @@ class TextCreationDefaults:
 
 
 @dataclass(frozen=True, slots=True)
+class InAxesCreationDefaults:
+    """Effective style defaults for a newly created inset Axes."""
+
+    facecolor: str
+    edgecolor: str
+    linewidth: float
+    indicator_color: str
+    indicator_linestyle: str
+    indicator_linewidth: float
+    image_interpolation: str
+
+
+@dataclass(frozen=True, slots=True)
 class ComponentCreationDefaults:
     """Effective defaults and chart palette for one Figure style."""
 
@@ -54,6 +67,7 @@ class ComponentCreationDefaults:
     line: LineCreationDefaults
     scatter: ScatterCreationDefaults
     text: TextCreationDefaults
+    in_axes: InAxesCreationDefaults
     chart_palette: PaletteDefinition
 
 
@@ -113,6 +127,8 @@ def resolve_component_creation_defaults(
         line, = line_axes.plot([], [])
         scatter = scatter_axes.scatter([], [])
         text = text_axes.text(0.0, 0.0, "")
+        inset = text_axes.inset_axes((0.55, 0.55, 0.35, 0.35))
+        indicator, _connectors = text_axes.indicate_inset_zoom(inset)
 
         cycle_colors = tuple(
             normalize_color(color)
@@ -156,6 +172,22 @@ def resolve_component_creation_defaults(
                 color=normalize_color(text.get_color()),
                 fontweight=text.get_fontweight(),
                 fontstyle=str(text.get_fontstyle()),
+            ),
+            in_axes=InAxesCreationDefaults(
+                facecolor=normalize_color(inset.get_facecolor()),
+                edgecolor=normalize_color(
+                    inset.spines["left"].get_edgecolor()
+                ),
+                linewidth=float(inset.spines["left"].get_linewidth()),
+                indicator_color=normalize_color(indicator.get_edgecolor()),
+                indicator_linestyle=str(indicator.get_linestyle()),
+                indicator_linewidth=float(indicator.get_linewidth()),
+                image_interpolation=(
+                    str(mpl.rcParams["image.interpolation"])
+                    if str(mpl.rcParams["image.interpolation"])
+                    in {"nearest", "bilinear", "bicubic"}
+                    else "bilinear"
+                ),
             ),
             chart_palette=_style_palette(style_name, cycle_colors),
         )

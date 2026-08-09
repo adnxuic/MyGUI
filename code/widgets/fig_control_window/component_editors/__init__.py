@@ -27,12 +27,14 @@ from .inspector import (
 )
 from .inputs import (
     DataReferenceInput,
+    InAxesInput,
     InterpolationOptionsInput,
     LineAppearanceInput,
 )
 from .profiles import register_production_profiles
 from .sections import (
     DataReferenceSection,
+    ImageInAxesSourceSection,
     LegendLocationSection,
     LineAppearanceSection,
     PaletteSection,
@@ -62,10 +64,12 @@ __all__ = [
     "SectionSpec",
     "TreePresentationSpec",
     "DataReferenceInput",
+    "InAxesInput",
     "InterpolationOptionsInput",
     "LineAppearanceInput",
     "register_production_profiles",
     "DataReferenceSection",
+    "ImageInAxesSourceSection",
     "PropertySection",
     "LineAppearanceSection",
     "ScatterAppearanceSection",

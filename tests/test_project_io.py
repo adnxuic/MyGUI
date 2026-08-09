@@ -140,10 +140,13 @@ class ProjectIoTests(unittest.TestCase):
             "schema": "mygui-project",
             "schema_version": 3,
         }), encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "supported versions are v4, v5, and v6"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "supported versions are v4, v5, v6, and v7",
+        ):
             load_project_file(self.path)
 
-    def test_schema_v4_migrates_through_v5_to_v6(self):
+    def test_schema_v4_migrates_through_v5_v6_to_v7(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -159,7 +162,7 @@ class ProjectIoTests(unittest.TestCase):
 
         migrated = load_project_file(self.path)
         migrated_legacy = v6_figure_to_legacy(migrated["figure"])
-        self.assertEqual(migrated["schema_version"], 6)
+        self.assertEqual(migrated["schema_version"], 7)
         self.assertIsNone(migrated_legacy["axes"][0]["color_cycle"])
         self.assertEqual(migrated_legacy["plots"][0]["color_order"], 0)
         self.assertEqual(migrated_legacy["plots"][0]["color"], "#1F77B4")

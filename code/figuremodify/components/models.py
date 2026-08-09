@@ -29,6 +29,7 @@ class ComponentKind(str, Enum):
     LEGEND = "legend"
     LINE = "line"
     SCATTER = "scatter"
+    IN_AXES = "in_axes"
 
 
 class ComponentRole(str, Enum):
@@ -55,6 +56,8 @@ class ComponentRole(str, Enum):
     FIT_CURVE = "fit_curve"
     INTERPOLATION = "interpolation"
     SCATTER = "scatter"
+    IN_AXES_ZOOM = "in_axes_zoom"
+    IN_AXES_IMAGE = "in_axes_image"
 
 
 ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
@@ -93,6 +96,12 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
         }
     ),
     ComponentKind.SCATTER: frozenset({ComponentRole.SCATTER}),
+    ComponentKind.IN_AXES: frozenset(
+        {
+            ComponentRole.IN_AXES_ZOOM,
+            ComponentRole.IN_AXES_IMAGE,
+        }
+    ),
 }
 
 

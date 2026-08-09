@@ -62,7 +62,7 @@ session; it does not keep a second selected ID. Switching project tabs
 reflects the Canvas selection and restores expansion.
 Closing a project releases its Registry and Canvas callbacks and discards its
 tree session. Selection, expansion, search text, and Explorer page state are
-not part of schema v6.
+not part of schema v7.
 
 When a project is first bound, the tree selects the current Axes when one
 exists, otherwise the Figure root. Creating an Axes, Chart, or free Text

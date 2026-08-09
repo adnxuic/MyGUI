@@ -34,7 +34,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v6.
+  serialized into `ComponentState` or schema v7.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:

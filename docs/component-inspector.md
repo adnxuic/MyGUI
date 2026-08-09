@@ -116,7 +116,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v6.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v7.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -126,7 +126,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v6
+state, artists, Locator bindings, a complete tree projection, and schema-v7
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -170,4 +170,4 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format remains schema v6. Inspector profiles, section expansion, and Qt widgets are never serialized, and the Legend profile introduces no new persistent fields.
+The project format uses schema v7. Inspector profiles, section expansion, and Qt widgets are never serialized, and the Legend profile introduces no new persistent fields.

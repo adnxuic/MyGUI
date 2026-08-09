@@ -42,15 +42,24 @@ from code.figuremodify.components import (
     FitCurveController,
     FunctionCurveController,
     InterpolationController,
+    ImageInAxesController,
     LineController,
     ScatterController,
     TextController,
     UpdateImpact,
+    ZoomInAxesController,
     create_semantic_children,
+    decode_in_axes_image,
 )
 from code.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v6_figure,
+    normalize_v7_figure,
+)
+from code.figuremodify.in_axes import (
+    ImageInAxesCreateSpec,
+    InAxesCreateSpec,
+    InAxesService,
+    ZoomInAxesCreateSpec,
 )
 
 from code import tex_config
@@ -152,6 +161,10 @@ class PyFigureCanvas(QWidget):
         self.text_render_service = TextRenderService(
             self.component_registry
         )
+        self.in_axes_service = InAxesService(
+            self.component_registry,
+            warning_callback=status_messages.show_warning,
+        )
         self.message_presenter = MessagePresenter(
             self.component_registry
         )
@@ -179,6 +192,7 @@ class PyFigureCanvas(QWidget):
             interpolation=self.interpolation_service,
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
+            in_axes=self.in_axes_service,
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
         )
@@ -789,6 +803,7 @@ class PyFigureCanvas(QWidget):
             self._selection_unsubscribe = None
         self.message_presenter.close()
         self.component_editor_manager.close()
+        self.in_axes_service.dispose()
 
     def closeEvent(self, event):
         """Handle Qt close events and release owned resources."""
@@ -1434,6 +1449,88 @@ class PyFigureCanvas(QWidget):
         self.redraw()
         return text_artist
 
+    def add_in_axes(
+        self,
+        spec: InAxesCreateSpec,
+        *,
+        object_id: str | None = None,
+    ) -> Axes:
+        """Create one Zoom or embedded-image child Axes Element atomically."""
+
+        parent_axes = self.current_axes
+        parent_id = self.current_axes_component_id
+        if parent_axes is None or parent_id is None:
+            raise ValueError("Select an axes before creating an in_axes Element.")
+        if isinstance(spec, ZoomInAxesCreateSpec):
+            role = ComponentRole.IN_AXES_ZOOM
+            controller_type = ZoomInAxesController
+            properties = spec.properties()
+            data: dict[str, Any] = {}
+        elif isinstance(spec, ImageInAxesCreateSpec):
+            role = ComponentRole.IN_AXES_IMAGE
+            controller_type = ImageInAxesController
+            properties = spec.properties()
+            data = spec.data()
+            decode_in_axes_image(data)
+        else:
+            raise TypeError("add_in_axes requires a Zoom or Image creation spec.")
+
+        component_id = object_id or new_id()
+        state = ComponentState(
+            id=component_id,
+            kind=ComponentKind.IN_AXES,
+            role=role,
+            parent_id=parent_id,
+            order=self._next_child_order(
+                parent_id,
+                kind=ComponentKind.IN_AXES,
+            ),
+            selector={"object_id": component_id},
+            properties=properties,
+            data=data,
+        )
+        controller = None
+        mirrored = None
+        with self.component_registry.registration_transaction() as transaction:
+            with mpl_style.context(self.component_style):
+                runtime = self.in_axes_service.create_runtime(
+                    parent_axes,
+                    tuple(properties["bounds"]),
+                    zorder=float(properties["zorder"]),
+                )
+            transaction.on_rollback(
+                lambda target=runtime: self.in_axes_service.destroy_runtime(target)
+            )
+            controller = controller_type(state, target=runtime)
+            initial = controller.apply_state(state)
+            if not initial.ok:
+                raise ValueError(initial.message)
+            if isinstance(controller, ZoomInAxesController):
+                self.in_axes_service.add_zoom_indicator(runtime, properties)
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=runtime)
+            self.in_axes_service.register_runtime(component_id, runtime)
+            transaction.on_rollback(
+                lambda target=component_id: self.in_axes_service.unregister_runtime(target)
+            )
+            if isinstance(controller, ZoomInAxesController):
+                mirrored = self.in_axes_service.refresh_zoom(controller)
+            self._prepare_created_component(controller, transaction)
+
+        self._select_created_component(controller)
+        if not self._restoring_component_tree_now:
+            self.redraw()
+            if role is ComponentRole.IN_AXES_ZOOM and mirrored == 0:
+                status_messages.show_warning(
+                    "Zoom inset created, but the parent Axes has no visible "
+                    "Line or Scatter components yet."
+                )
+            elif role is ComponentRole.IN_AXES_ZOOM:
+                status_messages.show_success("Zoom inset created.")
+            else:
+                status_messages.show_success("Image inset created.")
+        return runtime.axes
+
     def save(self, filename, dpi=None):
         """Save the current figure through the selected destination."""
 
@@ -1453,7 +1550,7 @@ class PyFigureCanvas(QWidget):
         )
 
     def _restore_component_state(self, state: ComponentState):
-        """Materialize one dynamic v6 component and reapply its full state."""
+        """Materialize one dynamic v7 component and reapply its full state."""
 
         if state.id in self.component_registry:
             return self.component_registry.get(state.id)
@@ -1468,7 +1565,48 @@ class PyFigureCanvas(QWidget):
         properties = state.properties
         data = state.data
         role = state.role
-        if role is ComponentRole.FUNCTION_CURVE:
+        if role is ComponentRole.IN_AXES_ZOOM:
+            self.add_in_axes(
+                ZoomInAxesCreateSpec(
+                    bounds=tuple(properties["bounds"]),
+                    xlim=tuple(properties["xlim"]),
+                    ylim=tuple(properties["ylim"]),
+                    facecolor=properties["facecolor"],
+                    edgecolor=properties["edgecolor"],
+                    linewidth=properties["linewidth"],
+                    indicator_color=properties["indicator_color"],
+                    indicator_linestyle=properties["indicator_linestyle"],
+                    indicator_linewidth=properties["indicator_linewidth"],
+                    indicator_alpha=properties["indicator_alpha"],
+                    visible=properties["visible"],
+                    zorder=properties["zorder"],
+                    frameon=properties["frameon"],
+                    ticks_visible=properties["ticks_visible"],
+                    region_visible=properties["region_visible"],
+                    connectors_visible=properties["connectors_visible"],
+                ),
+                object_id=state.id,
+            )
+        elif role is ComponentRole.IN_AXES_IMAGE:
+            self.add_in_axes(
+                ImageInAxesCreateSpec(
+                    bounds=tuple(properties["bounds"]),
+                    filename=data["filename"],
+                    mime_type=data["mime_type"],
+                    payload_base64=data["payload_base64"],
+                    facecolor=properties["facecolor"],
+                    edgecolor=properties["edgecolor"],
+                    linewidth=properties["linewidth"],
+                    opacity=properties["opacity"],
+                    fit_mode=properties["fit_mode"],
+                    interpolation=properties["interpolation"],
+                    visible=properties["visible"],
+                    zorder=properties["zorder"],
+                    frameon=properties["frameon"],
+                ),
+                object_id=state.id,
+            )
+        elif role is ComponentRole.FUNCTION_CURVE:
             self.add_curve(
                 data["expression"],
                 data["x_start"],
@@ -1658,11 +1796,14 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated v6 component tree directly."""
+        """Materialize and apply a validated v7 component tree directly."""
 
         self._restoring_component_tree_now = True
         try:
-            with self.component_registry.batch_events():
+            with (
+                self.component_registry.batch_events(),
+                self.in_axes_service.suspend_refresh(),
+            ):
                 self._restore_component_tree_impl(component_tree)
         finally:
             self._restoring_component_tree_now = False
@@ -1686,7 +1827,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v6_figure(source)
+        source = normalize_v7_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -1756,12 +1897,23 @@ class PyFigureCanvas(QWidget):
         ):
             self._restore_component_state(state)
 
+        in_axes_states = [
+            state
+            for state in states
+            if state.kind is ComponentKind.IN_AXES
+        ]
+        for state in sorted(
+            in_axes_states,
+            key=lambda item: (item.parent_id or "", item.order, item.id),
+        ):
+            self._restore_component_state(state)
+
         self.apply_component_tree(source)
 
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all v6 states after their Matplotlib targets exist."""
+        """Apply all v7 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return
@@ -1807,6 +1959,16 @@ class PyFigureCanvas(QWidget):
                 ComponentKind.LEGEND,
             }
         ]
+        in_axes_states = [
+            state
+            for state in body_states
+            if state.kind is ComponentKind.IN_AXES
+        ]
+        body_states = [
+            state
+            for state in body_states
+            if state.kind is not ComponentKind.IN_AXES
+        ]
         tex_fallback = False
 
         def apply_states(values: list[ComponentState]) -> None:
@@ -1850,6 +2012,8 @@ class PyFigureCanvas(QWidget):
         # Raw Line/Scatter data can autoscale the Axes.  Reapply the persisted
         # Axes range after that update has been coalesced.
         apply_states(axes_states)
+        apply_states(in_axes_states)
+        self.in_axes_service.refresh_all_zoom()
 
         for legend_state in legend_states:
             controller = self.component_registry.get(legend_state.id)
@@ -1905,7 +2069,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the v6 component tree used by project persistence."""
+        """Return the v7 component tree used by project persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -1925,4 +2089,4 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v6_figure(snapshot)
+        return normalize_v7_figure(snapshot)

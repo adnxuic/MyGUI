@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 from copy import deepcopy
 from dataclasses import dataclass
+from io import BytesIO
 import math
 from pathlib import Path
 from typing import Any, ClassVar
+import warnings
 
 import numpy as np
 from matplotlib import style as mpl_style
@@ -20,6 +23,7 @@ from matplotlib.lines import Line2D
 from matplotlib.markers import MarkerStyle
 from matplotlib.spines import Spine
 from matplotlib.text import Text
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from code.database.interpolate_func import (
     B_SPLINE_METHOD,
@@ -99,6 +103,94 @@ def _rectangle(value: Any) -> tuple[float, float, float, float]:
             "Rectangle width and height must be positive."
         )
     return result
+
+
+def _in_axes_rectangle(value: Any) -> tuple[float, float, float, float]:
+    result = _rectangle(value)
+    if not all(math.isfinite(item) for item in result):
+        raise ComponentValidationError("Inset bounds must be finite.")
+    return result
+
+
+def _in_axes_range(value: Any) -> tuple[float, float]:
+    result = _pair(value)
+    if not all(math.isfinite(item) for item in result):
+        raise ComponentValidationError("Inset limits must be finite.")
+    if result[0] == result[1]:
+        raise ComponentValidationError("Inset limits must not be degenerate.")
+    return result
+
+
+IN_AXES_IMAGE_MIMES = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    "BMP": "image/bmp",
+    "TIFF": "image/tiff",
+}
+
+
+def _validate_in_axes_image_data(data: dict[str, Any]) -> bytes:
+    expected = {"filename", "mime_type", "payload_base64"}
+    if set(data) != expected:
+        raise ComponentValidationError(
+            "Image inset data fields must be filename, mime_type, and "
+            "payload_base64."
+        )
+    filename = data.get("filename")
+    mime_type = data.get("mime_type")
+    payload = data.get("payload_base64")
+    if not isinstance(filename, str) or not filename.strip():
+        raise ComponentValidationError("Image inset filename must be non-empty.")
+    if Path(filename).name != filename:
+        raise ComponentValidationError(
+            "Image inset filename must not contain a directory path."
+        )
+    if mime_type not in set(IN_AXES_IMAGE_MIMES.values()):
+        raise ComponentValidationError("Image inset MIME type is unsupported.")
+    if not isinstance(payload, str) or not payload:
+        raise ComponentValidationError("Image inset payload must be non-empty.")
+    try:
+        return base64.b64decode(payload, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ComponentValidationError(
+            "Image inset payload is not valid Base64."
+        ) from exc
+
+
+def decode_in_axes_image(data: dict[str, Any]) -> np.ndarray:
+    """Decode and verify one embedded image-inset payload."""
+
+    payload = _validate_in_axes_image_data(data)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(payload)) as image:
+                detected_format = str(image.format or "").upper()
+                detected_mime = IN_AXES_IMAGE_MIMES.get(detected_format)
+                if detected_mime is None:
+                    raise ComponentValidationError(
+                        "Image inset format must be PNG, JPEG, BMP, or TIFF."
+                    )
+                if detected_mime != data["mime_type"]:
+                    raise ComponentValidationError(
+                        "Image inset MIME type does not match its payload."
+                    )
+                image.load()
+                image = ImageOps.exif_transpose(image)
+                if image.mode not in {"RGB", "RGBA"}:
+                    image = image.convert("RGBA")
+                return np.asarray(image).copy()
+    except ComponentValidationError:
+        raise
+    except (
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+        UnidentifiedImageError,
+        OSError,
+    ) as exc:
+        raise ComponentValidationError(
+            "Image inset payload could not be decoded safely."
+        ) from exc
 
 
 def _optional_pair(value: Any) -> tuple[float, float] | None:
@@ -562,6 +654,7 @@ class AxesController(ContainerController):
             target=target,
             figure=figure,
             subject=figure,
+            child_axes=tuple(target.child_axes),
             localaxes=tuple(figure._localaxes),
             stack_axes=stack_axes,
             stale=figure.stale,
@@ -609,6 +702,11 @@ class AxesController(ContainerController):
         figure = handle.figure
         target = handle.target
         figure._remove_axes(target, owners=())
+        for child_axes in handle.child_axes:
+            try:
+                child_axes.remove()
+            except (RuntimeError, ValueError):
+                pass
         target.stale_callback = None
         target.axes = None
         target.figure = None
@@ -621,6 +719,7 @@ class AxesRemovalHandle:
     target: Axes
     figure: Figure
     subject: Figure
+    child_axes: tuple[Axes, ...]
     localaxes: tuple[Axes, ...]
     stack_axes: dict[Axes, int]
     stale: bool
@@ -1562,6 +1661,524 @@ class LegendController(ComponentController[Legend]):
         super()._write_property(target, spec, value)
 
 
+@dataclass(slots=True)
+class AuxiliaryRemovalState:
+    """Reversible location for one indicator artist owned by a parent Axes."""
+
+    target: Any
+    owner: list[Any]
+    index: int
+    stale_callback: Any
+    axes: Axes | None
+    figure: Figure | None
+
+
+@dataclass(slots=True)
+class InAxesRemovalHandle:
+    """Pinned child-Axes and indicator state for atomic inset deletion."""
+
+    target: Axes
+    owner: list[Any]
+    index: int
+    subject: Axes
+    stale_callback: Any
+    axes: Axes
+    figure: Figure
+    axes_stale: bool | None
+    figure_stale: bool | None
+    mouseover: bool
+    target_stale: bool
+    runtime: Any
+    auxiliary_handles: tuple[AuxiliaryRemovalState, ...]
+    detached: bool = False
+
+
+_IN_AXES_COMMON_PROPERTIES = (
+    PropertySpec(
+        "bounds",
+        tuple,
+        (0.6, 0.6, 0.35, 0.35),
+        editor="rectangle",
+        normalizer=_in_axes_rectangle,
+    ),
+    PropertySpec("visible", bool, True, editor="check"),
+    PropertySpec("zorder", float, 5.0, editor="double_spin"),
+    PropertySpec(
+        "facecolor",
+        str,
+        "#ffffff",
+        editor="color",
+        normalizer=_normalize_color,
+    ),
+    PropertySpec("frameon", bool, True, editor="check"),
+    PropertySpec(
+        "edgecolor",
+        str,
+        "#000000",
+        editor="color",
+        normalizer=_normalize_color,
+    ),
+    PropertySpec(
+        "linewidth",
+        float,
+        0.8,
+        validator=_nonnegative,
+        editor="double_spin",
+    ),
+)
+
+
+class InAxesController(ComponentController[Any]):
+    """Base Controller for a removable child Axes represented as an Element."""
+
+    KIND = ComponentKind.IN_AXES
+    DELETION_POLICY = DeletionPolicy.REMOVE
+    CAPABILITIES = frozenset({"in_axes"})
+    DELETE_IMPACTS = UpdateImpact.REDRAW
+
+    @staticmethod
+    def _runtime_axes(runtime: Any) -> Axes:
+        axes = getattr(runtime, "axes", None)
+        if not isinstance(axes, Axes):
+            raise ComponentValidationError(
+                "Inset runtime does not contain a child Axes."
+            )
+        return axes
+
+    @staticmethod
+    def _sync_indicator_visibility(runtime: Any) -> None:
+        axes = InAxesController._runtime_axes(runtime)
+        enabled = bool(axes.get_visible())
+        rectangle = getattr(runtime, "indicator_rectangle", None)
+        if rectangle is not None:
+            rectangle.set_visible(
+                enabled and bool(getattr(runtime, "region_visible", True))
+            )
+        defaults = tuple(getattr(runtime, "connector_defaults", ()))
+        for index, connector in enumerate(
+            tuple(getattr(runtime, "connectors", ()))
+        ):
+            default_visible = defaults[index] if index < len(defaults) else True
+            connector.set_visible(
+                enabled
+                and bool(getattr(runtime, "connectors_visible", True))
+                and bool(default_visible)
+            )
+
+    @staticmethod
+    def _sync_indicator_positions(runtime: Any) -> None:
+        axes = InAxesController._runtime_axes(runtime)
+        rectangle = getattr(runtime, "indicator_rectangle", None)
+        connectors = tuple(getattr(runtime, "connectors", ()))
+        if rectangle is None:
+            return
+        x0, x1 = (float(value) for value in axes.get_xlim())
+        y0, y1 = (float(value) for value in axes.get_ylim())
+        rectangle.set_bounds(x0, y0, x1 - x0, y1 - y0)
+        corners = ((x0, y0), (x0, y1), (x1, y0), (x1, y1))
+        for connector, corner in zip(connectors, corners):
+            connector.set_positions(connector.xy1, corner)
+
+    def _validate_candidate(self, state: ComponentState) -> None:
+        if state.selector.get("object_id") != state.id:
+            raise ComponentValidationError(
+                "Inset selector object_id must equal its component id."
+            )
+
+    def _read_property(self, runtime: Any, spec: PropertySpec) -> Any:
+        axes = self._runtime_axes(runtime)
+        key = spec.key
+        if key == "bounds":
+            return tuple(getattr(runtime.bounds_locator, "bounds"))
+        if key == "visible":
+            return bool(axes.get_visible())
+        if key == "zorder":
+            return float(axes.get_zorder())
+        if key == "facecolor":
+            return _read_color(axes.get_facecolor())
+        if key == "frameon":
+            return bool(axes.get_frame_on())
+        if key == "edgecolor":
+            return _read_color(axes.spines["left"].get_edgecolor())
+        if key == "linewidth":
+            return float(axes.spines["left"].get_linewidth())
+        if key == "xlim":
+            return tuple(float(value) for value in axes.get_xlim())
+        if key == "ylim":
+            return tuple(float(value) for value in axes.get_ylim())
+        if key == "ticks_visible":
+            return bool(axes.xaxis.get_visible() and axes.yaxis.get_visible())
+        if key == "region_visible":
+            return bool(getattr(runtime, "region_visible", True))
+        if key == "connectors_visible":
+            return bool(getattr(runtime, "connectors_visible", True))
+        if key.startswith("indicator_"):
+            rectangle = getattr(runtime, "indicator_rectangle", None)
+            if rectangle is None:
+                return self._state.properties[key]
+            if key == "indicator_color":
+                return _read_color(rectangle.get_edgecolor())
+            if key == "indicator_linestyle":
+                return str(rectangle.get_linestyle())
+            if key == "indicator_linewidth":
+                return float(rectangle.get_linewidth())
+            if key == "indicator_alpha":
+                value = rectangle.get_alpha()
+                return 1.0 if value is None else float(value)
+        if key == "opacity":
+            image = getattr(runtime, "image_artist", None)
+            if image is None:
+                return float(self._state.properties.get(key, 1.0))
+            value = image.get_alpha()
+            return 1.0 if value is None else float(value)
+        if key == "fit_mode":
+            return str(getattr(runtime, "fit_mode", "contain"))
+        if key == "interpolation":
+            image = getattr(runtime, "image_artist", None)
+            if image is None:
+                return str(self._state.properties.get(key, "bilinear"))
+            return str(image.get_interpolation())
+        return super()._read_property(runtime, spec)
+
+    def _write_property(
+        self, runtime: Any, spec: PropertySpec, value: Any
+    ) -> None:
+        axes = self._runtime_axes(runtime)
+        key = spec.key
+        if key == "bounds":
+            runtime.bounds_locator.bounds = tuple(value)
+            axes.stale = True
+            return
+        if key == "visible":
+            axes.set_visible(bool(value))
+            self._sync_indicator_visibility(runtime)
+            return
+        if key == "zorder":
+            axes.set_zorder(value)
+            return
+        if key == "facecolor":
+            axes.set_facecolor(value)
+            return
+        if key == "frameon":
+            axes.set_frame_on(bool(value))
+            return
+        if key == "edgecolor":
+            for spine in axes.spines.values():
+                spine.set_edgecolor(value)
+            return
+        if key == "linewidth":
+            for spine in axes.spines.values():
+                spine.set_linewidth(value)
+            return
+        if key == "xlim":
+            axes.set_xlim(*value)
+            self._sync_indicator_positions(runtime)
+            return
+        if key == "ylim":
+            axes.set_ylim(*value)
+            self._sync_indicator_positions(runtime)
+            return
+        if key == "ticks_visible":
+            axes.xaxis.set_visible(bool(value))
+            axes.yaxis.set_visible(bool(value))
+            return
+        if key == "region_visible":
+            runtime.region_visible = bool(value)
+            self._sync_indicator_visibility(runtime)
+            return
+        if key == "connectors_visible":
+            runtime.connectors_visible = bool(value)
+            self._sync_indicator_visibility(runtime)
+            return
+        if key.startswith("indicator_"):
+            artists = tuple(
+                artist
+                for artist in (
+                    getattr(runtime, "indicator_rectangle", None),
+                    *tuple(getattr(runtime, "connectors", ())),
+                )
+                if artist is not None
+            )
+            setter_name = {
+                "indicator_color": "set_edgecolor",
+                "indicator_linestyle": "set_linestyle",
+                "indicator_linewidth": "set_linewidth",
+                "indicator_alpha": "set_alpha",
+            }[key]
+            for artist in artists:
+                getattr(artist, setter_name)(value)
+            return
+        if key == "opacity":
+            image = getattr(runtime, "image_artist", None)
+            if image is not None:
+                image.set_alpha(value)
+            return
+        if key == "fit_mode":
+            runtime.fit_mode = str(value)
+            axes.set_aspect("equal" if value == "contain" else "auto")
+            return
+        if key == "interpolation":
+            image = getattr(runtime, "image_artist", None)
+            if image is not None:
+                image.set_interpolation(value)
+            return
+        super()._write_property(runtime, spec, value)
+
+    def _request_updates(
+        self, impacts: UpdateImpact, target: Any | None = None
+    ) -> None:
+        if impacts == UpdateImpact.NONE:
+            return
+        runtime = target if target is not None else self.resolve_target()
+        parent = getattr(runtime, "parent_axes", None)
+        if self._registry is not None and isinstance(parent, Axes):
+            self._registry.request_update(parent, impacts)
+            return
+        super()._request_updates(impacts, runtime)
+
+    def prepare_remove(self) -> InAxesRemovalHandle:
+        """Capture child-Axes and indicator containers without publishing removal."""
+
+        runtime = self.resolve_target()
+        child = self._runtime_axes(runtime)
+        parent = getattr(runtime, "parent_axes", None)
+        if not isinstance(parent, Axes):
+            raise ComponentValidationError(
+                "Inset Axes has no registered parent Axes."
+            )
+        owner = parent.child_axes
+        if child not in owner:
+            raise ComponentValidationError(
+                "Inset Axes is not attached to its registered parent Axes."
+            )
+        auxiliary = []
+        for artist in (
+            getattr(runtime, "indicator_rectangle", None),
+            *tuple(getattr(runtime, "connectors", ())),
+        ):
+            if artist is None:
+                continue
+            artist_owner = parent._children
+            if artist not in artist_owner:
+                raise ComponentValidationError(
+                    "Inset indicator is detached from its parent Axes."
+                )
+            auxiliary.append(
+                AuxiliaryRemovalState(
+                    artist,
+                    artist_owner,
+                    artist_owner.index(artist),
+                    getattr(artist, "stale_callback", None),
+                    getattr(artist, "axes", None),
+                    getattr(artist, "figure", None),
+                )
+            )
+        figure = child.figure
+        if figure is None:
+            raise ComponentValidationError("Inset Axes has no Figure.")
+        return InAxesRemovalHandle(
+            target=child,
+            owner=owner,
+            index=owner.index(child),
+            subject=parent,
+            stale_callback=child.stale_callback,
+            axes=parent,
+            figure=figure,
+            axes_stale=parent.stale,
+            figure_stale=figure.stale,
+            mouseover=False,
+            target_stale=child.stale,
+            runtime=runtime,
+            auxiliary_handles=tuple(auxiliary),
+        )
+
+    def commit_remove(self, handle: InAxesRemovalHandle) -> None:
+        if handle.detached:
+            return
+        handle.detached = True
+        try:
+            for auxiliary in handle.auxiliary_handles:
+                auxiliary.owner.remove(auxiliary.target)
+            handle.owner.remove(handle.target)
+        except ValueError as exc:
+            self.rollback_remove(handle)
+            raise ComponentValidationError(
+                "Prepared inset component changed before deletion."
+            ) from exc
+
+    def rollback_remove(self, handle: InAxesRemovalHandle) -> None:
+        if not handle.detached and handle.target in handle.owner:
+            return
+        if handle.target not in handle.owner:
+            handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
+        handle.target.figure = handle.figure
+        handle.target.axes = handle.axes
+        handle.target.stale = handle.target_stale
+        handle.target.stale_callback = handle.stale_callback
+        for auxiliary in sorted(
+            handle.auxiliary_handles,
+            key=lambda item: item.index,
+        ):
+            if auxiliary.target not in auxiliary.owner:
+                auxiliary.owner.insert(
+                    min(auxiliary.index, len(auxiliary.owner)),
+                    auxiliary.target,
+                )
+            auxiliary.target.axes = auxiliary.axes
+            auxiliary.target.figure = auxiliary.figure
+            auxiliary.target.stale_callback = auxiliary.stale_callback
+        if handle.axes_stale is not None:
+            handle.axes.stale = handle.axes_stale
+        if handle.figure_stale is not None:
+            handle.figure.stale = handle.figure_stale
+        handle.detached = False
+
+    def _finalize_remove(self, handle: InAxesRemovalHandle) -> None:
+        for auxiliary in sorted(
+            handle.auxiliary_handles,
+            key=lambda item: item.index,
+        ):
+            if auxiliary.target not in auxiliary.owner:
+                auxiliary.owner.insert(
+                    min(auxiliary.index, len(auxiliary.owner)),
+                    auxiliary.target,
+                )
+            auxiliary.target.remove()
+        if handle.target not in handle.owner:
+            handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
+        handle.target.remove()
+
+
+class ZoomInAxesController(InAxesController):
+    """Coordinate a live zoom inset and its parent-Axes indicator."""
+
+    ROLES = frozenset({ComponentRole.IN_AXES_ZOOM})
+    PROPERTY_SPECS = _IN_AXES_COMMON_PROPERTIES + (
+        PropertySpec(
+            "xlim",
+            tuple,
+            (0.0, 1.0),
+            editor="position",
+            normalizer=_in_axes_range,
+        ),
+        PropertySpec(
+            "ylim",
+            tuple,
+            (0.0, 1.0),
+            editor="position",
+            normalizer=_in_axes_range,
+        ),
+        PropertySpec("ticks_visible", bool, True, editor="check"),
+        PropertySpec("region_visible", bool, True, editor="check"),
+        PropertySpec("connectors_visible", bool, True, editor="check"),
+        PropertySpec(
+            "indicator_color",
+            str,
+            "#808080",
+            editor="color",
+            normalizer=_normalize_color,
+        ),
+        PropertySpec(
+            "indicator_linestyle",
+            str,
+            "-",
+            editor="line_style",
+            normalizer=normalize_linestyle,
+        ),
+        PropertySpec(
+            "indicator_linewidth",
+            float,
+            1.0,
+            validator=_nonnegative,
+            editor="double_spin",
+        ),
+        PropertySpec(
+            "indicator_alpha",
+            float,
+            0.5,
+            validator=lambda value: 0 <= value <= 1,
+            editor="double_spin",
+        ),
+    )
+
+    def _is_empty(self, runtime: Any, state: ComponentState) -> bool:
+        del state
+        return not tuple(getattr(runtime, "content_artists", ()))
+
+
+class ImageInAxesController(InAxesController):
+    """Coordinate one embedded raster image displayed in a child Axes."""
+
+    ROLES = frozenset({ComponentRole.IN_AXES_IMAGE})
+    PROPERTY_SPECS = _IN_AXES_COMMON_PROPERTIES + (
+        PropertySpec(
+            "opacity",
+            float,
+            1.0,
+            validator=lambda value: 0 <= value <= 1,
+            editor="double_spin",
+        ),
+        PropertySpec(
+            "fit_mode",
+            str,
+            "contain",
+            editor="combo",
+            choices=("contain", "stretch"),
+        ),
+        PropertySpec(
+            "interpolation",
+            str,
+            "bilinear",
+            editor="combo",
+            choices=("nearest", "bilinear", "bicubic"),
+        ),
+    )
+
+    def _validate_data(self, state: ComponentState) -> None:
+        _validate_in_axes_image_data(state.data)
+
+    def _apply_data(self, runtime: Any, state: ComponentState) -> None:
+        array = decode_in_axes_image(state.data)
+        axes = self._runtime_axes(runtime)
+        previous = getattr(runtime, "image_artist", None)
+        candidate = None
+        try:
+            candidate = axes.imshow(
+                array,
+                alpha=state.properties["opacity"],
+                interpolation=state.properties["interpolation"],
+                aspect=(
+                    "equal"
+                    if state.properties["fit_mode"] == "contain"
+                    else "auto"
+                ),
+                origin="upper",
+                label="_nolegend_",
+            )
+            if previous is not None:
+                previous.remove()
+            runtime.image_artist = candidate
+            runtime.content_artists = [candidate]
+            runtime.fit_mode = state.properties["fit_mode"]
+            axes.set_axis_off()
+            axes.set_frame_on(state.properties["frameon"])
+        except Exception:
+            if candidate is not None:
+                try:
+                    candidate.remove()
+                except Exception:
+                    pass
+            raise
+
+    def _data_impacts(
+        self,
+        before: ComponentState | None,
+        after: ComponentState,
+    ) -> UpdateImpact:
+        del before, after
+        return UpdateImpact.REDRAW
+
+
 class LineController(ComponentController[Line2D]):
     """Coordinate state changes for line components."""
 
@@ -2423,6 +3040,14 @@ CONTROLLER_TYPES: dict[
         ComponentRole.INTERPOLATION,
     ): InterpolationController,
     (ComponentKind.SCATTER, ComponentRole.SCATTER): ScatterController,
+    (
+        ComponentKind.IN_AXES,
+        ComponentRole.IN_AXES_ZOOM,
+    ): ZoomInAxesController,
+    (
+        ComponentKind.IN_AXES,
+        ComponentRole.IN_AXES_IMAGE,
+    ): ImageInAxesController,
 }
 
 

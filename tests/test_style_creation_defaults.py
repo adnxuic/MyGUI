@@ -36,6 +36,13 @@ class StyleCreationDefaultsTests(unittest.TestCase):
 
         self.assertEqual(dark.text.color, "#FFFFFF")
         self.assertEqual(dark.chart_palette.colors[0], "#8DD3C7")
+        self.assertEqual(dark.in_axes.facecolor, "#000000")
+        self.assertEqual(dark.in_axes.edgecolor, "#FFFFFF")
+        self.assertEqual(five_thirty_eight.in_axes.linewidth, 3.0)
+        self.assertEqual(
+            five_thirty_eight.in_axes.image_interpolation,
+            "bilinear",
+        )
         self.assertAlmostEqual(poster.scatter.size, 125.44)
 
     def test_style_palette_identity_is_deterministic_and_tagged(self):

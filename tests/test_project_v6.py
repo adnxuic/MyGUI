@@ -173,7 +173,7 @@ class ProjectV6Tests(unittest.TestCase):
         self.assertEqual(roles.count("x_label"), 1)
         self.assertEqual(roles.count("y_label"), 1)
         self.assertEqual(roles.count("legend"), 1)
-        validate_project_snapshot(first)
+        validate_project_snapshot(migrate_project_snapshot(first))
 
         legacy = v6_figure_to_legacy(first["figure"])
         self.assertEqual(legacy["plots"][0]["object_id"], "plot-object")
@@ -230,11 +230,11 @@ class ProjectV6Tests(unittest.TestCase):
         self.assertIsNone(v5["figure"]["axes"][0]["color_cycle"])
         self.assertEqual(v5["figure"]["curves"][0]["color_order"], 0)
         self.assertEqual(v5["figure"]["plots"][0]["color_order"], 1)
-        self.assertEqual(migrated["schema_version"], 6)
+        self.assertEqual(migrated["schema_version"], 7)
         validate_project_snapshot(migrated)
 
     def test_generic_line_uses_persisted_xy_and_a_separate_legacy_collection(self):
-        snapshot = migrate_v5_to_v6(self.snapshot())
+        snapshot = migrate_project_snapshot(self.snapshot())
         function_curve = self.component(snapshot, "function_curve")
         generic_line = {
             "id": "native-generic-line",
@@ -272,7 +272,7 @@ class ProjectV6Tests(unittest.TestCase):
         self.assertEqual(restored["properties"], generic_line["properties"])
 
     def test_generic_line_rejects_missing_mismatched_or_non_numeric_xy(self):
-        valid = migrate_v5_to_v6(self.snapshot())
+        valid = migrate_project_snapshot(self.snapshot())
         function_curve = self.component(valid, "function_curve")
         generic_line = {
             "id": "invalid-generic-line",
@@ -299,7 +299,7 @@ class ProjectV6Tests(unittest.TestCase):
                     validate_project_snapshot(candidate)
 
     def test_validation_rejects_invalid_graph_and_component_state(self):
-        valid = migrate_v5_to_v6(self.snapshot())
+        valid = migrate_project_snapshot(self.snapshot())
         cases = {}
 
         duplicate_id = deepcopy(valid)
@@ -332,7 +332,7 @@ class ProjectV6Tests(unittest.TestCase):
                     validate_project_snapshot(snapshot)
 
     def test_validation_rejects_bad_selector_order_color_and_reference(self):
-        valid = migrate_v5_to_v6(self.snapshot())
+        valid = migrate_project_snapshot(self.snapshot())
         cases = {}
 
         duplicate_selector = deepcopy(valid)
@@ -407,7 +407,7 @@ class ProjectV6Tests(unittest.TestCase):
                     validate_project_snapshot(snapshot)
 
     def test_invalid_v6_file_is_rejected_before_application_state_changes(self):
-        snapshot = migrate_v5_to_v6(self.snapshot())
+        snapshot = migrate_project_snapshot(self.snapshot())
         self.component(snapshot, "data_plot")["parent_id"] = "missing"
 
         class Sentinel:
@@ -427,7 +427,7 @@ class ProjectV6Tests(unittest.TestCase):
         self.assertFalse(sentinel.called)
 
     def test_figure_name_must_match_project_name_even_when_empty(self):
-        snapshot = migrate_v5_to_v6(self.snapshot())
+        snapshot = migrate_project_snapshot(self.snapshot())
         self.component(snapshot, "figure")["properties"]["name"] = ""
 
         with self.assertRaisesRegex(

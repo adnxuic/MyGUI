@@ -7,7 +7,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from Qt_core import QApplication, Qt
 
-from code.project_io import load_project_file, restore_project_snapshot
+from code.project_io import (
+    PROJECT_SCHEMA_VERSION,
+    load_project_file,
+    restore_project_snapshot,
+)
 from code.widgets.title_bar.py_title_menu import MenuBar
 from main import MainWindow
 
@@ -34,13 +38,16 @@ class GuiFileFlowTests(unittest.TestCase):
         self.app.processEvents()
         self.directory.cleanup()
 
-    def test_save_menu_writes_schema_v6_without_database_flush(self):
+    def test_save_menu_writes_current_schema_without_database_flush(self):
         target = Path(self.directory.name) / "saved"
         self.menu._save_project_to(str(target))
         saved = Path(str(target) + ".mygui.json")
 
         self.assertTrue(saved.exists())
-        self.assertEqual(load_project_file(saved)["schema_version"], 6)
+        self.assertEqual(
+            load_project_file(saved)["schema_version"],
+            PROJECT_SCHEMA_VERSION,
+        )
         self.assertEqual(self.window.figure_window.current_canva.project_path, str(saved))
 
     def test_restored_project_is_added_to_table_and_figure(self):

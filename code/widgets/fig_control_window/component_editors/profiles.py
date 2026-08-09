@@ -22,6 +22,7 @@ from .inspector import (
 )
 from .sections import (
     DataReferenceSection,
+    ImageInAxesSourceSection,
     LegendLocationSection,
     LineAppearanceSection,
     PaletteSection,
@@ -204,6 +205,14 @@ def _text_position(controller, context, parent):
 
 def _text_render(controller, context, parent):
     return TextRenderSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
+
+
+def _image_in_axes_source(controller, context, parent):
+    return ImageInAxesSourceSection(
         controller,
         context=context,
         parent=parent,
@@ -504,6 +513,94 @@ TEXT_PROFILE = EditorProfile(
 )
 
 
+IN_AXES_ZOOM_PROFILE = EditorProfile(
+    "in_axes_zoom",
+    "Zoom inset",
+    (
+        SectionSpec(
+            "layout",
+            "Layout",
+            _properties("bounds", "visible", "zorder"),
+        ),
+        SectionSpec(
+            "frame",
+            "Frame",
+            _properties(
+                "facecolor",
+                "frameon",
+                "edgecolor",
+                "linewidth",
+            ),
+        ),
+        SectionSpec(
+            "range",
+            "Zoom range",
+            _properties("xlim", "ylim", "ticks_visible"),
+        ),
+        SectionSpec(
+            "indicator",
+            "Indicator",
+            _properties(
+                "region_visible",
+                "connectors_visible",
+                "indicator_color",
+                "indicator_linestyle",
+                "indicator_linewidth",
+                "indicator_alpha",
+            ),
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Zoom Inset",
+        "Zoom Insets",
+        "zoom inset",
+        preview=lambda state: (
+            f"X {tuple(state.properties.get('xlim', ()))}; "
+            f"Y {tuple(state.properties.get('ylim', ()))}"
+        ),
+        sort_bucket=45,
+    ),
+)
+
+
+IN_AXES_IMAGE_PROFILE = EditorProfile(
+    "in_axes_image",
+    "Image inset",
+    (
+        SectionSpec(
+            "layout",
+            "Layout",
+            _properties("bounds", "visible", "zorder"),
+        ),
+        SectionSpec(
+            "frame",
+            "Frame",
+            _properties(
+                "facecolor",
+                "frameon",
+                "edgecolor",
+                "linewidth",
+            ),
+        ),
+        SectionSpec("source", "Image", _image_in_axes_source),
+        SectionSpec(
+            "display",
+            "Display",
+            _properties("opacity", "fit_mode", "interpolation"),
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Image Inset",
+        "Image Insets",
+        "image inset",
+        preview=lambda state: state.data.get("filename", ""),
+        sort_bucket=45,
+    ),
+)
+
+
 SEMANTIC_TEXT_PROFILE = EditorProfile(
     "semantic_text",
     "Text",
@@ -726,6 +823,16 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.AXES,
         AXES_PROFILE,
         role=ComponentRole.AXES,
+    )
+    editor_registry.register_profile(
+        ComponentKind.IN_AXES,
+        IN_AXES_ZOOM_PROFILE,
+        role=ComponentRole.IN_AXES_ZOOM,
+    )
+    editor_registry.register_profile(
+        ComponentKind.IN_AXES,
+        IN_AXES_IMAGE_PROFILE,
+        role=ComponentRole.IN_AXES_IMAGE,
     )
     for kind, profile in PROPERTY_PROFILES.items():
         for role in ROLES_BY_KIND[kind]:

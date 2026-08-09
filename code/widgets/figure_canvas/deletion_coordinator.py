@@ -10,7 +10,7 @@ from code.figuremodify.component_services import (
     DeletionRequest,
 )
 from code.figuremodify.components import ComponentKind, DeletionPolicy
-from code.figuremodify.components.serialization import normalize_v6_figure
+from code.figuremodify.components.serialization import normalize_v7_figure
 from code.widgets.component_tree.model import ComponentTreeModel
 from code.widgets.component_tree.presentation import TreePresentationResolver
 
@@ -190,7 +190,7 @@ class DeletionCoordinator:
                 canvas.component_registry,
                 canvas.editor_registry,
             )
-            normalize_v6_figure(canvas.component_snapshot())
+            normalize_v7_figure(canvas.component_snapshot())
             candidate_axes_map = self._candidate_axes_map()
 
         try:

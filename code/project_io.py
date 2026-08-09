@@ -13,12 +13,13 @@ from code.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepo
 from code.figuremodify.components.serialization import (
     legacy_figure_to_v6,
     normalize_v6_figure,
-    validate_v6_figure,
+    normalize_v7_figure,
+    validate_v7_figure,
 )
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 6
+PROJECT_SCHEMA_VERSION = 7
 
 
 def export_database_snapshot(filename: str | Path, repository: TableRepository,
@@ -117,6 +118,19 @@ def migrate_v5_to_v6(snapshot: dict[str, Any]) -> dict[str, Any]:
     return root
 
 
+def migrate_v6_to_v7(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Migrate a schema-v6 project to the v7 component contract."""
+
+    root = deepcopy(_expect_dict(snapshot, "project"))
+    if root.get("schema") != PROJECT_SCHEMA_NAME or root.get("schema_version") != 6:
+        raise ValueError("migrate_v6_to_v7 requires a schema v6 project.")
+    root["figure"] = normalize_v6_figure(
+        _expect_dict(root.get("figure"), "figure")
+    )
+    root["schema_version"] = 7
+    return root
+
+
 def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Migrate project snapshot."""
 
@@ -128,15 +142,19 @@ def migrate_project_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         root = migrate_v4_to_v5(root)
         version = 5
     if version == 5:
-        return migrate_v5_to_v6(root)
+        root = migrate_v5_to_v6(root)
+        version = 6
+    if version == 6:
+        root = migrate_v6_to_v7(root)
+        version = 7
     if version == PROJECT_SCHEMA_VERSION:
-        root["figure"] = normalize_v6_figure(
+        root["figure"] = normalize_v7_figure(
             _expect_dict(root.get("figure"), "figure")
         )
         return root
     raise ValueError(
         f"Unsupported project schema version {version!r}; "
-        "supported versions are v4, v5, and v6."
+        "supported versions are v4, v5, v6, and v7."
     )
 
 
@@ -158,7 +176,7 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
         raise ValueError("Project id must not be empty.")
     project_name = validate_component_name(project.get("name", ""), "Project name")
     refs = _validate_table(root.get("table"), project_id, project_name)
-    validate_v6_figure(root.get("figure"), refs, project_id, project_name)
+    validate_v7_figure(root.get("figure"), refs, project_id, project_name)
 
 
 def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
@@ -171,7 +189,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v6_figure(canvas.component_snapshot())
+    figure = normalize_v7_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,

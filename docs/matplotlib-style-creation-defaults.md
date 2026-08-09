@@ -15,8 +15,10 @@ rewriting existing artists.
 | Fit | implicit line style, line width/marker settings, chart color |
 | Interpolation | implicit line style, line width/marker settings, chart color |
 | Text | font family, font size, implicit text color/weight/style |
+| In-Axes | child-Axes background/border, indicator line, image interpolation |
 
-The resolver creates temporary Matplotlib Line, Scatter, and Text artists
+The resolver creates temporary Matplotlib Line, Scatter, Text, child-Axes,
+and inset-indicator artists
 inside a short `matplotlib.style.context`. Reading the resulting artists
 preserves Matplotlib-specific behavior such as Classic scatter size. The
 context is closed before Qt displays the dialog.
@@ -44,7 +46,9 @@ palette. A Figure style change alone does not recolor existing components.
   `next_index` after the first successful palette-backed creation.
 - Line, Scatter, and Text components store their resolved concrete visual
   properties.
+- In-Axes Components store their resolved background, frame, indicator, and
+  display properties without consuming the Axes chart-color cursor.
 
-These values use the existing schema-v6 component tree. Opening a project
+These values use the existing schema-v7 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.

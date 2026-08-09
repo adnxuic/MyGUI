@@ -223,6 +223,16 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
         ComponentRole.TEXT,
         DeletionHandler(),
     )
+    handlers.register(
+        ComponentKind.IN_AXES,
+        ComponentRole.IN_AXES_ZOOM,
+        DeletionHandler(),
+    )
+    handlers.register(
+        ComponentKind.IN_AXES,
+        ComponentRole.IN_AXES_IMAGE,
+        DeletionHandler(),
+    )
     handlers.validate(
         key
         for key, controller_type in CONTROLLER_TYPES.items()

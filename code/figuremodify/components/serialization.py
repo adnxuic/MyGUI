@@ -12,14 +12,21 @@ from code.database import ColumnRef, ColumnType
 from code.database.interpolate_func import interpolate_dict
 from code.figuremodify.style_base.color_models import ColorCycleState, normalize_color
 
-from .controllers import controller_type_for
+from .controllers import controller_type_for, decode_in_axes_image
 from .errors import ComponentValidationError
 from .models import ComponentState
 CHART_KINDS = {"line", "scatter"}
 DATA_ROLES = {"data_plot", "fit_curve", "interpolation", "scatter"}
 SPINE_NAMES = ("left", "right", "bottom", "top")
 LEVELS = ("major", "minor")
-COLOR_PROPERTIES = {"color", "facecolor", "edgecolor", "markerfacecolor", "markeredgecolor"}
+COLOR_PROPERTIES = {
+    "color",
+    "facecolor",
+    "edgecolor",
+    "markerfacecolor",
+    "markeredgecolor",
+    "indicator_color",
+}
 
 
 def deterministic_component_id(project_id: str, legacy_path: str) -> str:
@@ -723,13 +730,19 @@ def legacy_figure_to_v6(
     })
 
 
-def normalize_v6_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize v6 figure."""
+def _normalize_component_figure(
+    figure_snapshot: dict[str, Any],
+    *,
+    allow_in_axes: bool,
+) -> dict[str, Any]:
+    """Normalize one component-tree Figure for its declared schema version."""
 
     figure = deepcopy(_expect_dict(figure_snapshot, "figure"))
     components = _expect_list(figure.get("components"), "figure.components")
     for index, raw in enumerate(components):
         component = _expect_dict(raw, f"figure.components[{index}]")
+        if not allow_in_axes and component.get("kind") == "in_axes":
+            raise ValueError("Schema v6 does not support in_axes components.")
         for field in ("selector", "properties", "data"):
             component[field] = _canonical_json_value(
                 component.get(field),
@@ -749,6 +762,24 @@ def normalize_v6_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
                     f"{properties[name]!r}"
                 ) from exc
     return figure
+
+
+def normalize_v6_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a schema-v6 Figure without accepting v7 component kinds."""
+
+    return _normalize_component_figure(
+        figure_snapshot,
+        allow_in_axes=False,
+    )
+
+
+def normalize_v7_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a schema-v7 Figure component tree."""
+
+    return _normalize_component_figure(
+        figure_snapshot,
+        allow_in_axes=True,
+    )
 
 
 def _canonical_json_value(value: Any, path: str) -> Any:
@@ -1053,6 +1084,56 @@ def _validate_component_properties(
         ) <= 1:
             raise ValueError(f"Invalid project field {path}.properties.framealpha.")
         _require_string(properties.get("title"), f"{path}.properties.title")
+    elif kind == "in_axes":
+        bounds = _require_quad(properties.get("bounds"), f"{path}.properties.bounds")
+        if bounds[2] <= 0 or bounds[3] <= 0:
+            raise ValueError(
+                f"Invalid project field {path}.properties.bounds: "
+                "width and height must be positive."
+            )
+        _require_bool(properties.get("visible"), f"{path}.properties.visible")
+        _require_number(properties.get("zorder"), f"{path}.properties.zorder")
+        _require_bool(properties.get("frameon"), f"{path}.properties.frameon")
+        if _require_number(
+            properties.get("linewidth"), f"{path}.properties.linewidth"
+        ) < 0:
+            raise ValueError(f"Invalid project field {path}.properties.linewidth.")
+        if role == "in_axes_zoom":
+            for key in ("xlim", "ylim"):
+                values = _require_pair(
+                    properties.get(key), f"{path}.properties.{key}"
+                )
+                if values[0] == values[1]:
+                    raise ValueError(
+                        f"Invalid project field {path}.properties.{key}: "
+                        "limits must not be degenerate."
+                    )
+            for key in (
+                "ticks_visible",
+                "region_visible",
+                "connectors_visible",
+            ):
+                _require_bool(properties.get(key), f"{path}.properties.{key}")
+            alpha = _require_number(
+                properties.get("indicator_alpha"),
+                f"{path}.properties.indicator_alpha",
+            )
+            if not 0 <= alpha <= 1:
+                raise ValueError(
+                    f"Invalid project field {path}.properties.indicator_alpha."
+                )
+        elif role == "in_axes_image":
+            opacity = _require_number(
+                properties.get("opacity"), f"{path}.properties.opacity"
+            )
+            if not 0 <= opacity <= 1:
+                raise ValueError(
+                    f"Invalid project field {path}.properties.opacity."
+                )
+            try:
+                decode_in_axes_image(data)
+            except ComponentValidationError as exc:
+                raise ValueError(f"Invalid project field {path}.data: {exc}") from exc
     elif kind in CHART_KINDS:
         try:
             normalize_color(properties.get("color"))
@@ -1206,6 +1287,8 @@ def _validate_component_properties(
             "x_start",
             "x_stop",
         },
+        "in_axes_zoom": set(),
+        "in_axes_image": {"filename", "mime_type", "payload_base64"},
     }[role]
     if set(data) != expected_data_fields:
         raise ValueError(
@@ -1239,6 +1322,8 @@ def _validate_parent(component: dict[str, Any], parent: dict[str, Any] | None, p
     elif kind == "grid":
         valid = parent_kind == "axis"
     elif kind in CHART_KINDS:
+        valid = parent_kind == "axes"
+    elif kind == "in_axes":
         valid = parent_kind == "axes"
     elif role == "title":
         valid = parent_kind == "axes"
@@ -1279,7 +1364,7 @@ def _validate_parent(component: dict[str, Any], parent: dict[str, Any] | None, p
             raise ValueError(f"Mismatched axis label selector at {path}.selector.")
     if kind == "spine" and not selector.get("name"):
         raise ValueError(f"Invalid semantic selector at {path}.selector.")
-    if kind in CHART_KINDS or role == "text":
+    if kind in CHART_KINDS or kind == "in_axes" or role == "text":
         object_id = selector.get("object_id")
         if object_id != component["id"]:
             raise ValueError(f"Invalid object selector at {path}.selector.object_id.")
@@ -1370,18 +1455,22 @@ def _require_fixed_axes_components(
                 )
 
 
-def validate_v6_figure(
+def _validate_component_figure(
     figure_snapshot: Any,
     available_refs: dict[ColumnRef, ColumnType],
     project_id: str,
     project_name: str | None = None,
+    *,
+    schema_version: int,
+    allow_in_axes: bool,
 ) -> None:
-    """Validate v6 figure."""
+    """Validate one versioned component-tree Figure."""
 
     figure = _expect_dict(figure_snapshot, "figure")
     if set(figure) != {"root_component_id", "components"}:
         raise ValueError(
-            "Schema v6 figure must contain only root_component_id and components."
+            f"Schema v{schema_version} figure must contain only "
+            "root_component_id and components."
         )
     root_id = figure.get("root_component_id")
     if not isinstance(root_id, str) or not root_id.strip():
@@ -1394,6 +1483,8 @@ def validate_v6_figure(
     for index, raw in enumerate(raw_components):
         path = f"figure.components[{index}]"
         component = _component_state_dict(raw, path)
+        if not allow_in_axes and component["kind"] == "in_axes":
+            raise ValueError("Schema v6 does not support in_axes components.")
         component_id = component["id"]
         if component_id in by_id:
             raise ValueError(f"Duplicate component id at {path}: {component_id}")
@@ -1407,7 +1498,10 @@ def validate_v6_figure(
         if component["parent_id"] is None
     ]
     if len(roots) != 1 or roots[0]["id"] != root_id or roots[0]["kind"] != "figure":
-        raise ValueError("Schema v6 requires one Figure root matching root_component_id.")
+        raise ValueError(
+            f"Schema v{schema_version} requires one Figure root matching "
+            "root_component_id."
+        )
 
     selector_keys = set()
     children: dict[str, list[dict[str, Any]]] = {}
@@ -1481,6 +1575,42 @@ def validate_v6_figure(
         saved_name = roots[0]["properties"].get("name", "")
         if saved_name != project_name:
             raise ValueError("Project and Figure component names must match.")
+
+
+def validate_v6_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate a strict schema-v6 Figure."""
+
+    _validate_component_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=6,
+        allow_in_axes=False,
+    )
+
+
+def validate_v7_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate a schema-v7 Figure with in_axes Elements."""
+
+    _validate_component_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=7,
+        allow_in_axes=True,
+    )
 
 
 def _component_children(

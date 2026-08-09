@@ -841,6 +841,18 @@ class ComponentRegistry:
             target.figure = handle.figure
             if handle.figure_stale is not None:
                 handle.figure.stale = handle.figure_stale
+        for auxiliary in sorted(
+            getattr(handle, "auxiliary_handles", ()),
+            key=lambda item: item.index,
+        ):
+            if auxiliary.target not in auxiliary.owner:
+                auxiliary.owner.insert(
+                    min(auxiliary.index, len(auxiliary.owner)),
+                    auxiliary.target,
+                )
+            auxiliary.target.stale_callback = auxiliary.stale_callback
+            auxiliary.target.axes = auxiliary.axes
+            auxiliary.target.figure = auxiliary.figure
 
     def add_cleanup_callback(
         self,
@@ -1254,6 +1266,8 @@ class ComponentRegistry:
             valid = parent_kind is ComponentKind.AXIS
         elif kind in _CHART_KINDS:
             valid = parent_kind is ComponentKind.AXES
+        elif kind is ComponentKind.IN_AXES:
+            valid = parent_kind is ComponentKind.AXES
         elif kind is ComponentKind.TEXT:
             if role is ComponentRole.TITLE:
                 valid = parent_kind is ComponentKind.AXES
@@ -1386,6 +1400,13 @@ class ComponentRegistry:
             if selector.get("object_id") != state.id:
                 raise ComponentValidationError(
                     f"Chart component {state.id!r} requires object_id "
+                    "equal to its component id."
+                )
+            return
+        if state.kind is ComponentKind.IN_AXES:
+            if selector.get("object_id") != state.id:
+                raise ComponentValidationError(
+                    f"Inset component {state.id!r} requires object_id "
                     "equal to its component id."
                 )
             return

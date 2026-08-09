@@ -9,7 +9,9 @@ from code.widgets.title_bar.py_action_gallery import ResponsiveActionGallery
 from code.widgets.title_bar.py_pull_down_menu import StyleMenu
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog_dict
-from code.widgets.title_bar.titlebar_dialog.py_element_dialog import element_dialog_dict
+from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+    element_action_specs,
+)
 from code.excel_io import EXCEL_FILE_FILTER, import_excel_into_workspace
 from code.text_io import import_text_into_workspace
 from code.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
@@ -542,10 +544,18 @@ class LegacySelectorElementMenuBar(QFrame):
         self.layout = QHBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 10)
 
-        for index, (name, value) in enumerate(element_dialog_dict.items()):
-            dialog = value(dialog_name=name, figure_window=figure_window)
-            button = StaticSelectButton(name, f'pictures/icons/element_images/{name}.svg', name,
-                                        f'pictures/icons/element_images/{name}.svg', dialog)
+        for index, (name, spec) in enumerate(element_action_specs.items()):
+            dialog = spec.dialog_type(
+                dialog_name=name,
+                figure_window=figure_window,
+            )
+            button = StaticSelectButton(
+                name,
+                spec.icon_path,
+                name,
+                spec.icon_path,
+                dialog,
+            )
             if index < 8:
                 self.layout.addWidget(button)
 
@@ -621,11 +631,11 @@ class SelectorElementMenuBar(ResponsiveActionGallery):
 
     def __init__(self, figure_window=None):
         super().__init__()
-        for name, dialog_type in element_dialog_dict.items():
+        for name, spec in element_action_specs.items():
             self.add_dialog_action(
                 name,
-                f"pictures/icons/element_images/{name}.svg",
-                lambda parent, name=name, dialog_type=dialog_type: dialog_type(
+                spec.icon_path,
+                lambda parent, name=name, spec=spec: spec.dialog_type(
                     dialog_name=name,
                     figure_window=figure_window,
                     parent=parent,

@@ -1,13 +1,13 @@
 # MyGUI Project Files
 
-MyGUI project files use JSON schema version 6. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading returns v6 in memory, and every subsequent save writes v6.
+MyGUI project files use JSON schema version 7. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading migrates supported older files to v7 in memory, and every subsequent save writes v7.
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 6,
+  "schema_version": 7,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -18,7 +18,7 @@ MyGUI project files use JSON schema version 6. One file contains one project, it
 ```
 
 - `schema` is always `mygui-project`.
-- `schema_version` is always `6` after migration, loading, or saving.
+- `schema_version` is always `7` after migration, loading, or saving.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -78,6 +78,7 @@ The controlled kind/role combinations are:
 | `legend` | `legend` |
 | `line` | `line`, `function_curve`, `data_plot`, `fit_curve`, `interpolation` |
 | `scatter` | `scatter` |
+| `in_axes` | `in_axes_zoom`, `in_axes_image` |
 
 ## Figure hierarchy and fixed components
 
@@ -119,10 +120,22 @@ Role-specific `data` fields are:
 | `scatter` | `x_ref`, `y_ref` |
 | `interpolation` | `x_ref`, `y_ref`, `method`, `k`, `samples`, `lam`, `lam_auto` |
 | `fit_curve` | `x_ref`, `y_ref`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
+| `in_axes_zoom` | no persisted data; mirrors are derived at runtime |
+| `in_axes_image` | `filename`, detected `mime_type`, original `payload_base64` bytes |
 
 Free Text, Title, and Axis Label records share Text properties: `text`, `position`, `color`, `fontsize`, `fontfamily`, `fontweight`, `fontstyle`, `rotation`, horizontal/vertical alignment, `usetex`, `alpha`, and `visible`.
 
 Legend properties use `location`, `ncols`, `fontsize`, frame colors/state, `framealpha`, `title`, and `visible`.
+
+An `in_axes` record is a removable child of a main Axes and uses
+`selector: {"object_id": component_id}`. Both roles persist normalized parent
+Axes `bounds`, `visible`, `zorder`, `facecolor`, `frameon`, `edgecolor`, and
+`linewidth`. Zoom additionally stores `xlim`, `ylim`, tick/region/connector
+visibility and indicator appearance. Image additionally stores `opacity`,
+`fit_mode` (`contain` or `stretch`), and `interpolation` (`nearest`, `bilinear`,
+or `bicubic`). Image filenames cannot contain a path, the MIME type must match
+the decoded PNG/JPEG/BMP/TIFF payload, and decode safety is checked before any
+application state changes.
 
 ## Data references, colors, and palette cursor
 
@@ -140,7 +153,7 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v6.
+snapshot only and does not change schema v7.
 
 ## Stable IDs and migration
 
@@ -148,13 +161,16 @@ Existing Plot, Scatter, Fit, and Interpolation `object_id` values are retained. 
 
 - v4 is migrated to v5 first, adding missing color-cycle and color-order state.
 - v5 is then converted to the v6 component tree.
-- v6 is normalized and validated directly.
+- v6 is strictly normalized and migrated without loss to v7.
+- v7 is normalized and validated directly, including embedded inset images.
 - v1-v3 and unknown versions are rejected.
 
 Migration functions operate on deep copies and do not modify the supplied dictionary.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
-children, chart/Text artists, and Legend directly from the v6 tree. It does not
+children and source chart/Text artists first, then `in_axes` Elements and
+Legend directly from the v7 tree. Zoom mirrors receive one final batch refresh
+after their sources exist. Restore does not
 create legacy chart arrays or Modifier records as an intermediate runtime
 format. The Registry tree is subsequently the source for every save.
 
@@ -176,4 +192,4 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v6.
+are not added to schema v7.

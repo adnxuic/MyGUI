@@ -101,6 +101,43 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     aborts exit without closing a project, while an earlier successful save
     remains clean.
 
+## In-Axes Elements
+
+1. With no project and then with a project but no selected Axes, click
+   Elements > `in_axes`. Confirm creation is intercepted with one useful
+   warning and no child Axes is left behind.
+2. Create Line and Scatter charts, open `in_axes`, choose Zoom, enter X/Y
+   ranges and normalized bounds, and create it. Confirm the Figure still has
+   the same number of main Axes and the new node appears under `Zoom Insets`
+   in the selected parent Axes.
+3. Modify source data, color, marker, line style, visibility, scale, and axis
+   direction; then create and delete another source chart. Confirm the inset
+   refreshes all visible Line/Scatter mirrors, never shows Text or Legend, and
+   does not advance the Axes palette.
+4. Edit Layout, Frame, Zoom Range, and Indicator Inspector sections. Confirm
+   the position, size, range, ticks, region rectangle, and connector styling
+   update without canvas dragging or a second Component state model.
+5. Create an empty Zoom inset under an Axes with no supported visible chart.
+   Confirm it remains editable and one yellow Message Bar warning explains
+   that it is empty.
+6. Open `in_axes` again, choose Image, preview PNG, JPEG, BMP, and TIFF files,
+   and exercise transparent PNG and EXIF-rotated JPEG inputs. Confirm invalid,
+   damaged, mismatched, or oversized payloads leave the dialog open.
+7. For an Image inset, edit opacity, `contain`/`stretch`, interpolation,
+   layout, and frame. Replace the image from its Image Inspector section and
+   confirm the tree preview shows the new base filename.
+8. Save the project, move or delete the source image, and reopen it. Confirm
+   the embedded image, stable inset IDs, Zoom sources, ranges, and styles are
+   restored. Export the Figure and confirm both inset modes are present.
+9. In a multi-Figure, multi-Axes workspace, create insets under different
+   parents. Confirm selection never changes the current main Axes or subplot
+   numbering and each Zoom mirrors only its own parent.
+10. Delete one inset, batch-delete same-role insets, then delete their parent
+    Axes. Confirm child Axes, image/mirror artists, zoom rectangle, connectors,
+    Inspector, and tree nodes disappear atomically and one result is shown.
+    On an injected failure, confirm all original object identities, selection,
+    listeners, and visible artists remain.
+
 ## Matplotlib Style Creation Defaults
 
 1. Create a `fivethirtyeight` project and add Axes. Open Curve, Plot, Scatter,

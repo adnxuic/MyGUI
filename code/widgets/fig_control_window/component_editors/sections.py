@@ -9,6 +9,7 @@ from Qt_core import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QPainter,
@@ -27,6 +28,7 @@ from Qt_core import (
 from code import status_messages, tex_config
 from code.database import ColumnRef
 from code.figuremodify.components import ComponentKind, ComponentMutation
+from code.figuremodify.in_axes import embedded_image_data
 from code.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     choose_palette,
 )
@@ -184,6 +186,80 @@ class PropertySection(ComponentEditorBase, EditorSection):
 
         for binding in self._text_bindings.values():
             binding.cancel()
+
+
+class ImageInAxesSourceSection(QWidget, EditorSection):
+    """Replace one embedded image through the authoritative inset Service."""
+
+    IMAGE_FILTER = (
+        "Raster images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff);;"
+        "All files (*)"
+    )
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.filename_label = QLabel(self)
+        self.filename_label.setWordWrap(True)
+        self.filename_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        layout.addWidget(self.filename_label)
+        self.replace_button = QPushButton("Replace image…", self)
+        self.replace_button.clicked.connect(self.replace_image)
+        layout.addWidget(self.replace_button)
+        self.sync_from_controller()
+
+    def replace_image(self) -> bool:
+        """Choose, validate, embed, and apply a replacement raster image."""
+
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Replace inset image",
+            "",
+            self.IMAGE_FILTER,
+        )
+        if not filename:
+            return False
+        try:
+            data = embedded_image_data(filename)
+            result = self.context.in_axes.replace_image(
+                self.controller,
+                data,
+            )
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            self.sync_from_controller()
+            return False
+        if not self.context.messages.present(
+            result,
+            success="Inset image replaced.",
+        ):
+            self.sync_from_controller()
+            return False
+        self.sync_from_controller()
+        return True
+
+    def sync_from_controller(self) -> None:
+        """Refresh the displayed embedded source filename."""
+
+        filename = str(
+            self.controller.read_state().data.get("filename", "")
+        )
+        self.filename_label.setText(
+            f"Embedded source: {filename or '(unnamed image)'}"
+        )
+
+    def dispose(self) -> None:
+        """Disconnect this section's local signal idempotently."""
+
+        try:
+            self.replace_button.clicked.disconnect(self.replace_image)
+        except (RuntimeError, TypeError):
+            pass
 
 
 class LineAppearanceSection(QWidget, EditorSection):

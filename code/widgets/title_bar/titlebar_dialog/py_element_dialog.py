@@ -1,4 +1,6 @@
-"""Collect inputs for creating Figure text elements."""
+"""Collect Controller-free inputs for creating Figure Elements."""
+
+from dataclasses import dataclass
 
 from Qt_core import *
 
@@ -8,6 +10,7 @@ from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from code.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
 )
+from code.widgets.fig_control_window.component_editors import InAxesInput
 
 from code.widgets import qss_func
 import os
@@ -161,6 +164,84 @@ class PyTextDialog(QDialog):
         super().reject()
 
 
+class PyInAxesDialog(QDialog):
+    """Create a Zoom or embedded-image child Axes Element."""
+
+    ICON_PATH = "pictures/icons/element_images/in_axes.svg"
+
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("in_axes_dialog")
+        self.setWindowTitle(dialog_name or "in_axes")
+        self.setWindowIcon(QIcon(self.ICON_PATH))
+        self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+        defaults = (
+            canvas.component_creation_defaults()
+            if canvas is not None
+            else resolve_component_creation_defaults("default")
+        )
+        color_library = getattr(figure_window, "color_library", None)
+        if color_library is None:
+            raise ValueError("The application ColorLibrary is unavailable.")
+
+        layout = QVBoxLayout(self)
+        self.input = InAxesInput(
+            color_library=color_library,
+            defaults=defaults.in_axes,
+            parent=self,
+        )
+        layout.addWidget(self.input)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self):
+        """Validate and create one inset without closing on failure."""
+
+        canvas = getattr(self.figure_window, "current_canva", None)
+        if canvas is None or canvas.current_axes is None:
+            QMessageBox.warning(
+                self,
+                "No Axes selected",
+                "Select an Axes before creating an in_axes Element.",
+            )
+            return
+        try:
+            canvas.add_in_axes(self.input.spec())
+        except Exception as exc:
+            QMessageBox.warning(self, "Could not create in_axes", str(exc))
+            return
+        super().accept()
+
+
+@dataclass(frozen=True, slots=True)
+class ElementActionSpec:
+    """Declare one Elements action and its explicit root-relative icon."""
+
+    dialog_type: type[QDialog]
+    icon_path: str
+
+
+element_action_specs = {
+    "Text": ElementActionSpec(
+        PyTextDialog,
+        "pictures/icons/element_images/Text.svg",
+    ),
+    "in_axes": ElementActionSpec(
+        PyInAxesDialog,
+        PyInAxesDialog.ICON_PATH,
+    ),
+}
+
+
+# Kept as a narrow compatibility export for callers outside the title menu.
 element_dialog_dict = {
-    'Text': PyTextDialog,
+    name: spec.dialog_type
+    for name, spec in element_action_specs.items()
 }

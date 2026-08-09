@@ -17,8 +17,11 @@ from code.widgets.title_bar.py_title_menu import (
 )
 from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog
 from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+    PyInAxesDialog,
     PyTextDialog,
+    element_action_specs,
 )
+from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
 class CommandGalleryTests(unittest.TestCase):
@@ -35,7 +38,7 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 5, 5, 1])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 5, 5, 2])
             created_dialogs = {
                 id(widget) for widget in self.app.topLevelWidgets() if isinstance(widget, QDialog)
             }
@@ -77,6 +80,28 @@ class CommandGalleryTests(unittest.TestCase):
                 action.trigger()
                 action.trigger()
 
+            self.assertEqual(execute.call_count, 2)
+            self.assertIsNone(action.dialog)
+        finally:
+            host.close()
+            self.app.processEvents()
+
+    def test_in_axes_action_has_explicit_icon_and_rebuilds_dialog(self):
+        figure_window = Mock()
+        figure_window.current_canva = None
+        figure_window.color_library = ColorLibrary()
+        host = QMainWindow()
+        bar = SelectorElementMenuBar(figure_window=figure_window)
+        host.setCentralWidget(bar)
+        action = bar.action_dict["in_axes"]
+        try:
+            self.assertEqual(
+                element_action_specs["in_axes"].icon_path,
+                "pictures/icons/element_images/in_axes.svg",
+            )
+            with patch.object(PyInAxesDialog, "exec", return_value=0) as execute:
+                action.trigger()
+                action.trigger()
             self.assertEqual(execute.call_count, 2)
             self.assertIsNone(action.dialog)
         finally:
