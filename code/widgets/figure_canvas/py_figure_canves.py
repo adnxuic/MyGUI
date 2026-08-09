@@ -1,6 +1,7 @@
 """Host Matplotlib figures and register their editable components."""
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, Optional
 from Qt_core import *
 
@@ -66,6 +67,7 @@ from code import tex_config
 from code import status_messages
 from code.database import (
     ColumnRef,
+    ColumnType,
     DataPreprocessSpec,
     TableChangeSet,
     TableRepository,
@@ -78,6 +80,7 @@ from code.database.safe_expression import evaluate_curve_expression
 from code.widgets.common_widget.min_widget.color_library import ColorLibrary
 from code.figuremodify.style_base.color_models import (
     ColorCycleState,
+    ColorSelection,
     normalize_color,
 )
 from code.figuremodify.style_base.creation_defaults import (
@@ -96,6 +99,27 @@ from matplotlib import style as mpl_style
 
 import numpy as np
 mpl.use("QtAgg")
+
+
+@dataclass(frozen=True, slots=True)
+class ChartBatchCreationResult:
+    """Transient result returned after one atomic chart creation batch."""
+
+    component_ids: tuple[str, ...]
+    artists: tuple[Any, ...]
+    colors: tuple[str, ...]
+    excluded_counts: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedChartSeries:
+    x_ref: ColumnRef
+    y_ref: ColumnRef
+    x: Any
+    y: Any
+    label: str
+    color: str
+    excluded_count: int
 
 
 class PyFigureCanvas(QWidget):
@@ -909,6 +933,340 @@ class PyFigureCanvas(QWidget):
 
         transaction.on_rollback(rollback_inspector)
 
+    def _normalize_batch_refs(
+        self,
+        x_ref: ColumnRef,
+        y_refs,
+    ) -> tuple[ColumnRef, tuple[ColumnRef, ...]]:
+        if not isinstance(x_ref, ColumnRef):
+            raise ValueError("Please select X Data.")
+        normalized_y = tuple(y_refs)
+        if not normalized_y:
+            raise ValueError("Please select at least one Y Data column.")
+        if any(not isinstance(ref, ColumnRef) for ref in normalized_y):
+            raise ValueError("Every Y Data selection must be a column reference.")
+        if len(set(normalized_y)) != len(normalized_y):
+            raise ValueError("Duplicate Y Data selections are not allowed.")
+        if x_ref.project_id != self.project_id:
+            raise ValueError("X Data must belong to the current project.")
+        if not self.repository.has_ref(x_ref):
+            raise ValueError("X Data column was removed.")
+        x_column = self.repository.sheet(
+            x_ref.project_id, x_ref.sheet_id
+        ).column(x_ref.column_id)
+        if x_column.type not in {ColumnType.NUMBER, ColumnType.DATETIME}:
+            raise ValueError("X Data must be numeric or date/time.")
+        for index, ref in enumerate(normalized_y, start=1):
+            if ref.project_id != self.project_id:
+                raise ValueError(
+                    f"Y Data selection {index} must belong to the current project."
+                )
+            if not self.repository.has_ref(ref):
+                raise ValueError(f"Y Data selection {index} was removed.")
+            column = self.repository.sheet(
+                ref.project_id, ref.sheet_id
+            ).column(ref.column_id)
+            if column.type is not ColumnType.NUMBER:
+                raise ValueError(
+                    f"Y Data selection {index} must be numeric."
+                )
+        return x_ref, normalized_y
+
+    def _batch_series_labels(
+        self,
+        y_refs: tuple[ColumnRef, ...],
+    ) -> tuple[str, ...]:
+        names = tuple(
+            str(
+                self.repository.sheet(ref.project_id, ref.sheet_id)
+                .column(ref.column_id)
+                .name
+            )
+            for ref in y_refs
+        )
+        counts = {
+            name.casefold(): sum(
+                candidate.casefold() == name.casefold()
+                for candidate in names
+            )
+            for name in names
+        }
+        labels = []
+        for ref, name in zip(y_refs, names):
+            if counts[name.casefold()] == 1:
+                labels.append(name)
+                continue
+            sheet = self.repository.sheet(ref.project_id, ref.sheet_id)
+            labels.append(f"{sheet.name}/{name}")
+        return tuple(labels)
+
+    def _batch_color_plan(
+        self,
+        selection: ColorSelection,
+        count: int,
+    ) -> tuple[tuple[str, ...], dict[str, Any] | None, bool]:
+        if not isinstance(selection, ColorSelection):
+            raise TypeError("Batch chart color must be a ColorSelection.")
+        if selection.palette is None:
+            return (
+                tuple(selection.color for _index in range(count)),
+                None,
+                False,
+            )
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before adding charts.")
+        cycle = self.axes_commands.cycle_state(axes_id)
+        colors: list[str] = []
+        next_selection = selection
+        for index in range(count):
+            if index:
+                next_selection = cycle.peek()
+            colors.append(next_selection.color)
+            cycle.commit(next_selection)
+        return tuple(colors), cycle.to_dict(), True
+
+    def _prepare_data_batch(
+        self,
+        x_ref: ColumnRef,
+        y_refs,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None,
+        color_selection: ColorSelection,
+        *,
+        preserve_gaps: bool,
+    ) -> tuple[
+        tuple[_PreparedChartSeries, ...],
+        dict[str, Any] | None,
+        bool,
+    ]:
+        x_ref, normalized_y = self._normalize_batch_refs(x_ref, y_refs)
+        spec = DataPreprocessSpec.from_dict(preprocess)
+        labels = self._batch_series_labels(normalized_y)
+        resolved = []
+        for y_ref, label in zip(normalized_y, labels):
+            try:
+                pair = resolve_preprocessed_pair(
+                    self.repository,
+                    x_ref,
+                    y_ref,
+                    spec,
+                    preserve_gaps=preserve_gaps,
+                )
+                if not pair.valid_mask.any():
+                    raise ValueError(
+                        "X Data and Y Data have no valid row pairs after "
+                        "preprocessing."
+                    )
+            except Exception as exc:
+                raise ValueError(f"{label}: {exc}") from exc
+            resolved.append((y_ref, label, pair))
+        colors, final_cycle, commit_cycle = self._batch_color_plan(
+            color_selection,
+            len(resolved),
+        )
+        prepared = tuple(
+            _PreparedChartSeries(
+                x_ref=x_ref,
+                y_ref=y_ref,
+                x=pair.x,
+                y=pair.y,
+                label=label,
+                color=color,
+                excluded_count=pair.excluded_count,
+            )
+            for (y_ref, label, pair), color in zip(resolved, colors)
+        )
+        return prepared, final_cycle, commit_cycle
+
+    def _stage_plot(
+        self,
+        transaction,
+        series: _PreparedChartSeries,
+        *,
+        style,
+        size,
+        linewidth: float | None,
+        preprocess: DataPreprocessSpec,
+        object_id: str | None = None,
+        color_order: int | None = None,
+    ):
+        object_id = object_id or new_id()
+        plot_kwargs = {
+            "linestyle": style,
+            "markersize": size,
+            "color": series.color,
+            "label": series.label,
+        }
+        if linewidth is not None:
+            plot_kwargs["linewidth"] = float(linewidth)
+        with mpl_style.context(self.component_style):
+            line, = self.current_axes.plot(series.x, series.y, **plot_kwargs)
+        transaction.on_rollback(
+            lambda line=line: self._remove_created_artist(line)
+        )
+        component_order = self._claim_color_order(color_order)
+        controller = self._register_chart_controller(
+            DataPlotController,
+            object_id,
+            ComponentRole.DATA_PLOT,
+            line,
+            component_order,
+            {
+                "linestyle": line.get_linestyle(),
+                "markersize": float(line.get_markersize()),
+                "color": series.color,
+                "label": series.label,
+            },
+            {
+                "x_ref": series.x_ref.to_dict(),
+                "y_ref": series.y_ref.to_dict(),
+                "preprocess": preprocess.to_dict(),
+            },
+        )
+        self._prepare_created_component(controller, transaction)
+        return line, controller
+
+    def _stage_scatter(
+        self,
+        transaction,
+        series: _PreparedChartSeries,
+        *,
+        size,
+        marker,
+        preprocess: DataPreprocessSpec,
+        object_id: str | None = None,
+        color_order: int | None = None,
+    ):
+        object_id = object_id or new_id()
+        with mpl_style.context(self.component_style):
+            scatter = self.current_axes.scatter(
+                series.x,
+                series.y,
+                s=size,
+                c=series.color,
+                marker=marker,
+                label=series.label,
+            )
+        transaction.on_rollback(
+            lambda scatter=scatter: self._remove_created_artist(scatter)
+        )
+        component_order = self._claim_color_order(color_order)
+        controller = self._register_chart_controller(
+            ScatterController,
+            object_id,
+            ComponentRole.SCATTER,
+            scatter,
+            component_order,
+            {
+                "color": series.color,
+                "edgecolor": series.color,
+                "size": float(size),
+                "marker": marker,
+                "label": series.label,
+            },
+            {
+                "x_ref": series.x_ref.to_dict(),
+                "y_ref": series.y_ref.to_dict(),
+                "preprocess": preprocess.to_dict(),
+            },
+        )
+        self._prepare_created_component(controller, transaction)
+        return scatter, controller
+
+    def _stage_interpolation(
+        self,
+        transaction,
+        series: _PreparedChartSeries,
+        *,
+        method,
+        k: int,
+        samples: int,
+        lam: float | None,
+        lam_auto: bool,
+        preprocess: DataPreprocessSpec,
+        object_id: str | None = None,
+        color_order: int | None = None,
+    ):
+        object_id = object_id or new_id()
+        with mpl_style.context(self.component_style):
+            line, = self.current_axes.plot(
+                series.x,
+                series.y,
+                color=series.color,
+                label=series.label,
+            )
+        transaction.on_rollback(
+            lambda line=line: self._remove_created_artist(line)
+        )
+        component_order = self._claim_color_order(color_order)
+        controller = self._register_chart_controller(
+            InterpolationController,
+            object_id,
+            ComponentRole.INTERPOLATION,
+            line,
+            component_order,
+            {
+                "linestyle": line.get_linestyle(),
+                "color": series.color,
+                "label": series.label,
+            },
+            {
+                "x_ref": series.x_ref.to_dict(),
+                "y_ref": series.y_ref.to_dict(),
+                "preprocess": preprocess.to_dict(),
+                "method": method,
+                "k": int(k),
+                "samples": int(samples),
+                "lam": None if lam is None else float(lam),
+                "lam_auto": bool(lam_auto),
+            },
+        )
+        self._prepare_created_component(controller, transaction)
+        return line, controller
+
+    def _commit_chart_batch(
+        self,
+        prepared: tuple[_PreparedChartSeries, ...],
+        stage,
+        *,
+        final_cycle: dict[str, Any] | None,
+        commit_cycle: bool,
+    ) -> ChartBatchCreationResult:
+        axes_id = self.current_axes_component_id
+        axes_controller = self.current_axes_controller
+        if axes_id is None or axes_controller is None or self.current_axes is None:
+            raise ValueError("Select an axes before adding charts.")
+        artists = []
+        controllers = []
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.watch_existing(axes_id)
+            for series in prepared:
+                artist, controller = stage(transaction, series)
+                artists.append(artist)
+                controllers.append(controller)
+            if commit_cycle:
+                change = axes_controller.set_property(
+                    "color_cycle", final_cycle
+                )
+                if not change.ok:
+                    raise ValueError(
+                        change.message or "Could not commit the chart color cycle."
+                    )
+        self._select_created_component(controllers[-1])
+        self.redraw()
+        colors = tuple(series.color for series in prepared)
+        self.color_library.record_recent_many(colors)
+        return ChartBatchCreationResult(
+            component_ids=tuple(
+                controller.component_id for controller in controllers
+            ),
+            artists=tuple(artists),
+            colors=colors,
+            excluded_counts=tuple(
+                series.excluded_count for series in prepared
+            ),
+        )
+
     def delete_component_group(
         self,
         component_ids,
@@ -1140,46 +1498,68 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=True,
         )
-        x, y = pair.x, pair.y
-        color = normalize_color(color)
-        object_id = object_id or new_id()
-        plot_kwargs = {
-            "linestyle": style,
-            "markersize": size,
-            "color": color,
-            "label": label,
-        }
-        if linewidth is not None:
-            plot_kwargs["linewidth"] = float(linewidth)
+        series = _PreparedChartSeries(
+            x_ref=x_ref,
+            y_ref=y_ref,
+            x=pair.x,
+            y=pair.y,
+            label=str(label),
+            color=normalize_color(color),
+            excluded_count=pair.excluded_count,
+        )
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before adding a chart.")
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
-                line, = self.current_axes.plot(x, y, **plot_kwargs)
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(line)
+            transaction.watch_existing(axes_id)
+            line, controller = self._stage_plot(
+                transaction,
+                series,
+                style=style,
+                size=size,
+                linewidth=linewidth,
+                preprocess=preprocess,
+                object_id=object_id,
+                color_order=color_order,
             )
-            component_order = self._claim_color_order(color_order)
-            controller = self._register_chart_controller(
-                DataPlotController,
-                object_id,
-                ComponentRole.DATA_PLOT,
-                line,
-                component_order,
-                {
-                    "linestyle": line.get_linestyle(),
-                    "markersize": float(line.get_markersize()),
-                    "color": color,
-                    "label": label,
-                },
-                {
-                    "x_ref": x_ref.to_dict(),
-                    "y_ref": y_ref.to_dict(),
-                    "preprocess": preprocess.to_dict(),
-                },
-            )
-            self._prepare_created_component(controller, transaction)
         self._select_created_component(controller)
         self.redraw()
         return line
+
+    def add_plots(
+        self,
+        x_ref: ColumnRef,
+        y_refs,
+        *,
+        style,
+        size,
+        linewidth: float | None,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None,
+        color_selection: ColorSelection,
+    ) -> ChartBatchCreationResult:
+        """Atomically create one Plot component for every selected Y column."""
+
+        spec = DataPreprocessSpec.from_dict(preprocess)
+        prepared, final_cycle, commit_cycle = self._prepare_data_batch(
+            x_ref,
+            y_refs,
+            spec,
+            color_selection,
+            preserve_gaps=True,
+        )
+        return self._commit_chart_batch(
+            prepared,
+            lambda transaction, series: self._stage_plot(
+                transaction,
+                series,
+                style=style,
+                size=size,
+                linewidth=linewidth,
+                preprocess=spec,
+            ),
+            final_cycle=final_cycle,
+            commit_cycle=commit_cycle,
+        )
 
     # Add scatter plot
     def add_scatter(self, x, y, size, color, marker, label, x_ref: ColumnRef, y_ref: ColumnRef,
@@ -1196,41 +1576,65 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=False,
         )
-        x, y = pair.x, pair.y
-        color = normalize_color(color)
-        object_id = object_id or new_id()
+        series = _PreparedChartSeries(
+            x_ref=x_ref,
+            y_ref=y_ref,
+            x=pair.x,
+            y=pair.y,
+            label=str(label),
+            color=normalize_color(color),
+            excluded_count=pair.excluded_count,
+        )
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before adding a chart.")
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
-                scatter = self.current_axes.scatter(
-                    x, y, s=size, c=color, marker=marker, label=label
-                )
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(scatter)
+            transaction.watch_existing(axes_id)
+            scatter, controller = self._stage_scatter(
+                transaction,
+                series,
+                size=size,
+                marker=marker,
+                preprocess=preprocess,
+                object_id=object_id,
+                color_order=color_order,
             )
-            component_order = self._claim_color_order(color_order)
-            controller = self._register_chart_controller(
-                ScatterController,
-                object_id,
-                ComponentRole.SCATTER,
-                scatter,
-                component_order,
-                {
-                    "color": color,
-                    "edgecolor": color,
-                    "size": float(size),
-                    "marker": marker,
-                    "label": label,
-                },
-                {
-                    "x_ref": x_ref.to_dict(),
-                    "y_ref": y_ref.to_dict(),
-                    "preprocess": preprocess.to_dict(),
-                },
-            )
-            self._prepare_created_component(controller, transaction)
         self._select_created_component(controller)
         self.redraw()
         return scatter
+
+    def add_scatters(
+        self,
+        x_ref: ColumnRef,
+        y_refs,
+        *,
+        size,
+        marker,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None,
+        color_selection: ColorSelection,
+    ) -> ChartBatchCreationResult:
+        """Atomically create one Scatter component for every selected Y."""
+
+        spec = DataPreprocessSpec.from_dict(preprocess)
+        prepared, final_cycle, commit_cycle = self._prepare_data_batch(
+            x_ref,
+            y_refs,
+            spec,
+            color_selection,
+            preserve_gaps=False,
+        )
+        return self._commit_chart_batch(
+            prepared,
+            lambda transaction, series: self._stage_scatter(
+                transaction,
+                series,
+                size=size,
+                marker=marker,
+                preprocess=spec,
+            ),
+            final_cycle=final_cycle,
+            commit_cycle=commit_cycle,
+        )
 
     # Add fit curve
     def add_fit_curve(self, x, y, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
@@ -1367,42 +1771,32 @@ class PyFigureCanvas(QWidget):
                     f"current source data ({exc}); an empty component "
                     "was restored."
                 )
-        object_id = object_id or new_id()
+        series = _PreparedChartSeries(
+            x_ref=x_ref,
+            y_ref=y_ref,
+            x=x_new,
+            y=y_new,
+            label=str(label),
+            color=color,
+            excluded_count=pair.excluded_count,
+        )
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before adding a chart.")
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
-                line, = self.current_axes.plot(
-                    x_new,
-                    y_new,
-                    color=color,
-                    label=label,
-                )
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(line)
+            transaction.watch_existing(axes_id)
+            line, controller = self._stage_interpolation(
+                transaction,
+                series,
+                method=method,
+                k=k,
+                samples=samples,
+                lam=lam,
+                lam_auto=lam_auto,
+                preprocess=preprocess,
+                object_id=object_id,
+                color_order=color_order,
             )
-            component_order = self._claim_color_order(color_order)
-            controller = self._register_chart_controller(
-                InterpolationController,
-                object_id,
-                ComponentRole.INTERPOLATION,
-                line,
-                component_order,
-                {
-                    "linestyle": line.get_linestyle(),
-                    "color": color,
-                    "label": label,
-                },
-                {
-                    "x_ref": x_ref.to_dict(),
-                    "y_ref": y_ref.to_dict(),
-                    "preprocess": preprocess.to_dict(),
-                    "method": method,
-                    "k": int(k),
-                    "samples": int(samples),
-                    "lam": None if lam is None else float(lam),
-                    "lam_auto": bool(lam_auto),
-                },
-            )
-            self._prepare_created_component(controller, transaction)
         self._select_created_component(controller)
         self.redraw()
         if announce:
@@ -1413,6 +1807,70 @@ class PyFigureCanvas(QWidget):
                     "Interpolation curve has no valid data yet; its editor and style were kept."
                 )
         return line
+
+    def add_interpolate_curves(
+        self,
+        x_ref: ColumnRef,
+        y_refs,
+        *,
+        method,
+        color_selection: ColorSelection,
+        k: int = 3,
+        samples: int = DEFAULT_INTERPOLATION_SAMPLES,
+        lam: float | None = None,
+        lam_auto: bool = True,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+    ) -> ChartBatchCreationResult:
+        """Atomically create one interpolation component for every Y."""
+
+        spec = DataPreprocessSpec.from_dict(preprocess)
+        sources, final_cycle, commit_cycle = self._prepare_data_batch(
+            x_ref,
+            y_refs,
+            spec,
+            color_selection,
+            preserve_gaps=False,
+        )
+        prepared = []
+        for series in sources:
+            try:
+                x_new, y_new = interpolate_curve(
+                    np.asarray(series.x),
+                    np.asarray(series.y),
+                    method,
+                    k=k,
+                    samples=samples,
+                    lam=lam,
+                    lam_auto=lam_auto,
+                )
+            except Exception as exc:
+                raise ValueError(f"{series.label}: {exc}") from exc
+            prepared.append(
+                _PreparedChartSeries(
+                    x_ref=series.x_ref,
+                    y_ref=series.y_ref,
+                    x=x_new,
+                    y=y_new,
+                    label=series.label,
+                    color=series.color,
+                    excluded_count=series.excluded_count,
+                )
+            )
+        return self._commit_chart_batch(
+            tuple(prepared),
+            lambda transaction, series: self._stage_interpolation(
+                transaction,
+                series,
+                method=method,
+                k=k,
+                samples=samples,
+                lam=lam,
+                lam_auto=lam_auto,
+                preprocess=spec,
+            ),
+            final_cycle=final_cycle,
+            commit_cycle=commit_cycle,
+        )
 
     # Add text
     @staticmethod

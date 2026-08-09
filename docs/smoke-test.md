@@ -36,13 +36,24 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 5. Save table data to the in-memory database from the sheet/table workflow if needed.
 6. Create a plot using two saved data columns. Confirm the line-style control
    initially reads `Solid`, selecting `Dashed` creates a dashed line, and the
-   Inspector shows the same style.
+   Inspector shows the same style. Reopen Plot, select one shared X and at
+   least three Y columns from the checkable dropdown, and confirm the compact
+   field reports the selected count. Confirm the X/Y `fx` expression inputs
+   remain visible beside their data selectors. Create the batch and confirm
+   the curves receive distinct palette colors and Y-column legend labels.
 7. Create a scatter chart using two saved data columns.
+   Select multiple Y columns and confirm one Scatter component is created per
+   Y with shared marker/size settings; edit one afterward and confirm the
+   other Scatter components remain unchanged.
    In Plot and Scatter, set X `fx` to `1/x` and Y `fx` to `y`; confirm the
    reciprocal-X data is drawn. Enter an unsafe or malformed expression and
    confirm all four source/formula controls and the artist roll back with one
    red result. Include X = 0 and confirm one yellow filtered-row warning.
-8. Create an interpolation curve from saved data, change its method, set `Samples`, and confirm the curve redraws.
+8. Create interpolation curves from one shared X and multiple Y columns,
+   change their shared method and `Samples`, and confirm each resulting curve
+   redraws independently. Include one Y column that cannot satisfy the method
+   and confirm the complete batch is rejected with one red result, no palette
+   advance, and no partial component.
 9. Change method-specific interpolation options and confirm the curve redraws.
 10. Change interpolation X/Y data sources from the right-side panel and confirm only current-project data is listed.
 11. Create a SciPy fitting curve, run `poly2`, and confirm the result area shows coefficients and goodness metrics.

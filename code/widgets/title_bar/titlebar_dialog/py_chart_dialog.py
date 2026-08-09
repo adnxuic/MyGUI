@@ -8,6 +8,7 @@ from code.widgets.fig_control_window.component_editors import (
     DataReferenceInput,
     InterpolationOptionsInput,
     LineAppearanceInput,
+    MultiSeriesDataReferenceInput,
     ScatterStyleEditor,
 )
 from code.widgets import qss_func
@@ -64,6 +65,26 @@ def _show_creation_result(name: str, pair) -> None:
         status_messages.show_success(f"{name} created.")
 
 
+def _show_batch_creation_result(name: str, result) -> None:
+    count = len(result.component_ids)
+    noun = "curve" if count == 1 else "curves"
+    total_excluded = sum(result.excluded_counts)
+    affected = sum(value > 0 for value in result.excluded_counts)
+    if total_excluded:
+        status_messages.show_warning(
+            f"Created {count} {name} {noun}; preprocessing masked or "
+            f"filtered {total_excluded} row pairs across {affected} {noun}."
+        )
+    else:
+        status_messages.show_success(f"Created {count} {name} {noun}.")
+
+
+def _update_batch_button(button: QPushButton, data_input) -> None:
+    count = data_input.selected_count()
+    button.setEnabled(count > 0)
+    button.setText(f"Create ({count})")
+
+
 def _new_color_input(figure_window: PyFigureWindow) -> ColorChoiceWidget:
     return ColorChoiceWidget(
         colorselector=figure_window.get_current_canvas_axes_colorselector(),
@@ -85,6 +106,18 @@ def _new_data_reference_input(
 ) -> DataReferenceInput:
     canvas = figure_window.current_canva
     return DataReferenceInput(
+        figure_window.repository,
+        canvas.project_id if canvas is not None else None,
+        parent=parent,
+    )
+
+
+def _new_multi_data_reference_input(
+    figure_window: PyFigureWindow,
+    parent=None,
+) -> MultiSeriesDataReferenceInput:
+    canvas = figure_window.current_canva
+    return MultiSeriesDataReferenceInput(
         figure_window.repository,
         canvas.project_id if canvas is not None else None,
         parent=parent,
@@ -232,7 +265,7 @@ class PyPlotDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        self.data_reference_input = _new_data_reference_input(
+        self.data_reference_input = _new_multi_data_reference_input(
             self.figure_window,
             parent=self,
         )
@@ -248,6 +281,7 @@ class PyPlotDialog(QDialog):
             label="plot",
             style=self.creation_defaults.line.linestyle,
             linewidth=self.creation_defaults.line.linewidth,
+            show_label=False,
         )
         self.line_style_editor = self.appearance_input.line_style_editor
         self.style_input = self.appearance_input.style_input
@@ -272,6 +306,13 @@ class PyPlotDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
 
+        self.data_reference_input.refsChanged.connect(
+            lambda _x, _ys: _update_batch_button(
+                self.ok_button, self.data_reference_input
+            )
+        )
+        _update_batch_button(self.ok_button, self.data_reference_input)
+
         self.setLayout(self.layout)
 
     def accept(self):
@@ -288,35 +329,34 @@ class PyPlotDialog(QDialog):
             return
 
         try:
-            x_ref, y_ref, pair, preprocess = _selected_pair(
-                self.figure_window,
-                self.x_data_input,
-                self.y_data_input,
-                self.data_reference_input.preprocess_values(),
-                line_mode=True,
+            result = self.figure_window.current_canva.add_plots(
+                self.data_reference_input.get_x_ref(),
+                self.data_reference_input.get_y_refs(),
+                style=self.line_style_editor.style(),
+                size=self.creation_defaults.line.markersize,
+                linewidth=self.linewidth_input.value(),
+                preprocess=self.data_reference_input.preprocess_values(),
+                color_selection=self.color_input.selection(),
             )
-        except ValueError as exc:
+        except Exception as exc:
             status_messages.show_error(str(exc))
             return
 
-        self.figure_window.current_canva.add_plot(x=pair.x, y=pair.y,
-                                                  style=self.line_style_editor.style(),
-                                                  size=self.creation_defaults.line.markersize,
-                                                  color=self.color_input.color(),
-                                                  label=self.label_input.text(),
-                                                  x_ref=x_ref,
-                                                  y_ref=y_ref,
-                                                  linewidth=self.linewidth_input.value(),
-                                                  preprocess=preprocess)
-
-        _commit_color_input(self.figure_window, self.color_input)
-        _show_creation_result("Plot", pair)
+        _show_batch_creation_result("Plot", result)
+        self.data_reference_input.dispose()
         super().accept()
 
     def reject(self):
         """Reject the dialog without applying its pending inputs."""
 
+        self.data_reference_input.dispose()
         super().reject()
+
+    def closeEvent(self, event):
+        """Dispose the batch selector when the dialog window closes."""
+
+        self.data_reference_input.dispose()
+        super().closeEvent(event)
 
 
 # Scatter plot dialog
@@ -337,7 +377,7 @@ class PyScatterDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        self.data_reference_input = _new_data_reference_input(
+        self.data_reference_input = _new_multi_data_reference_input(
             self.figure_window,
             parent=self,
         )
@@ -361,11 +401,10 @@ class PyScatterDialog(QDialog):
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
 
-        # Legend label input
+        # Compatibility-only hidden label input; batch labels come from Y.
         self.label_input = QLineEdit(self)
         self.label_input.setText('scatter')
-        self.layout.addWidget(QLabel('Label:'))
-        self.layout.addWidget(self.label_input)
+        self.label_input.hide()
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
@@ -377,6 +416,13 @@ class PyScatterDialog(QDialog):
         self.button_layout.addWidget(self.ok_button)
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
+
+        self.data_reference_input.refsChanged.connect(
+            lambda _x, _ys: _update_batch_button(
+                self.ok_button, self.data_reference_input
+            )
+        )
+        _update_batch_button(self.ok_button, self.data_reference_input)
 
         self.setLayout(self.layout)
 
@@ -394,33 +440,33 @@ class PyScatterDialog(QDialog):
             return
 
         try:
-            x_ref, y_ref, pair, preprocess = _selected_pair(
-                self.figure_window,
-                self.x_data_input,
-                self.y_data_input,
-                self.data_reference_input.preprocess_values(),
+            result = self.figure_window.current_canva.add_scatters(
+                self.data_reference_input.get_x_ref(),
+                self.data_reference_input.get_y_refs(),
+                size=self.size_input.value(),
+                marker=self.scatter_style_editor.marker(),
+                preprocess=self.data_reference_input.preprocess_values(),
+                color_selection=self.color_input.selection(),
             )
-        except ValueError as exc:
+        except Exception as exc:
             status_messages.show_error(str(exc))
             return
 
-        self.figure_window.current_canva.add_scatter(x=pair.x, y=pair.y,
-                                                     size=self.size_input.value(),
-                                                     color=self.color_input.color(),
-                                                     marker=self.style_input.currentText(),
-                                                     label=self.label_input.text(),
-                                                     x_ref=x_ref,
-                                                     y_ref=y_ref,
-                                                     preprocess=preprocess)
-
-        _commit_color_input(self.figure_window, self.color_input)
-        _show_creation_result("Scatter", pair)
+        _show_batch_creation_result("Scatter", result)
+        self.data_reference_input.dispose()
         super().accept()
 
     def reject(self):
         """Reject the dialog without applying its pending inputs."""
 
+        self.data_reference_input.dispose()
         super().reject()
+
+    def closeEvent(self, event):
+        """Dispose the batch selector when the dialog window closes."""
+
+        self.data_reference_input.dispose()
+        super().closeEvent(event)
 
 
 class PyFitDialog(QDialog):
@@ -536,7 +582,7 @@ class PyInterpolationDialog(QDialog):
 
         self.layout = QVBoxLayout()
 
-        self.data_reference_input = _new_data_reference_input(
+        self.data_reference_input = _new_multi_data_reference_input(
             self.figure_window,
             parent=self,
         )
@@ -583,6 +629,13 @@ class PyInterpolationDialog(QDialog):
         self.button_bar.setLayout(self.button_layout)
         self.layout.addWidget(self.button_bar)
 
+        self.data_reference_input.refsChanged.connect(
+            lambda _x, _ys: _update_batch_button(
+                self.ok_button, self.data_reference_input
+            )
+        )
+        _update_batch_button(self.ok_button, self.data_reference_input)
+
         self.setLayout(self.layout)
 
     def change_method(self):
@@ -612,39 +665,34 @@ class PyInterpolationDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
+        options = self.options_input.options()
         try:
-            x_ref, y_ref, pair, preprocess = _selected_pair(
-                self.figure_window,
-                self.x_data_input,
-                self.y_data_input,
-                self.data_reference_input.preprocess_values(),
+            result = self.figure_window.current_canva.add_interpolate_curves(
+                self.data_reference_input.get_x_ref(),
+                self.data_reference_input.get_y_refs(),
+                preprocess=self.data_reference_input.preprocess_values(),
+                color_selection=self.color_input.selection(),
+                **options,
             )
-        except ValueError as exc:
+        except Exception as exc:
             status_messages.show_error(str(exc))
             return
 
-        options = self.options_input.options()
-        line = self.figure_window.current_canva.add_interpolate_curve(
-            x=pair.x,
-            y=pair.y,
-            x_ref=x_ref,
-            y_ref=y_ref,
-            preprocess=preprocess,
-            **options,
-            color=self.color_input.color(),
-            announce=False,
-        )
-        if line is None:
-            return
-
-        _commit_color_input(self.figure_window, self.color_input)
-        _show_creation_result("Interpolation curve", pair)
+        _show_batch_creation_result("Interpolation", result)
+        self.data_reference_input.dispose()
         super().accept()
 
     def reject(self):
         """Reject the dialog without applying its pending inputs."""
 
+        self.data_reference_input.dispose()
         super().reject()
+
+    def closeEvent(self, event):
+        """Dispose the batch selector when the dialog window closes."""
+
+        self.data_reference_input.dispose()
+        super().closeEvent(event)
 
 
 chart_dialog_dict = {

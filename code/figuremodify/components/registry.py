@@ -44,13 +44,29 @@ _CHART_KINDS = frozenset({ComponentKind.LINE, ComponentKind.SCATTER})
 class ComponentRegistrationTransaction:
     """Collect external rollback work for one component creation batch."""
 
-    def __init__(self) -> None:
+    def __init__(self, registry: "ComponentRegistry") -> None:
+        self._registry = registry
         self._rollback_callbacks: list[Callable[[], None]] = []
+        self._watched_existing: dict[
+            str, tuple[ComponentController[Any], tuple[Any, ...]]
+        ] = {}
 
     def on_rollback(self, callback: Callable[[], None]) -> None:
         if not callable(callback):
             raise TypeError("Registration rollback callback must be callable.")
         self._rollback_callbacks.append(callback)
+
+    def watch_existing(self, component_id: str) -> None:
+        """Snapshot an existing Controller and target for exact rollback."""
+
+        component_id = str(component_id)
+        if component_id in self._watched_existing:
+            return
+        controller = self._registry.get(component_id)
+        self._watched_existing[component_id] = (
+            controller,
+            controller._transaction_snapshot(),
+        )
 
     def _rollback(self) -> None:
         for callback in reversed(self._rollback_callbacks):
@@ -58,6 +74,17 @@ class ComponentRegistrationTransaction:
                 callback()
             except Exception:
                 continue
+
+    def _restore_watched(self) -> tuple[Exception, ...]:
+        errors: list[Exception] = []
+        for controller, snapshot in reversed(
+            tuple(self._watched_existing.values())
+        ):
+            try:
+                controller._restore_transaction_snapshot(snapshot)
+            except Exception as exc:
+                errors.append(exc)
+        return tuple(errors)
 
 
 class ComponentRegistry:
@@ -1026,7 +1053,7 @@ class ComponentRegistry:
         if self._registration_active:
             raise RuntimeError("Nested component registration is not supported.")
         self._registration_active = True
-        transaction = ComponentRegistrationTransaction()
+        transaction = ComponentRegistrationTransaction(self)
         existing_ids = set(self._controllers)
         original_children = defaultdict(
             set,
@@ -1043,7 +1070,7 @@ class ComponentRegistry:
             if self._batch_depth == 1:
                 self.flush_updates()
             succeeded = True
-        except Exception:
+        except Exception as exc:
             transaction._rollback()
             new_ids = set(self._controllers) - existing_ids
             for component_id in reversed(
@@ -1061,8 +1088,14 @@ class ComponentRegistry:
                 controller._registry = None
                 controller._deleted = True
             self._children = original_children
+            restore_errors = transaction._restore_watched()
             self._pending = original_pending
             del self._event_buffer[event_start:]
+            if restore_errors:
+                raise RuntimeError(
+                    "Component registration rollback could not restore "
+                    "all watched components."
+                ) from exc
             raise
         finally:
             self._batch_depth -= 1

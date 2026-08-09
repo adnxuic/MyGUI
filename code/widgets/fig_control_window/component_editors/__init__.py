@@ -30,6 +30,7 @@ from .inputs import (
     InAxesInput,
     InterpolationOptionsInput,
     LineAppearanceInput,
+    MultiSeriesDataReferenceInput,
 )
 from .profiles import register_production_profiles
 from .sections import (
@@ -67,6 +68,7 @@ __all__ = [
     "InAxesInput",
     "InterpolationOptionsInput",
     "LineAppearanceInput",
+    "MultiSeriesDataReferenceInput",
     "register_production_profiles",
     "DataReferenceSection",
     "ImageInAxesSourceSection",

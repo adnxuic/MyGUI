@@ -41,7 +41,7 @@ These settings are application preferences. They are not written to `.mygui.json
 - The Components tree is the only Component navigation. It opens one exact
   stable-ID Inspector at a time; every Inspector binds its Controller
   directly.
-- Chart creation dialogs reuse controller-free line appearance, data reference, and interpolation-option inputs. Accepting a dialog still delegates component creation to the active canvas.
+- Chart creation dialogs reuse controller-free line appearance, data reference, and interpolation-option inputs. Plot, Scatter, and Interpolation use a compact shared-X/multi-Y dropdown with visible X/Y preprocessing expressions and publish all selected curves through one Canvas registration transaction. Fit retains its single-pair input. Accepting a dialog still delegates component creation to the active canvas.
 
 ## Project tab close and application exit
 
