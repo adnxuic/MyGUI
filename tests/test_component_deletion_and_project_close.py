@@ -1121,7 +1121,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
         self.assertIsNone(self.canvas.current_axes_component_id)
 
-    def test_axes_delete_round_trips_through_schema_v6(self):
+    def test_axes_delete_round_trips_through_schema_v9(self):
         axes = self._replace_with_two_by_two_axes()
         self.assertTrue(self.canvas.delete_axes(axes[1].component_id))
         surviving = sorted(

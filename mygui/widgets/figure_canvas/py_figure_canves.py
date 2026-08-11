@@ -452,7 +452,7 @@ class PyFigureCanvas(QWidget):
     def _component_paths_from_tree(
         component_tree: dict[str, Any] | None,
     ) -> dict[str, str]:
-        """Map fixed semantic paths to IDs from a validated v6 tree."""
+        """Map fixed semantic paths to IDs from a validated v9 tree."""
 
         if not isinstance(component_tree, dict):
             return {}
@@ -2547,7 +2547,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated v7 component tree directly."""
+        """Materialize and apply a validated v9 component tree directly."""
 
         self._restoring_component_tree_now = True
         try:
@@ -2617,7 +2617,7 @@ class PyFigureCanvas(QWidget):
         for state in sorted(
             dynamic_states,
             key=lambda item: (
-                int(item.selector.get("axes_index", -1)),
+                item.parent_id or "",
                 item.order,
                 item.id,
             ),
@@ -2640,7 +2640,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all v7 states after their Matplotlib targets exist."""
+        """Apply all v9 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return

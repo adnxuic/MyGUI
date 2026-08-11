@@ -255,13 +255,13 @@ class AxesLayoutSpec:
         }
 
 
-def stable_layout_id(project_id: str, legacy_group: int) -> str:
-    """Return a deterministic layout id for a migrated v8 layout group."""
+def stable_layout_id(project_id: str, group_index: int) -> str:
+    """Return a deterministic layout id for a semantic layout group."""
 
     return str(
         uuid5(
             NAMESPACE_URL,
-            f"mygui-project:{str(project_id).strip()}:layout:{int(legacy_group)}",
+            f"mygui-project:{str(project_id).strip()}:layout:{int(group_index)}",
         )
     )
 

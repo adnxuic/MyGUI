@@ -4,7 +4,7 @@ All physical Figure-component deletion uses the Canvas-owned
 `DeletionCoordinator`. Tree single/batch actions, Axes deletion, Inspector
 commands, and table-data dependency cascades submit stable IDs through the same
 two-phase workflow. Deletion state is runtime-only and does not change schema
-v6.
+v9.
 
 ## Runtime values
 

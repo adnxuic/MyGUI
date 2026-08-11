@@ -5,7 +5,6 @@ import unittest
 from unittest import mock
 from collections import Counter
 from pathlib import Path
-from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -16,7 +15,12 @@ from PySide6.QtWidgets import QApplication
 from mygui import status_messages
 from mygui.database import ColumnRef, ColumnType, TableChangeSet
 from mygui.database.interpolate_func import interpolate_dict
-from mygui.figuremodify.components import ComponentKind, ComponentRole
+from mygui.figuremodify.components import (
+    ChangeStatus,
+    ComponentChange,
+    ComponentKind,
+    ComponentRole,
+)
 from mygui.figuremodify.components.serialization import validate_v9_figure
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
@@ -164,7 +168,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         self.canvas.current_axes.legend()
         return ids
 
-    def test_canvas_registers_complete_component_tree_and_valid_v8_snapshot(self):
+    def test_canvas_registers_complete_component_tree_and_valid_v9_snapshot(self):
         ids = self._add_all_runtime_components()
         registry = self.canvas.component_registry
         registry.validate_tree()
@@ -787,8 +791,12 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
 
         status_messages.set_status_handler(handler)
         try:
-            controller.set_property = lambda _key, _value: SimpleNamespace(
-                ok=False,
+            controller.set_property = lambda _key, _value: ComponentChange(
+                controller.component_id,
+                "color",
+                controller.state,
+                controller.state,
+                ChangeStatus.REJECTED,
                 message="rejected color",
             )
             color_choice = appearance.editor("color")
@@ -919,7 +927,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 loaded.close()
                 self.app.processEvents()
 
-    def test_native_v6_ids_and_full_component_properties_roundtrip(self):
+    def test_stable_v9_ids_and_full_component_properties_roundtrip(self):
         self._add_all_runtime_components()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "native-components.mygui.json"

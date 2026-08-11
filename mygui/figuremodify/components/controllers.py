@@ -397,17 +397,6 @@ def _marker(value: Any) -> str:
 
 def _axis_name(state: ComponentState) -> str:
     value = state.selector.get("axis")
-    if value is None:
-        if state.role in {
-            ComponentRole.X_AXIS,
-            ComponentRole.X_LABEL,
-        }:
-            value = "x"
-        elif state.role in {
-            ComponentRole.Y_AXIS,
-            ComponentRole.Y_LABEL,
-        }:
-            value = "y"
     if value not in {"x", "y"}:
         raise ComponentValidationError(
             "Axis component selector requires axis='x' or axis='y'."
@@ -417,16 +406,6 @@ def _axis_name(state: ComponentState) -> str:
 
 def _level(state: ComponentState) -> str:
     value = state.selector.get("level")
-    if value is None:
-        value = (
-            "minor"
-            if state.role
-            in {
-                ComponentRole.MINOR_TICK,
-                ComponentRole.MINOR_TICK_LABEL,
-            }
-            else "major"
-        )
     if value not in {"major", "minor"}:
         raise ComponentValidationError(
             "Tick/grid selector requires level='major' or level='minor'."
@@ -521,10 +500,8 @@ class FigureController(ContainerController):
         super().__init__(state, **kwargs)
 
     def _validate_data(self, state: ComponentState) -> None:
-        """Accept legacy empty data or the schema-v9 layout collection."""
+        """Require the schema-v9 layout collection."""
 
-        if not state.data:
-            return
         _exact_data_fields(state, {"layouts"})
         layouts = state.data.get("layouts")
         if not isinstance(layouts, list):
@@ -746,25 +723,6 @@ class AxesController(ContainerController):
             raise ComponentValidationError(
                 "Axes subplot data must be an object."
             )
-        legacy = {"layout_group", "nrows", "ncols", "slot"}
-        if set(subplot) == legacy:
-            for key in legacy:
-                value = subplot[key]
-                minimum = 0 if key == "layout_group" else 1
-                if (
-                    isinstance(value, bool)
-                    or not isinstance(value, int)
-                    or value < minimum
-                ):
-                    raise ComponentValidationError(
-                        f"Axes subplot {key} is invalid."
-                    )
-            if subplot["slot"] > subplot["nrows"] * subplot["ncols"]:
-                raise ComponentValidationError(
-                    "Axes subplot slot exceeds the layout size."
-                )
-            return
-
         expected = {
             "layout_id",
             "row",
@@ -1128,7 +1086,7 @@ class SpineController(AxisComponentController):
     )
 
     def _validate_candidate(self, state: ComponentState) -> None:
-        name = state.selector.get("name", state.selector.get("side"))
+        name = state.selector.get("name")
         if name not in {"left", "right", "top", "bottom"}:
             raise ComponentValidationError(
                 "Spine selector requires a standard spine name."

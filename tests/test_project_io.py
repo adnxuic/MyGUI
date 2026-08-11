@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+from copy import deepcopy
 from types import SimpleNamespace
 import unittest
 from pathlib import Path
@@ -200,6 +201,28 @@ class ProjectIoTests(unittest.TestCase):
                 self.path.write_text(json.dumps(candidate), encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, "only schema v9 is supported"):
                     load_project_file(self.path)
+
+    def test_v9_wrapper_rejects_retired_figure_and_axes_shapes(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        valid = json.loads(self.path.read_text(encoding="utf-8"))
+
+        empty_figure = deepcopy(valid)
+        self.component(empty_figure, "figure")["data"] = {}
+        self.path.write_text(json.dumps(empty_figure), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "layouts"):
+            load_project_file(self.path)
+
+        old_subplot = deepcopy(valid)
+        self.component(old_subplot, "axes")["data"]["subplot"] = {
+            "layout_group": 0,
+            "nrows": 1,
+            "ncols": 1,
+            "slot": 1,
+        }
+        self.path.write_text(json.dumps(old_subplot), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "subplot fields"):
+            load_project_file(self.path)
 
     def test_v9_rejects_unsafe_preprocessing_before_restore(self):
         self.build_project()

@@ -528,7 +528,7 @@ class ComponentTreeTests(unittest.TestCase):
         )
         self.assertTrue(host.tree.isExpanded(restored_group))
 
-    def test_selection_search_and_expansion_do_not_mutate_schema_v6(self):
+    def test_selection_search_and_expansion_do_not_mutate_schema_v9(self):
         before = self.canvas.component_snapshot()
         host = self.window.component_tree_host
         title = self.canvas.component_registry.query(

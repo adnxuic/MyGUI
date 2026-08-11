@@ -19,6 +19,7 @@ from mygui.figuremodify.components import (
     ChangeStatus,
     ComponentEventKind,
     ComponentKind,
+    ComponentLocator,
     ComponentRole,
     ComponentState,
     ComponentValidationError,
@@ -60,6 +61,41 @@ def state(
 
 
 class ComponentModelTests(unittest.TestCase):
+    def test_locator_requires_v9_selectors_and_explicit_artist_bindings(self):
+        figure = Figure()
+        axes = figure.subplots()
+        line, = axes.plot([0.0, 1.0], [0.0, 1.0])
+        line.set_gid("line-id")
+        parents = {"figure-id": figure, "axes-id": axes}
+        locator = ComponentLocator(parents.get)
+
+        old_axes = state(
+            "axes-old",
+            ComponentKind.AXES,
+            ComponentRole.AXES,
+            "figure-id",
+            selector={"axes_index": 0},
+        )
+        old_axis = state(
+            "axis-old",
+            ComponentKind.AXIS,
+            ComponentRole.X_AXIS,
+            "axes-id",
+            selector={},
+        )
+        unbound_line = state(
+            "line-id",
+            ComponentKind.LINE,
+            ComponentRole.LINE,
+            "axes-id",
+            selector={"object_id": "line-id", "index": 0},
+        )
+        self.assertIsNone(locator.resolve(old_axes))
+        self.assertIsNone(locator.resolve(old_axis))
+        self.assertIsNone(locator.resolve(unbound_line))
+        locator.bind("line-id", line)
+        self.assertIs(locator.resolve(unbound_line), line)
+
     def test_state_round_trip_is_strict_and_json_friendly(self):
         original = state(
             "line-1",
@@ -562,7 +598,7 @@ class SemanticControllerTests(unittest.TestCase):
         self.assertEqual(visible.status, ChangeStatus.REJECTED)
         self.assertEqual(legend.state, previous)
 
-    def test_factory_builds_required_v6_hierarchy_and_deterministic_paths(self):
+    def test_factory_builds_required_v9_hierarchy_and_deterministic_paths(self):
         self.registry.validate_tree()
         x_axis = self.registry.get("figure/axes/0/axis/x")
         major_tick = self.registry.get(

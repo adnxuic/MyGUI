@@ -161,7 +161,7 @@ class ComponentLocator:
         if state.kind is ComponentKind.AXES:
             if not isinstance(parent, Figure):
                 return None
-            index = selector.get("index", selector.get("axes_index"))
+            index = selector.get("index")
             if isinstance(index, int) and 0 <= index < len(parent.axes):
                 return parent.axes[index]
             return None
@@ -171,18 +171,12 @@ class ComponentLocator:
             if axes is None:
                 return None
             axis_name = selector.get("axis")
-            if axis_name is None:
-                axis_name = (
-                    "x"
-                    if state.role is ComponentRole.X_AXIS
-                    else "y"
-                )
             return axes.xaxis if axis_name == "x" else axes.yaxis if axis_name == "y" else None
 
         if state.kind is ComponentKind.SPINE:
             if axes is None:
                 return None
-            return axes.spines.get(selector.get("name", selector.get("side")))
+            return axes.spines.get(selector.get("name"))
 
         if state.kind in {
             ComponentKind.TICK_GROUP,
@@ -193,7 +187,7 @@ class ComponentLocator:
                 return parent
             if axes is None:
                 return None
-            axis_name = selector.get("axis", "x")
+            axis_name = selector.get("axis")
             return axes.xaxis if axis_name == "x" else axes.yaxis if axis_name == "y" else None
 
         if state.kind is ComponentKind.TEXT:
@@ -204,39 +198,9 @@ class ComponentLocator:
                     return axes.xaxis.label
                 if state.role is ComponentRole.Y_LABEL:
                     return axes.yaxis.label
-                index = selector.get("index")
-                if isinstance(index, int) and 0 <= index < len(axes.texts):
-                    return axes.texts[index]
-            if isinstance(parent, Figure):
-                index = selector.get("index")
-                if isinstance(index, int) and 0 <= index < len(parent.texts):
-                    return parent.texts[index]
             return None
 
         if state.kind is ComponentKind.LEGEND:
             return axes.get_legend() if axes is not None else None
 
-        if state.kind is ComponentKind.LINE and axes is not None:
-            index = selector.get("index")
-            if isinstance(index, int) and 0 <= index < len(axes.lines):
-                return axes.lines[index]
-            gid = selector.get("gid", state.id)
-            return next(
-                (line for line in axes.lines if line.get_gid() == gid),
-                None,
-            )
-
-        if state.kind is ComponentKind.SCATTER and axes is not None:
-            index = selector.get("index")
-            if isinstance(index, int) and 0 <= index < len(axes.collections):
-                return axes.collections[index]
-            gid = selector.get("gid", state.id)
-            return next(
-                (
-                    collection
-                    for collection in axes.collections
-                    if collection.get_gid() == gid
-                ),
-                None,
-            )
         return None
