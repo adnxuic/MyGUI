@@ -127,7 +127,7 @@ class BatchChartCreationTests(unittest.TestCase):
             widget.y_data_input.hidePopup()
 
             widget.clear_all()
-            widget.y_data_input.item(2).setCheckState(Qt.Checked)
+            widget.y_data_input.model().item(2).setCheckState(Qt.Checked)
             self.assertEqual(widget.get_y_refs(), (self.y2_ref,))
 
             widget.set_y_refs((self.y1_ref, self.y2_ref))
@@ -153,7 +153,7 @@ class BatchChartCreationTests(unittest.TestCase):
                 (self.y1_ref, self.y2_ref),
             )
             labels = [
-                widget.y_data_input.item(index).text()
+                widget.y_data_input.model().item(index).text()
                 for index in range(widget.y_data_input.count())
             ]
             self.assertTrue(any(label.endswith("/Renamed Y") for label in labels))
@@ -508,7 +508,9 @@ class BatchChartCreationTests(unittest.TestCase):
             for index in range(
                 dialog.data_reference_input.y_data_input.count()
             ):
-                item = dialog.data_reference_input.y_data_input.item(index)
+                item = (
+                    dialog.data_reference_input.y_data_input.model().item(index)
+                )
                 if item.data(Qt.UserRole) in selected:
                     item.setCheckState(Qt.Checked)
             self.assertTrue(dialog.ok_button.isEnabled())

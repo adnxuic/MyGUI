@@ -392,11 +392,6 @@ class _CheckableColumnComboBox(QComboBox):
 
         self.set_checked_data(())
 
-    def item(self, index: int) -> QStandardItem | None:
-        """Expose an item lookup for lightweight compatibility and tests."""
-
-        return self.model().item(index)
-
     def _item_changed(self, _item: QStandardItem) -> None:
         self._refresh_summary()
         self.selectionChanged.emit()
@@ -453,8 +448,6 @@ class MultiSeriesDataReferenceInput(QFrame):
         self.y_layout = QHBoxLayout()
         self.y_data_input = _CheckableColumnComboBox(self)
         self.y_data_input.setObjectName("multi_series_y_combo")
-        # Compatibility name for callers that only retrieve the selector.
-        self.y_data_list = self.y_data_input
         self.y_expression_input = QLineEdit("y", self)
         self.y_expression_input.setPlaceholderText("e.g. y, log10(y)")
         self.y_expression_input.setMinimumWidth(90)

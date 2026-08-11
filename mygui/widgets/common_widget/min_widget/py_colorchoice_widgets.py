@@ -802,15 +802,6 @@ class ColorPickerDialog(QDialog):
         return self._selected_palette
 
 
-class ColorSelector(ColorCycleState):
-    """Compatibility name for the former per-axes selector."""
-
-    def get_color(self):
-        """Return color."""
-
-        return self.peek().color
-
-
 class ColorChoiceWidget(QFrame):
     """Provide the color choice widget Qt widget."""
 

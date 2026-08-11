@@ -23,7 +23,6 @@ class PyTitleBar(QFrame):
         self,
         parent=None,
         figure_window=None,
-        fig_control_window=None,
         table: PyTable | None = None,
     ):
         super().__init__(parent)
@@ -49,11 +48,9 @@ class PyTitleBar(QFrame):
 
         self.selector_style_bar = SelectorStyleMenuBar(
             figure_window=figure_window,
-            fig_control_window=fig_control_window,
         )
         self.selector_layout_bar = SelectorLayoutMenuBar(
             figure_window=figure_window,
-            fig_control_window=fig_control_window,
         )
         self.selector_chart_bar = SelectorChartMenuBar(figure_window=figure_window)
         self.selector_element_bar = SelectorElementMenuBar(figure_window=figure_window)

@@ -299,9 +299,6 @@ class PyPlotDialog(QDialog):
         self.line_style_editor = self.appearance_input.line_style_editor
         self.style_input = self.appearance_input.style_input
         self.linewidth_input = self.appearance_input.linewidth_input
-        # Compatibility name retained for tests and callers that inspected
-        # the former dialog field directly.
-        self.size_input = self.linewidth_input
         self.linewidth_input.setRange(0.0, 1_000_000.0)
         self.linewidth_input.setSingleStep(0.1)
         self.color_input = self.appearance_input.color_input
@@ -415,11 +412,6 @@ class PyScatterDialog(QDialog):
         self.color_input = _new_color_input(figure_window)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
-
-        # Compatibility-only hidden label input; batch labels come from Y.
-        self.label_input = QLineEdit(self)
-        self.label_input.setText('scatter')
-        self.label_input.hide()
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")

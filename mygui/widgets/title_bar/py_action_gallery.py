@@ -91,8 +91,6 @@ class ResponsiveActionGallery(QFrame):
         self._overflow_timer.timeout.connect(self._sync_overflow_reservation)
 
         self.action_dict: dict[str, LazyDialogAction] = {}
-        # Compatibility for callers that used the old gallery mapping.
-        self.button_dict = self.action_dict
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

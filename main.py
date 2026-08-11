@@ -110,9 +110,6 @@ class MainWindow(QMainWindow):
         self.central_widget_layout = QVBoxLayout(self.central_widget)
         self.central_widget_layout.setSpacing(0)
         self.central_widget_layout.setContentsMargins(0, 0, 0, 0)
-        # Keep this historical attribute as a top-level-layout alias.
-        self.left_layout = self.central_widget_layout
-
         self.repository = TableRepository(self)
         self.color_library = ColorLibrary(self.settings, self)
         self.table = PyTable(self.repository)
@@ -147,7 +144,11 @@ class MainWindow(QMainWindow):
         self.figure_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.figure_window.set_table(self.table)
 
-        self.title_bar = PyTitleBar(self, self.figure_window, self.fig_control_window, self.table)
+        self.title_bar = PyTitleBar(
+            self,
+            figure_window=self.figure_window,
+            table=self.table,
+        )
         self.figure_window.requestStyleSelector.connect(self.title_bar.show_style_selector)
         self.figure_window.projectCloseRequested.connect(
             self.close_project_from_tab
@@ -192,7 +193,6 @@ class MainWindow(QMainWindow):
         self.workspace_splitter.setStretchFactor(0, 45)
         self.workspace_splitter.setStretchFactor(1, 55)
         self.workspace_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.outer_splitter = self.workspace_splitter
         self.central_widget_layout.addWidget(self.workspace_splitter, stretch=1)
 
         self.bottom_bar = PyBottomBar()

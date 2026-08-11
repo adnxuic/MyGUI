@@ -192,7 +192,6 @@ class PyFigureCanvas(QWidget):
         self.editor_registry = EditorRegistry()
         register_production_profiles(self.editor_registry)
         self.editor_registry.validate_production_profiles()
-        self.component_editor_registry = self.editor_registry
         self.axes_commands = AxesCommandService(self.component_registry)
         self.axes_layout_service = AxesLayoutService(self)
         self.function_curve_service = FunctionCurveService(

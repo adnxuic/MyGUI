@@ -15,10 +15,8 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.widgets.table.py_table import PyTable
-from mygui.widgets.title_bar.py_title_button import SelectMenuButton, MenuButton, StaticSelectButton, DynSelectButton, \
-    PullDownButton
+from mygui.widgets.title_bar.py_title_button import MenuButton, SelectMenuButton
 from mygui.widgets.title_bar.py_action_gallery import ResponsiveActionGallery
-from mygui.widgets.title_bar.py_pull_down_menu import StyleMenu
 from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
     axes_layout_presets,
@@ -419,140 +417,16 @@ class ControlBar(QFrame):
         self.layout.addWidget(button_close)
 
 
-class LegacySelectorStyleMenuBar(QFrame):
-    """Provide the legacy selector style title-bar menu."""
-
-    def __init__(self, figure_window=None, fig_control_window=None):
-        super().__init__()
-
-        # 读取可用的样式
-        self.available_styles_dict = load_json_resource(
-            "mygui/widgets/title_bar/available_styles.json"
-        )
-
-        # 设置对象名称
-        self.setObjectName("selector_menu")
-
-        # 设置布局
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 10)
-
-        self.button_dict = {}
-
-        for index, style in enumerate(self.available_styles_dict):
-            dialog = PyStyleDialog(dialog_name=style, figure_window=figure_window)
-            button = StaticSelectButton(style, icon_path(f'style_images/{style}.svg'), style,
-                                        icon_path(f'style_images/{style}.svg'),
-                                        dialog)
-            self.button_dict[style] = button
-            if index < 8:
-                self.layout.addWidget(button)
-
-        # 添加下拉按钮及其菜单
-        self.pulldown_button = PullDownButton()
-        self.stylemenu = StyleMenu(self.pulldown_button, self.button_dict)
-        self.pulldown_button.connect_menu(self.stylemenu)
-
-        self.layout.addWidget(self.pulldown_button)
-
-        self.setLayout(self.layout)
 
 
-class LegacySelectorLayoutMenuBar(QFrame):
-    """Provide the legacy selector layout title-bar menu."""
-
-    def __init__(self, figure_window=None, fig_control_window=None):
-        super().__init__()
-        self.available_layout_dict = {
-            preset.key: preset for preset in axes_layout_presets()
-        }
-
-        self.setObjectName("selector_menu")
-
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 10)
-
-        self.button_dict = {}
-
-        for index, preset in enumerate(self.available_layout_dict.values()):
-            dialog = PyLayoutDialog(
-                dialog_name=preset.label,
-                figure_window=figure_window,
-                preset_key=preset.key,
-            )
-            button = StaticSelectButton(
-                preset.label,
-                preset.icon_path,
-                preset.label,
-                preset.icon_path,
-                dialog,
-            )
-            self.button_dict[preset.key] = button
-            if index < 8:
-                self.layout.addWidget(button)
-
-        self.setLayout(self.layout)
 
 
-class LegacySelectorChartMenuBar(QFrame):
-    """
-    按钮链接的对话框由chart_dialog_dict提供
-    """
-
-    def __init__(self, figure_window=None):
-        super().__init__()
-
-        self.setObjectName("selector_menu")
-
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 10)
-
-        for index, (name, value) in enumerate(chart_dialog_dict.items()):
-            # 传类进去，不传实例，点击按钮时才会创建实例，以便实时更新数据
-            button = DynSelectButton(name, icon_path(f'chart_images/{name}.svg'), name,
-                                     icon_path(f'chart_images/{name}.svg'), value, figure_window)
-            if index < 8:
-                self.layout.addWidget(button)
-
-        self.setLayout(self.layout)
 
 
-class LegacySelectorElementMenuBar(QFrame):
-    """Provide the legacy selector element title-bar menu."""
-
-    def __init__(self, figure_window=None):
-        super().__init__()
-
-        self.setObjectName("selector_menu")
-
-        self.layout = QHBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 10)
-
-        for index, (name, spec) in enumerate(element_action_specs.items()):
-            dialog = spec.dialog_type(
-                dialog_name=name,
-                figure_window=figure_window,
-            )
-            button = StaticSelectButton(
-                name,
-                spec.icon_path,
-                name,
-                spec.icon_path,
-                dialog,
-            )
-            if index < 8:
-                self.layout.addWidget(button)
-
-        self.setLayout(self.layout)
-
-
-# The action-gallery implementations below intentionally replace the legacy
-# fixed-width classes above.  Keeping the old definitions during this focused
-# GUI change avoids mixing dead-code removal into the feature commit.
 class SelectorStyleMenuBar(ResponsiveActionGallery):
     """Provide the selector style title-bar menu."""
 
-    def __init__(self, figure_window=None, fig_control_window=None):
+    def __init__(self, figure_window=None):
         super().__init__()
         self.available_styles_dict = load_json_resource(
             "mygui/widgets/title_bar/available_styles.json"
@@ -573,7 +447,7 @@ class SelectorStyleMenuBar(ResponsiveActionGallery):
 class SelectorLayoutMenuBar(ResponsiveActionGallery):
     """Provide the selector layout title-bar menu."""
 
-    def __init__(self, figure_window=None, fig_control_window=None):
+    def __init__(self, figure_window=None):
         super().__init__()
         self.available_layout_dict = {
             preset.key: preset for preset in axes_layout_presets()

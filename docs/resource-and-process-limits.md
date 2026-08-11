@@ -5,6 +5,23 @@ image, Text, Excel, expression, and external-process payloads. Overrides are
 read from positive-integer `MYGUI_*` environment variables and cannot exceed
 the built-in hard caps.
 
+## Bundled application resources
+
+Production icons, QSS, and JSON are resolved by `mygui.resources` from a
+repository-relative path. They do not depend on the process working directory.
+
+| API | Parameter | Result |
+| --- | --- | --- |
+| `resource_path()` | Relative path below the repository root | Validated absolute `Path` |
+| `icon_path()` / `icon_directory()` | Relative path below `pictures/icons` | Qt-compatible path or validated directory |
+| `load_text_resource()` | UTF-8 text resource path | `str` |
+| `load_json_resource()` | UTF-8 JSON resource path | Decoded JSON value |
+| `load_qss_resource()` | QSS resource path and optional token mapping | Stylesheet with strict `{{TOKEN}}` expansion |
+
+Absolute paths and `..` traversal are rejected. QSS tokens default to the
+shared values in `mygui.widgets.theme`; unknown or malformed tokens fail during
+resource loading.
+
 ## Input budgets
 
 | Environment variable | Default | Hard cap | Applies to |

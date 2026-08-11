@@ -253,10 +253,3 @@ element_action_specs = {
         PyInAxesDialog.ICON_PATH,
     ),
 }
-
-
-# Kept as a narrow compatibility export for callers outside the title menu.
-element_dialog_dict = {
-    name: spec.dialog_type
-    for name, spec in element_action_specs.items()
-}

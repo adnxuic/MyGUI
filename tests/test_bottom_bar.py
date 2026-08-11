@@ -1,7 +1,6 @@
 import os
-from pathlib import Path
-import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -9,14 +8,14 @@ from PySide6.QtWidgets import QApplication, QStackedLayout, QWidget
 from mygui import tex_config
 from mygui import status_messages
 from mygui.database import matlab_adapter
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.bottom_bar.py_bottom_bar import PyBottomBar
 from mygui.widgets.bottom_bar.py_message_bar import PyMessageBar
 from mygui.widgets.bottom_bar.py_state_bar import FeatureIndicator, PyStateBar
 from mygui.widgets.left_column.py_left_column import PyLeftColumn
 from mygui.widgets.right_column.py_right_column import PyRightColumn
 from mygui.widgets.theme import COLORS, CONTROL_SIZES
-from mygui.widgets.title_bar.py_title_button import ChangeButton, PullDownButton
+from mygui.widgets.title_bar.py_title_button import ChangeButton
 
 
 class ThemeQssTests(unittest.TestCase):
@@ -40,10 +39,11 @@ class ThemeQssTests(unittest.TestCase):
         return (lighter + 0.05) / (darker + 0.05)
 
     def _load_qss(self, source):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir, "test.qss")
-            path.write_text(source, encoding="utf-8")
-            return qss_func.qss_loader(path)
+        with patch(
+            "mygui.resources.load_text_resource",
+            return_value=source,
+        ):
+            return load_qss_resource("test.qss")
 
     def test_loader_replaces_shared_tokens_with_single_argument(self):
         rendered = self._load_qss(
@@ -254,13 +254,13 @@ class IconButtonAccessibilityTests(unittest.TestCase):
             left_column.deleteLater()
             right_column.deleteLater()
 
-    def test_title_icon_buttons_have_names_and_tooltips(self):
-        for button in (ChangeButton("change_button"), PullDownButton()):
-            try:
-                self.assertTrue(button.accessibleName())
-                self.assertTrue(button.toolTip())
-            finally:
-                button.deleteLater()
+    def test_title_icon_button_has_name_and_tooltip(self):
+        button = ChangeButton("change_button")
+        try:
+            self.assertTrue(button.accessibleName())
+            self.assertTrue(button.toolTip())
+        finally:
+            button.deleteLater()
 
 
 if __name__ == "__main__":
