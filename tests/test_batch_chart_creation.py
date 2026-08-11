@@ -140,14 +140,14 @@ class BatchChartCreationTests(unittest.TestCase):
                 widget.y_data_input.lineEdit().text(),
             )
 
-            self.sheet.column(self.y2_ref.column_id).name = "Renamed Y"
-            self.window.repository.record_change(
+            with self.window.repository.mutate(
                 TableChangeSet(
                     self.canvas.project_id,
                     metadata_changed=True,
                     reason="test-rename",
                 )
-            )
+            ):
+                self.sheet.column(self.y2_ref.column_id).name = "Renamed Y"
             self.assertEqual(
                 widget.get_y_refs(),
                 (self.y1_ref, self.y2_ref),
@@ -291,14 +291,14 @@ class BatchChartCreationTests(unittest.TestCase):
         draw_idle = Mock()
         self.canvas.fig.canvas.draw_idle = draw_idle
 
-        self.sheet.set_cell(1, self.x_ref.column_id, 10.0)
-        self.window.repository.record_change(
+        with self.window.repository.mutate(
             TableChangeSet(
                 self.canvas.project_id,
                 changed_columns={self.x_ref},
                 reason="test-shared-x",
             )
-        )
+        ):
+            self.sheet.set_cell(1, self.x_ref.column_id, 10.0)
 
         for line in result.artists:
             self.assertEqual(float(line.get_xdata()[1]), 10.0)

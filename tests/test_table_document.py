@@ -165,16 +165,15 @@ class TableRepositoryTests(unittest.TestCase):
         repository.transaction_committed.connect(observed.append)
 
         with self.assertRaisesRegex(RuntimeError, "injected"):
-            with repository.transaction(project.id):
+            with repository.mutate(
+                TableChangeSet(
+                    project.id,
+                    structure_changed=True,
+                    reason="failed",
+                )
+            ):
                 sheet.name = "Mutated"
                 sheet.remove_column(column.id)
-                repository.record_change(
-                    TableChangeSet(
-                        project.id,
-                        structure_changed=True,
-                        reason="failed",
-                    )
-                )
                 raise RuntimeError("injected failure")
 
         self.assertIs(repository.project(project.id), project)

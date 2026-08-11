@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from mygui import status_messages
 from mygui.database import ColumnRef, TableRepository, validate_component_name
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+from mygui.widgets.figure_canvas.project_metadata import ProjectMetadataService
 from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorHost,
     FigureInspectorPanel,
@@ -105,6 +106,7 @@ class PyFigureWindow(QFrame):
 
         self.tabwindow = FigureTabWidget(self)
         self.tabwindow.currentChanged.connect(self.change_current_canvas)
+        self.project_metadata = ProjectMetadataService(self, self.repository)
 
         self.content_stack.addWidget(self.empty_state)
         self.content_stack.addWidget(self.tabwindow)
@@ -135,11 +137,12 @@ class PyFigureWindow(QFrame):
     def has_project_name(self, name: str) -> bool:
         """Return whether this object has project name."""
 
-        for index in range(self.tabwindow.count()):
-            canvas = self.tabwindow.widget(index)
-            if getattr(canvas, "project_name", None) == name:
-                return True
-        return False
+        normalized = str(name).strip().casefold()
+        return any(
+            self.repository.project(project_id).name.casefold() == normalized
+            for project_id in self.canvas
+            if project_id in self.repository.projects
+        )
 
     def add_figure(self, width=None, height=None, dpi=None, style=None, canva_name=None,
                    create_table=True, project_path=None, component_tree=None):
@@ -554,26 +557,17 @@ class PyFigureWindow(QFrame):
         if not ok:
             return
         try:
-            self.rename_project(tab_index, new_name)
+            canvas = self.tabwindow.widget(tab_index)
+            if not isinstance(canvas, PyFigureCanvas):
+                raise IndexError(f"Invalid project index: {tab_index}")
+            self.rename_project(canvas.project_id, new_name)
         except Exception as exc:
             QMessageBox.warning(self, "Rename Project", str(exc))
 
-    def rename_project(self, tab_index: int, new_name: str):
+    def rename_project(self, project_id: str, new_name: str):
         """Rename project."""
 
-        new_name = validate_component_name(new_name, "Project name")
-        canvas = self.tabwindow.widget(tab_index)
-        if canvas is None:
-            raise IndexError(f"Invalid project index: {tab_index}")
-        old_name = canvas.project_name
-        if old_name == new_name:
-            return
-        if self.has_project_name(new_name):
-            raise ValueError(f"Project already exists: {new_name}")
-        if self.table is not None:
-            self.table.rename_project_table(old_name, new_name)
-        canvas.set_project_name(new_name)
-        self.tabwindow.setTabText(tab_index, new_name)
+        self.project_metadata.rename(project_id, new_name)
 
     def load_project_figure_snapshot(
         self,

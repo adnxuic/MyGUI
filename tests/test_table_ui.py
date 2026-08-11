@@ -115,6 +115,27 @@ class TableUiTests(unittest.TestCase):
         stack.redo()
         self.assertEqual(self.subtable.tabWidget.tabText(1), "Renamed")
 
+    def test_sheet_view_construction_failure_rolls_back_without_event(self):
+        before = self.project.to_snapshot()
+        before_views = dict(self.subtable._views)
+        before_tabs = self.subtable.tabWidget.count()
+        before_index = self.subtable.tabWidget.currentIndex()
+        observed = []
+        self.repository.transaction_committed.connect(observed.append)
+
+        with patch(
+            "mygui.widgets.table.py_subtable.TableView",
+            side_effect=RuntimeError("injected TableView failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "TableView"):
+                self.subtable.add_new_sheet("Broken")
+
+        self.assertEqual(self.project.to_snapshot(), before)
+        self.assertEqual(self.subtable._views, before_views)
+        self.assertEqual(self.subtable.tabWidget.count(), before_tabs)
+        self.assertEqual(self.subtable.tabWidget.currentIndex(), before_index)
+        self.assertEqual(observed, [])
+
     def test_sheet_delete_and_dependency_cascade_are_undoable(self):
         second_view = self.subtable.add_new_sheet("Second")
         second_sheet_id = second_view.sheet_id

@@ -192,6 +192,29 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertIn("primary failure", str(error.primary_error))
         self.assertEqual(len(error.rollback_errors), 1)
 
+    def test_registry_observer_failure_is_structured_and_non_blocking(self):
+        line, = self.axes.plot([0, 1], [1, 2], color="#010101")
+        controller = self._line_controller(
+            "observer-line",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        failures = []
+        self.registry.set_observer_failure_handler(failures.extend)
+
+        def broken_observer(_event):
+            raise RuntimeError("injected observer failure")
+
+        self.registry.subscribe(broken_observer)
+        change = controller.set_property("color", "#112233")
+
+        self.assertTrue(change.ok)
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0].component_id, controller.component_id)
+        self.assertEqual(failures[0].phase, "lifecycle")
+        self.assertTrue(failures[0].source.endswith("broken_observer"))
+        self.assertIsInstance(failures[0].error, RuntimeError)
+
     def test_registry_transaction_rolls_back_artist_state_and_events(self):
         first_line, = self.axes.plot([0, 1], [1, 2], color="#010101")
         second_line, = self.axes.plot([0, 1], [2, 3], color="#020202")

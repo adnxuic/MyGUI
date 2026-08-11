@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
@@ -385,23 +386,23 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             object_id="second-axes-plot",
         )
 
-        self.sheet.set_block(
-            0,
-            0,
-            [
-                [100.0, 1000.0],
-                [200.0, 2000.0],
-                [300.0, 3000.0],
-                [400.0, 4000.0],
-            ],
-        )
-        self.window.repository.record_change(
+        with self.window.repository.mutate(
             TableChangeSet(
                 self.canvas.project_id,
                 {self.x_ref, self.y_ref},
                 reason="test-multi-axes-refresh",
             )
-        )
+        ):
+            self.sheet.set_block(
+                0,
+                0,
+                [
+                    [100.0, 1000.0],
+                    [200.0, 2000.0],
+                    [300.0, 3000.0],
+                    [400.0, 4000.0],
+                ],
+            )
         self.app.processEvents()
 
         self.assertEqual(tuple(first_axes.get_xlim()), first_limits[0])
@@ -1230,6 +1231,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             controller.set_property("size_inches", (5.0, 4.0)).ok
         )
         self.assertTrue(controller.set_property("dpi", 120.0).ok)
+        metadata_events = []
+        self.window.repository.transaction_committed.connect(
+            metadata_events.append
+        )
         self.assertTrue(
             controller.set_property("name", "RenamedRuntime").ok
         )
@@ -1242,12 +1247,107 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.window.repository.project(self.canvas.project_id).name,
             "RenamedRuntime",
         )
+        self.assertEqual(len(metadata_events), 1)
+        self.assertEqual(metadata_events[0].reason, "rename-project")
         self.assertEqual(
             self.window.figure_window.tabwindow.tabText(
                 self.window.figure_window.tabwindow.indexOf(self.canvas)
             ),
             "RenamedRuntime",
         )
+
+    def test_project_rename_failure_restores_repository_root_and_tab(self):
+        project_id = self.canvas.project_id
+        controller = self.canvas.component_registry.get(
+            self.canvas.root_component_id
+        )
+        before_state = controller.state
+        before_name = self.canvas.project_name
+        index = self.window.figure_window.tabwindow.indexOf(self.canvas)
+        before_tab = self.window.figure_window.tabwindow.tabText(index)
+        events = []
+        self.window.repository.transaction_committed.connect(events.append)
+
+        with mock.patch.object(
+            self.window.figure_window.tabwindow,
+            "setTabText",
+            side_effect=RuntimeError("injected Tab rename failure"),
+        ):
+            with self.assertRaisesRegex(ValueError, "Tab rename"):
+                self.window.figure_window.rename_project(
+                    project_id,
+                    "RejectedRename",
+                )
+
+        self.assertEqual(controller.state, before_state)
+        self.assertEqual(self.canvas.project_name, before_name)
+        self.assertEqual(
+            self.window.repository.project(project_id).name,
+            before_name,
+        )
+        self.assertEqual(
+            self.window.figure_window.tabwindow.tabText(index),
+            before_tab,
+        )
+        self.assertEqual(events, [])
+
+    def test_project_id_name_collision_never_changes_internal_routing(self):
+        first_id = self.canvas.project_id
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name=first_id,
+        )
+        second = self.window.figure_window.current_canva
+        self.assertNotEqual(second.project_id, first_id)
+        self.assertEqual(second.project_name, first_id)
+
+        self.window.table.switch_to_table(first_id)
+
+        self.assertEqual(self.window.table.current_project_id, first_id)
+        self.assertIs(
+            self.window.table.current_subtable(),
+            self.window.table._subtables[first_id],
+        )
+
+    def test_refresh_reference_failure_is_one_structured_warning(self):
+        self._set_source_data()
+        pair = self.window.repository.line_pair(self.x_ref, self.y_ref)
+        self.canvas.add_plot(
+            pair.x,
+            pair.y,
+            "-",
+            2.0,
+            "#123456",
+            "observer",
+            self.x_ref,
+            self.y_ref,
+            object_id="observer-refresh",
+        )
+        messages = []
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+        with mock.patch.object(
+            self.canvas.chart_data_service,
+            "refs_for",
+            side_effect=ValueError("injected bad reference"),
+        ):
+            with self.window.repository.mutate(
+                TableChangeSet(
+                    self.canvas.project_id,
+                    changed_columns={self.x_ref},
+                    reason="observer-failure",
+                )
+            ):
+                self.sheet.set_cell(0, self.x_ref.column_id, 42.0)
+
+        self.app.processEvents()
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "warning")
+        self.assertIn("ChartDataService data-reference", messages[0][0])
 
     def test_invalid_interpolation_source_restores_as_empty_component(self):
         self.sheet.set_block(0, 0, [[1.0, 2.0]])

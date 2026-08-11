@@ -540,3 +540,14 @@ class ComponentEvent:
     before: ComponentState | None
     after: ComponentState | None
     change: ComponentChange | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ObserverFailure:
+    """Describe an isolated post-commit observer or refresh failure."""
+
+    source: str
+    phase: str
+    error: BaseException
+    component_id: str | None = None
+    reference: object | None = None

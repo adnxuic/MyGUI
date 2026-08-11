@@ -450,13 +450,14 @@ class ComponentInspectorTests(unittest.TestCase):
         references.dispose()
         references.dispose()
 
-        repository.record_change(
+        with repository.mutate(
             TableChangeSet(
                 project.id,
                 metadata_changed=True,
                 reason="disposed-input",
             )
-        )
+        ):
+            pass
 
         self.assertEqual(references.repository_events, 0)
         references.close()

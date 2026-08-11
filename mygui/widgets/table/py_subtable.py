@@ -997,18 +997,53 @@ class PySubTable(QFrame):
     def add_new_sheet(self, sheet_name: str | None = None, sheet=None) -> TableView:
         """Add new sheet."""
 
-        if sheet is None:
-            sheet = self.project.add_sheet(sheet_name)
-        else:
-            self.project.add_sheet(sheet=sheet)
-        view = TableView(self.repository, self.project_id, sheet.id, self.dependency_handler)
-        self._views[sheet.id] = view
-        index = self.tabWidget.count() - 1
-        self.tabWidget.insertTab(index, view, sheet.name)
-        self.tabWidget.setCurrentIndex(index)
-        self.repository.record_change(TableChangeSet(
-            self.project_id, metadata_changed=True, structure_changed=True, reason="add-sheet"
-        ))
+        previous_index = self.tabWidget.currentIndex()
+        view = None
+        added_sheet = None
+        changes = TableChangeSet(
+            self.project_id,
+            metadata_changed=True,
+            structure_changed=True,
+            reason="add-sheet",
+        )
+        try:
+            with self.repository.mutate(changes):
+                added_sheet = (
+                    self.project.add_sheet(sheet_name)
+                    if sheet is None
+                    else self.project.add_sheet(sheet=sheet)
+                )
+                view = TableView(
+                    self.repository,
+                    self.project_id,
+                    added_sheet.id,
+                    self.dependency_handler,
+                )
+                index = self.tabWidget.count() - 1
+                inserted = self.tabWidget.insertTab(
+                    index,
+                    view,
+                    added_sheet.name,
+                )
+                if inserted < 0:
+                    raise RuntimeError("Could not add the sheet tab.")
+                self._views[added_sheet.id] = view
+                self.tabWidget.setCurrentIndex(inserted)
+        except Exception:
+            if added_sheet is not None:
+                self._views.pop(added_sheet.id, None)
+            if view is not None:
+                index = self.tabWidget.indexOf(view)
+                if index >= 0:
+                    self.tabWidget.removeTab(index)
+                view.dispose()
+                view.setParent(None)
+                view.deleteLater()
+            if self.tabWidget.count():
+                self.tabWidget.setCurrentIndex(
+                    max(0, min(previous_index, self.tabWidget.count() - 1))
+                )
+            raise
         return view
 
     def rename_sheet(self, index: int):

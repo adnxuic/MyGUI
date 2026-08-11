@@ -50,6 +50,7 @@ from mygui.figuremodify.components import (
     FunctionCurveController,
     InterpolationController,
     MessageLevel,
+    ObserverFailure,
     ScatterController,
     TextController,
     XYData,
@@ -983,6 +984,16 @@ class ChartDataService:
         self.repository = repository
         self.registry = registry
         self.interpolation_service: InterpolationService | None = None
+        self._observer_failures: list[ObserverFailure] = []
+
+    def drain_observer_failures(self) -> tuple[ObserverFailure, ...]:
+        """Return and clear refresh failures isolated from table commits."""
+
+        failures, self._observer_failures = (
+            tuple(self._observer_failures),
+            [],
+        )
+        return failures
 
     @staticmethod
     def refs_for(controller) -> tuple[ColumnRef, ColumnRef]:
@@ -1099,7 +1110,16 @@ class ChartDataService:
             ):
                 try:
                     refs = set(self.refs_for(controller))
-                except Exception:
+                except Exception as exc:
+                    self._observer_failures.append(
+                        ObserverFailure(
+                            "ChartDataService",
+                            "data-reference",
+                            exc,
+                            component_id=controller.component_id,
+                            reference=deepcopy(controller.state.data),
+                        )
+                    )
                     continue
                 if not refs.intersection(changed):
                     continue
@@ -1254,6 +1274,16 @@ class FitService:
         self.registry = registry
         self._request_generation: dict[str, int] = {}
         self._pending_source_changes: set[str] = set()
+        self._observer_failures: list[ObserverFailure] = []
+
+    def drain_observer_failures(self) -> tuple[ObserverFailure, ...]:
+        """Return and clear stale-marking reference failures."""
+
+        failures, self._observer_failures = (
+            tuple(self._observer_failures),
+            [],
+        )
+        return failures
 
     def mark_sources_changed(
         self,
@@ -1271,7 +1301,16 @@ class FitService:
                     _column_ref(controller.state.data["x_ref"]),
                     _column_ref(controller.state.data["y_ref"]),
                 }
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError) as exc:
+                self._observer_failures.append(
+                    ObserverFailure(
+                        "FitService",
+                        "data-reference",
+                        exc,
+                        component_id=controller.component_id,
+                        reference=deepcopy(controller.state.data),
+                    )
+                )
                 continue
             if refs.intersection(changed):
                 self._pending_source_changes.add(controller.component_id)

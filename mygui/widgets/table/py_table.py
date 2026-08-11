@@ -144,43 +144,41 @@ class PyTable(QFrame):
         subtable.setParent(None)
         subtable.deleteLater()
 
-    def switch_to_table(self, table: str | None):
+    def switch_to_table(self, project_id: str | None):
         """Select the requested project table."""
 
-        if table is None:
+        if project_id is None:
             self._current_project_id = None
             self.stack.setCurrentWidget(self.empty_label)
             return
-        if table in self._subtables:
-            project_id = table
-        else:
-            project = self.repository.project_by_name(table, required=False)
-            if project is None:
-                raise KeyError(f"Unknown project table: {table}")
-            project_id = project.id
+        if project_id not in self._subtables:
+            raise KeyError(f"Unknown project table id: {project_id}")
         self._current_project_id = project_id
         self.stack.setCurrentWidget(self._subtables[project_id])
 
-    def rename_project_table(self, old_name: str, new_name: str):
-        """Rename project table."""
+    def rename_project_table(self, project_id: str, new_name: str):
+        """Rename repository metadata by stable project ID."""
 
         new_name = validate_component_name(new_name, "Project name")
-        project = self.repository.project_by_name(old_name)
+        project = self.repository.project(project_id)
         existing = self.repository.project_by_name(new_name, required=False)
         if existing is not None and existing.id != project.id:
             raise ValueError(f"Project already exists: {new_name}")
-        project.name = new_name
-        self.repository.record_change(TableChangeSet(
-            project.id, metadata_changed=True, reason="rename-project"
-        ))
+        with self.repository.mutate(
+            TableChangeSet(
+                project.id,
+                metadata_changed=True,
+                reason="rename-project",
+            )
+        ):
+            project.name = new_name
 
-    def remove_project_table(self, table: str, *, publish: bool = True):
+    def remove_project_table(self, project_id: str, *, publish: bool = True):
         """Remove project table."""
 
-        project = self.repository.projects.get(table) or self.repository.project_by_name(table, required=False)
+        project = self.repository.projects.get(project_id)
         if project is None:
             return
-        project_id = project.id
         self._remove_project_widget(project_id)
         self.repository.remove_project(project_id, publish=publish)
         if self._current_project_id == project_id:

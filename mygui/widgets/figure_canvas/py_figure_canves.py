@@ -49,6 +49,7 @@ from mygui.figuremodify.components import (
     InterpolationController,
     ImageInAxesController,
     LineController,
+    ObserverFailure,
     ScatterController,
     TextController,
     UpdateImpact,
@@ -156,8 +157,7 @@ class PyFigureCanvas(QWidget):
         self.repository = repository
         self.project_id = project_id
         self.style = style
-        self.project_name = project_name or ""
-        self.project_table_name = self.project_name
+        self._project_name_fallback = project_name or ""
         self.project_path = project_path
         self._disposed = False
         self._restoring_component_tree_now = False
@@ -179,6 +179,11 @@ class PyFigureCanvas(QWidget):
         # window between screens cannot change exports or project files.
         self._document_dpi = float(self.fig.dpi)
         self.component_registry = ComponentRegistry()
+        self._observer_failures: list[ObserverFailure] = []
+        self._observer_warning_scheduled = False
+        self.component_registry.set_observer_failure_handler(
+            self._queue_observer_failures
+        )
         self.component_materializers = ComponentMaterializerRegistry()
         self.editor_registry = EditorRegistry()
         register_production_profiles(self.editor_registry)
@@ -314,6 +319,15 @@ class PyFigureCanvas(QWidget):
         self.setLayout(layout)
 
     @property
+    def project_name(self) -> str:
+        """Return the authoritative repository project name."""
+
+        try:
+            return self.repository.project(self.project_id).name
+        except KeyError:
+            return self._project_name_fallback
+
+    @property
     def current_axes(self) -> Axes | None:
         """Resolve the selected Axes from the Registry, never a mirror."""
 
@@ -349,32 +363,20 @@ class PyFigureCanvas(QWidget):
 
         if key == "name":
             name = validate_component_name(value, "Project name")
-            existing = self.repository.project_by_name(
-                name,
-                required=False,
-            )
-            if existing is not None and existing.id != self.project_id:
-                raise ValueError(f"Project already exists: {name}")
-            project = self.repository.project(self.project_id)
-            if project.name != name:
-                project.name = name
-                self.repository.record_change(
+            owner = self.figure_window
+            metadata = getattr(owner, "project_metadata", None)
+            if metadata is not None:
+                metadata.apply_controller_name(self.project_id, name)
+            else:
+                project = self.repository.project(self.project_id)
+                with self.repository.mutate(
                     TableChangeSet(
                         self.project_id,
                         metadata_changed=True,
                         reason="rename-project",
                     )
-                )
-            self.project_name = name
-            self.project_table_name = name
-            owner = self.parent()
-            while owner is not None and not hasattr(owner, "tabwindow"):
-                owner = owner.parent()
-            tabwindow = getattr(owner, "tabwindow", None)
-            if tabwindow is not None:
-                index = tabwindow.indexOf(self)
-                if index >= 0:
-                    tabwindow.setTabText(index, name)
+                ):
+                    project.name = name
             return
         if key == "style":
             self.style = str(value)
@@ -834,6 +836,7 @@ class PyFigureCanvas(QWidget):
             self._selection_unsubscribe()
             self._selection_unsubscribe = None
         self.message_presenter.close()
+        self.component_registry.set_observer_failure_handler(None)
         self.component_editor_manager.close()
         self.axes_layout_service.dispose()
         self.in_axes_service.dispose()
@@ -853,14 +856,35 @@ class PyFigureCanvas(QWidget):
         pending_fits = self.fit_service.mark_sources_changed(
             changes.changed_columns
         )
+        self._observer_failures.extend(
+            self.chart_data_service.drain_observer_failures()
+        )
+        self._observer_failures.extend(
+            self.fit_service.drain_observer_failures()
+        )
         failures = [result for result in results if not result.ok]
         warnings = [
             result
             for result in results
             if result.ok and result.notices
         ]
-        if failures:
-            self.message_presenter.present(failures[0])
+        if failures or self._observer_failures:
+            self.message_presenter.discard_pending()
+            count = len(failures) + len(self._observer_failures)
+            details = []
+            if failures:
+                details.append(failures[0].message or "component refresh rejected")
+            if self._observer_failures:
+                failure = self._observer_failures[0]
+                details.append(
+                    f"{failure.source} {failure.phase}: {failure.error}"
+                )
+            self._observer_failures.clear()
+            self._observer_warning_scheduled = False
+            status_messages.show_warning(
+                f"{count} component refresh operation(s) reported a problem: "
+                + "; ".join(details)
+            )
         elif warnings:
             self.message_presenter.present(warnings[0])
         elif pending_fits:
@@ -868,6 +892,35 @@ class PyFigureCanvas(QWidget):
                 f"{len(pending_fits)} fit result(s) use changed source data; "
                 "run fitting again to refresh them."
             )
+
+    def _queue_observer_failures(
+        self,
+        failures: tuple[ObserverFailure, ...],
+    ) -> None:
+        """Coalesce Registry observer failures into one Canvas warning."""
+
+        self._observer_failures.extend(failures)
+        if self._observer_warning_scheduled:
+            return
+        self._observer_warning_scheduled = True
+        QTimer.singleShot(0, self._flush_observer_failures)
+
+    def _flush_observer_failures(self) -> None:
+        self._observer_warning_scheduled = False
+        if self._disposed or not self._observer_failures:
+            return
+        failures, self._observer_failures = self._observer_failures, []
+        first = failures[0]
+        component = (
+            f" component={first.component_id}"
+            if first.component_id is not None
+            else ""
+        )
+        status_messages.show_warning(
+            f"{len(failures)} component observer failure(s) were isolated; "
+            f"source={first.source} phase={first.phase}{component}: "
+            f"{first.error}"
+        )
 
     def create_component_editor(self, component_id: str, *, parent=None):
         """Create a schema-driven runtime editor with the shared color library."""
@@ -2689,6 +2742,10 @@ class PyFigureCanvas(QWidget):
     def set_project_name(self, name: str):
         """Set project name."""
 
+        metadata = getattr(self.figure_window, "project_metadata", None)
+        if metadata is not None:
+            metadata.rename(self.project_id, name)
+            return
         controller = self.component_registry.get(self.root_component_id)
         change = controller.set_property("name", name)
         if not change.ok:

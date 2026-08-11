@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from copy import deepcopy
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 from matplotlib.axes import Axes
@@ -32,6 +33,7 @@ from .models import (
     ComponentState,
     DeletionPolicy,
     MessageLevel,
+    ObserverFailure,
     UpdateImpact,
 )
 
@@ -43,6 +45,7 @@ _STANDARD_SPINES = frozenset({"left", "right", "bottom", "top"})
 _AXIS_NAMES = frozenset({"x", "y"})
 _TICK_LEVELS = frozenset({"major", "minor"})
 _CHART_KINDS = frozenset({ComponentKind.LINE, ComponentKind.SCATTER})
+LOGGER = logging.getLogger(__name__)
 
 
 class ComponentRegistrationTransaction:
@@ -121,6 +124,10 @@ class ComponentRegistry:
         ] = []
         self._transaction_depth = 0
         self._event_buffer: list[ComponentEvent] = []
+        self._observer_failures: list[ObserverFailure] = []
+        self._observer_failure_handler: (
+            Callable[[tuple[ObserverFailure, ...]], None] | None
+        ) = None
         self._registration_active = False
         self._active_registration_transaction: (
             ComponentRegistrationTransaction | None
@@ -134,6 +141,64 @@ class ComponentRegistry:
 
     def __iter__(self) -> Iterator[ComponentController[Any]]:
         return iter(self.query())
+
+    def set_observer_failure_handler(
+        self,
+        callback: Callable[[tuple[ObserverFailure, ...]], None] | None,
+    ) -> None:
+        """Set the non-blocking sink for aggregated observer failures."""
+
+        if callback is not None and not callable(callback):
+            raise TypeError("Observer failure handler must be callable.")
+        self._observer_failure_handler = callback
+
+    @staticmethod
+    def _observer_name(callback: Callable) -> str:
+        return str(
+            getattr(callback, "__qualname__", None)
+            or getattr(callback, "__name__", None)
+            or type(callback).__name__
+        )
+
+    def _record_observer_failure(
+        self,
+        callback: Callable,
+        phase: str,
+        error: BaseException,
+        *,
+        component_id: str | None = None,
+    ) -> None:
+        self._observer_failures.append(
+            ObserverFailure(
+                self._observer_name(callback),
+                phase,
+                error,
+                component_id=component_id,
+            )
+        )
+
+    def _publish_observer_failures(self) -> None:
+        if not self._observer_failures:
+            return
+        failures, self._observer_failures = (
+            tuple(self._observer_failures),
+            [],
+        )
+        if self._observer_failure_handler is None:
+            for failure in failures:
+                LOGGER.warning(
+                    "Component observer failed source=%s phase=%s "
+                    "component_id=%s error=%s",
+                    failure.source,
+                    failure.phase,
+                    failure.component_id,
+                    failure.error,
+                )
+            return
+        try:
+            self._observer_failure_handler(failures)
+        except Exception:
+            LOGGER.exception("Component observer failure handler failed")
 
     def register(
         self,
@@ -1621,10 +1686,15 @@ class ComponentRegistry:
         for callback in (*callbacks, *self._remove_listeners):
             try:
                 callback(state.clone())
-            except Exception:
+            except Exception as exc:
                 # Cleanup is best-effort: one stale editor must not prevent
                 # the artist and all remaining registrations being released.
-                continue
+                self._record_observer_failure(
+                    callback,
+                    "cleanup",
+                    exc,
+                    component_id=state.id,
+                )
         self._queue_event(
             ComponentEvent(
                 ComponentEventKind.REMOVED,
@@ -1664,10 +1734,15 @@ class ComponentRegistry:
                     continue
                 try:
                     callback(event)
-                except Exception:
+                except Exception as exc:
                     # Runtime/editor observers are isolated from Controller
                     # commits just like cleanup callbacks.
-                    continue
+                    self._record_observer_failure(
+                        callback,
+                        "lifecycle",
+                        exc,
+                        component_id=event.component_id,
+                    )
         committed = tuple(events)
         for callback, kinds in tuple(self._batch_subscribers):
             selected = (
@@ -1679,8 +1754,18 @@ class ComponentRegistry:
                 continue
             try:
                 callback(selected)
-            except Exception:
-                continue
+            except Exception as exc:
+                self._record_observer_failure(
+                    callback,
+                    "batch",
+                    exc,
+                    component_id=(
+                        selected[0].component_id
+                        if len(selected) == 1
+                        else None
+                    ),
+                )
+        self._publish_observer_failures()
 
     @staticmethod
     def _ordered(

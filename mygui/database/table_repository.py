@@ -83,21 +83,18 @@ class TableMutationCommand(QUndoCommand):
         self.rollback_on_error = bool(rollback_on_error)
         self.last_succeeded = False
 
-    def _change_set(self) -> TableChangeSet:
-        return self.changes() if callable(self.changes) else self.changes
-
     def redo(self) -> None:
         """Reapply this table mutation."""
 
         self.last_succeeded = False
         try:
-            with self.repository.transaction(
-                self.project_id,
+            with self.repository.mutate(
+                self.changes,
+                project_id=self.project_id,
                 rollback=self.rollback_on_error,
             ):
                 if self.redo_action() is False:
                     raise _MutationRejected
-                self.repository.record_change(self._change_set())
                 self.last_succeeded = True
         except _MutationRejected:
             self.setObsolete(True)
@@ -107,13 +104,13 @@ class TableMutationCommand(QUndoCommand):
 
         self.last_succeeded = False
         try:
-            with self.repository.transaction(
-                self.project_id,
+            with self.repository.mutate(
+                self.changes,
+                project_id=self.project_id,
                 rollback=self.rollback_on_error,
             ):
                 if self.undo_action() is False:
                     raise _MutationRejected
-                self.repository.record_change(self._change_set())
                 self.last_succeeded = True
         except _MutationRejected:
             return
@@ -357,8 +354,38 @@ class TableRepository(QObject):
                     ):
                         self.transaction_committed.emit(changes)
 
-    def record_change(self, changes: TableChangeSet) -> None:
-        """Publish a repository change after a successful mutation."""
+    @contextmanager
+    def mutate(
+        self,
+        changes: Callable[[], TableChangeSet] | TableChangeSet,
+        *,
+        project_id: str | None = None,
+        rollback: bool = True,
+    ) -> Iterator[ProjectTableDocument]:
+        """Run one document mutation and publish its ChangeSet exactly once."""
+
+        if callable(changes):
+            if project_id is None:
+                raise ValueError(
+                    "Callable Table changes require a stable project_id."
+                )
+            resolved_project_id = str(project_id)
+        elif isinstance(changes, TableChangeSet):
+            resolved_project_id = changes.project_id
+        else:
+            raise TypeError("Table mutation requires a TableChangeSet.")
+        project = self.project(resolved_project_id)
+        with self.transaction(resolved_project_id, rollback=rollback):
+            yield project
+            resolved = changes() if callable(changes) else changes
+            if not isinstance(resolved, TableChangeSet):
+                raise TypeError("Table mutation did not produce a ChangeSet.")
+            if resolved.project_id != resolved_project_id:
+                raise ValueError("Table mutation ChangeSet project ID changed.")
+            self._record_change(resolved)
+
+    def _record_change(self, changes: TableChangeSet) -> None:
+        """Queue an already successful mutation for outermost publication."""
 
         existing = self._pending.get(changes.project_id)
         if existing is None:
