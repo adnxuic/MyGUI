@@ -1,18 +1,10 @@
-import os
-import tempfile
 import unittest
-from pathlib import Path
-
-_TEST_TMP_DIR = Path(__file__).with_name("_tmp")
-_TEST_TMP_DIR.mkdir(exist_ok=True)
-os.environ["TEMP"] = str(_TEST_TMP_DIR)
-os.environ["TMP"] = str(_TEST_TMP_DIR)
-tempfile.tempdir = str(_TEST_TMP_DIR)
+import json
 
 import numpy as np
 
-from code.database import scipy_fit_adapter
-from code.database.safe_expression import evaluate_curve_expression
+from mygui.database import scipy_fit_adapter
+from mygui.database.safe_expression import evaluate_curve_expression
 
 
 class ScipyFitAdapterTests(unittest.TestCase):
@@ -84,6 +76,25 @@ class ScipyFitAdapterTests(unittest.TestCase):
         self.assertIn("Loss", info["options"])
         self.assertNotIn("Normalize", info["options"])
         self.assertNotIn("TolCon", info["options"])
+
+    def test_default_bounds_and_low_dof_result_are_strict_json(self):
+        options = scipy_fit_adapter.default_fit_options("poly1")
+        self.assertEqual(options["Lower"], [None, None])
+        self.assertEqual(options["Upper"], [None, None])
+
+        result = scipy_fit_adapter.fit_curve([0.0, 1.0], [1.0, 3.0], "poly1")
+
+        self.assertEqual(result["goodness"]["dfe"], 0.0)
+        self.assertIsNone(result["goodness"]["adjrsquare"])
+        self.assertIsNone(result["goodness"]["rmse"])
+        self.assertTrue(
+            all(
+                coefficient["lower"] is None
+                and coefficient["upper"] is None
+                for coefficient in result["coefficients"]
+            )
+        )
+        json.dumps(result, allow_nan=False)
 
 
 if __name__ == "__main__":

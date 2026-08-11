@@ -14,7 +14,8 @@ Windows Shell before `QApplication` is created. It takes no parameters and
 returns whether the Windows identity was successfully applied; unsupported
 platforms leave startup unchanged.
 
-`main.APP_ICON_PATH` is the root-relative `Path` for the icon asset. Resource
+`main.APP_ICON_PATH` is the absolute `Path` returned by the package resource
+locator for the icon asset. Resource
 loading therefore follows the application's existing requirement that
 `main.py` is launched from the repository root.
 

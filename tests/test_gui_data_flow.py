@@ -6,10 +6,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from Qt_core import QApplication, QGuiApplication, QInputDialog, QMessageBox, Qt
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
 
-from code.database import ColumnRef
-from code.figuremodify.components import ComponentRole
+from mygui.database import ColumnRef
+from mygui.figuremodify.components import ComponentRole
 from main import MainWindow
 
 
@@ -172,6 +174,41 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         self.assertEqual(
             len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
             1,
+        )
+
+    def test_datetime_type_change_also_cascades_data_dependents(self):
+        canvas, view, x_ref, y_ref = self.add_project()
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(
+            pair.x,
+            pair.y,
+            "-",
+            2,
+            "black",
+            "plot",
+            x_ref,
+            y_ref,
+        )
+        view.setCurrentIndex(view.table_model.index(0, 1))
+
+        with patch.object(
+            QInputDialog,
+            "getItem",
+            return_value=("datetime", True),
+        ), patch.object(
+            QMessageBox,
+            "question",
+            return_value=QMessageBox.Yes,
+        ):
+            view.change_column_type()
+
+        self.assertEqual(
+            view.table_model.sheet.column(y_ref.column_id).type.value,
+            "datetime",
+        )
+        self.assertEqual(
+            len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
+            0,
         )
 
     def test_referenced_sheet_delete_cascades_and_undo_restores(self):

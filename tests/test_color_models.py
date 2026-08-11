@@ -1,6 +1,6 @@
 import unittest
 
-from code.figuremodify.style_base.color_models import (
+from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
     PaletteDefinition,

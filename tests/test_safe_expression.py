@@ -1,8 +1,15 @@
+import builtins
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
-from code.database.safe_expression import UnsafeExpressionError, evaluate_curve_expression
+from mygui.database.safe_expression import (
+    MAX_EXPRESSION_LENGTH,
+    UnsafeExpressionError,
+    compile_math_expression,
+    evaluate_curve_expression,
+)
 
 
 class SafeExpressionTests(unittest.TestCase):
@@ -44,6 +51,36 @@ class SafeExpressionTests(unittest.TestCase):
             with self.subTest(expression=expression):
                 with self.assertRaises(UnsafeExpressionError):
                     evaluate_curve_expression(expression, x)
+
+    def test_interpreter_does_not_call_python_eval(self):
+        x = np.array([0.0, 1.0])
+        with patch.object(
+            builtins,
+            "eval",
+            side_effect=AssertionError("eval must not be used"),
+        ):
+            result = evaluate_curve_expression("2*x + 1", x)
+        np.testing.assert_allclose(result, [1.0, 3.0])
+
+    def test_rejects_expression_budgets_before_evaluation(self):
+        blocked = [
+            "x" + " " * MAX_EXPRESSION_LENGTH,
+            "+".join(["x"] * 70),
+            str(1 << 300),
+            "True",
+        ]
+        for expression in blocked:
+            with self.subTest(expression=expression[:40]):
+                with self.assertRaises(UnsafeExpressionError):
+                    compile_math_expression(expression, {"x"})
+        with self.assertRaisesRegex(UnsafeExpressionError, "Power exponent"):
+            evaluate_curve_expression("2 ** (2 ** 8)", np.array([1.0]))
+
+    def test_curve_output_must_be_one_dimensional_equal_and_finite(self):
+        with self.assertRaisesRegex(UnsafeExpressionError, "one-dimensional"):
+            evaluate_curve_expression("x", np.ones((2, 2)))
+        with self.assertRaisesRegex(UnsafeExpressionError, "finite"):
+            evaluate_curve_expression("1/x", np.array([0.0, 1.0]))
 
 
 if __name__ == "__main__":

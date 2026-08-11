@@ -7,10 +7,11 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QMimeData, QUrl
+from PySide6.QtCore import QMimeData, QUrl
+from PySide6.QtWidgets import QApplication
 
-from code.database import ColumnType
-from code.text_io import (
+from mygui.database import ColumnType
+from mygui.text_io import (
     TEXT_PREVIEW_TYPE_ROWS,
     TextDataSource,
     TextImportDialog,
@@ -142,6 +143,22 @@ class TextDataImportTests(unittest.TestCase):
 
         self.window.repository.undo_stack(project.id).undo()
         self.assertEqual([item.name for item in project.sheets.values()], ["Sheet1"])
+
+    def test_canvas_failure_rolls_back_new_text_workspace(self):
+        with patch.object(
+            self.window.figure_window,
+            "add_figure",
+            side_effect=RuntimeError("injected canvas failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "canvas failure"):
+                import_text_into_workspace(
+                    str(self.path),
+                    self.window.table,
+                    figure_window=self.window.figure_window,
+                    show_preview=False,
+                )
+        self.assertEqual(self.window.repository.projects, {})
+        self.assertEqual(self.window.table.table_names(), [])
 
     def test_arbitrary_suffix_drop_routes_to_text_import(self):
         enter_event = DropEventStub([self.path])

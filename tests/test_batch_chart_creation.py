@@ -10,22 +10,23 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 from PySide6.QtTest import QTest
 
-from Qt_core import QApplication, QComboBox, QDialog, Qt
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog
 
-from code import status_messages
-from code.database import ColumnRef, TableChangeSet
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.components import ComponentRole
-from code.figuremodify.style_base.color_models import ColorSelection
-from code.project_io import (
+from mygui import status_messages
+from mygui.database import ColumnRef, TableChangeSet
+from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.components import ComponentRole
+from mygui.figuremodify.style_base.color_models import ColorSelection
+from mygui.project_io import (
     load_project_file,
     restore_project_snapshot,
     save_project_snapshot,
 )
-from code.widgets.fig_control_window.component_editors import (
+from mygui.widgets.fig_control_window.component_editors import (
     MultiSeriesDataReferenceInput,
 )
-from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
+from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
     PyInterpolationDialog,
     PyPlotDialog,
 )

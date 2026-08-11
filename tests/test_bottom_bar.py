@@ -5,18 +5,18 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QFrame, QStackedLayout, QWidget
-from code import tex_config
-from code import status_messages
-from code.database import matlab_adapter
-from code.widgets import qss_func
-from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
-from code.widgets.bottom_bar.py_message_bar import PyMessageBar
-from code.widgets.bottom_bar.py_state_bar import FeatureIndicator, PyStateBar
-from code.widgets.left_column.py_left_column import PyLeftColumn
-from code.widgets.right_column.py_right_column import PyRightColumn
-from code.widgets.theme import COLORS, CONTROL_SIZES
-from code.widgets.title_bar.py_title_button import ChangeButton, PullDownButton
+from PySide6.QtWidgets import QApplication, QStackedLayout, QWidget
+from mygui import tex_config
+from mygui import status_messages
+from mygui.database import matlab_adapter
+from mygui.widgets import qss_func
+from mygui.widgets.bottom_bar.py_bottom_bar import PyBottomBar
+from mygui.widgets.bottom_bar.py_message_bar import PyMessageBar
+from mygui.widgets.bottom_bar.py_state_bar import FeatureIndicator, PyStateBar
+from mygui.widgets.left_column.py_left_column import PyLeftColumn
+from mygui.widgets.right_column.py_right_column import PyRightColumn
+from mygui.widgets.theme import COLORS, CONTROL_SIZES
+from mygui.widgets.title_bar.py_title_button import ChangeButton, PullDownButton
 
 
 class ThemeQssTests(unittest.TestCase):
@@ -213,6 +213,19 @@ class BottomBarMessageFlowTests(unittest.TestCase):
         finally:
             message_bar.deleteLater()
 
+    def test_failing_status_handler_is_contained_and_detached(self):
+        calls = []
+
+        def failing_handler(message, level):
+            calls.append((message, level))
+            raise ValueError("presentation failed")
+
+        status_messages.set_status_handler(failing_handler)
+        with self.assertLogs("mygui.status_messages", level="ERROR"):
+            self.assertFalse(status_messages.show_error("business result"))
+        self.assertEqual(calls, [("business result", "error")])
+        self.assertFalse(status_messages.show_success("not delivered"))
+
 
 class IconButtonAccessibilityTests(unittest.TestCase):
     @classmethod
@@ -220,7 +233,6 @@ class IconButtonAccessibilityTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_activity_rail_icon_buttons_have_names_and_tooltips(self):
-        table = QFrame()
         left_column = PyLeftColumn()
 
         stack = QStackedLayout()

@@ -12,14 +12,13 @@ matplotlib.use("Agg")
 from matplotlib.figure import Figure
 from matplotlib.ticker import AutoLocator
 
-from code.figuremodify.components import (
+from mygui.figuremodify.components import (
     CONTROLLER_TYPES,
     ROLES_BY_KIND,
     AxesController,
     ChangeStatus,
     ComponentEventKind,
     ComponentKind,
-    ComponentRegistry,
     ComponentRole,
     ComponentState,
     ComponentValidationError,

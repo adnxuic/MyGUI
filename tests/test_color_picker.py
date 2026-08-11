@@ -3,11 +3,13 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QAction, QApplication, QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QApplication
 
-from code.figuremodify.style_base.color_models import ColorCycleState, PaletteDefinition
-from code.widgets.common_widget.min_widget.color_library import ColorLibrary
-from code.widgets.common_widget.min_widget.py_colorchoice_widgets import (
+from mygui.figuremodify.style_base.color_models import ColorCycleState, PaletteDefinition
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
     ColorPickerDialog,
 )

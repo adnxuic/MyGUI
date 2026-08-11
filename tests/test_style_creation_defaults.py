@@ -4,7 +4,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 
-from code.figuremodify.style_base.creation_defaults import (
+from mygui.figuremodify.style_base.creation_defaults import (
     MATPLOTLIB_STYLE_PALETTE_SOURCE,
     resolve_component_creation_defaults,
     resolve_style_palette,

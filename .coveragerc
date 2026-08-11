@@ -1,0 +1,12 @@
+[run]
+branch = True
+source = mygui
+omit =
+    mygui/database/matlab_func/curve_fitting/__init__.py
+    mygui/database/matlab_func/get_func/__init__.py
+
+[report]
+fail_under = 74
+precision = 0
+show_missing = True
+skip_covered = True

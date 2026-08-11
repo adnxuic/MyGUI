@@ -6,13 +6,14 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QDialog, QModelIndex, QMessageBox, Qt
+from PySide6.QtCore import QModelIndex, Qt
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
-from code.figuremodify.components import (
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
 )
-from code.widgets.component_tree import (
+from mygui.widgets.component_tree import (
     COMPONENT_ID_ROLE,
     NODE_KEY_ROLE,
     VIRTUAL_GROUP_ROLE,
@@ -21,8 +22,8 @@ from code.widgets.component_tree import (
     ComponentTreeModel,
     ComponentBatchDeleteDialog,
 )
-from code.widgets.left_column import ExplorerMode
-from code.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.widgets.left_column import ExplorerMode
+from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
 
@@ -728,7 +729,7 @@ class ComponentTreeTests(unittest.TestCase):
         position = host.tree.visualRect(proxy_index).center()
 
         with mock.patch(
-            "code.widgets.component_tree.component_tree.QMenu",
+            "mygui.widgets.component_tree.component_tree.QMenu",
             self._menu_type("Delete Component"),
         ), mock.patch.object(
             host,
@@ -756,7 +757,7 @@ class ComponentTreeTests(unittest.TestCase):
         host.show()
         self.app.processEvents()
         with mock.patch(
-            "code.widgets.component_tree.component_tree.QMenu",
+            "mygui.widgets.component_tree.component_tree.QMenu",
             self._menu_type(None),
         ):
             host.tree._context_menu_requested(
@@ -782,7 +783,7 @@ class ComponentTreeTests(unittest.TestCase):
             "show_component",
             side_effect=fail_target,
         ), mock.patch(
-            "code.widgets.component_tree.component_tree.QMenu",
+            "mygui.widgets.component_tree.component_tree.QMenu",
             side_effect=AssertionError("menu must not be constructed"),
         ):
             host.tree._context_menu_requested(
@@ -823,11 +824,8 @@ class ComponentTreeTests(unittest.TestCase):
         host.tree.expand_component_path("filtered-b")
         host.show()
         self.app.processEvents()
-        proxy_index = host.proxy_model.mapFromSource(
-            host.model.index_for_component("filtered-b")
-        )
         with mock.patch(
-            "code.widgets.component_tree.component_tree.QMenu",
+            "mygui.widgets.component_tree.component_tree.QMenu",
             self._menu_type("Batch Delete Same Type..."),
         ), mock.patch.object(
             ComponentBatchDeleteDialog,

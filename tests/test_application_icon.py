@@ -1,12 +1,13 @@
 import os
-from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QIcon
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication
 
+from mygui.resources import resource_path
 from main import (
     APP_ICON_PATH,
     WINDOWS_APP_USER_MODEL_ID,
@@ -31,7 +32,7 @@ class ApplicationIconTests(unittest.TestCase):
     def test_configured_icon_exists_and_loads(self):
         self.assertEqual(
             APP_ICON_PATH,
-            Path("pictures/icons/app_icon.ico"),
+            resource_path("pictures/icons/app_icon.ico"),
         )
         self.assertTrue(APP_ICON_PATH.is_file())
 

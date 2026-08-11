@@ -1,26 +1,25 @@
 import json
 import os
 import tempfile
+from types import SimpleNamespace
 import unittest
-from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication
+from PySide6.QtWidgets import QApplication
 
-from code.database import ColumnRef, ColumnType
-from code.project_io import (
+from mygui.database import ColumnRef, ColumnType, TableRepository, scipy_fit_adapter
+from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
-    migrate_v7_to_v8,
     restore_project_snapshot,
     save_project_snapshot,
 )
-from code.figuremodify.components import ComponentKind, ComponentRole
-from code.figuremodify.components.serialization import v6_figure_to_legacy
-from code.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.figuremodify.components import ComponentRole
+from mygui.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from main import MainWindow
 
 
@@ -65,7 +64,7 @@ class ProjectIoTests(unittest.TestCase):
             if component["role"] == role
         )
 
-    def test_v6_roundtrip_preserves_types_missing_rows_and_refs(self):
+    def test_v9_roundtrip_preserves_types_missing_rows_and_refs(self):
         canvas, sheet = self.build_project()
         sheet.columns[0].width = 144
         canvas.canva._set_device_pixel_ratio(2)
@@ -109,7 +108,60 @@ class ProjectIoTests(unittest.TestCase):
             loaded.close()
             self.app.processEvents()
 
-    def test_recorded_v4_dpi_is_not_multiplied_on_later_saves(self):
+    def test_unbounded_low_dof_fit_roundtrips_with_json_null(self):
+        canvas, sheet = self.build_project()
+        x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[4].id)
+        pair = self.window.repository.valid_pair(x_ref, y_ref)
+        fit_options = scipy_fit_adapter.default_fit_options("poly1")
+        fit_result = scipy_fit_adapter.fit_curve(
+            pair.x,
+            pair.y,
+            "poly1",
+            fit_options,
+        )
+        canvas.add_fit_curve(
+            pair.x,
+            pair.y,
+            "tab:red",
+            "fit",
+            x_ref,
+            y_ref,
+            fit_type="poly1",
+            fit_options=fit_options,
+            fit_result=fit_result,
+            expression=fit_result["value_expression"],
+        )
+
+        save_project_snapshot(self.path, self.window.figure_window)
+        raw_text = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("NaN", raw_text)
+        self.assertNotIn("Infinity", raw_text)
+        loaded = load_project_file(self.path)
+        fit = self.component(loaded, "fit_curve")
+        self.assertEqual(fit["data"]["fit_options"]["Lower"], [None, None])
+        self.assertEqual(fit["data"]["fit_options"]["Upper"], [None, None])
+        self.assertIsNone(fit["data"]["fit_result"]["goodness"]["rmse"])
+        self.assertIsNone(
+            fit["data"]["fit_result"]["goodness"]["adjrsquare"]
+        )
+
+        reopened = MainWindow()
+        try:
+            restore_project_snapshot(self.path, reopened.table, reopened.figure_window)
+            restored = reopened.figure_window.current_canva.component_snapshot()
+            restored_fit = next(
+                component
+                for component in restored["components"]
+                if component["role"] == "fit_curve"
+            )
+            self.assertEqual(restored_fit["data"]["fit_options"], fit["data"]["fit_options"])
+            self.assertEqual(restored_fit["data"]["fit_result"], fit["data"]["fit_result"])
+        finally:
+            reopened.close()
+            self.app.processEvents()
+
+    def test_recorded_dpi_is_not_multiplied_on_later_saves(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -137,61 +189,19 @@ class ProjectIoTests(unittest.TestCase):
             loaded.close()
             self.app.processEvents()
 
-    def test_schema_v3_is_rejected_without_migration(self):
-        self.path.write_text(json.dumps({
-            "schema": "mygui-project",
-            "schema_version": 3,
-        }), encoding="utf-8")
-        with self.assertRaisesRegex(
-            ValueError,
-            "supported versions are v4, v5, v6, v7, v8, and v9",
-        ):
-            load_project_file(self.path)
-
-    def test_schema_v4_migrates_through_v5_v6_v7_v8_to_v9(self):
+    def test_only_exact_integer_schema_v9_is_accepted(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        raw["figure"] = v6_figure_to_legacy(raw["figure"])
-        raw["schema_version"] = 4
-        raw["figure"]["plots"][0]["color"] = "tab:blue"
-        for axes in raw["figure"]["axes"]:
-            axes.pop("color_cycle", None)
-        for collection in ("curves", "plots", "scatters", "interpolates", "fits"):
-            for record in raw["figure"][collection]:
-                record.pop("color_order", None)
-        self.path.write_text(json.dumps(raw), encoding="utf-8")
+        valid = json.loads(self.path.read_text(encoding="utf-8"))
+        for version in (3, 4, 5, 6, 7, 8, 9.0, "9", 10, None):
+            with self.subTest(version=version):
+                candidate = dict(valid)
+                candidate["schema_version"] = version
+                self.path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "only schema v9 is supported"):
+                    load_project_file(self.path)
 
-        migrated = load_project_file(self.path)
-        migrated_legacy = v6_figure_to_legacy(migrated["figure"])
-        self.assertEqual(migrated["schema_version"], 9)
-        self.assertEqual(
-            self.component(migrated, "data_plot")["data"]["preprocess"],
-            {"x_expression": "x", "y_expression": "y"},
-        )
-        self.assertIsNone(migrated_legacy["axes"][0]["color_cycle"])
-        self.assertEqual(migrated_legacy["plots"][0]["color_order"], 0)
-        self.assertEqual(migrated_legacy["plots"][0]["color"], "#1F77B4")
-
-    def test_v7_to_v8_migration_is_pure_and_adds_identity_preprocessing(self):
-        self.build_project()
-        save_project_snapshot(self.path, self.window.figure_window)
-        v7 = json.loads(self.path.read_text(encoding="utf-8"))
-        v7["schema_version"] = 7
-        for component in v7["figure"]["components"]:
-            component["data"].pop("preprocess", None)
-        original = deepcopy(v7)
-
-        migrated = migrate_v7_to_v8(v7)
-
-        self.assertEqual(v7, original)
-        self.assertEqual(migrated["schema_version"], 8)
-        self.assertEqual(
-            self.component(migrated, "data_plot")["data"]["preprocess"],
-            {"x_expression": "x", "y_expression": "y"},
-        )
-
-    def test_v8_rejects_unsafe_preprocessing_before_restore(self):
+    def test_v9_rejects_unsafe_preprocessing_before_restore(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -203,7 +213,7 @@ class ProjectIoTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "preprocess"):
             load_project_file(self.path)
 
-    def test_v8_rejects_non_identity_datetime_preprocessing_before_restore(self):
+    def test_v9_rejects_non_identity_datetime_preprocessing_before_restore(self):
         _canvas, sheet = self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -363,7 +373,7 @@ class ProjectIoTests(unittest.TestCase):
         self.path.write_text("existing project", encoding="utf-8")
 
         with mock.patch(
-            "code.project_io.os.replace",
+            "mygui.project_io.os.replace",
             side_effect=PermissionError("destination is locked"),
         ):
             with self.assertRaises(PermissionError):
@@ -374,6 +384,27 @@ class ProjectIoTests(unittest.TestCase):
             "existing project",
         )
         self.assertEqual(list(self.path.parent.glob("*.tmp")), [])
+
+    def test_post_replace_clean_bookkeeping_cannot_report_save_failure(self):
+        self.build_project()
+        with mock.patch.object(
+            self.window.figure_window,
+            "mark_canvas_clean",
+            side_effect=RuntimeError("injected bookkeeping failure"),
+        ):
+            snapshot = save_project_snapshot(self.path, self.window.figure_window)
+
+        self.assertEqual(load_project_file(self.path), snapshot)
+
+    def test_nonfinite_runtime_table_state_cannot_replace_existing_file(self):
+        _canvas, sheet = self.build_project()
+        self.path.write_text("preserve-me", encoding="utf-8")
+        sheet.frame.at[0, sheet.columns[0].id] = float("inf")
+
+        with self.assertRaisesRegex(ValueError, "finite"):
+            save_project_snapshot(self.path, self.window.figure_window)
+
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "preserve-me")
 
     def test_restore_failure_detaches_table_views_before_repository_rollback(self):
         self.build_project()
@@ -398,6 +429,99 @@ class ProjectIoTests(unittest.TestCase):
             self.assertEqual(loaded.repository.projects, {})
             self.assertEqual(loaded.table.table_names(), [])
         finally:
+            loaded.close()
+            self.app.processEvents()
+
+    def test_table_widget_construction_failure_never_publishes_project(self):
+        observed = []
+        self.window.repository.transaction_committed.connect(observed.append)
+        with mock.patch(
+            "mygui.widgets.table.py_table.PySubTable",
+            side_effect=RuntimeError("injected table widget failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "table widget failure"):
+                self.window.figure_window.add_figure(
+                    width=4,
+                    height=3,
+                    dpi=100,
+                    style="default",
+                    canva_name="FailedTable",
+                )
+
+        self.assertEqual(self.window.repository.projects, {})
+        self.assertEqual(self.window.table._subtables, {})
+        self.assertEqual(self.window.figure_window.tabwindow.count(), 0)
+        self.assertEqual(observed, [])
+
+    def test_restore_materialization_failure_is_clean_before_tab_publication(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        loaded = MainWindow()
+        original_restore = PyFigureCanvas.restore_component_tree
+
+        def restore_then_fail(canvas, component_tree=None):
+            original_restore(canvas, component_tree)
+            raise RuntimeError("injected post-materialization failure")
+
+        try:
+            with mock.patch.object(
+                PyFigureCanvas,
+                "restore_component_tree",
+                new=restore_then_fail,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "post-materialization"):
+                    restore_project_snapshot(
+                        self.path,
+                        loaded.table,
+                        loaded.figure_window,
+                    )
+            self.app.processEvents()
+            self.assertEqual(loaded.repository.projects, {})
+            self.assertEqual(loaded.table._subtables, {})
+            self.assertEqual(loaded.figure_window.canvas, {})
+            self.assertEqual(loaded.figure_window.tabwindow.count(), 0)
+        finally:
+            loaded.close()
+            self.app.processEvents()
+
+    def test_restore_rejects_different_table_and_figure_repositories(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        table = SimpleNamespace(repository=TableRepository())
+        figure_window = SimpleNamespace(repository=TableRepository())
+
+        with self.assertRaisesRegex(ValueError, "share one TableRepository"):
+            restore_project_snapshot(self.path, table, figure_window)
+
+    def test_cleanup_failure_does_not_mask_primary_restore_error(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        loaded = MainWindow()
+        try:
+            with (
+                mock.patch.object(
+                    loaded.figure_window,
+                    "load_project_figure_snapshot",
+                    side_effect=RuntimeError("primary restore failure"),
+                ),
+                mock.patch.object(
+                    loaded.table,
+                    "remove_project_table",
+                    side_effect=RuntimeError("cleanup failure"),
+                ),
+                self.assertLogs("mygui.project_io", level="ERROR") as logs,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "primary restore failure"):
+                    restore_project_snapshot(
+                        self.path,
+                        loaded.table,
+                        loaded.figure_window,
+                    )
+            self.assertIn("cleanup failure", "\n".join(logs.output))
+        finally:
+            project_ids = list(loaded.repository.projects)
+            for project_id in project_ids:
+                loaded.table.remove_project_table(project_id, publish=False)
             loaded.close()
             self.app.processEvents()
 

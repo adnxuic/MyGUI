@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from code.database import (
+from mygui.database import (
     ColumnType,
     DataPreprocessSpec,
     TableRepository,
@@ -96,6 +96,14 @@ class DataPreprocessingTests(unittest.TestCase):
                 self.x_ref,
                 self.y_ref,
                 DataPreprocessSpec("True", "y"),
+                preserve_gaps=False,
+            )
+        with self.assertRaisesRegex(ValueError, "Power exponent"):
+            resolve_preprocessed_pair(
+                self.repository,
+                self.x_ref,
+                self.y_ref,
+                DataPreprocessSpec("2 ** (2 ** 8)", "y"),
                 preserve_gaps=False,
             )
 

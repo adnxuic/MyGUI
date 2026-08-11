@@ -10,15 +10,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from Qt_core import QApplication
+from PySide6.QtWidgets import QApplication
 
-from code import status_messages
-from code.database import ColumnRef, ColumnType, TableChangeSet
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.components import ComponentKind, ComponentRole
-from code.figuremodify.components.serialization import validate_v9_figure
-from code.figuremodify.style_base.color_models import PaletteDefinition
-from code.project_io import restore_project_snapshot, save_project_snapshot
+from mygui import status_messages
+from mygui.database import ColumnRef, ColumnType, TableChangeSet
+from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.components import ComponentKind, ComponentRole
+from mygui.figuremodify.components.serialization import validate_v9_figure
+from mygui.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
 
@@ -741,7 +741,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         np.testing.assert_allclose(valid_x, [1.0, 0.5, 1.0 / 3.0])
         before_x = np.asarray(line.get_xdata()).copy()
         events = []
-        handler = lambda message, level: events.append((message, level))
+
+        def handler(message, level):
+            events.append((message, level))
+
         status_messages.set_status_handler(handler)
         try:
             x_expression.setText("__import__('os')")
@@ -777,7 +780,10 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         line = self.canvas.component_registry.resolve_target(object_id)
         original_set_property = controller.set_property
         events = []
-        handler = lambda message, level: events.append((message, level))
+
+        def handler(message, level):
+            events.append((message, level))
+
         status_messages.set_status_handler(handler)
         try:
             controller.set_property = lambda _key, _value: SimpleNamespace(

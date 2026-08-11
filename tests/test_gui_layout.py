@@ -5,15 +5,16 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QDialog, QObject, QSettings, Qt
+from PySide6.QtCore import QObject, QSettings, Qt
+from PySide6.QtWidgets import QApplication, QDialog
 
-from code.widgets.fig_control_window.figure_inspector import (
+from mygui.widgets.fig_control_window.figure_inspector import (
     AxesInspectorPanel,
     FigureInspectorPanel,
 )
-from code.widgets.left_column import ExplorerMode
-from code.widgets.theme import CONTROL_SIZES
-from code.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.widgets.left_column import ExplorerMode
+from mygui.widgets.theme import CONTROL_SIZES
+from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
 

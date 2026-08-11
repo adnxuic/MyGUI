@@ -5,27 +5,29 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QDialog, QFrame, QMainWindow, QRegion, QToolButton
+from PySide6.QtGui import QRegion
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow
 
-from code.widgets.left_column.py_left_column import PyLeftColumn
-from code.widgets.left_column.py_setting_dialog import PySettingDialog
-from code.widgets.theme import CONTROL_SIZES
-from code.widgets.title_bar.py_title_menu import (
+from mygui.widgets.left_column.py_left_column import PyLeftColumn
+from mygui.widgets.left_column.py_setting_dialog import PySettingDialog
+from mygui.resources import icon_path
+from mygui.widgets.theme import CONTROL_SIZES
+from mygui.widgets.title_bar.py_title_menu import (
     SelectorChartMenuBar,
     SelectorElementMenuBar,
     SelectorLayoutMenuBar,
     SelectorStyleMenuBar,
 )
-from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog
-from code.widgets.title_bar.titlebar_dialog.axes_layout_input import (
+from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog
+from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
     axes_layout_presets,
 )
-from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     PyInAxesDialog,
     PyTextDialog,
     element_action_specs,
 )
-from code.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
 class CommandGalleryTests(unittest.TestCase):
@@ -178,7 +180,7 @@ class CommandGalleryTests(unittest.TestCase):
         host.setCentralWidget(bar)
         try:
             with patch(
-                "code.widgets.title_bar.py_title_menu.PyLayoutDialog"
+                "mygui.widgets.title_bar.py_title_menu.PyLayoutDialog"
             ) as dialog_type:
                 bar.action_dict["Horizontal Comparison"].trigger()
 
@@ -205,7 +207,7 @@ class CommandGalleryTests(unittest.TestCase):
         try:
             self.assertEqual(
                 element_action_specs["in_axes"].icon_path,
-                "pictures/icons/element_images/in_axes.svg",
+                icon_path("element_images/in_axes.svg"),
             )
             with patch.object(PyInAxesDialog, "exec", return_value=0) as execute:
                 action.trigger()

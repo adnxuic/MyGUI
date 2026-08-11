@@ -39,7 +39,8 @@ logs/
 *~
 *.bak
 *.baiduyun.uploading.cfg
-codex_handoff/
+codex_handoff/*
+!codex_handoff/current-limitations.md
 tests/_tmp/
 tests/fixtures/
 

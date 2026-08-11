@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from code.database.interpolate_func import (
+from mygui.database.interpolate_func import (
     CubicSpline_interpolate,
     b_spline_splrep_interpolate,
     interpolate_curve,

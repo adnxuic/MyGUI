@@ -24,7 +24,10 @@ trigonometric and inverse-trigonometric functions, hyperbolic functions,
 `np.` or `numpy.` form.
 
 Expressions are limited to 512 characters, 128 syntax nodes, and 32 levels of
-syntax nesting. Results may be scalar values, which are broadcast to all
+syntax nesting. Integer constants are limited to 256 bits, exponent magnitude
+is limited to 64, and intermediate arrays are limited to 2,000,000 elements.
+The evaluator interprets the validated syntax tree directly and never calls
+Python `eval`. Results may be scalar values, which are broadcast to all
 rows, or one-dimensional real numeric arrays matching the source row count.
 Unknown names, arbitrary attributes or calls, indexing, conditions, lambdas,
 collections, Boolean values, complex values, objects, and mismatched shapes
@@ -61,5 +64,5 @@ role-specific `data` record:
 }
 ```
 
-Projects from schema v7 receive the identity object during migration. Parsed
-syntax trees, evaluated arrays, masks, and editor state are runtime-only.
+Every schema-v9 data-backed component contains this object. Parsed syntax
+trees, evaluated arrays, masks, and editor state are runtime-only.

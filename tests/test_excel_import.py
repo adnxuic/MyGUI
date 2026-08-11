@@ -8,14 +8,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import openpyxl
 
-from Qt_core import QApplication, QMimeData, QUrl
+from PySide6.QtCore import QMimeData, QUrl
+from PySide6.QtWidgets import QApplication
 
-from code.database import ColumnType
-from code.excel_io import (
+from mygui.database import ColumnType
+from mygui.excel_io import (
     ExcelColumnSpec,
     ExcelSheetPreview,
     ExcelSheetSpec,
     import_excel_into_table,
+    import_excel_into_workspace,
     read_excel_workbook,
 )
 from main import MainWindow
@@ -167,7 +169,7 @@ class ExcelImportV4Tests(unittest.TestCase):
         invalid = [ExcelSheetSpec("Raw", "Raw", [
             ExcelColumnSpec("X", ColumnType.NUMBER, ["not-a-number"])
         ])]
-        with patch("code.excel_io._default_specs", return_value=invalid):
+        with patch("mygui.excel_io._default_specs", return_value=invalid):
             with self.assertRaisesRegex(ValueError, "valid number"):
                 import_excel_into_table(str(self.path), self.window.table, show_preview=False)
         self.assertEqual(self.window.table.table_names(), [])
@@ -193,6 +195,22 @@ class ExcelImportV4Tests(unittest.TestCase):
             subtable.project.id,
         )
         self.assertIn("Excel imported", self.window.bottom_bar.message_bar.message_label.text())
+
+    def test_canvas_failure_rolls_back_new_excel_workspace(self):
+        with patch.object(
+            self.window.figure_window,
+            "add_figure",
+            side_effect=RuntimeError("injected canvas failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "canvas failure"):
+                import_excel_into_workspace(
+                    str(self.path),
+                    self.window.table,
+                    figure_window=self.window.figure_window,
+                    show_preview=False,
+                )
+        self.assertEqual(self.window.repository.projects, {})
+        self.assertEqual(self.window.table.table_names(), [])
 
     def test_multiple_file_drops_are_rejected(self):
         multiple_event = DropEventStub([self.path, self.path])

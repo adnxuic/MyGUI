@@ -1,0 +1,318 @@
+"""Validate, save, and load strict schema-v9 MyGUI project snapshots."""
+
+from __future__ import annotations
+
+import json
+import hashlib
+import logging
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
+from mygui.figuremodify.components.serialization import (
+    normalize_v9_figure,
+    validate_v9_figure,
+)
+from mygui.resource_limits import load_resource_limits, validate_json_budget
+
+
+PROJECT_SCHEMA_NAME = "mygui-project"
+PROJECT_SCHEMA_VERSION = 9
+LOGGER = logging.getLogger(__name__)
+
+
+def _json_bytes(payload: Any, *, pretty: bool) -> bytes:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        indent=2 if pretty else None,
+        separators=None if pretty else (",", ":"),
+        sort_keys=not pretty,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def project_fingerprint(snapshot: dict[str, Any]) -> str:
+    """Return the canonical persisted-state fingerprint for a project."""
+
+    return hashlib.sha256(_json_bytes(snapshot, pretty=False)).hexdigest()
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "wb",
+            dir=path.parent,
+            delete=False,
+            suffix=".tmp",
+        ) as handle:
+            temp_name = handle.name
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+        temp_name = None
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                LOGGER.exception("Unable to remove temporary project file %s", temp_name)
+
+
+def export_database_snapshot(filename: str | Path, repository: TableRepository,
+                             project_id: str | None = None) -> None:
+    """Export database snapshot."""
+
+    if project_id is None:
+        payload = [project.to_snapshot() for project in repository.projects.values()]
+    else:
+        payload = repository.snapshot(project_id)
+    encoded = _json_bytes(payload, pretty=True)
+    limits = load_resource_limits()
+    if len(encoded) > limits.max_project_bytes:
+        raise ValueError("Database export exceeds the configured file-size budget.")
+    _atomic_write_bytes(Path(filename), encoded)
+
+
+def _expect_dict(value: Any, path: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"Invalid project field {path}: expected object.")
+    return value
+
+
+def _expect_list(value: Any, path: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValueError(f"Invalid project field {path}: expected array.")
+    return value
+
+
+def _expect_exact_keys(value: dict[str, Any], expected: set[str], path: str) -> None:
+    actual = set(value)
+    if actual != expected:
+        raise ValueError(
+            f"Invalid project field {path}: expected exactly {sorted(expected)}, "
+            f"got {sorted(actual)}."
+        )
+
+
+def _expect_string(value: Any, path: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"Invalid project field {path}: expected string.")
+    return value
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON numeric constant: {value}.")
+
+
+def _validate_table(table_snapshot: Any, project_id: str,
+                    project_name: str) -> dict[ColumnRef, ColumnType]:
+    table = _expect_dict(table_snapshot, "table")
+    document = ProjectTableDocument.from_snapshot(table)
+    if document.id != project_id:
+        raise ValueError("Project and table identifiers must match.")
+    if document.name != project_name:
+        raise ValueError("Project and table names must match.")
+    refs = {}
+    sheet_names = set()
+    for sheet in document.sheets.values():
+        validate_component_name(sheet.name, "Sheet name")
+        normalized = sheet.name.casefold()
+        if normalized in sheet_names:
+            raise ValueError(f"Duplicate sheet name: {sheet.name}")
+        sheet_names.add(normalized)
+        column_names = set()
+        for column in sheet.columns:
+            normalized_column = column.name.casefold()
+            if normalized_column in column_names:
+                raise ValueError(f"Duplicate column name in {sheet.name}: {column.name}")
+            column_names.add(normalized_column)
+            refs[ColumnRef(project_id, sheet.id, column.id)] = column.type
+    return refs
+
+
+def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate project snapshot."""
+
+    validate_json_budget(snapshot, limits=load_resource_limits())
+    root = _expect_dict(snapshot, "project")
+    _expect_exact_keys(
+        root,
+        {"schema", "schema_version", "project", "table", "figure"},
+        "project",
+    )
+    if _expect_string(root.get("schema"), "schema") != PROJECT_SCHEMA_NAME:
+        raise ValueError("Unsupported project file.")
+    version = root.get("schema_version")
+    if type(version) is not int or version != PROJECT_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported project schema version {version!r}; "
+            f"only schema v{PROJECT_SCHEMA_VERSION} is supported."
+        )
+    project = _expect_dict(root.get("project"), "project")
+    _expect_exact_keys(project, {"id", "name"}, "project.project")
+    project_id = _expect_string(project.get("id"), "project.id").strip()
+    if not project_id:
+        raise ValueError("Project id must not be empty.")
+    project_name = validate_component_name(
+        _expect_string(project.get("name"), "project.name"),
+        "Project name",
+    )
+    refs = _validate_table(root.get("table"), project_id, project_name)
+    validate_v9_figure(root.get("figure"), refs, project_id, project_name)
+
+
+def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
+    """Build the complete serializable project snapshot."""
+
+    if figure_window is None:
+        raise ValueError("No Figure window is available to save.")
+    if canvas is None:
+        canvas = getattr(figure_window, "current_canva", None)
+    if canvas is None:
+        raise ValueError("No current project canvas to save.")
+    project = figure_window.repository.project(canvas.project_id)
+    figure = normalize_v9_figure(canvas.component_snapshot())
+    snapshot = {
+        "schema": PROJECT_SCHEMA_NAME,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {"id": project.id, "name": project.name},
+        "table": project.to_snapshot(),
+        "figure": figure,
+    }
+    validate_project_snapshot(snapshot)
+    return snapshot
+
+
+def save_project_snapshot(
+    filename: str | Path,
+    figure_window=None,
+    *,
+    canvas=None,
+) -> dict[str, Any]:
+    """Save project snapshot."""
+
+    path = Path(filename)
+    if canvas is None and figure_window is not None:
+        canvas = getattr(figure_window, "current_canva", None)
+    snapshot = project_snapshot(figure_window, canvas=canvas)
+    payload = _json_bytes(snapshot, pretty=True)
+    if len(payload) > load_resource_limits().max_project_bytes:
+        raise ValueError("Project exceeds the configured file-size budget.")
+    fingerprint = project_fingerprint(snapshot)
+    _atomic_write_bytes(path, payload)
+
+    # The file is committed at this point. Runtime bookkeeping must never turn
+    # a successful atomic replacement into a reported save failure.
+    try:
+        if canvas is not None:
+            canvas.project_path = str(path)
+        mark_clean = getattr(figure_window, "mark_canvas_clean", None)
+        if callable(mark_clean) and canvas is not None:
+            mark_clean(canvas, fingerprint=fingerprint)
+    except Exception:
+        LOGGER.exception("Project file was saved but clean-state bookkeeping failed")
+    return snapshot
+
+
+def load_project_file(filename: str | Path) -> dict[str, Any]:
+    """Load project file."""
+
+    path = Path(filename)
+    limits = load_resource_limits()
+    if not path.is_file():
+        raise ValueError(f"Project file does not exist: {path}")
+    if path.stat().st_size > limits.max_project_bytes:
+        raise ValueError("Project file exceeds the configured file-size budget.")
+    with path.open("r", encoding="utf-8-sig") as handle:
+        snapshot = json.load(
+            handle,
+            parse_constant=_reject_json_constant,
+        )
+    validate_json_budget(snapshot, limits=limits)
+    validate_project_snapshot(snapshot)
+    return snapshot
+
+
+def restore_project_snapshot(filename: str | Path, table=None, figure_window=None) -> dict[str, Any]:
+    """Restore project snapshot."""
+
+    snapshot = load_project_file(filename)
+    project_meta = snapshot["project"]
+    project_id = project_meta["id"]
+    project_name = project_meta["name"]
+    table_repository = getattr(table, "repository", None)
+    figure_repository = getattr(figure_window, "repository", None)
+    if (
+        table_repository is not None
+        and figure_repository is not None
+        and table_repository is not figure_repository
+    ):
+        raise ValueError(
+            "Project restore requires Table and Figure windows to share one "
+            "TableRepository."
+        )
+    repository = table_repository or figure_repository
+    if repository is None:
+        raise ValueError("Project restore requires a TableRepository-backed window.")
+    if project_id in repository.projects or repository.project_by_name(project_name, required=False) is not None:
+        raise ValueError(f"Project already exists: {project_name}")
+
+    previous_table_project_id = getattr(table, "current_project_id", None)
+    previous_canvas = getattr(figure_window, "current_canva", None)
+    try:
+        if table is None:
+            raise ValueError("Project restore requires the Table widget.")
+        table.load_project_table_snapshot(snapshot["table"], publish=False)
+        if figure_window is not None:
+            canvas = figure_window.load_project_figure_snapshot(
+                snapshot["figure"],
+                project_name,
+                project_path=str(Path(filename)),
+            )
+            mark_clean = getattr(figure_window, "mark_canvas_clean", None)
+            if callable(mark_clean) and canvas is not None:
+                mark_clean(canvas)
+        repository.publish_project_added(project_id)
+        return snapshot
+    except Exception:
+        cleanup_errors = []
+        if figure_window is not None:
+            try:
+                figure_window.remove_project_by_id(project_id)
+            except Exception as cleanup_error:
+                cleanup_errors.append(f"Figure cleanup: {cleanup_error}")
+        if table is not None and project_id in repository.projects:
+            try:
+                table.remove_project_table(project_id, publish=False)
+            except Exception as cleanup_error:
+                cleanup_errors.append(f"Table cleanup: {cleanup_error}")
+        try:
+            if (
+                previous_canvas is not None
+                and previous_canvas.project_id in getattr(
+                    figure_window,
+                    "canvas",
+                    {},
+                )
+            ):
+                figure_window.tabwindow.setCurrentWidget(previous_canvas)
+                figure_window.change_current_canvas()
+            elif (
+                previous_table_project_id is not None
+                and previous_table_project_id in repository.projects
+            ):
+                table.switch_to_table(previous_table_project_id)
+        except Exception as cleanup_error:
+            cleanup_errors.append(f"Selection restore: {cleanup_error}")
+        if cleanup_errors:
+            LOGGER.error(
+                "Project restore rollback was incomplete: %s",
+                "; ".join(cleanup_errors),
+            )
+        raise

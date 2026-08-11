@@ -72,7 +72,11 @@ High-order Gaussian, Fourier, and rational models can be numerically sensitive.
 | `goodness` | Fit metrics: SSE, R-square, adjusted R-square, DFE, and RMSE. |
 | `confidence_level` | Confidence level used for coefficient bounds. |
 
-A failed fit does not update the plotted curve or result table.
+Unbounded `Lower`/`Upper` entries are persisted as JSON `null` and expanded to
+the adapter-specific infinities only while a fit executes. Undefined
+confidence bounds, adjusted R-square, or RMSE are also persisted as `null` and
+shown as `N/A`. Fitted coefficient values must always be finite. A failed fit
+does not update the plotted curve or result table.
 
 ## Project Files
 
@@ -88,7 +92,7 @@ new MATLAB fit still requires a successful MATLAB connection.
 
 ## SciPy Engine
 
-SciPy fitting uses `code/database/scipy_fit_models.py` and `code/database/scipy_fit_adapter.py`.
+SciPy fitting uses `mygui/database/scipy_fit_models.py` and `mygui/database/scipy_fit_adapter.py`.
 
 SciPy does not call MATLAB code.
 
@@ -158,9 +162,15 @@ Old generated package signatures are not supported.
 | `MYGUI_MATLAB_MCR_CACHE_ROOT` | Custom MATLAB Runtime cache root. |
 | `MCR_CACHE_ROOT` | External MATLAB Runtime cache root. |
 
-Default local paths:
+Default writable locations are derived from Qt `QStandardPaths` and live under
+the current user's MyGUI data directory rather than the source tree:
 
 ```text
-logs/matlab.log
-.matlab_runtime_cache/runtime/<key>
+<user-data>/MyGUI/logs/matlab.log
+<user-data>/MyGUI/cache/matlab_runtime/runtime/<key>
 ```
+
+MATLAB and TeX child processes use bounded input/output capture and terminate
+the child process tree when their configured timeout expires. Connection,
+metadata extraction, fitting, and TeX validation run outside the GUI thread;
+closing the owning panel suppresses stale callbacks.

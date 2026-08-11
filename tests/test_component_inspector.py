@@ -4,19 +4,19 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from code import tex_config
-from code.database import (
+from mygui import tex_config
+from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
     TableChangeSet,
     TableRepository,
 )
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.component_services import (
+from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
     FitService,
@@ -24,7 +24,7 @@ from code.figuremodify.component_services import (
     InterpolationService,
     TextRenderService,
 )
-from code.figuremodify.components import (
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRegistry,
     ComponentRole,
@@ -35,11 +35,11 @@ from code.figuremodify.components import (
     InterpolationController,
     register_figure_components,
 )
-from code.widgets.common_widget.min_widget.color_library import ColorLibrary
-from code.widgets.fig_control_window.component_editors.containers import (
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.fig_control_window.component_editors.containers import (
     AxesSemanticInspectorPanel,
 )
-from code.widgets.fig_control_window.component_editors import (
+from mygui.widgets.fig_control_window.component_editors import (
     ComponentEditorManager,
     ComponentInspector,
     DataReferenceInput,
@@ -55,7 +55,7 @@ from code.widgets.fig_control_window.component_editors import (
     TreePresentationSpec,
     register_production_profiles,
 )
-from code.widgets.fig_control_window.component_editors.profiles import (
+from mygui.widgets.fig_control_window.component_editors.profiles import (
     LEGEND_PROFILE,
     LINE_PROFILES,
     SEMANTIC_TEXT_PROFILE,

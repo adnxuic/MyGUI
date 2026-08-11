@@ -1,6 +1,6 @@
 # Matplotlib Component Controllers
 
-The component-controller layer under `code/figuremodify/components/` provides Qt-independent control of a Matplotlib Figure. It separates artist behavior, serializable state, semantic lookup, hierarchy, and redraw coordination so GUI editors, project restore, scripted changes, and later Undo commands can call the same API.
+The component-controller layer under `mygui/figuremodify/components/` provides Qt-independent control of a Matplotlib Figure. It separates artist behavior, serializable state, semantic lookup, hierarchy, and redraw coordination so GUI editors, project restore, scripted changes, and later Undo commands can call the same API.
 
 ## Architecture
 
@@ -137,7 +137,7 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 
 ## Domain services and Editors
 
-`code/figuremodify/component_services.py` contains application commands that span Controller or repository boundaries:
+`mygui/figuremodify/component_services.py` contains application commands that span Controller or repository boundaries:
 
 - `AxesCommandService`: semantic Axis/Spine/Label/Legend commands and ordered palette application;
 - `FunctionCurveService`: safe expression evaluation and atomic curve-data replacement;
@@ -186,7 +186,7 @@ persisting the canonical Matplotlib values (`-`, `--`, `-.`, and `:`).
 ## State and property example
 
 ```python
-from code.figuremodify.components import (
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
     ComponentState,
@@ -229,7 +229,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend v6 serialization, strict validation, v4/v5 migration, and direct v6 project round-trip coverage when the component is persistent.
+9. Extend strict schema-v9 serialization and direct save/open round-trip coverage when the component is persistent. Any new persisted field requires a dedicated schema-v10 migration task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

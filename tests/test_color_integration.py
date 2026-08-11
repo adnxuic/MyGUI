@@ -4,23 +4,24 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QApplication
 
-from code.database import ColumnRef
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.components import (
+from mygui.database import ColumnRef
+from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.components import (
     ComponentRole,
     DataPlotController,
 )
-from code.figuremodify.style_base.color_models import PaletteDefinition, builtin_palettes
-from code.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
+from mygui.figuremodify.style_base.color_models import PaletteDefinition, builtin_palettes
+from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
     PyCurveDialog,
     PyFitDialog,
     PyInterpolationDialog,
     PyPlotDialog,
     PyScatterDialog,
 )
-from code.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     PyTextDialog,
 )
 from main import MainWindow
@@ -173,7 +174,7 @@ class ColorIntegrationTests(unittest.TestCase):
 
         failed = PyCurveDialog("Curve", self.window.figure_window)
         failed.expression_edit.setText("__import__('os')")
-        with patch("code.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"):
+        with patch("mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"):
             failed.accept()
         self.assertEqual(
             self.canvas.axes_commands.cycle_state(axes_id).next_index,
@@ -213,7 +214,7 @@ class ColorIntegrationTests(unittest.TestCase):
         failed = PyCurveDialog("Curve", self.window.figure_window)
         failed.expression_edit.setText("__import__('os')")
         with patch(
-            "code.widgets.title_bar.titlebar_dialog."
+            "mygui.widgets.title_bar.titlebar_dialog."
             "py_chart_dialog.QMessageBox.warning"
         ):
             failed.accept()

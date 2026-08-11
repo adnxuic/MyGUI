@@ -6,31 +6,26 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import (
-    QApplication,
-    QDialog,
-    QEvent,
-    QFileDialog,
-    QMessageBox,
-)
+from PySide6.QtCore import QEvent
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox
 
-from code import status_messages, tex_config
-from code.figuremodify.components import (
+from mygui import status_messages, tex_config
+from mygui.figuremodify.components import (
     ComponentEventKind,
     ComponentKind,
     ComponentRole,
 )
-from code.figuremodify.style_base.color_models import PaletteDefinition
-from code.project_io import (
+from mygui.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.project_io import (
     load_project_file,
     project_snapshot,
     restore_project_snapshot,
 )
-from code.widgets.component_tree.dialogs import (
+from mygui.widgets.component_tree.dialogs import (
     ComponentBatchDeleteDialog,
 )
-from code.widgets.component_tree.model import ComponentTreeModel
-from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+from mygui.widgets.component_tree.model import ComponentTreeModel
+from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from main import MainWindow
 
 
@@ -932,7 +927,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "code.widgets.figure_canvas.deletion_coordinator.normalize_v9_figure",
+                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v9_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))
@@ -1163,7 +1158,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
 
         with (
             mock.patch(
-                "code.widgets.figure_canvas.py_figure_window.PyFigureCanvas",
+                "mygui.widgets.figure_canvas.py_figure_window.PyFigureCanvas",
                 side_effect=construct,
             ),
             mock.patch.object(
@@ -1332,7 +1327,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 return_value=QMessageBox.Save,
             ),
             mock.patch(
-                "code.project_io.os.replace",
+                "mygui.project_io.os.replace",
                 side_effect=PermissionError("destination is locked"),
             ),
             mock.patch.object(QMessageBox, "warning"),

@@ -16,9 +16,9 @@ PROBE = textwrap.dedent(
     import tempfile
     from pathlib import Path
 
-    from Qt_core import QApplication
-    from code.database import TableRepository
-    from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+    from PySide6.QtWidgets import QApplication
+    from mygui.database import TableRepository
+    from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 
     app = QApplication([])
     repository = TableRepository()

@@ -4,8 +4,8 @@ from unittest.mock import Mock
 import numpy as np
 from matplotlib.figure import Figure
 
-from code.figuremodify.component_services import FunctionCurveService
-from code.figuremodify.components import (
+from mygui.figuremodify.component_services import FunctionCurveService
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRegistry,
     ComponentRole,

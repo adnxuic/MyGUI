@@ -5,14 +5,15 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, Qt
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 
-from code.project_io import (
+from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
     restore_project_snapshot,
 )
-from code.widgets.title_bar.py_title_menu import MenuBar
+from mygui.widgets.title_bar.py_title_menu import MenuBar
 from main import MainWindow
 
 

@@ -9,32 +9,28 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
 
-from Qt_core import QApplication
-from code.database import ColumnRef, TableRepository
-from code.figuremodify.components import (
+from PySide6.QtWidgets import QApplication
+from mygui.database import ColumnRef, TableRepository
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
     ComponentValidationError,
     decode_in_axes_image,
 )
-from code.figuremodify.components.serialization import (
-    legacy_figure_to_v6,
-    normalize_v6_figure,
-    v6_figure_to_legacy,
+from mygui.figuremodify.components.serialization import (
     validate_v9_figure,
 )
-from code.figuremodify.in_axes import (
+from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
     ZoomInAxesCreateSpec,
 )
-from code.project_io import migrate_project_snapshot
-from code.widgets.fig_control_window.component_editors.inspector import (
+from mygui.widgets.fig_control_window.component_editors.inspector import (
     EditorPlacement,
 )
-from code.widgets.fig_control_window.figure_inspector import (
+from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorHost,
 )
-from code.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 
 
 def image_payload(
@@ -433,7 +429,7 @@ class InAxesTests(unittest.TestCase):
         self.assertIn(rectangle, parent.patches)
         self.assertTrue(all(item in parent.patches for item in connectors))
 
-    def test_schema_v9_validation_and_v6_migration(self):
+    def test_schema_v9_validation_is_strict_for_in_axes(self):
         self.canvas.add_in_axes(self.zoom_spec())
         self.canvas.add_in_axes(self.image_spec())
         figure = self.canvas.component_snapshot()
@@ -537,37 +533,6 @@ class InAxesTests(unittest.TestCase):
                         self.project.id,
                         self.project.name,
                     )
-
-        with self.assertRaisesRegex(ValueError, "does not support in_axes"):
-            normalize_v6_figure(figure)
-
-        without_insets = deepcopy(figure)
-        without_insets["components"] = [
-            component
-            for component in without_insets["components"]
-            if component["kind"] != "in_axes"
-        ]
-        v6_without_insets = legacy_figure_to_v6(
-            v6_figure_to_legacy(without_insets),
-            self.project.id,
-        )
-        legacy_project = {
-            "schema": "mygui-project",
-            "schema_version": 6,
-            "project": {
-                "id": self.project.id,
-                "name": self.project.name,
-            },
-            "table": self.repository.snapshot(self.project.id),
-            "figure": v6_without_insets,
-        }
-        migrated = migrate_project_snapshot(legacy_project)
-        self.assertEqual(migrated["schema_version"], 9)
-        self.assertEqual(
-            migrated["figure"]["root_component_id"],
-            without_insets["root_component_id"],
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

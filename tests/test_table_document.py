@@ -6,7 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pandas as pd
 
-from code.database import (
+from mygui.database import (
     ColumnRef,
     ColumnType,
     ProjectTableDocument,
@@ -15,7 +15,7 @@ from code.database import (
     TableMutationCommand,
     TableRepository,
 )
-from Qt_core import QApplication
+from PySide6.QtWidgets import QApplication
 
 
 class TableDocumentTests(unittest.TestCase):
@@ -57,6 +57,17 @@ class TableDocumentTests(unittest.TestCase):
             sheet.set_block(0, 0, [[4], ["not-a-number"]])
 
         pd.testing.assert_series_equal(sheet.frame[column.id], before)
+
+    def test_number_columns_reject_nonfinite_values_atomically(self):
+        sheet = SheetDocument.create("Data", column_count=0)
+        column = sheet.add_column("Numeric", ColumnType.NUMBER, values=[1, 2, 3])
+        before = sheet.frame[column.id].copy(deep=True)
+
+        for value in (float("nan"), float("inf"), float("-inf"), "Infinity"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "finite"):
+                    sheet.set_cell(0, column.id, value)
+                pd.testing.assert_series_equal(sheet.frame[column.id], before)
 
     def test_row_and_column_moves_keep_values_aligned(self):
         sheet = SheetDocument.create("Data", column_count=0)
@@ -143,6 +154,64 @@ class TableRepositoryTests(unittest.TestCase):
         self.assertEqual(len(observed), 2)
         self.assertEqual(observed[0].changed_columns, {ref})
         self.assertEqual(observed[1].changed_columns, {ref})
+
+    def test_failed_transaction_restores_document_identity_and_emits_nothing(self):
+        repository = TableRepository()
+        project = repository.create_project("Project")
+        sheet = next(iter(project.sheets.values()))
+        column = sheet.columns[0]
+        before = project.to_snapshot()
+        observed = []
+        repository.transaction_committed.connect(observed.append)
+
+        with self.assertRaisesRegex(RuntimeError, "injected"):
+            with repository.transaction(project.id):
+                sheet.name = "Mutated"
+                sheet.remove_column(column.id)
+                repository.record_change(
+                    TableChangeSet(
+                        project.id,
+                        structure_changed=True,
+                        reason="failed",
+                    )
+                )
+                raise RuntimeError("injected failure")
+
+        self.assertIs(repository.project(project.id), project)
+        self.assertIs(repository.sheet(project.id, sheet.id), sheet)
+        self.assertIs(sheet.column(column.id), column)
+        self.assertEqual(project.to_snapshot(), before)
+        self.assertEqual(observed, [])
+
+    def test_caught_nested_failure_poisoned_outer_transaction(self):
+        repository = TableRepository()
+        project = repository.create_project("Project")
+        original_name = project.name
+
+        with self.assertRaisesRegex(RuntimeError, "rolled back"):
+            with repository.transaction(project.id):
+                try:
+                    with repository.transaction(project.id):
+                        project.name = "Mutated"
+                        raise ValueError("nested failure")
+                except ValueError:
+                    pass
+
+        self.assertEqual(project.name, original_name)
+
+    def test_project_mapping_and_series_do_not_expose_mutation_paths(self):
+        repository = TableRepository()
+        project = repository.create_project("Project")
+        sheet = next(iter(project.sheets.values()))
+        column = sheet.columns[0]
+        sheet.set_cell(0, column.id, "3")
+        ref = ColumnRef(project.id, sheet.id, column.id)
+
+        with self.assertRaises(TypeError):
+            repository.projects["other"] = project
+        detached = repository.series(ref)
+        detached.iloc[0] = 99
+        self.assertEqual(float(repository.series(ref).iloc[0]), 3.0)
 
 
 if __name__ == "__main__":

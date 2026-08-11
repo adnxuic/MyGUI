@@ -5,13 +5,13 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QCheckBox, QComboBox, QLineEdit
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from code import status_messages
-from code.database import ColumnRef, TableRepository
-from code.figuremodify.component_services import (
+from mygui import status_messages
+from mygui.database import ColumnRef, TableRepository
+from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
     FitService,
@@ -19,7 +19,7 @@ from code.figuremodify.component_services import (
     InterpolationService,
     TextRenderService,
 )
-from code.figuremodify.components import (
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRegistry,
     ComponentRole,
@@ -29,10 +29,10 @@ from code.figuremodify.components import (
     ScatterController,
     register_figure_components,
 )
-from code.figuremodify.style_base.color_models import PaletteDefinition
-from code.widgets.common_widget.min_widget.color_library import ColorLibrary
-from code.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
-from code.widgets.fig_control_window.component_editors import (
+from mygui.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
+from mygui.widgets.fig_control_window.component_editors import (
     ComponentEditorBase,
     ComponentEditorManager,
     DebouncedTextBinding,
@@ -195,7 +195,10 @@ class ComponentEditorTests(unittest.TestCase):
     def test_success_messages_skip_noop_changes(self):
         editor = QLineEdit("before")
         events = []
-        handler = lambda message, level: events.append((message, level))
+
+        def handler(message, level):
+            events.append((message, level))
+
         status_messages.set_status_handler(handler)
         results = iter(
             (
@@ -247,7 +250,10 @@ class ComponentEditorTests(unittest.TestCase):
         controller = _FakeController()
         editor = ComponentEditorBase(controller, color_library=ColorLibrary())
         events = []
-        handler = lambda message, level: events.append((message, level))
+
+        def handler(message, level):
+            events.append((message, level))
+
         status_messages.set_status_handler(handler)
         try:
             self.assertTrue(editor.apply_property("linewidth", 4.0))
@@ -626,7 +632,7 @@ class ComponentEditorTests(unittest.TestCase):
             self.assertFalse(section.button.isEnabled())
 
             with patch(
-                "code.widgets.fig_control_window.component_editors."
+                "mygui.widgets.fig_control_window.component_editors."
                 "sections.choose_palette",
                 return_value=None,
             ):
@@ -637,7 +643,7 @@ class ComponentEditorTests(unittest.TestCase):
             self.assertFalse(section.button.isEnabled())
 
             with patch(
-                "code.widgets.fig_control_window.component_editors."
+                "mygui.widgets.fig_control_window.component_editors."
                 "sections.choose_palette",
                 return_value=custom,
             ):

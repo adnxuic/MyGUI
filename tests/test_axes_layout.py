@@ -1,34 +1,30 @@
 import os
 import tempfile
 import unittest
-from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel
 
-from code.database import ColumnRef
-from code.figuremodify.axes_layout import (
+from mygui.database import ColumnRef
+from mygui.figuremodify.axes_layout import (
     AxesCellSpec,
     AxesLayoutSpec,
     AxesViewSpec,
     ShareMode,
 )
-from code.figuremodify.components import ComponentKind, ComponentRole
-from code.figuremodify.components.serialization import (
-    legacy_figure_to_v6,
-    migrate_v8_figure_to_v9,
-    v6_figure_to_legacy,
+from mygui.figuremodify.components import ComponentKind, ComponentRole
+from mygui.figuremodify.components.serialization import (
     validate_v9_figure,
 )
-from code.project_io import restore_project_snapshot, save_project_snapshot
-from code.widgets.title_bar.titlebar_dialog.axes_layout_input import (
+from mygui.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
     AxesLayoutInput,
     axes_layout_presets,
 )
-from code.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import (
+from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import (
     PyLayoutDialog,
 )
 from main import MainWindow
@@ -383,40 +379,6 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(self.canvas._allocated_component_ids, before_ids)
         self.assertEqual(len(self.canvas.component_registry), 1)
-
-    def test_v8_layout_migration_is_pure_deterministic_and_valid(self):
-        self.canvas.add_axes(2, 1)
-        current = self.canvas.component_snapshot()
-        v8 = legacy_figure_to_v6(
-            v6_figure_to_legacy(current),
-            self.canvas.project_id,
-        )
-        original = deepcopy(v8)
-
-        first = migrate_v8_figure_to_v9(v8, self.canvas.project_id)
-        second = migrate_v8_figure_to_v9(v8, self.canvas.project_id)
-
-        self.assertEqual(v8, original)
-        self.assertEqual(first, second)
-        root = next(
-            item for item in first["components"] if item["kind"] == "figure"
-        )
-        self.assertEqual(len(root["data"]["layouts"]), 1)
-        axes = [item for item in first["components"] if item["kind"] == "axes"]
-        self.assertEqual(
-            {(item["data"]["subplot"]["row"], item["data"]["subplot"]["column"]) for item in axes},
-            {(0, 0), (1, 0)},
-        )
-        for item in axes:
-            self.assertNotIn("position", item["properties"])
-            self.assertIn("autoscalex_on", item["properties"])
-            self.assertIn("autoscaley_on", item["properties"])
-        validate_v9_figure(
-            first,
-            self._available_refs(),
-            self.canvas.project_id,
-            self.canvas.project_name,
-        )
 
     def test_compatibility_add_axes_uses_current_figure_style_defaults(self):
         figure = self.canvas.component_registry.get(

@@ -5,16 +5,16 @@ import matplotlib
 import numpy as np
 from matplotlib.figure import Figure
 
-from code.database import ColumnRef, DataPreprocessSpec, TableRepository
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.component_services import (
+from mygui.database import ColumnRef, DataPreprocessSpec, TableRepository
+from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
     ComponentDependencyService,
     FitService,
     InterpolationService,
 )
-from code.figuremodify.components import (
+from mygui.figuremodify.components import (
     ComponentEventKind,
     ComponentKind,
     ComponentMutation,
@@ -33,7 +33,7 @@ from code.figuremodify.components import (
     TitleController,
     register_figure_components,
 )
-from code.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.figuremodify.style_base.color_models import PaletteDefinition
 
 
 def _ref(project_id, sheet_id, column_id):
@@ -560,10 +560,38 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertFalse(
             service.request_is_current(fit.component_id, generation)
         )
+        self.assertTrue(service.has_pending_source_change(fit.component_id))
         np.testing.assert_array_equal(line.get_xdata(), original_x)
         resolved = service.resolve_sources(fit)
         np.testing.assert_allclose(resolved.x, [1.0, 0.5])
         np.testing.assert_allclose(resolved.y, [2.0, 4.0])
+
+    def test_fit_source_change_marks_pending_until_explicit_result(self):
+        pair = self.repository.valid_pair(self.x_ref, self.y_ref)
+        line, = self.axes.plot(pair.x, pair.y)
+        fit = self._line_controller(
+            "pending-fit",
+            ComponentRole.FIT_CURVE,
+            line,
+        )
+        service = FitService(self.repository, self.registry)
+
+        affected = service.mark_sources_changed({self.y_ref})
+
+        self.assertEqual(affected, (fit.component_id,))
+        self.assertTrue(service.has_pending_source_change(fit.component_id))
+        result = service.apply_result(
+            fit,
+            engine="Python",
+            fit_type=None,
+            fit_options=None,
+            fit_result=None,
+            expression="x",
+            x_start=0.0,
+            x_stop=2.0,
+        )
+        self.assertTrue(result.ok)
+        self.assertFalse(service.has_pending_source_change(fit.component_id))
 
     def test_scatter_preprocessing_filters_nonfinite_rows(self):
         pair = self.repository.valid_pair(self.x_ref, self.y_ref)
@@ -677,6 +705,35 @@ class ComponentServiceTests(unittest.TestCase):
 
         self.assertNotIn(controller.component_id, self.registry)
         self.assertEqual(restored, snapshots)
+
+    def test_dependency_restore_failure_removes_components_restored_so_far(self):
+        pair = self.repository.line_pair(self.x_ref, self.y_ref)
+        first_line, = self.axes.plot(pair.x, pair.y)
+        second_line, = self.axes.plot(pair.x, pair.y)
+        self._line_controller("first", ComponentRole.DATA_PLOT, first_line)
+        self._line_controller("second", ComponentRole.DATA_PLOT, second_line)
+        calls = []
+
+        def restore(state):
+            calls.append(state.id)
+            if state.id == "second":
+                raise RuntimeError("injected second restore failure")
+            line, = self.axes.plot(pair.x, pair.y)
+            return self._line_controller(state.id, state.role, line)
+
+        service = ComponentDependencyService(
+            self.registry,
+            restore_state=restore,
+        )
+        snapshots = service.dependent_states({self.x_ref})
+        service.delete_states(snapshots)
+
+        with self.assertRaisesRegex(RuntimeError, "second restore failure"):
+            service.restore_states(snapshots)
+
+        self.assertEqual(calls, ["first", "second"])
+        self.assertNotIn("first", self.registry)
+        self.assertNotIn("second", self.registry)
 
 
 if __name__ == "__main__":

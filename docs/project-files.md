@@ -1,6 +1,6 @@
 # MyGUI Project Files
 
-MyGUI project files use JSON schema version 9. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. Loading migrates supported older files to v9 in memory, and every subsequent save writes v9.
+MyGUI project files use strict JSON schema version 9. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. The loader accepts only the exact integer version `9`; older schema versions are intentionally unsupported.
 
 ## Root structure
 
@@ -18,7 +18,7 @@ MyGUI project files use JSON schema version 9. One file contains one project, it
 ```
 
 - `schema` is always `mygui-project`.
-- `schema_version` is always `9` after migration, loading, or saving.
+- `schema_version` is always the integer `9`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -164,23 +164,9 @@ palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
 snapshot only and does not change schema v9.
 
-## Stable IDs and migration
+## Stable IDs and compatibility
 
-Existing Plot, Scatter, Fit, and Interpolation `object_id` values are retained. Curve and Text IDs are also retained when present. Older records without IDs receive deterministic UUID5 values derived from the project ID and their legacy semantic path; repeating the same migration therefore produces identical IDs.
-
-- v4 is migrated to v5 first, adding missing color-cycle and color-order state.
-- v5 is then converted to the v6 component tree.
-- v6 is strictly normalized and migrated without loss to v7.
-- v7 is migrated to v8 by adding identity preprocessing to every Plot,
-  Scatter, Interpolation, and Fit component.
-- v8 is migrated to v9 by replacing numeric subplot batches with Figure-level
-  layout definitions, splitting X/Y autoscale state, and adding Legend entry
-  scope. Saved Axes positions are used to infer migration geometry.
-- v9 is normalized and validated directly, including layout/link consistency,
-  embedded inset images, and preprocessing expressions.
-- v1-v3 and unknown versions are rejected.
-
-Migration functions operate on deep copies and do not modify the supplied dictionary.
+Component, project, Sheet, column, layout, and data-reference IDs are persisted unchanged and must remain stable across every schema-v9 save/open round trip. Schema versions v4 through v8, non-integer versions, and unknown versions are rejected before Table or Figure state is published. A future format change must use a new schema version with an explicit migration task rather than silently normalizing an older file.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
@@ -201,6 +187,11 @@ Before Table or Figure application state changes, the loader validates:
   interpolation methods, and fitting engines.
 
 Project writes use a temporary file followed by atomic replacement. If the operating system blocks replacement, saving fails and leaves the previous project file unchanged. `size_inches` and `dpi` remain document/export values; display device-pixel ratio does not alter them.
+
+The file byte count, decoded JSON depth/value count, and Figure component count
+are checked before project state is materialized. Embedded images have encoded
+byte, dimension, and decoded-pixel budgets. Defaults and supported environment
+overrides are listed in `resource-and-process-limits.md`.
 
 `project_snapshot(figure_window, canvas=...)` and
 `save_project_snapshot(path, figure_window, canvas=...)` accept an explicit

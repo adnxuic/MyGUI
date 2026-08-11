@@ -2,15 +2,17 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from Qt_core import QApplication
+from PySide6.QtWidgets import QApplication
 
-from code.database import ColumnRef
-from code.database.interpolate_func import interpolate_dict
-from code.figuremodify.components import ComponentRole
-from code.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.database import ColumnRef
+from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.components import ComponentRole
+from mygui import tex_config
+from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
 
@@ -25,6 +27,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         self.window = MainWindow()
 
     def tearDown(self):
+        tex_config.set_tex_enabled(False, notify=False)
         self.window.close()
         self.app.processEvents()
         self.directory.cleanup()
@@ -111,6 +114,46 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 ),
                 2,
             )
+        finally:
+            loaded.close()
+            self.app.processEvents()
+
+    def test_requested_tex_mode_survives_restore_without_tex_runtime(self):
+        self.window.figure_window.add_figure(
+            width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
+        )
+        canvas = self.window.figure_window.current_canva
+        canvas.add_axes()
+        tex_config.set_tex_enabled(True, notify=False)
+        with patch.object(canvas.fig.canvas, "draw"):
+            canvas.add_text(
+                0.25,
+                0.75,
+                r"$x^2$",
+                "DejaVu Sans",
+                12,
+                usetex=True,
+            )
+        source = canvas.component_registry.query(role=ComponentRole.TEXT)[0]
+        self.assertTrue(source.read_state().properties["usetex"])
+
+        tex_config.set_tex_enabled(False, notify=False)
+        source.resolve_target().set_usetex(False)
+        save_project_snapshot(self.path, self.window.figure_window)
+
+        loaded = MainWindow()
+        second_path = Path(self.directory.name) / "objects-resaved.mygui.json"
+        try:
+            restore_project_snapshot(self.path, loaded.table, loaded.figure_window)
+            restored = loaded.figure_window.current_canva
+            controller = restored.component_registry.query(
+                role=ComponentRole.TEXT
+            )[0]
+            self.assertTrue(controller.read_state().properties["usetex"])
+            self.assertFalse(controller.resolve_target().get_usetex())
+
+            save_project_snapshot(second_path, loaded.figure_window)
+            self.assertIn('"usetex": true', second_path.read_text(encoding="utf-8"))
         finally:
             loaded.close()
             self.app.processEvents()

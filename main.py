@@ -8,30 +8,42 @@ import matplotlib
 
 matplotlib.use("QtAgg")
 
-from Qt_core import *
+from PySide6.QtCore import QCoreApplication, QSettings, QTimer, Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QMainWindow,
+    QMessageBox,
+    QSizePolicy,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
-from code import status_messages
-from code.database import TableRepository
-from code.excel_io import import_excel_into_workspace, is_supported_excel_workbook
-from code.text_io import import_text_into_workspace
-from code.widgets.bottom_bar.py_bottom_bar import PyBottomBar
-from code.widgets.component_tree import ComponentTreeHost
-from code.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
-from code.widgets.figure_canvas.py_figure_window import PyFigureWindow
-from code.widgets.left_column import (
+from mygui import status_messages
+from mygui.database import TableRepository
+from mygui.excel_io import import_excel_into_workspace, is_supported_excel_workbook
+from mygui.resources import resource_path
+from mygui.text_io import import_text_into_workspace
+from mygui.widgets.bottom_bar.py_bottom_bar import PyBottomBar
+from mygui.widgets.component_tree import ComponentTreeHost
+from mygui.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
+from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from mygui.widgets.left_column import (
     ExplorerMode,
     LeftExplorerHost,
     PyLeftColumn,
 )
-from code.widgets.mainwindow_init import mainwindow_qss
-from code.widgets.right_column.py_right_column import PyRightColumn
-from code.widgets.table.py_table import PyTable
-from code.widgets.theme import CONTROL_SIZES
-from code.widgets.title_bar.py_title_bar import PyTitleBar
-from code.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.mainwindow_init import mainwindow_qss
+from mygui.widgets.right_column.py_right_column import PyRightColumn
+from mygui.widgets.table.py_table import PyTable
+from mygui.widgets.theme import CONTROL_SIZES
+from mygui.widgets.title_bar.py_title_bar import PyTitleBar
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
-APP_ICON_PATH = Path("pictures/icons/app_icon.ico")
+APP_ICON_PATH = resource_path("pictures/icons/app_icon.ico")
 WINDOWS_APP_USER_MODEL_ID = "MyGUI.Desktop"
 
 

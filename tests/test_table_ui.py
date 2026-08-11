@@ -4,13 +4,13 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import numpy as np
 
-from Qt_core import QApplication, QInputDialog, Qt
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QInputDialog
 
-from code import status_messages
-from code.database import ColumnType, TableRepository
-from code.widgets.table.py_subtable import PySubTable
+from mygui import status_messages
+from mygui.database import ColumnType, TableRepository
+from mygui.widgets.table.py_subtable import PySubTable
 
 
 class TableUiTests(unittest.TestCase):

@@ -19,13 +19,14 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 import numpy as np
 
-from Qt_core import QApplication, QDialog, QPushButton, Qt
-from code import tex_config
-from code import status_messages
-from code.database import ColumnRef, TableRepository, matlab_adapter, scipy_fit_adapter
-from code.database.safe_expression import evaluate_curve_expression
-from code.figuremodify.component_services import FitService, TextRenderService
-from code.figuremodify.components import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+from mygui import tex_config
+from mygui import status_messages
+from mygui.database import ColumnRef, TableRepository, matlab_adapter, scipy_fit_adapter
+from mygui.database.safe_expression import evaluate_curve_expression
+from mygui.figuremodify.component_services import FitService, TextRenderService
+from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRegistry,
     ComponentRole,
@@ -33,18 +34,18 @@ from code.figuremodify.components import (
     FitCurveController,
     TextController,
 )
-from code.widgets.common_widget.min_widget.color_library import ColorLibrary
-from code.widgets.fig_control_window.component_editors import (
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.fig_control_window.component_editors import (
     ComponentEditorManager,
     EditorRegistry,
     MessagePresenter,
     register_production_profiles,
 )
-from code.widgets.fig_control_window import py_matlab_window as matlab_window_module
-from code.widgets.fig_control_window import py_fit_options_window as fit_options_module
-from code.widgets.fig_control_window.py_fit_options_window import PyMatlabFitOptionsWidget
-from code.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
-from code.widgets.fig_control_window.py_tex_window import PyTexWindow
+from mygui.widgets.fig_control_window import py_matlab_window as matlab_window_module
+from mygui.widgets.fig_control_window import py_fit_options_window as fit_options_module
+from mygui.widgets.fig_control_window.py_fit_options_window import PyMatlabFitOptionsWidget
+from mygui.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
+from mygui.widgets.fig_control_window.py_tex_window import PyTexWindow
 
 
 def load_module_from_file(module_name: str, path: Path):
@@ -208,14 +209,16 @@ class OptionalDependencyTests(unittest.TestCase):
             status_messages.set_status_handler(
                 lambda message, level: status_events.append((message, level))
             )
-            with patch.object(PyTexWindow, "_has_tex_engine", return_value=False), \
-                    patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+            with patch.object(PyTexWindow, "_has_tex_engine", return_value=False):
                 window.use_latex_engine(Qt.CheckState.Checked)
+                self.wait_until(
+                    lambda: bool(status_events)
+                    and status_events[-1][1] == "error"
+                )
 
             self.assertFalse(window.is_latex)
             self.assertFalse(window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
-            warning.assert_not_called()
             self.assertEqual(status_events[-1], ("No TeX executable was found on PATH.", "error"))
         finally:
             window.close()
@@ -242,17 +245,19 @@ class OptionalDependencyTests(unittest.TestCase):
                     self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
                 with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
                         patch(
-                            "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                            "mygui.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
                             return_value="render probe failed",
-                        ) as validate_tex_runtime, \
-                        patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                        ) as validate_tex_runtime:
                     window.latex_engine.setChecked(True)
+                    self.wait_until(
+                        lambda: bool(status_events)
+                        and status_events[-1] == ("render probe failed", "error")
+                    )
 
             validate_tex_runtime.assert_called_once_with(tex_config.default_preamble_text())
             self.assertFalse(window.is_latex)
             self.assertFalse(window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
-            warning.assert_not_called()
             self.assertEqual(status_events[-1], ("render probe failed", "error"))
             log_text = "\n".join(logs.output)
             self.assertIn("TeX enable request started", log_text)
@@ -273,11 +278,11 @@ class OptionalDependencyTests(unittest.TestCase):
                     self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
                 with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
                         patch(
-                            "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                            "mygui.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
                             return_value=None,
-                        ) as validate_tex_runtime, \
-                        patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                        ) as validate_tex_runtime:
                     window.latex_engine.setChecked(True)
+                    self.wait_until(lambda: window.is_latex)
 
             expected_preamble = "\\usepackage{amsmath}\n\\usepackage{xcolor}"
             validate_tex_runtime.assert_called_once_with(expected_preamble)
@@ -286,7 +291,6 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertTrue(mpl.rcParams['text.usetex'])
             self.assertEqual(mpl.rcParams['text.latex.preamble'], expected_preamble)
             self.assertEqual(window.preamble_text, expected_preamble)
-            warning.assert_not_called()
             self.assertEqual(
                 status_events[-1],
                 ("TeX runtime check passed; TeX rendering is enabled.", "success"),
@@ -316,18 +320,20 @@ class OptionalDependencyTests(unittest.TestCase):
                     self.assertLogs(tex_config.LOGGER_NAME, level="INFO") as logs:
                 with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
                         patch(
-                            "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                            "mygui.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
                             return_value="bad preamble",
-                        ) as validate_tex_runtime, \
-                        patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                        ) as validate_tex_runtime:
                     window.update_preamble()
+                    self.wait_until(
+                        lambda: bool(status_events)
+                        and status_events[-1] == ("bad preamble", "error")
+                    )
 
             validate_tex_runtime.assert_called_once_with("\\usepackage{broken}")
             self.assertTrue(window.is_latex)
             self.assertTrue(mpl.rcParams['text.usetex'])
             self.assertEqual(mpl.rcParams['text.latex.preamble'], old_preamble)
             self.assertEqual(window.preamble_text, old_preamble)
-            warning.assert_not_called()
             self.assertEqual(status_events[-1], ("bad preamble", "error"))
             log_text = "\n".join(logs.output)
             self.assertIn("TeX preamble update request started", log_text)
@@ -342,7 +348,7 @@ class OptionalDependencyTests(unittest.TestCase):
             window.preamble_input.setPlainText("\\usepackage{amsmath}\n\n\\usepackage{xcolor}")
 
             with patch(
-                "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                "mygui.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
             ) as validate_tex_runtime:
                 window.update_preamble()
 
@@ -384,16 +390,19 @@ class OptionalDependencyTests(unittest.TestCase):
             tex_window = window.fig_control_window.tex_window
             with patch.object(PyTexWindow, "_has_tex_engine", return_value=True), \
                     patch(
-                        "code.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
+                        "mygui.widgets.fig_control_window.py_tex_window.tex_config.validate_tex_runtime",
                         return_value="render probe failed",
-                    ), patch("code.widgets.fig_control_window.py_tex_window.QMessageBox.warning") as warning:
+                    ):
                 tex_window.latex_engine.setChecked(True)
+                self.wait_until(
+                    lambda: bool(status_events)
+                    and status_events[-1] == ("render probe failed", "error")
+                )
 
             self.assertIsNotNone(window.fig_control_window.tex_window)
             self.assertFalse(tex_window.is_latex)
             self.assertFalse(tex_window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
-            warning.assert_not_called()
             self.assertEqual(status_events[-1], ("render probe failed", "error"))
         finally:
             window.close()
@@ -571,7 +580,7 @@ class OptionalDependencyTests(unittest.TestCase):
             widget.close()
             context.editor_manager.close()
 
-    def test_global_tex_disable_unchecks_and_disables_text_tex_button(self):
+    def test_global_tex_disable_preserves_requested_text_tex_mode(self):
         tex_config.set_tex_enabled(True, notify=False)
         figure = Figure()
         FigureCanvasAgg(figure)
@@ -590,9 +599,16 @@ class OptionalDependencyTests(unittest.TestCase):
                 tex_config.set_tex_enabled(False)
 
             self.assertFalse(render.tex_render.isEnabled())
-            self.assertFalse(render.tex_render.isChecked())
+            self.assertTrue(render.tex_render.isChecked())
             self.assertFalse(text.get_usetex())
-            self.assertFalse(controller.state.properties["usetex"])
+            self.assertTrue(controller.state.properties["usetex"])
+
+            with patch.object(figure.canvas, "draw"):
+                tex_config.set_tex_enabled(True)
+            self.assertTrue(render.tex_render.isEnabled())
+            self.assertTrue(render.tex_render.isChecked())
+            self.assertTrue(text.get_usetex())
+            self.assertTrue(controller.state.properties["usetex"])
         finally:
             widget.close()
             context.editor_manager.close()
@@ -846,7 +862,7 @@ class OptionalDependencyTests(unittest.TestCase):
                 self.assertEqual(fit_type, "gauss1")
                 self.assertEqual(options["StartPoint"], [0.1, 0.2, 0.3])
                 self.assertEqual(options["Lower"][2], 0.0)
-                self.assertTrue(np.isinf(options["Upper"][0]))
+                self.assertIsNone(options["Upper"][0])
                 self.assertEqual(options["TolFun"], 1e-7)
 
                 fit_window.coefficient_table.item(1, 1).setText("")
@@ -1060,7 +1076,7 @@ class OptionalDependencyTests(unittest.TestCase):
                 dialog.fit_options_widget.coefficient_table.item(0, 1).setText("bad")
                 dialog.fit_button.click()
 
-            self.assertIn(("p1 Lower must be a number.", "error"), messages)
+            self.assertIn(("p1 Lower must be a number or infinity.", "error"), messages)
             fit_curve_isolated.assert_not_called()
             self.assertTrue(dialog.fit_button.isEnabled())
         finally:
@@ -1107,16 +1123,20 @@ class OptionalDependencyTests(unittest.TestCase):
                 matlab_adapter.get_func_exp("poly1")
 
     def test_adapter_isolated_connect_timeout_raises_runtime_error(self):
-        with patch.object(
-            matlab_adapter.subprocess,
-            "run",
-            side_effect=subprocess.TimeoutExpired(cmd=["python"], timeout=1),
-        ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "MATLAB runtime unavailable: timed out after 1 seconds",
+        with self.temp_dir() as cache_dir:
+            with patch.dict(
+                matlab_adapter.os.environ,
+                {"MYGUI_MATLAB_MCR_CACHE_ROOT": cache_dir},
+            ), patch.object(
+                matlab_adapter,
+                "_run_isolated_process",
+                side_effect=subprocess.TimeoutExpired(cmd=["python"], timeout=1),
             ):
-                matlab_adapter.ensure_matlab_available_isolated(timeout=1)
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "MATLAB runtime unavailable: timed out after 1 seconds",
+                ):
+                    matlab_adapter.ensure_matlab_available_isolated(timeout=1)
 
     def test_adapter_isolated_calls_use_private_mcr_cache(self):
         captured = {}
@@ -1135,11 +1155,19 @@ class OptionalDependencyTests(unittest.TestCase):
                 stderr="",
             )
 
-        with patch.dict(matlab_adapter.os.environ, {}, clear=True):
-            with patch.object(matlab_adapter.subprocess, "run", side_effect=fake_run):
+        with self.temp_dir() as cache_dir, patch.dict(
+            matlab_adapter.os.environ,
+            {
+                "MYGUI_MATLAB_MCR_CACHE_ROOT": str(
+                    Path(cache_dir) / "runtime" / "test"
+                )
+            },
+            clear=True,
+        ):
+            with patch.object(matlab_adapter, "_run_isolated_process", side_effect=fake_run):
                 self.assertTrue(matlab_adapter.ensure_matlab_available_isolated(timeout=1).available)
 
-        self.assertTrue(Path(captured["cache_root"]).is_relative_to(matlab_adapter._MCR_CACHE_PARENT))
+        self.assertTrue(Path(captured["cache_root"]).is_relative_to(cache_dir))
         self.assertIn("runtime", Path(captured["cache_root"]).parts)
 
     def test_adapter_mcr_cache_key_changes_when_package_inputs_change(self):
@@ -1189,9 +1217,10 @@ class OptionalDependencyTests(unittest.TestCase):
                 {
                     "MYGUI_MATLAB_LOG_DIR": log_dir,
                     "MYGUI_MATLAB_LOG_LEVEL": "INFO",
+                    "MYGUI_MATLAB_MCR_CACHE_ROOT": str(Path(log_dir) / "cache"),
                 },
             ):
-                with patch.object(matlab_adapter.subprocess, "run", side_effect=fake_run):
+                with patch.object(matlab_adapter, "_run_isolated_process", side_effect=fake_run):
                     self.assertTrue(matlab_adapter.ensure_matlab_available_isolated(timeout=1).available)
                 self.flush_matlab_log_handlers()
 
@@ -1215,9 +1244,10 @@ class OptionalDependencyTests(unittest.TestCase):
                 {
                     "MYGUI_MATLAB_LOG_DIR": log_dir,
                     "MYGUI_MATLAB_LOG_LEVEL": "DEBUG",
+                    "MYGUI_MATLAB_MCR_CACHE_ROOT": str(Path(log_dir) / "cache"),
                 },
             ):
-                with patch.object(matlab_adapter.subprocess, "run", side_effect=fake_run):
+                with patch.object(matlab_adapter, "_run_isolated_process", side_effect=fake_run):
                     self.assertTrue(matlab_adapter.ensure_matlab_available_isolated(timeout=1).available)
                 self.flush_matlab_log_handlers()
 
@@ -1241,9 +1271,10 @@ class OptionalDependencyTests(unittest.TestCase):
                 {
                     "MYGUI_MATLAB_LOG_DIR": log_dir,
                     "MYGUI_MATLAB_LOG_LEVEL": "INFO",
+                    "MYGUI_MATLAB_MCR_CACHE_ROOT": str(Path(log_dir) / "cache"),
                 },
             ):
-                with patch.object(matlab_adapter.subprocess, "run", side_effect=fake_run):
+                with patch.object(matlab_adapter, "_run_isolated_process", side_effect=fake_run):
                     self.assertTrue(matlab_adapter.ensure_matlab_available_isolated(timeout=1).available)
                 self.flush_matlab_log_handlers()
 
@@ -1415,11 +1446,11 @@ class OptionalDependencyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         matlab_fitting_module = load_module_from_file(
             "matlab_fitting_under_test",
-            root / "code" / "database" / "matlab_func" / "curve_fitting" / "matlab_fitting.py",
+            root / "mygui" / "database" / "matlab_func" / "curve_fitting" / "matlab_fitting.py",
         )
         get_func_exp_module = load_module_from_file(
             "get_func_exp_under_test",
-            root / "code" / "database" / "matlab_func" / "get_func" / "get_func_exp.py",
+            root / "mygui" / "database" / "matlab_func" / "get_func" / "get_func_exp.py",
         )
 
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=ImportError("missing matlab")):
