@@ -34,6 +34,7 @@ from .base import ComponentEditorBase
 from .common import DebouncedTextBinding
 from .inputs import DataReferenceInput
 from .inspector import EditorSection
+from .lifecycle import CallbackLifecycle
 
 
 ApplyProperties = Callable[[dict[str, object]], object]
@@ -667,6 +668,7 @@ class TextRenderSection(QWidget, EditorSection):
         self.controller = controller
         self.context = context
         self._disposed = False
+        self._lifecycle = CallbackLifecycle()
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(QLabel("Render:", self))
@@ -676,8 +678,17 @@ class TextRenderSection(QWidget, EditorSection):
         self.layout.addStretch()
         self._listener = self._tex_state_changed
         tex_config.register_tex_state_listener(self._listener)
-        self.tex_render.toggled.connect(self.set_tex_render)
-        self._sync_tex_button()
+        self._lifecycle.add(
+            lambda: tex_config.unregister_tex_state_listener(
+                self._listener
+            )
+        )
+        try:
+            self.tex_render.toggled.connect(self.set_tex_render)
+            self._sync_tex_button()
+        except Exception:
+            self._lifecycle.close()
+            raise
 
     def _sync_tex_button(self):
         enabled = tex_config.is_tex_enabled()
@@ -695,21 +706,9 @@ class TextRenderSection(QWidget, EditorSection):
     def _tex_state_changed(self, enabled: bool):
         if self._disposed:
             return
-        requested = bool(
-            self.controller.read_state().properties.get("usetex")
-        )
-        if requested and enabled:
-            result = self.context.text_rendering.apply(
-                self.controller,
-                {"usetex": True},
-            )
-            if not result.ok or result.notices:
-                self.context.messages.present(result)
-        elif requested:
-            target = self.controller.resolve_target()
-            target.set_usetex(False)
-            if target.figure.canvas is not None:
-                target.figure.canvas.draw_idle()
+        result = self.context.text_rendering.apply_tex_availability(enabled)
+        if not result.committed:
+            status_messages.show_warning(result.message)
         self._sync_tex_button()
 
     def set_tex_render(self, state):
@@ -755,7 +754,7 @@ class TextRenderSection(QWidget, EditorSection):
         if self._disposed:
             return
         self._disposed = True
-        tex_config.unregister_tex_state_listener(self._listener)
+        self._lifecycle.close()
 
 
 class LegendLocationSection(QWidget, EditorSection):
@@ -965,6 +964,7 @@ class PaletteSection(QWidget, EditorSection):
         self.controller = controller
         self.context = context
         self._disposed = False
+        self._lifecycle = CallbackLifecycle()
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -1008,8 +1008,13 @@ class PaletteSection(QWidget, EditorSection):
             self._component_event,
             kinds=("changed",),
         )
-        self._figure_id = figure_id
-        self.sync_from_controller()
+        self._lifecycle.add(self._unsubscribe)
+        try:
+            self._figure_id = figure_id
+            self.sync_from_controller()
+        except Exception:
+            self._lifecycle.close()
+            raise
 
     def _component_event(self, event) -> None:
         if (
@@ -1144,7 +1149,7 @@ class PaletteSection(QWidget, EditorSection):
         if self._disposed:
             return
         self._disposed = True
-        self._unsubscribe()
+        self._lifecycle.close()
 
 
 class _PalettePreview(QWidget):

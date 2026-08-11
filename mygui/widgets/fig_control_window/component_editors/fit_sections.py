@@ -25,6 +25,7 @@ from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
 from .context import EditorContext
 from .inspector import EditorSection
+from .lifecycle import CallbackLifecycle
 
 from mygui import status_messages
 from mygui.database import ColumnRef, matlab_adapter
@@ -76,6 +77,7 @@ class FitDomainSection(QFrame):
         data = state.data
         self._disposed = False
         self._fit_dialogs = []
+        self._lifecycle = CallbackLifecycle()
 
         self.layout = QVBoxLayout()
 
@@ -92,12 +94,6 @@ class FitDomainSection(QFrame):
         self.engine_layout.addStretch()
 
         self._matlab_state_listener = self._matlab_enabled_changed
-        matlab_adapter.register_matlab_state_listener(self._matlab_state_listener)
-        matlab_state_listener = self._matlab_state_listener
-        self.destroyed.connect(lambda *_args, listener=matlab_state_listener: (
-            matlab_adapter.unregister_matlab_state_listener(listener)
-        ))
-        self._matlab_enabled_changed(matlab_adapter.is_matlab_enabled())
 
         # Function expression
         self.expression_box = QGroupBox('Expression', self)
@@ -174,6 +170,23 @@ class FitDomainSection(QFrame):
             self.expression_input.blockSignals(True)
             self.expression_input.setPlainText(show_expression)
             self.expression_input.blockSignals(False)
+        try:
+            matlab_adapter.register_matlab_state_listener(
+                self._matlab_state_listener
+            )
+            self._lifecycle.add(
+                lambda: matlab_adapter.unregister_matlab_state_listener(
+                    self._matlab_state_listener
+                )
+            )
+            lifecycle = self._lifecycle
+            self.destroyed.connect(lambda *_args: lifecycle.close())
+            self._matlab_enabled_changed(
+                matlab_adapter.is_matlab_enabled()
+            )
+        except Exception:
+            self._lifecycle.close()
+            raise
 
     def expression_change(self):
         """Apply the expression change emitted by the corresponding control."""
@@ -627,9 +640,7 @@ class FitDomainSection(QFrame):
             return
         self._disposed = True
         self.context.fitting.cancel(self.controller.component_id)
-        matlab_adapter.unregister_matlab_state_listener(
-            self._matlab_state_listener
-        )
+        self._lifecycle.close()
         dialogs = tuple(self._fit_dialogs)
         self._fit_dialogs.clear()
         for dialog in dialogs:

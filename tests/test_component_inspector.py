@@ -9,6 +9,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from mygui import tex_config
+from mygui.database import matlab_adapter
 from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
@@ -38,6 +39,14 @@ from mygui.figuremodify.components import (
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.fig_control_window.component_editors.containers import (
     AxesSemanticInspectorPanel,
+    ChartInspectorStack,
+)
+from mygui.widgets.fig_control_window.component_editors.fit_sections import (
+    FitDomainSection,
+)
+from mygui.widgets.fig_control_window.component_editors.sections import (
+    PaletteSection,
+    TextRenderSection,
 )
 from mygui.widgets.fig_control_window.component_editors import (
     ComponentEditorManager,
@@ -61,6 +70,7 @@ from mygui.widgets.fig_control_window.component_editors.profiles import (
     SEMANTIC_TEXT_PROFILE,
     TEXT_PROFILE,
 )
+from mygui.widgets.fig_control_window.figure_inspector import AxesInspectorPanel
 
 
 def _context(
@@ -644,6 +654,135 @@ class ComponentInspectorTests(unittest.TestCase):
             self.assertEqual(len(registry._event_subscribers), baseline)
         finally:
             context.editor_manager.close()
+
+    def test_external_section_constructor_failures_release_listeners(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        figure.text(0.5, 0.5, "note")
+        registry = register_figure_components(figure)
+        repository = TableRepository()
+        context = _context(registry, repository, ColorLibrary())
+
+        text = registry.find_one(
+            kind=ComponentKind.TEXT,
+            role=ComponentRole.TEXT,
+        )
+        tex_before = tuple(tex_config._TEX_STATE_LISTENERS)
+        with patch.object(
+            TextRenderSection,
+            "_sync_tex_button",
+            side_effect=RuntimeError("injected TeX Section failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "TeX Section"):
+                TextRenderSection(text, context=context)
+        self.assertEqual(tuple(tex_config._TEX_STATE_LISTENERS), tex_before)
+
+        axes_controller = registry.find_one(kind=ComponentKind.AXES)
+        registry_before = tuple(registry._event_subscribers)
+        with patch.object(
+            PaletteSection,
+            "sync_from_controller",
+            side_effect=RuntimeError("injected Palette Section failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Palette Section"):
+                PaletteSection(axes_controller, context=context)
+        self.assertEqual(tuple(registry._event_subscribers), registry_before)
+        context.editor_manager.close()
+
+    def test_fit_section_and_toolbox_construction_failure_leave_no_cache(self):
+        repository = TableRepository()
+        project = repository.create_project("Fit construction")
+        sheet = next(iter(project.sheets.values()))
+        x_ref = ColumnRef(project.id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(project.id, sheet.id, sheet.columns[1].id)
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        line, = axes.plot([0.0, 1.0], [1.0, 2.0])
+        registry = ComponentRegistry()
+        controller = FitCurveController(
+            ComponentState(
+                id="fit-construction",
+                kind=ComponentKind.LINE,
+                role=ComponentRole.FIT_CURVE,
+                selector={"object_id": "fit-construction"},
+                properties={},
+                data={
+                    "x_ref": x_ref.to_dict(),
+                    "y_ref": y_ref.to_dict(),
+                    "preprocess": DataPreprocessSpec().to_dict(),
+                    "engine": "Python",
+                    "fit_type": None,
+                    "fit_options": None,
+                    "fit_result": None,
+                    "expression": "",
+                    "x_start": 0.0,
+                    "x_stop": 1.0,
+                },
+            )
+        )
+        registry.register(controller, target=line, require_parent=False)
+        context = _context(registry, repository, ColorLibrary())
+        matlab_before = tuple(matlab_adapter._MATLAB_STATE_LISTENERS)
+        with patch.object(
+            FitDomainSection,
+            "_matlab_enabled_changed",
+            side_effect=RuntimeError("injected MATLAB Section failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "MATLAB Section"):
+                FitDomainSection(controller, context=context)
+        self.assertEqual(
+            tuple(matlab_adapter._MATLAB_STATE_LISTENERS),
+            matlab_before,
+        )
+
+        stack = ChartInspectorStack(axes)
+        original_count = stack.toolbox_stack.count()
+        original_add = stack.toolbox_stack.addWidget
+
+        def fail_after_add(widget):
+            original_add(widget)
+            raise RuntimeError("injected Toolbox insertion failure")
+
+        with patch.object(
+            stack.toolbox_stack,
+            "addWidget",
+            side_effect=fail_after_add,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Toolbox insertion"):
+                stack.ensure_toolbox(
+                    (ComponentKind.LINE, ComponentRole.FIT_CURVE)
+                )
+        self.assertIsNone(
+            stack.toolbox(
+                (ComponentKind.LINE, ComponentRole.FIT_CURVE)
+            )
+        )
+        self.assertEqual(stack.toolbox_stack.count(), original_count)
+        stack.dispose()
+        context.editor_manager.close()
+
+    def test_axes_panel_construction_failure_disposes_partial_inspectors(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        axes_controller = registry.find_one(kind=ComponentKind.AXES)
+        subscribers_before = tuple(registry._event_subscribers)
+
+        with patch(
+            "mygui.widgets.fig_control_window.figure_inspector."
+            "ChartInspectorStack",
+            side_effect=RuntimeError("injected Axes Panel failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Axes Panel"):
+                AxesInspectorPanel(axes_controller, context)
+
+        self.assertEqual(tuple(registry._event_subscribers), subscribers_before)
+        self.assertEqual(context.editor_manager._editors, {})
+        context.editor_manager.close()
 
 
 if __name__ == "__main__":

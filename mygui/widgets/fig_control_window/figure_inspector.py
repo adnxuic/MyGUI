@@ -65,26 +65,31 @@ class AxesInspectorPanel(QFrame):
         self.axes_controller = axes_controller
         self.context = context
         self.axes = axes_controller.resolve_target()
-
-        self.semantic_panel = AxesSemanticInspectorPanel(
-            axes_controller,
-            context,
-            color_library,
-        )
-        self._chart_stack = ChartInspectorStack(self.axes)
-        self._element_stack = ElementInspectorStack(self.axes)
-        self._inspector_stack = QStackedWidget(self)
-        self._inspector_stack.addWidget(self.semantic_panel)
-        self._inspector_stack.addWidget(self._chart_stack)
-        self._inspector_stack.addWidget(self._element_stack)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self._inspector_stack)
         self._disposed = False
+        self.semantic_panel = None
+        self._chart_stack = None
+        self._element_stack = None
+        self._inspector_stack = QStackedWidget(self)
+        try:
+            self.semantic_panel = AxesSemanticInspectorPanel(
+                axes_controller,
+                context,
+                color_library,
+            )
+            self._chart_stack = ChartInspectorStack(self.axes)
+            self._element_stack = ElementInspectorStack(self.axes)
+            self._inspector_stack.addWidget(self.semantic_panel)
+            self._inspector_stack.addWidget(self._chart_stack)
+            self._inspector_stack.addWidget(self._element_stack)
 
-        self.show_component(axes_controller.component_id)
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(self._inspector_stack)
+            self.show_component(axes_controller.component_id)
+        except Exception:
+            self.dispose()
+            raise
 
     def ensure_component(self, component_id: str):
         """Create the exact Axes-owned Inspector on first selection."""
@@ -120,6 +125,7 @@ class AxesInspectorPanel(QFrame):
             )
         editor_key: EditorKey = (controller.state.kind, controller.state.role)
         toolbox = stack.ensure_toolbox(editor_key)
+        toolbox.editor_manager = self.context.editor_manager
         toolbox.set_empty_callback(
             lambda target_stack=stack, target_key=editor_key: (
                 self._remove_component_toolbox(target_stack, target_key)
@@ -134,6 +140,7 @@ class AxesInspectorPanel(QFrame):
         try:
             toolbox.add_inspector(inspector)
         except Exception:
+            self.context.editor_manager.release(inspector)
             inspector.dispose()
             inspector.setParent(None)
             inspector.deleteLater()
@@ -158,6 +165,7 @@ class AxesInspectorPanel(QFrame):
         if stack is None:
             raise ValueError("Semantic/Figure profiles do not use a toolbox.")
         toolbox = stack.ensure_toolbox(editor_key)
+        toolbox.editor_manager = self.context.editor_manager
         toolbox.set_empty_callback(
             lambda target_stack=stack, target_key=editor_key: (
                 self._remove_component_toolbox(target_stack, target_key)
@@ -258,6 +266,8 @@ class AxesInspectorPanel(QFrame):
             self._chart_stack,
             self._element_stack,
         ):
+            if container is None:
+                continue
             try:
                 container.dispose()
             except Exception:
@@ -275,14 +285,20 @@ class FigureElementInspectorPanel(QFrame):
         super().__init__()
         self.context = context
         self._disposed = False
-        self._element_stack = ElementInspectorStack(None, self)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self._element_stack)
+        self._element_stack = None
+        try:
+            self._element_stack = ElementInspectorStack(None, self)
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(self._element_stack)
+        except Exception:
+            self.dispose()
+            raise
 
     def ensure_toolbox(self, editor_key: EditorKey) -> InspectorToolBox:
         toolbox = self._element_stack.ensure_toolbox(editor_key)
+        toolbox.editor_manager = self.context.editor_manager
         toolbox.set_empty_callback(
             lambda target_key=editor_key: self.remove_toolbox(target_key)
         )
@@ -312,6 +328,7 @@ class FigureElementInspectorPanel(QFrame):
         try:
             toolbox.add_inspector(inspector)
         except Exception:
+            self.context.editor_manager.release(inspector)
             inspector.dispose()
             inspector.setParent(None)
             inspector.deleteLater()
@@ -348,7 +365,8 @@ class FigureElementInspectorPanel(QFrame):
         if self._disposed:
             return
         self._disposed = True
-        self._element_stack.dispose()
+        if self._element_stack is not None:
+            self._element_stack.dispose()
 
     def closeEvent(self, event):
         self.dispose()
@@ -372,20 +390,26 @@ class FigureInspectorPanel(QFrame):
         self._disposed = False
 
         self._inspector_stack = QStackedWidget(self)
-        self.root_inspector = context.editor_manager.create(
-            root_controller,
-            context=context,
-            parent=self._inspector_stack,
-        )
-        self._figure_elements_panel = FigureElementInspectorPanel(context)
-        self._inspector_stack.addWidget(self.root_inspector)
-        self._inspector_stack.addWidget(self._figure_elements_panel)
+        self.root_inspector = None
+        self._figure_elements_panel = None
+        try:
+            self.root_inspector = context.editor_manager.create(
+                root_controller,
+                context=context,
+                parent=self._inspector_stack,
+            )
+            self._figure_elements_panel = FigureElementInspectorPanel(context)
+            self._inspector_stack.addWidget(self.root_inspector)
+            self._inspector_stack.addWidget(self._figure_elements_panel)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self._inspector_stack)
-        self._inspector_stack.setCurrentWidget(self.root_inspector)
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(self._inspector_stack)
+            self._inspector_stack.setCurrentWidget(self.root_inspector)
+        except Exception:
+            self.dispose()
+            raise
 
     def add_axes_inspector(
         self,
@@ -696,6 +720,13 @@ class FigureInspectorPanel(QFrame):
             self._figure_elements_panel,
             self.root_inspector,
         ):
+            if inspector is None:
+                continue
+            if inspector is self.root_inspector:
+                try:
+                    self.context.editor_manager.release(inspector)
+                except Exception:
+                    pass
             try:
                 inspector.dispose()
             except Exception:

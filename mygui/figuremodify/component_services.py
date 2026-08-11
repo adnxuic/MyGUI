@@ -1517,6 +1517,96 @@ class TextRenderService:
     ):
         self.registry = registry
         self.tex_enabled = tex_enabled
+        self._tex_effective_overrides: set[str] = set()
+        self._last_tex_availability: bool | None = None
+
+    def effective_usetex(self, component_id: str) -> bool:
+        """Return runtime TeX use without changing the persisted request."""
+
+        controller = _controller(
+            self.registry,
+            component_id,
+            TextController,
+        )
+        requested = bool(controller.state.properties.get("usetex"))
+        return requested and component_id not in self._tex_effective_overrides
+
+    def apply_tex_availability(
+        self,
+        enabled: bool,
+        *,
+        force: bool = False,
+    ) -> ComponentBatchChange:
+        """Apply a runtime-only effective TeX override to requested Text."""
+
+        enabled = bool(enabled)
+        if not force and self._last_tex_availability is enabled:
+            return ComponentBatchChange((), True)
+        self._last_tex_availability = enabled
+        requested = [
+            controller
+            for controller in self.registry.query()
+            if isinstance(controller, TextController)
+            and bool(controller.state.properties.get("usetex"))
+        ]
+        if not requested:
+            self._tex_effective_overrides.clear()
+            return ComponentBatchChange((), True)
+        targets = [controller.resolve_target() for controller in requested]
+        before = [bool(target.get_usetex()) for target in targets]
+        figures = []
+        seen: set[int] = set()
+        for target in targets:
+            figure = target.figure
+            if id(figure) not in seen:
+                seen.add(id(figure))
+                figures.append(figure)
+        try:
+            for target in targets:
+                target.set_usetex(enabled)
+            if enabled:
+                for figure in figures:
+                    figure.canvas.draw()
+            else:
+                for figure in figures:
+                    figure.canvas.draw_idle()
+        except Exception as exc:
+            # Enabling TeX failed its render probe. Keep every requested Text
+            # on the known-safe Matplotlib renderer while preserving state.
+            safe_values = (
+                [False] * len(targets) if enabled else before
+            )
+            for target, safe_value in zip(targets, safe_values):
+                try:
+                    target.set_usetex(safe_value)
+                except Exception:
+                    pass
+            for figure in figures:
+                try:
+                    figure.canvas.draw_idle()
+                except Exception:
+                    pass
+            self._tex_effective_overrides.update(
+                controller.component_id for controller in requested
+            )
+            return ComponentBatchChange(
+                (),
+                False,
+                message=(
+                    "TeX availability changed, but the render probe failed; "
+                    f"safe text rendering was kept: {exc}"
+                ),
+                rollback_complete=True,
+            )
+        if enabled:
+            self._tex_effective_overrides.difference_update(
+                controller.component_id for controller in requested
+            )
+        else:
+            self._tex_effective_overrides.update(
+                controller.component_id for controller in requested
+            )
+        return ComponentBatchChange((), True)
 
     def apply(
         self,

@@ -613,6 +613,41 @@ class OptionalDependencyTests(unittest.TestCase):
             widget.close()
             context.editor_manager.close()
 
+    def test_tex_reenable_probe_failure_keeps_safe_effective_state(self):
+        tex_config.set_tex_enabled(True, notify=False)
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(0.5, 0.5, "plain")
+        text.set_usetex(True)
+        controller, service, context = make_text_controller(figure, text)
+        controller.set_property("usetex", True)
+        widget = context.editor_manager.create(controller, context=context)
+        render = widget.section("render")
+        messages = []
+        status_messages.set_status_handler(
+            lambda message, level: messages.append((message, level))
+        )
+        try:
+            tex_config.set_tex_enabled(False)
+            self.assertFalse(text.get_usetex())
+            with patch.object(
+                figure.canvas,
+                "draw",
+                side_effect=RuntimeError("injected TeX render probe failure"),
+            ):
+                tex_config.set_tex_enabled(True)
+
+            self.assertTrue(controller.state.properties["usetex"])
+            self.assertFalse(text.get_usetex())
+            self.assertFalse(service.effective_usetex(controller.component_id))
+            self.assertTrue(render.tex_render.isChecked())
+            self.assertEqual(len(messages), 1)
+            self.assertEqual(messages[0][1], "warning")
+            self.assertIn("render probe failed", messages[0][0])
+        finally:
+            widget.close()
+            context.editor_manager.close()
+
     def test_new_text_defaults_to_tex_when_global_tex_is_enabled(self):
         from main import MainWindow
 

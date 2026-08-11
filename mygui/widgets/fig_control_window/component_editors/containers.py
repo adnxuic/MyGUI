@@ -94,9 +94,9 @@ class AxesSemanticInspectorPanel(QFrame):
             parent=self.inspector_stack,
             remover=self.remove_inspector,
         )
-        self._inspectors[component_id] = inspector
         try:
             self.inspector_stack.addWidget(inspector)
+            self._inspectors[component_id] = inspector
         except Exception:
             self.inspector_stack.removeWidget(inspector)
             self._inspectors.pop(component_id, None)
@@ -123,6 +123,10 @@ class AxesSemanticInspectorPanel(QFrame):
         self._inspectors.pop(component_id, None)
         self.inspector_stack.removeWidget(inspector)
         inspector.setParent(None)
+        try:
+            self.context.editor_manager.release(inspector)
+        except Exception:
+            pass
         try:
             dispose = getattr(inspector, "dispose", None)
             if callable(dispose):
@@ -226,6 +230,7 @@ class InspectorToolBox(QFrame):
         self._entries: list[tuple[str, QWidget]] = []
         self._entry_by_id: dict[str, QWidget] = {}
         self._empty_callback = None
+        self.editor_manager = None
         self._disposed = False
 
         self.inspector_stack = QStackedWidget(self)
@@ -251,13 +256,14 @@ class InspectorToolBox(QFrame):
             raise ValueError(
                 f"Duplicate Inspector component ID {component_id!r}."
             )
-        self._entries.append((component_id, inspector))
-        self._entry_by_id[component_id] = inspector
         try:
             self.inspector_stack.addWidget(inspector)
+            self._entries.append((component_id, inspector))
+            self._entry_by_id[component_id] = inspector
         except Exception:
             self.inspector_stack.removeWidget(inspector)
-            self._entries.pop()
+            if self._entries and self._entries[-1][1] is inspector:
+                self._entries.pop()
             self._entry_by_id.pop(component_id, None)
             raise
         if len(self._entries) == 1:
@@ -275,6 +281,11 @@ class InspectorToolBox(QFrame):
         was_current = self.inspector_stack.currentWidget() is inspector
         self.inspector_stack.removeWidget(inspector)
         inspector.setParent(None)
+        if self.editor_manager is not None:
+            try:
+                self.editor_manager.release(inspector)
+            except Exception:
+                pass
         if was_current and self._entries:
             next_index = min(index, len(self._entries) - 1)
             self.inspector_stack.setCurrentWidget(
@@ -415,8 +426,15 @@ class _ComponentInspectorStack(QFrame):
         toolbox = self._toolboxes.get(key)
         if toolbox is None:
             toolbox = InspectorToolBox(self.toolbox_stack)
-            self._toolboxes[key] = toolbox
-            self.toolbox_stack.addWidget(toolbox)
+            try:
+                self.toolbox_stack.addWidget(toolbox)
+                self._toolboxes[key] = toolbox
+            except Exception:
+                self.toolbox_stack.removeWidget(toolbox)
+                toolbox.dispose()
+                toolbox.setParent(None)
+                toolbox.deleteLater()
+                raise
         return toolbox
 
     def toolbox(self, key):

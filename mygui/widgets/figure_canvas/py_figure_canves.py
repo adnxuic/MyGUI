@@ -160,6 +160,7 @@ class PyFigureCanvas(QWidget):
         self._project_name_fallback = project_name or ""
         self.project_path = project_path
         self._disposed = False
+        self._tex_state_listener = None
         self._restoring_component_tree_now = False
         self._selection_repair_pending = False
         self.color_library = color_library or ColorLibrary(parent=self)
@@ -317,6 +318,8 @@ class PyFigureCanvas(QWidget):
         layout.addWidget(self.scroArea)
 
         self.setLayout(layout)
+        self._tex_state_listener = self._tex_availability_changed
+        tex_config.register_tex_state_listener(self._tex_state_listener)
 
     @property
     def project_name(self) -> str:
@@ -827,6 +830,11 @@ class PyFigureCanvas(QWidget):
         if self._disposed:
             return
         self._disposed = True
+        if self._tex_state_listener is not None:
+            tex_config.unregister_tex_state_listener(
+                self._tex_state_listener
+            )
+            self._tex_state_listener = None
         self.cancel_pending_draw()
         try:
             self.repository.transaction_committed.disconnect(self._table_changed)
@@ -840,6 +848,16 @@ class PyFigureCanvas(QWidget):
         self.component_editor_manager.close()
         self.axes_layout_service.dispose()
         self.in_axes_service.dispose()
+
+    def _tex_availability_changed(self, enabled: bool) -> None:
+        """Apply the global TeX capability through TextRenderService."""
+
+        if self._disposed:
+            return
+        result = self.text_render_service.apply_tex_availability(enabled)
+        if not result.committed:
+            self.message_presenter.discard_pending()
+            status_messages.show_warning(result.message)
 
     def closeEvent(self, event):
         """Handle Qt close events and release owned resources."""
@@ -2689,7 +2707,14 @@ class PyFigureCanvas(QWidget):
                             f"Could not restore component {source_state.id}: {change.message}"
                         )
                     if use_effective_fallback:
-                        controller.resolve_target().set_usetex(False)
+                        fallback = (
+                            self.text_render_service.apply_tex_availability(
+                                False,
+                                force=True,
+                            )
+                        )
+                        if not fallback.committed:
+                            raise ValueError(fallback.message)
                         tex_fallback = True
 
         apply_states(figure_states)
