@@ -1953,12 +1953,7 @@ class ComponentDependencyService:
             if isinstance(snapshots, ComponentDependencySnapshot)
             else tuple(snapshots)
         )
-        before_ids = {
-            controller.component_id
-            for controller in self.registry.query()
-        }
-        axes_before: dict[str, ComponentState] = {}
-        try:
+        with self.registry.registration_transaction() as transaction:
             for state in sorted(
                 states,
                 key=lambda item: (item.order, item.id),
@@ -1972,42 +1967,10 @@ class ComponentDependencyService:
                             f"Parent Axes {axes_state.id!r} is unavailable."
                         )
                     controller = self.registry.get(axes_state.id)
-                    axes_before[axes_state.id] = controller.read_state()
+                    transaction.watch_existing(axes_state.id)
                     change = controller.apply_state(axes_state.clone())
                     if not change.ok:
                         raise ComponentValidationError(
                             change.message
                             or f"Could not restore Axes {axes_state.id!r}."
                         )
-        except Exception as primary_error:
-            rollback_errors = []
-            for axes_id, previous in reversed(tuple(axes_before.items())):
-                try:
-                    change = self.registry.get(axes_id).apply_state(previous)
-                    if not change.ok:
-                        rollback_errors.append(change.message)
-                except Exception as exc:
-                    rollback_errors.append(str(exc))
-            added_ids = tuple(
-                controller.component_id
-                for controller in self.registry.query()
-                if controller.component_id not in before_ids
-            )
-            if added_ids:
-                try:
-                    result = self.deletion_service.delete(
-                        DeletionRequest(
-                            added_ids,
-                            reason=DeleteReason.DATA_DEPENDENCY,
-                        )
-                    )
-                    if not result.ok:
-                        rollback_errors.append(result.message)
-                except Exception as exc:
-                    rollback_errors.append(str(exc))
-            if rollback_errors:
-                raise ComponentValidationError(
-                    f"{primary_error} Restore rollback was incomplete: "
-                    + "; ".join(filter(None, rollback_errors))
-                ) from primary_error
-            raise

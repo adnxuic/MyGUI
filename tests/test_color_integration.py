@@ -1,13 +1,13 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtWidgets import QApplication
 
-from mygui.database import ColumnRef
+from mygui.database import ColumnRef, DataPreprocessSpec
 from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.components import (
     ComponentRole,
@@ -194,6 +194,88 @@ class ColorIntegrationTests(unittest.TestCase):
         created.close()
         created.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_single_curve_color_commit_failure_rolls_back_component(self):
+        axes_id = self.canvas.current_axes_component_id
+        before_ids = {
+            controller.component_id
+            for controller in self.canvas.component_registry.query()
+        }
+        before_lines = tuple(self.canvas.current_axes.lines)
+        before_cycle = self.canvas.component_registry.get(axes_id).state.properties[
+            "color_cycle"
+        ]
+        dialog = PyCurveDialog("Curve", self.window.figure_window)
+        try:
+            rejected = Mock(ok=False, message="injected color commit failure")
+            with (
+                patch.object(
+                    self.canvas.axes_commands,
+                    "commit_color_selection",
+                    return_value=rejected,
+                ),
+                patch(
+                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                ),
+            ):
+                dialog.accept()
+
+            self.assertEqual(
+                {
+                    controller.component_id
+                    for controller in self.canvas.component_registry.query()
+                },
+                before_ids,
+            )
+            self.assertEqual(tuple(self.canvas.current_axes.lines), before_lines)
+            self.assertEqual(
+                self.canvas.component_registry.get(axes_id).state.properties[
+                    "color_cycle"
+                ],
+                before_cycle,
+            )
+            self.assertEqual(self.window.color_library.recent_colors, [])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_dependency_restore_failure_publishes_no_intermediate_events(self):
+        self.canvas.add_plots(
+            self.x_ref,
+            (self.y_ref,),
+            style="-",
+            size=2.0,
+            linewidth=None,
+            preprocess=DataPreprocessSpec(),
+            color_selection=self.canvas.creation_color_cycle().peek(),
+        )
+        controller = self.canvas.component_registry.query(
+            role=ComponentRole.DATA_PLOT
+        )[0]
+        snapshots = self.canvas.dependent_records({self.x_ref})
+        self.assertTrue(self.canvas.remove_data_dependents(snapshots))
+        events = []
+        unsubscribe = self.canvas.component_registry.subscribe(events.append)
+        original = self.canvas.component_materializers.materialize
+
+        def fail_after_materialize(state, transaction):
+            original(state, transaction)
+            raise RuntimeError("injected materializer failure")
+
+        try:
+            with patch.object(
+                self.canvas.component_materializers,
+                "materialize",
+                side_effect=fail_after_materialize,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "materializer failure"):
+                    self.canvas.restore_data_dependents(snapshots)
+        finally:
+            unsubscribe()
+
+        self.assertNotIn(controller.component_id, self.canvas.component_registry)
+        self.assertEqual(events, [])
 
     def test_style_cycle_cancel_and_failure_leave_axes_state_null(self):
         root = self.canvas.component_registry.get(

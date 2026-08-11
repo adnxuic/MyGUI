@@ -352,6 +352,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
 
     def test_creation_failure_rolls_back_root_axes_and_allocated_ids(self):
         before_ids = set(self.canvas._allocated_component_ids)
+        before_grids = dict(self.canvas.axes_layout_service._grids)
         original = self.canvas._register_axes_components
         calls = 0
 
@@ -378,7 +379,25 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             {"layouts": []},
         )
         self.assertEqual(self.canvas._allocated_component_ids, before_ids)
+        self.assertEqual(self.canvas.axes_layout_service._grids, before_grids)
         self.assertEqual(len(self.canvas.component_registry), 1)
+
+    def test_semantic_sync_failure_rolls_back_complete_axes_subtree(self):
+        before_ids = set(self.canvas._allocated_component_ids)
+        before_grids = dict(self.canvas.axes_layout_service._grids)
+
+        with mock.patch(
+            "mygui.figuremodify.components.factory.TextController.sync_from_target",
+            side_effect=RuntimeError("injected semantic sync failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "semantic sync"):
+                self.canvas.create_axes_layout(AxesLayoutSpec.grid(1, 1))
+
+        self.assertEqual(self.canvas.fig.axes, [])
+        self.assertEqual(len(self.canvas.component_registry), 1)
+        self.assertEqual(self.canvas._axes_component_ids, {})
+        self.assertEqual(self.canvas._allocated_component_ids, before_ids)
+        self.assertEqual(self.canvas.axes_layout_service._grids, before_grids)
 
     def test_compatibility_add_axes_uses_current_figure_style_defaults(self):
         figure = self.canvas.component_registry.get(

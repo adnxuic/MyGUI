@@ -30,6 +30,9 @@ from mygui.figuremodify.component_services import (
     TextRenderService,
 )
 from mygui.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
+from mygui.widgets.figure_canvas.component_materializers import (
+    ComponentMaterializerRegistry,
+)
 from mygui.figuremodify.components import (
     AxesController,
     ComponentEvent,
@@ -163,6 +166,7 @@ class PyFigureCanvas(QWidget):
         # window between screens cannot change exports or project files.
         self._document_dpi = float(self.fig.dpi)
         self.component_registry = ComponentRegistry()
+        self.component_materializers = ComponentMaterializerRegistry()
         self.editor_registry = EditorRegistry()
         register_production_profiles(self.editor_registry)
         self.editor_registry.validate_production_profiles()
@@ -205,6 +209,7 @@ class PyFigureCanvas(QWidget):
             self.component_registry
         )
         self.deletion_coordinator = DeletionCoordinator(self)
+        self._register_component_materializers()
         self.dependency_service = ComponentDependencyService(
             self.component_registry,
             restore_state=self._restore_component_state,
@@ -909,6 +914,14 @@ class PyFigureCanvas(QWidget):
                 f"Could not open Inspector for {controller.component_id!r}."
             )
 
+    def _finish_created_component(self, controller) -> None:
+        """Publish selection and one redraw after a single creation commits."""
+
+        if self._restoring_component_tree_now:
+            return
+        self._select_created_component(controller)
+        self.redraw()
+
     @staticmethod
     def _remove_created_artist(artist) -> None:
         try:
@@ -1273,6 +1286,31 @@ class PyFigureCanvas(QWidget):
             ),
         )
 
+    def _commit_single_creation_color(
+        self,
+        transaction,
+        selection: ColorSelection | None,
+        preview_cycle: ColorCycleState | None,
+    ) -> bool:
+        """Commit one previewed chart color inside component registration."""
+
+        if selection is None:
+            return False
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before committing a chart color.")
+        transaction.watch_existing(axes_id)
+        change = self.axes_commands.commit_color_selection(
+            axes_id,
+            selection,
+            preview_cycle=preview_cycle,
+        )
+        if not change.ok:
+            raise ValueError(
+                change.message or "Could not commit the chart color cycle."
+            )
+        return True
+
     def delete_component_group(
         self,
         component_ids,
@@ -1338,9 +1376,20 @@ class PyFigureCanvas(QWidget):
         return self.axes_layout_service.update_geometry(spec)
 
     # Add custom curve
-    def add_curve(self, func_text: str, x_start: float, x_stop: float, style, color, label: str,
-                  color_order: int | None = None,
-                  object_id: str | None = None):
+    def add_curve(
+        self,
+        func_text: str,
+        x_start: float,
+        x_stop: float,
+        style,
+        color,
+        label: str,
+        color_order: int | None = None,
+        object_id: str | None = None,
+        *,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
+    ):
         """Add curve."""
 
         color = normalize_color(color)
@@ -1372,8 +1421,14 @@ class PyFigureCanvas(QWidget):
                 },
             )
             self._prepare_created_component(controller, transaction)
-        self._select_created_component(controller)
-        self.redraw()
+            color_committed = self._commit_single_creation_color(
+                transaction,
+                color_selection,
+                preview_cycle,
+            )
+        self._finish_created_component(controller)
+        if color_committed:
+            self.color_library.record_recent(color)
         return line
 
     def add_component_line(
@@ -1421,8 +1476,7 @@ class PyFigureCanvas(QWidget):
                 },
             )
             self._prepare_created_component(controller, transaction)
-        self._select_created_component(controller)
-        self.redraw()
+        self._finish_created_component(controller)
         return line
 
     # Add line plot
@@ -1465,8 +1519,7 @@ class PyFigureCanvas(QWidget):
                 object_id=object_id,
                 color_order=color_order,
             )
-        self._select_created_component(controller)
-        self.redraw()
+        self._finish_created_component(controller)
         return line
 
     def add_plots(
@@ -1542,8 +1595,7 @@ class PyFigureCanvas(QWidget):
                 object_id=object_id,
                 color_order=color_order,
             )
-        self._select_created_component(controller)
-        self.redraw()
+        self._finish_created_component(controller)
         return scatter
 
     def add_scatters(
@@ -1580,13 +1632,29 @@ class PyFigureCanvas(QWidget):
         )
 
     # Add fit curve
-    def add_fit_curve(self, x, y, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
-                      engine: str = "Python", fit_type=None,
-                      fit_options=None, fit_result=None, expression: str = "",
-                      x_start: float | None = None, x_stop: float | None = None,
-                      style: str | None = None, object_id: str | None = None,
-                      color_order: int | None = None,
-                      preprocess: DataPreprocessSpec | dict[str, Any] | None = None):
+    def add_fit_curve(
+        self,
+        x,
+        y,
+        color,
+        label,
+        x_ref: ColumnRef,
+        y_ref: ColumnRef,
+        engine: str = "Python",
+        fit_type=None,
+        fit_options=None,
+        fit_result=None,
+        expression: str = "",
+        x_start: float | None = None,
+        x_stop: float | None = None,
+        style: str | None = None,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        *,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
+    ):
         """Add fit curve."""
 
         preprocess = DataPreprocessSpec.from_dict(preprocess)
@@ -1663,8 +1731,14 @@ class PyFigureCanvas(QWidget):
                 },
             )
             self._prepare_created_component(controller, transaction)
-        self._select_created_component(controller)
-        self.redraw()
+            color_committed = self._commit_single_creation_color(
+                transaction,
+                color_selection,
+                preview_cycle,
+            )
+        self._finish_created_component(controller)
+        if color_committed:
+            self.color_library.record_recent(color)
         return line
 
     # Add interpolation curve
@@ -1740,9 +1814,8 @@ class PyFigureCanvas(QWidget):
                 object_id=object_id,
                 color_order=color_order,
             )
-        self._select_created_component(controller)
-        self.redraw()
-        if announce:
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
             if x_new.size:
                 status_messages.show_success("Interpolation curve created.")
             else:
@@ -1859,10 +1932,12 @@ class PyFigureCanvas(QWidget):
                 {"usetex": desired_usetex},
             )
             self._prepare_created_component(controller, transaction)
-        if not result.ok or result.notices:
+        if (
+            not self._restoring_component_tree_now
+            and (not result.ok or result.notices)
+        ):
             self.message_presenter.present(result)
-        self._select_created_component(controller)
-        self.redraw()
+        self._finish_created_component(controller)
         return text_artist
 
     def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: float,
@@ -1900,11 +1975,12 @@ class PyFigureCanvas(QWidget):
                 {"usetex": desired_usetex},
             )
             self._prepare_created_component(controller, transaction)
-        if not result.ok or result.notices:
+        if (
+            not self._restoring_component_tree_now
+            and (not result.ok or result.notices)
+        ):
             self.message_presenter.present(result)
-        if self.figure_inspector is not None:
-            self._select_created_component(controller)
-        self.redraw()
+        self._finish_created_component(controller)
         return text_artist
 
     def add_in_axes(
@@ -2007,199 +2083,233 @@ class PyFigureCanvas(QWidget):
             selected_component_id=self.current_component_id,
         )
 
+    def _register_component_materializers(self) -> None:
+        declarations = (
+            (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM, self._materialize_in_axes),
+            (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE, self._materialize_in_axes),
+            (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE, self._materialize_function_curve),
+            (ComponentKind.LINE, ComponentRole.LINE, self._materialize_line),
+            (ComponentKind.LINE, ComponentRole.DATA_PLOT, self._materialize_data_plot),
+            (ComponentKind.SCATTER, ComponentRole.SCATTER, self._materialize_scatter),
+            (ComponentKind.LINE, ComponentRole.INTERPOLATION, self._materialize_interpolation),
+            (ComponentKind.LINE, ComponentRole.FIT_CURVE, self._materialize_fit),
+            (ComponentKind.TEXT, ComponentRole.TEXT, self._materialize_text),
+        )
+        for kind, role, handler in declarations:
+            self.component_materializers.register(kind, role, handler)
+        self.component_materializers.validate_complete(
+            (kind, role) for kind, role, _handler in declarations
+        )
+
+    def _materialize_in_axes(self, state, _transaction) -> None:
+        properties = state.properties
+        data = state.data
+        if state.role is ComponentRole.IN_AXES_ZOOM:
+            spec = ZoomInAxesCreateSpec(
+                bounds=tuple(properties["bounds"]),
+                xlim=tuple(properties["xlim"]),
+                ylim=tuple(properties["ylim"]),
+                facecolor=properties["facecolor"],
+                edgecolor=properties["edgecolor"],
+                linewidth=properties["linewidth"],
+                indicator_color=properties["indicator_color"],
+                indicator_linestyle=properties["indicator_linestyle"],
+                indicator_linewidth=properties["indicator_linewidth"],
+                indicator_alpha=properties["indicator_alpha"],
+                visible=properties["visible"],
+                zorder=properties["zorder"],
+                frameon=properties["frameon"],
+                ticks_visible=properties["ticks_visible"],
+                region_visible=properties["region_visible"],
+                connectors_visible=properties["connectors_visible"],
+            )
+        else:
+            spec = ImageInAxesCreateSpec(
+                bounds=tuple(properties["bounds"]),
+                filename=data["filename"],
+                mime_type=data["mime_type"],
+                payload_base64=data["payload_base64"],
+                facecolor=properties["facecolor"],
+                edgecolor=properties["edgecolor"],
+                linewidth=properties["linewidth"],
+                opacity=properties["opacity"],
+                fit_mode=properties["fit_mode"],
+                interpolation=properties["interpolation"],
+                visible=properties["visible"],
+                zorder=properties["zorder"],
+                frameon=properties["frameon"],
+            )
+        self.add_in_axes(spec, object_id=state.id)
+
+    def _materialize_function_curve(self, state, _transaction) -> None:
+        self.add_curve(
+            state.data["expression"],
+            state.data["x_start"],
+            state.data["x_stop"],
+            state.properties.get("linestyle", "-"),
+            state.properties.get("color", "black"),
+            state.properties.get("label", ""),
+            object_id=state.id,
+            color_order=state.order,
+        )
+
+    def _materialize_line(self, state, _transaction) -> None:
+        self.add_component_line(
+            state.data.get("x", []),
+            state.data.get("y", []),
+            state.properties.get("linestyle", "-"),
+            state.properties.get("color", "black"),
+            state.properties.get("label", ""),
+            object_id=state.id,
+            color_order=state.order,
+        )
+
+    def _materializer_pair(self, state, *, preserve_gaps: bool):
+        x_ref = ColumnRef.from_dict(state.data["x_ref"])
+        y_ref = ColumnRef.from_dict(state.data["y_ref"])
+        preprocess = DataPreprocessSpec.from_dict(state.data["preprocess"])
+        pair = resolve_preprocessed_pair(
+            self.repository,
+            x_ref,
+            y_ref,
+            preprocess,
+            preserve_gaps=preserve_gaps,
+        )
+        return x_ref, y_ref, preprocess, pair
+
+    def _materialize_data_plot(self, state, _transaction) -> None:
+        x_ref, y_ref, preprocess, pair = self._materializer_pair(
+            state,
+            preserve_gaps=True,
+        )
+        self.add_plot(
+            pair.x,
+            pair.y,
+            state.properties.get("linestyle", "-"),
+            state.properties.get("markersize", 2.0),
+            state.properties.get("color", "black"),
+            state.properties.get("label", ""),
+            x_ref,
+            y_ref,
+            object_id=state.id,
+            color_order=state.order,
+            preprocess=preprocess,
+        )
+
+    def _materialize_scatter(self, state, _transaction) -> None:
+        x_ref, y_ref, preprocess, pair = self._materializer_pair(
+            state,
+            preserve_gaps=False,
+        )
+        self.add_scatter(
+            pair.x,
+            pair.y,
+            state.properties.get("size", 20.0),
+            state.properties.get("color", "black"),
+            state.properties.get("marker", "o"),
+            state.properties.get("label", ""),
+            x_ref,
+            y_ref,
+            object_id=state.id,
+            color_order=state.order,
+            preprocess=preprocess,
+        )
+
+    def _materialize_interpolation(self, state, _transaction) -> None:
+        x_ref, y_ref, preprocess, pair = self._materializer_pair(
+            state,
+            preserve_gaps=False,
+        )
+        self.add_interpolate_curve(
+            pair.x,
+            pair.y,
+            x_ref,
+            y_ref,
+            state.data["method"],
+            k=state.data.get("k", 3),
+            label=state.properties.get("label", "interpolate"),
+            color=state.properties.get("color", "black"),
+            samples=state.data.get("samples", DEFAULT_INTERPOLATION_SAMPLES),
+            lam=state.data.get("lam"),
+            lam_auto=state.data.get("lam_auto", True),
+            object_id=state.id,
+            color_order=state.order,
+            allow_empty=True,
+            preprocess=preprocess,
+            announce=False,
+        )
+
+    def _materialize_fit(self, state, _transaction) -> None:
+        x_ref, y_ref, preprocess, pair = self._materializer_pair(
+            state,
+            preserve_gaps=False,
+        )
+        self.add_fit_curve(
+            pair.x,
+            pair.y,
+            state.properties.get("color", "black"),
+            state.properties.get("label", "fitting"),
+            x_ref,
+            y_ref,
+            engine=state.data.get("engine", "Python"),
+            fit_type=state.data.get("fit_type"),
+            fit_options=state.data.get("fit_options"),
+            fit_result=state.data.get("fit_result"),
+            expression=state.data.get("expression", ""),
+            x_start=state.data.get("x_start"),
+            x_stop=state.data.get("x_stop"),
+            style=state.properties.get("linestyle", "solid"),
+            object_id=state.id,
+            color_order=state.order,
+            preprocess=preprocess,
+        )
+
+    def _materialize_text(self, state, _transaction) -> None:
+        properties = state.properties
+        position = properties.get("position", (0.0, 0.0))
+        family = properties.get("fontfamily", "sans-serif")
+        if isinstance(family, (list, tuple)):
+            family = family[0] if family else "sans-serif"
+        kwargs = dict(
+            x=float(position[0]),
+            y=float(position[1]),
+            text=properties.get("text", ""),
+            fontfamily=family,
+            fontsize=properties.get("fontsize", 10.0),
+            usetex=properties.get("usetex", False),
+            object_id=state.id,
+        )
+        if state.parent_id == self.root_component_id:
+            self.add_global_text(**kwargs)
+        else:
+            self.add_text(**kwargs)
+
     def _restore_component_state(self, state: ComponentState):
-        """Materialize one dynamic v7 component and reapply its full state."""
+        """Materialize one dynamic v9 component within registration scope."""
 
         if state.id in self.component_registry:
             return self.component_registry.get(state.id)
+        previous_axes_id = self.current_axes_component_id
+        previous_restoring = self._restoring_component_tree_now
         if state.parent_id != self.root_component_id:
             parent = self.component_registry.get(state.parent_id)
             if not isinstance(parent, AxesController):
                 raise ValueError(
                     f"Dynamic component {state.id!r} requires an Axes parent."
                 )
-            self.update_current_axes(parent)
-
-        properties = state.properties
-        data = state.data
-        role = state.role
-        if role is ComponentRole.IN_AXES_ZOOM:
-            self.add_in_axes(
-                ZoomInAxesCreateSpec(
-                    bounds=tuple(properties["bounds"]),
-                    xlim=tuple(properties["xlim"]),
-                    ylim=tuple(properties["ylim"]),
-                    facecolor=properties["facecolor"],
-                    edgecolor=properties["edgecolor"],
-                    linewidth=properties["linewidth"],
-                    indicator_color=properties["indicator_color"],
-                    indicator_linestyle=properties["indicator_linestyle"],
-                    indicator_linewidth=properties["indicator_linewidth"],
-                    indicator_alpha=properties["indicator_alpha"],
-                    visible=properties["visible"],
-                    zorder=properties["zorder"],
-                    frameon=properties["frameon"],
-                    ticks_visible=properties["ticks_visible"],
-                    region_visible=properties["region_visible"],
-                    connectors_visible=properties["connectors_visible"],
-                ),
-                object_id=state.id,
-            )
-        elif role is ComponentRole.IN_AXES_IMAGE:
-            self.add_in_axes(
-                ImageInAxesCreateSpec(
-                    bounds=tuple(properties["bounds"]),
-                    filename=data["filename"],
-                    mime_type=data["mime_type"],
-                    payload_base64=data["payload_base64"],
-                    facecolor=properties["facecolor"],
-                    edgecolor=properties["edgecolor"],
-                    linewidth=properties["linewidth"],
-                    opacity=properties["opacity"],
-                    fit_mode=properties["fit_mode"],
-                    interpolation=properties["interpolation"],
-                    visible=properties["visible"],
-                    zorder=properties["zorder"],
-                    frameon=properties["frameon"],
-                ),
-                object_id=state.id,
-            )
-        elif role is ComponentRole.FUNCTION_CURVE:
-            self.add_curve(
-                data["expression"],
-                data["x_start"],
-                data["x_stop"],
-                properties.get("linestyle", "-"),
-                properties.get("color", "black"),
-                properties.get("label", ""),
-                object_id=state.id,
-                color_order=state.order,
-            )
-        elif role is ComponentRole.LINE:
-            self.add_component_line(
-                data.get("x", []),
-                data.get("y", []),
-                properties.get("linestyle", "-"),
-                properties.get("color", "black"),
-                properties.get("label", ""),
-                object_id=state.id,
-                color_order=state.order,
-            )
-        elif role in {
-            ComponentRole.DATA_PLOT,
-            ComponentRole.SCATTER,
-            ComponentRole.INTERPOLATION,
-            ComponentRole.FIT_CURVE,
-        }:
-            x_ref = ColumnRef.from_dict(data["x_ref"])
-            y_ref = ColumnRef.from_dict(data["y_ref"])
-            preprocess = DataPreprocessSpec.from_dict(data["preprocess"])
-            pair = resolve_preprocessed_pair(
-                self.repository,
-                x_ref,
-                y_ref,
-                preprocess,
-                preserve_gaps=role is ComponentRole.DATA_PLOT,
-            )
-            if role is ComponentRole.DATA_PLOT:
-                self.add_plot(
-                    pair.x,
-                    pair.y,
-                    properties.get("linestyle", "-"),
-                    properties.get("markersize", 2.0),
-                    properties.get("color", "black"),
-                    properties.get("label", ""),
-                    x_ref,
-                    y_ref,
-                    object_id=state.id,
-                    color_order=state.order,
-                    preprocess=preprocess,
-                )
-            elif role is ComponentRole.SCATTER:
-                self.add_scatter(
-                    pair.x,
-                    pair.y,
-                    properties.get("size", 20.0),
-                    properties.get("color", "black"),
-                    properties.get("marker", "o"),
-                    properties.get("label", ""),
-                    x_ref,
-                    y_ref,
-                    object_id=state.id,
-                    color_order=state.order,
-                    preprocess=preprocess,
-                )
-            elif role is ComponentRole.INTERPOLATION:
-                self.add_interpolate_curve(
-                    pair.x,
-                    pair.y,
-                    x_ref,
-                    y_ref,
-                    data["method"],
-                    k=data.get("k", 3),
-                    label=properties.get("label", "interpolate"),
-                    color=properties.get("color", "black"),
-                    samples=data.get(
-                        "samples",
-                        DEFAULT_INTERPOLATION_SAMPLES,
-                    ),
-                    lam=data.get("lam"),
-                    lam_auto=data.get("lam_auto", True),
-                    object_id=state.id,
-                    color_order=state.order,
-                    allow_empty=True,
-                    preprocess=preprocess,
-                    announce=False,
-                )
-            else:
-                self.add_fit_curve(
-                    pair.x,
-                    pair.y,
-                    properties.get("color", "black"),
-                    properties.get("label", "fitting"),
-                    x_ref,
-                    y_ref,
-                    engine=data.get("engine", "Python"),
-                    fit_type=data.get("fit_type"),
-                    fit_options=data.get("fit_options"),
-                    fit_result=data.get("fit_result"),
-                    expression=data.get("expression", ""),
-                    x_start=data.get("x_start"),
-                    x_stop=data.get("x_stop"),
-                    style=properties.get("linestyle", "solid"),
-                    object_id=state.id,
-                    color_order=state.order,
-                    preprocess=preprocess,
-                )
-        elif role is ComponentRole.TEXT:
-            position = properties.get("position", (0.0, 0.0))
-            family = properties.get("fontfamily", "sans-serif")
-            if isinstance(family, (list, tuple)):
-                family = family[0] if family else "sans-serif"
-            kwargs = dict(
-                x=float(position[0]),
-                y=float(position[1]),
-                text=properties.get("text", ""),
-                fontfamily=family,
-                fontsize=properties.get("fontsize", 10.0),
-                usetex=properties.get("usetex", False),
-                object_id=state.id,
-            )
-            if state.parent_id == self.root_component_id:
-                self.add_global_text(**kwargs)
-            else:
-                self.add_text(**kwargs)
-        else:
-            raise ValueError(
-                f"Cannot materialize dynamic component role {role.value!r}."
-            )
-
-        controller = self.component_registry.get(state.id)
-        change = controller.apply_state(state)
-        if not change.ok:
-            self.component_registry.delete(state.id)
-            raise ValueError(change.message)
-        return controller
+            self.current_axes_component_id = parent.component_id
+        self._restoring_component_tree_now = True
+        try:
+            with self.component_registry.registration_transaction() as transaction:
+                self.component_materializers.materialize(state, transaction)
+                controller = self.component_registry.get(state.id)
+                change = controller.apply_state(state)
+                if not change.ok:
+                    raise ValueError(change.message)
+            return controller
+        finally:
+            self.current_axes_component_id = previous_axes_id
+            self._restoring_component_tree_now = previous_restoring
 
     def remove_data_dependents(
         self,
@@ -2306,7 +2416,12 @@ class PyFigureCanvas(QWidget):
             ),
             key=lambda state: int(state.selector["index"]),
         )
-        self.axes_layout_service.materialize(axes_states)
+        axes_ids = self.axes_layout_service.materialize(axes_states)
+        if axes_ids and self.current_axes_component_id is None:
+            # Restoration suppresses the per-component selection side effects.
+            # Publish one deterministic final Axes selection after the full
+            # component tree has been applied successfully.
+            self.current_axes_component_id = axes_ids[0]
 
         dynamic_states = [
             state

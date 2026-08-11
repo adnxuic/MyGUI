@@ -19,6 +19,7 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentMutation,
     ComponentRegistry,
+    ComponentRegistrationError,
     ComponentRole,
     ComponentState,
     DataPlotController,
@@ -171,6 +172,25 @@ class ComponentServiceTests(unittest.TestCase):
             [ComponentEventKind.CHANGED, ComponentEventKind.CHANGED],
         )
         self.assertEqual(self.figure.canvas.draw_idle.call_count, 1)
+
+    def test_nested_registration_reuses_scope_and_reports_rollback_errors(self):
+        registry = ComponentRegistry()
+        with registry.registration_transaction() as outer:
+            with registry.registration_transaction() as inner:
+                self.assertIs(inner, outer)
+
+        def fail_rollback():
+            raise RuntimeError("injected rollback failure")
+
+        with self.assertRaises(ComponentRegistrationError) as captured:
+            with registry.registration_transaction() as transaction:
+                transaction.on_rollback(fail_rollback)
+                raise ValueError("injected primary failure")
+
+        error = captured.exception
+        self.assertFalse(error.rollback_complete)
+        self.assertIn("primary failure", str(error.primary_error))
+        self.assertEqual(len(error.rollback_errors), 1)
 
     def test_registry_transaction_rolls_back_artist_state_and_events(self):
         first_line, = self.axes.plot([0, 1], [1, 2], color="#010101")

@@ -195,37 +195,53 @@ class PyFigureWindow(QFrame):
                 self.tabwindow.setCurrentWidget(canva)
             finally:
                 self.tabwindow.blockSignals(blocked)
-        except Exception:
-            self.canvas.pop(project.id, None)
+            self.change_current_canvas()
+            self._update_empty_state()
+            if created_project_id is not None:
+                self.repository.publish_project_added(created_project_id)
+        except Exception as primary_error:
+            cleanup_errors = []
+
+            def cleanup(action):
+                try:
+                    action()
+                except Exception as cleanup_error:
+                    cleanup_errors.append(cleanup_error)
+
+            cleanup(lambda: self.canvas.pop(project.id, None))
             if canva is not None:
                 index = self.tabwindow.indexOf(canva)
                 if index >= 0:
-                    self.tabwindow.removeTab(index)
+                    cleanup(lambda: self.tabwindow.removeTab(index))
             if inspector_added:
-                self.figure_inspector_host.remove_figure_inspector_panel(
-                    figure_inspector
+                cleanup(
+                    lambda: self.figure_inspector_host.remove_figure_inspector_panel(
+                        figure_inspector
+                    )
                 )
             elif figure_inspector is not None:
-                figure_inspector.dispose()
-                figure_inspector.setParent(None)
-                figure_inspector.deleteLater()
+                cleanup(figure_inspector.dispose)
+                cleanup(lambda: figure_inspector.setParent(None))
+                cleanup(figure_inspector.deleteLater)
             if canva is not None:
-                canva.dispose()
-                canva.setParent(None)
-                canva.deleteLater()
+                cleanup(canva.dispose)
+                cleanup(lambda: canva.setParent(None))
+                cleanup(canva.deleteLater)
             if created_project_id is not None and self.table is not None:
-                self.table.remove_project_table(
-                    created_project_id,
-                    publish=False,
+                cleanup(
+                    lambda: self.table.remove_project_table(
+                        created_project_id,
+                        publish=False,
+                    )
                 )
-            self.change_current_canvas()
-            self._update_empty_state()
+            cleanup(self.change_current_canvas)
+            cleanup(self._update_empty_state)
+            if cleanup_errors:
+                raise RuntimeError(
+                    f"{primary_error} Project publication rollback was incomplete: "
+                    + "; ".join(str(error) for error in cleanup_errors)
+                ) from primary_error
             raise
-
-        self.change_current_canvas()
-        self._update_empty_state()
-        if created_project_id is not None:
-            self.repository.publish_project_added(created_project_id)
         return canva
 
     @staticmethod

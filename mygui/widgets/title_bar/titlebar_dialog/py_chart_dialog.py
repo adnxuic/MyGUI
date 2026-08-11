@@ -248,11 +248,12 @@ class PyCurveDialog(QDialog):
                                                        x_stop=self.x_stop_input.value(),
                                                        style=self.appearance_input.style(),
                                                        color=self.color_input.color(),
-                                                       label=self.label_input.text())
+                                                       label=self.label_input.text(),
+                                                       color_selection=self.color_input.selection(),
+                                                       preview_cycle=self.color_input.colorselector)
         except ValueError as exc:
             QMessageBox.warning(self, 'Invalid Expression', str(exc))
             return
-        _commit_color_input(self.figure_window, self.color_input)
         super().accept()
 
     def reject(self):
@@ -567,9 +568,10 @@ class PyFitDialog(QDialog):
             x_ref=x_ref,
             y_ref=y_ref,
             preprocess=preprocess,
+            color_selection=self.color_input.selection(),
+            preview_cycle=self.color_input.colorselector,
         )
 
-        _commit_color_input(self.figure_window, self.color_input)
         _show_creation_result("Fit curve", pair)
         super().accept()
 

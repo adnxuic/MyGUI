@@ -231,10 +231,8 @@ def create_semantic_children(
         )
         controller = controller_type(state)
         registry.register(controller, target=target)
-        try:
-            controller.sync_from_target()
-        except Exception:
-            pass
+        if target is not None:
+            controller.sync_from_target(strict=True)
         created.append(component_id)
         order += 1
         return component_id

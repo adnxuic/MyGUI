@@ -1225,6 +1225,47 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
         self.assertIs(figure_window.current_canva, self.canvas)
 
+    def test_project_post_tab_selection_failure_rolls_back_publication(self):
+        figure_window = self.window.figure_window
+        before_projects = set(self.window.repository.projects)
+        before_subtables = set(self.window.table._subtables)
+        before_canvases = dict(figure_window.canvas)
+        before_tabs = figure_window.tabwindow.count()
+        before_panels = figure_window.figure_inspector_host._figure_stack.count()
+        original_change = figure_window.change_current_canvas
+        calls = 0
+
+        def fail_once():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("injected post-tab selection failure")
+            return original_change()
+
+        with mock.patch.object(
+            figure_window,
+            "change_current_canvas",
+            side_effect=fail_once,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "post-tab selection"):
+                figure_window.add_figure(
+                    width=4,
+                    height=3,
+                    dpi=100,
+                    canva_name="FailedPostTabSelection",
+                    style="default",
+                )
+
+        self.assertEqual(set(self.window.repository.projects), before_projects)
+        self.assertEqual(set(self.window.table._subtables), before_subtables)
+        self.assertEqual(figure_window.canvas, before_canvases)
+        self.assertEqual(figure_window.tabwindow.count(), before_tabs)
+        self.assertEqual(
+            figure_window.figure_inspector_host._figure_stack.count(),
+            before_panels,
+        )
+        self.assertIs(figure_window.current_canva, self.canvas)
+
     def test_targeted_background_save_writes_the_requested_project(self):
         first = self.canvas
         self.window.figure_window.add_figure(

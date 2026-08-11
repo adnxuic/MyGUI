@@ -39,6 +39,7 @@ from .errors import (
     ComponentDeletedError,
     ComponentError,
     ComponentNotFoundError,
+    ComponentRegistrationError,
     ComponentValidationError,
 )
 from .factory import create_semantic_children, register_figure_components
@@ -85,6 +86,7 @@ __all__ = [
     "ComponentKind",
     "ComponentLocator",
     "ComponentNotFoundError",
+    "ComponentRegistrationError",
     "ComponentRegistry",
     "ComponentRegistrationTransaction",
     "ComponentMutation",

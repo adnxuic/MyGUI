@@ -991,7 +991,7 @@ class AxisController(AxisComponentController):
         if spec.key == "label_position":
             return target.get_label_position()
         if spec.key == "inverted":
-            return (
+            return bool(
                 axes.xaxis_inverted()
                 if axis_name == "x"
                 else axes.yaxis_inverted()

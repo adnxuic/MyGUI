@@ -595,7 +595,6 @@ class AxesLayoutService:
             layout_id: self._grid_from_definition(self.canvas.fig, definition)
             for layout_id, definition in definitions.items()
         }
-        self._grids.update(grids)
         x_anchors: dict[str, Axes] = {}
         y_anchors: dict[str, Axes] = {}
         primaries: dict[tuple[str, int, int], Axes] = {}
@@ -649,11 +648,13 @@ class AxesLayoutService:
                             AxesViewSpec(),
                         )
                     )
-            return self._register_descriptors(
+            component_ids = self._register_descriptors(
                 descriptors,
                 transaction,
                 start_index=0,
             )
+        self._grids.update(grids)
+        return component_ids
 
     def axes_for_layout(self, layout_id: str) -> tuple[AxesController, ...]:
         return tuple(
