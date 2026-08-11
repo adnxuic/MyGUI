@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.figuremodify.components import (
-    ComponentKind,
     ComponentState,
     DeletionPolicy,
 )
@@ -283,10 +282,9 @@ class ComponentTreeHost(QFrame):
         menu = QMenu(self)
         delete_action = None
         batch_action = None
-        if state.kind is ComponentKind.AXES:
-            delete_action = menu.addAction("Delete Axes")
-        elif controller.DELETION_POLICY is DeletionPolicy.REMOVE:
-            delete_action = menu.addAction("Delete Component")
+        delete_label = self.model.presentation.delete_label(state)
+        if controller.DELETION_POLICY is DeletionPolicy.REMOVE:
+            delete_action = menu.addAction(f"Delete {delete_label}")
             if len(self._batch_candidates(state)) > 1:
                 batch_action = menu.addAction("Batch Delete Same Type...")
         if menu.isEmpty():
@@ -300,12 +298,8 @@ class ComponentTreeHost(QFrame):
             canvas.delete_components(
                 (component_id,),
                 anchor_id=component_id,
-                reason=("axes" if state.kind is ComponentKind.AXES else "single"),
-                role_label=(
-                    "axes"
-                    if state.kind is ComponentKind.AXES
-                    else state.role.value.replace("_", " ")
-                ),
+                reason="single",
+                role_label=delete_label,
             )
             return
         if action is batch_action:
@@ -317,11 +311,10 @@ class ComponentTreeHost(QFrame):
 
     def _confirm_single_delete(self, component_id: str) -> bool:
         canvas = self._canvas
-        controller = canvas.component_registry.get(component_id)
         label = self._source_label(component_id)
         detail = ""
-        if controller.state.kind is ComponentKind.AXES:
-            descendants = canvas.component_registry.descendants(component_id)
+        descendants = canvas.component_registry.descendants(component_id)
+        if descendants:
             detail = f" and its {len(descendants)} child components"
         message = QMessageBox(self)
         message.setWindowTitle("Delete Component")
@@ -376,7 +369,7 @@ class ComponentTreeHost(QFrame):
         original_candidates = self._batch_candidates(state)
         dialog = ComponentBatchDeleteDialog(
             original_candidates,
-            role_label=state.role.value.replace("_", " "),
+            role_label=self.model.presentation.delete_label(state),
             parent=self,
         )
         accepted = dialog.exec() == QDialog.Accepted
@@ -398,7 +391,7 @@ class ComponentTreeHost(QFrame):
             selected,
             anchor_id=state.id,
             reason="batch",
-            role_label=state.role.value.replace("_", " "),
+            role_label=self.model.presentation.delete_label(state),
         )
 
     def closeEvent(self, event):

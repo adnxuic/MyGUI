@@ -49,6 +49,7 @@ from .models import (
     ComponentRole,
     ComponentState,
     DeletionPolicy,
+    FitEngine,
     PropertySpec,
     UpdateImpact,
     XYData,
@@ -2620,10 +2621,12 @@ class LineController(ComponentController[Line2D]):
             _column_reference(state.data["x_ref"], "x_ref")
             _column_reference(state.data["y_ref"], "y_ref")
             DataPreprocessSpec.from_dict(state.data["preprocess"])
-            if state.data["engine"] not in {"Python", "Matlab"}:
+            try:
+                FitEngine(state.data["engine"])
+            except ValueError as exc:
                 raise ComponentValidationError(
                     "Fitting engine must be Python or Matlab."
-                )
+                ) from exc
             try:
                 normalized_options = normalize_fit_options_for_storage(
                     state.data["fit_options"]

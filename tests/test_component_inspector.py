@@ -605,6 +605,32 @@ class ComponentInspectorTests(unittest.TestCase):
                 tree=TreePresentationSpec("Invalid"),
             )
 
+    def test_production_registry_freezes_and_missing_profile_fails_closed(self):
+        registry = EditorRegistry()
+        register_production_profiles(registry)
+        registry.freeze()
+        self.assertTrue(registry.frozen)
+        with self.assertRaisesRegex(RuntimeError, "frozen"):
+            registry.unregister(
+                ComponentKind.LINE,
+                role=ComponentRole.LINE,
+            )
+
+        missing = EditorRegistry()
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        component_registry = register_figure_components(figure)
+        controller = component_registry.find_one(kind=ComponentKind.FIGURE)
+        context = _context(
+            component_registry,
+            TableRepository(),
+            ColorLibrary(),
+        )
+        with self.assertRaisesRegex(LookupError, "No exact Editor profile"):
+            missing.create(controller, context=context)
+        context.editor_manager.close()
+
     def test_section_factory_failure_disposes_prior_subscriptions(self):
         figure = Figure()
         FigureCanvasAgg(figure)

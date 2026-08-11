@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 import unittest
@@ -23,6 +24,15 @@ from mygui.widgets.component_tree import (
     ComponentBatchDeleteDialog,
 )
 from mygui.widgets.left_column import ExplorerMode
+from mygui.widgets.fig_control_window.component_editors import (
+    EditorRegistry,
+    TreePresentationSpec,
+)
+from mygui.widgets.fig_control_window.component_editors.profiles import (
+    AXES_PROFILE,
+    LINE_PROFILES,
+    TEXT_PROFILE,
+)
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
 
@@ -632,6 +642,103 @@ class ComponentTreeTests(unittest.TestCase):
         self.canvas.add_axes()
         self.assertEqual(refreshes, [True])
 
+    def test_property_driven_sort_rebuilds_from_projection_signature(self):
+        self.canvas.add_curve(
+            "x", 0.0, 1.0, "-", "#112233", "B",
+            object_id="sort-b",
+        )
+        self.canvas.add_curve(
+            "x**2", 0.0, 1.0, "-", "#445566", "A",
+            object_id="sort-a",
+        )
+        editor_registry = EditorRegistry()
+        profile = LINE_PROFILES[ComponentRole.FUNCTION_CURVE]
+        editor_registry.register_profile(
+            ComponentKind.LINE,
+            replace(
+                profile,
+                tree=TreePresentationSpec(
+                    "Function Curve",
+                    sort_bucket=-10,
+                    sort_key=lambda state: (
+                        state.properties.get("label", ""),
+                    ),
+                ),
+            ),
+            role=ComponentRole.FUNCTION_CURVE,
+        )
+        model = ComponentTreeModel()
+        model.set_registry(self.canvas.component_registry, editor_registry)
+        refreshes = []
+        model.refreshed.connect(lambda: refreshes.append(True))
+        try:
+            self.assertLess(
+                model.index_for_component("sort-a").row(),
+                model.index_for_component("sort-b").row(),
+            )
+            change = self.canvas.component_registry.get(
+                "sort-b"
+            ).set_property("label", "0")
+            self.assertTrue(change.ok)
+            self.assertLess(
+                model.index_for_component("sort-b").row(),
+                model.index_for_component("sort-a").row(),
+            )
+            self.assertEqual(refreshes, [True])
+        finally:
+            model.dispose()
+
+    def test_declared_cross_role_group_works_below_non_axes_parent(self):
+        self.canvas.add_global_text(
+            0.1,
+            0.2,
+            "Figure note",
+            "DejaVu Sans",
+            10,
+            object_id="figure-note",
+        )
+        editor_registry = EditorRegistry()
+        shared_group = {
+            "group_title": "Figure Contents",
+            "group_key": "figure_contents",
+            "group_order": 0,
+            "always_group": True,
+        }
+        editor_registry.register_profile(
+            ComponentKind.AXES,
+            replace(
+                AXES_PROFILE,
+                tree=TreePresentationSpec("Axes", **shared_group),
+            ),
+            role=ComponentRole.AXES,
+        )
+        editor_registry.register_profile(
+            ComponentKind.TEXT,
+            replace(
+                TEXT_PROFILE,
+                tree=TreePresentationSpec("Text", **shared_group),
+            ),
+            role=ComponentRole.TEXT,
+        )
+        model = ComponentTreeModel()
+        model.set_registry(self.canvas.component_registry, editor_registry)
+        try:
+            group = self._group_index(
+                model,
+                self.canvas.root_component_id,
+                "Figure Contents",
+            )
+            self.assertTrue(group.isValid())
+            self.assertEqual(
+                set(model.visual_children_ids(group.data(NODE_KEY_ROLE))),
+                {
+                    self.canvas.current_axes_component_id,
+                    "figure-note",
+                },
+            )
+        finally:
+            model.dispose()
+
     def test_batch_delete_fallback_is_computed_from_confirmed_selection(self):
         for component_id, expression in (
             ("fallback-a", "x"),
@@ -730,7 +837,7 @@ class ComponentTreeTests(unittest.TestCase):
 
         with mock.patch(
             "mygui.widgets.component_tree.component_tree.QMenu",
-            self._menu_type("Delete Component"),
+            self._menu_type("Delete Function Curve"),
         ), mock.patch.object(
             host,
             "_confirm_single_delete",

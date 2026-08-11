@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QSettings, Signal
 
 from mygui.figuremodify.style_base.color_models import (
     PaletteDefinition,
+    PaletteSource,
     builtin_palette_map,
     builtin_palettes,
     normalize_color,
@@ -81,7 +82,10 @@ class ColorLibrary(QObject):
         custom_names: set[str] = set()
         for raw_palette in state.get("custom_palettes", ()):
             try:
-                palette = PaletteDefinition.from_dict(raw_palette, source="custom")
+                palette = PaletteDefinition.from_dict(
+                    raw_palette,
+                    source=PaletteSource.CUSTOM,
+                )
                 if not 2 <= len(palette.colors) <= 12:
                     raise ValueError("Custom palettes require 2-12 colors.")
                 normalized_name = palette.name.casefold()
@@ -228,7 +232,7 @@ class ColorLibrary(QObject):
             id=f"custom:{uuid4()}",
             name=self._validate_custom_name(name),
             category="自定义配色",
-            source="custom",
+            source=PaletteSource.CUSTOM,
             colors=self._validate_custom_colors(colors),
         )
         self.custom_palettes[palette.id] = palette
@@ -245,7 +249,7 @@ class ColorLibrary(QObject):
             id=current.id,
             name=self._validate_custom_name(name, exclude_id=current.id),
             category="自定义配色",
-            source="custom",
+            source=PaletteSource.CUSTOM,
             colors=self._validate_custom_colors(colors),
         )
         self.custom_palettes[palette.id] = palette

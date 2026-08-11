@@ -71,3 +71,20 @@ class TreePresentationResolver:
             else (state.order,)
         )
         return (spec.sort_bucket, *detail, state.id)
+
+    def group_key(self, state: ComponentState) -> str | None:
+        """Return a cross-role group key declared by the profile."""
+
+        spec = self.spec(state)
+        if not spec.group_title:
+            return None
+        return spec.group_key or f"{state.kind.value}:{state.role.value}"
+
+    def delete_label(self, state: ComponentState) -> str:
+        """Return the declared user-facing deletion noun."""
+
+        spec = self.spec(state)
+        if spec.delete_label:
+            return spec.delete_label
+        label = spec.label(state) if callable(spec.label) else spec.label
+        return str(label)

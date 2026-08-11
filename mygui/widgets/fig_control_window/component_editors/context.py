@@ -166,7 +166,12 @@ class MessagePresenter:
                 success=self._fallback_success(changes),
             )
 
-    def present(self, result, *, success: str = "") -> bool:
+    def present(
+        self,
+        result: ComponentChange | ComponentBatchChange | bool | None,
+        *,
+        success: str = "",
+    ) -> bool:
         """Show this Inspector and synchronize it from controller state."""
 
         if isinstance(result, ComponentBatchChange):
@@ -198,13 +203,17 @@ class MessagePresenter:
             notices = result.notices
             message = result.message
             status = result.status
-        else:
-            raw_ok = getattr(result, "ok", result)
-            ok = bool(raw_ok() if callable(raw_ok) else raw_ok)
+        elif result is None or isinstance(result, bool):
+            ok = True if result is None else result
             changes = ()
             notices = ()
-            message = str(getattr(result, "message", "") or "")
+            message = ""
             status = ChangeStatus.APPLIED if ok else ChangeStatus.REJECTED
+        else:
+            status_messages.show_error(
+                f"Unsupported component result type: {type(result).__name__}."
+            )
+            return False
 
         self._consume(tuple(changes))
         if not ok or status is ChangeStatus.REJECTED:

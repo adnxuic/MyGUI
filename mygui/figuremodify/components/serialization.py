@@ -15,7 +15,7 @@ from mygui.figuremodify.axes_layout import stable_layout_id
 
 from .controllers import controller_type_for, decode_in_axes_image
 from .errors import ComponentValidationError
-from .models import ComponentState
+from .models import ComponentState, FitEngine
 CHART_KINDS = {"line", "scatter"}
 DATA_ROLES = {"data_plot", "fit_curve", "interpolation", "scatter"}
 SPINE_NAMES = ("left", "right", "bottom", "top")
@@ -1455,8 +1455,12 @@ def _validate_component_properties(
                 _require_number(data["lam"], f"{path}.data.lam")
             _require_bool(data.get("lam_auto"), f"{path}.data.lam_auto")
         elif role == "fit_curve":
-            if data.get("engine") not in {"Python", "Matlab"}:
-                raise ValueError(f"Unknown fitting engine at {path}.")
+            try:
+                FitEngine(data.get("engine"))
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unknown fitting engine at {path}."
+                ) from exc
             _require_string(data.get("expression"), f"{path}.data.expression")
             _require_number(data.get("x_start"), f"{path}.data.x_start")
             _require_number(data.get("x_stop"), f"{path}.data.x_stop")

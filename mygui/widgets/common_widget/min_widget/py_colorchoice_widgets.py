@@ -35,6 +35,7 @@ from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
     PaletteDefinition,
+    PaletteSource,
     all_single_colors,
     normalize_color,
 )
@@ -613,9 +614,17 @@ class ColorPickerDialog(QDialog):
             favorite_ids = set(self.library.favorite_palette_ids)
             palettes = tuple(palette for palette in palettes if palette.id in favorite_ids)
         elif palette_filter == 2:
-            palettes = tuple(palette for palette in palettes if palette.source == "builtin")
+            palettes = tuple(
+                palette
+                for palette in palettes
+                if palette.source is PaletteSource.BUILTIN
+            )
         elif palette_filter == 3:
-            palettes = tuple(palette for palette in palettes if palette.source == "custom")
+            palettes = tuple(
+                palette
+                for palette in palettes
+                if palette.source is PaletteSource.CUSTOM
+            )
         self.palette_model.set_palettes(palettes)
         if self._selected_palette is not None:
             current = self.library.palette(self._selected_palette.id)
@@ -685,7 +694,9 @@ class ColorPickerDialog(QDialog):
     def _sync_palette_buttons(self):
         palette = self._selected_palette
         has_palette = palette is not None
-        is_custom = bool(palette and palette.source == "custom")
+        is_custom = bool(
+            palette and palette.source is PaletteSource.CUSTOM
+        )
         self.favorite_palette_button.setEnabled(has_palette)
         self.edit_palette_button.setEnabled(is_custom)
         self.delete_palette_button.setEnabled(is_custom)
@@ -747,7 +758,10 @@ class ColorPickerDialog(QDialog):
             self._refresh_models()
 
     def _edit_palette(self):
-        if self._selected_palette is None or self._selected_palette.source != "custom":
+        if (
+            self._selected_palette is None
+            or self._selected_palette.source is not PaletteSource.CUSTOM
+        ):
             return
         dialog = CustomPaletteDialog(self.library, self._selected_palette, self)
         if dialog.exec() == QDialog.Accepted and dialog.result_palette is not None:
@@ -756,7 +770,7 @@ class ColorPickerDialog(QDialog):
 
     def _delete_palette(self):
         palette = self._selected_palette
-        if palette is None or palette.source != "custom":
+        if palette is None or palette.source is not PaletteSource.CUSTOM:
             return
         answer = QMessageBox.question(
             self,

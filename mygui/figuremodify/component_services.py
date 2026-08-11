@@ -47,6 +47,7 @@ from mygui.figuremodify.components import (
     DataPlotController,
     DeletionPolicy,
     FitCurveController,
+    FitEngine,
     FunctionCurveController,
     InterpolationController,
     MessageLevel,
@@ -59,12 +60,10 @@ from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
     PaletteDefinition,
+    PaletteSource,
     normalize_color,
 )
-from mygui.figuremodify.style_base.creation_defaults import (
-    MATPLOTLIB_STYLE_PALETTE_SOURCE,
-    resolve_style_palette,
-)
+from mygui.figuremodify.style_base.creation_defaults import resolve_style_palette
 
 
 def _controller(
@@ -787,7 +786,10 @@ class AxesCommandService:
         figure_style = self._figure_style(axes_id)
         style_palette = self.style_palette(axes_id)
         active = self.cycle_state(axes_id).active_palette
-        if active is not None and active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE:
+        if (
+            active is not None
+            and active.source is not PaletteSource.MATPLOTLIB_STYLE
+        ):
             return AxesPaletteStatus(
                 "user",
                 active,
@@ -823,7 +825,7 @@ class AxesCommandService:
         cycle = self.cycle_state(axes_id)
         active = cycle.active_palette
         if active is not None and (
-            active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE
+            active.source is not PaletteSource.MATPLOTLIB_STYLE
             or active.id == fallback_palette.id
         ):
             preview = ColorCycleState.from_dict(cycle.to_dict())
@@ -1424,7 +1426,7 @@ class FitService:
         self,
         component,
         *,
-        engine: str,
+        engine: FitEngine | str,
         fit_type,
         fit_options,
         fit_result,
@@ -1441,6 +1443,7 @@ class FitService:
             FitCurveController,
         )
         try:
+            engine = FitEngine(engine)
             start = float(x_start)
             stop = float(x_stop)
             persisted_options = normalize_fit_options_for_storage(fit_options)
@@ -1451,7 +1454,7 @@ class FitService:
             return _rejected(controller, str(exc))
         data = deepcopy(controller.state.data)
         data.update(
-            engine=engine,
+            engine=engine.value,
             fit_type=deepcopy(fit_type),
             fit_options=persisted_options,
             fit_result=persisted_result,

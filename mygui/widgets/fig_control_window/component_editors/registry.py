@@ -19,15 +19,29 @@ EditorKey = tuple[ComponentKind, ComponentRole]
 
 
 class EditorRegistry:
-    """Map exact kind/role pairs to profiles and optional fallback editors."""
+    """Map exact kind/role pairs to immutable production profiles."""
 
-    def __init__(self, fallback: type[ComponentEditorBase] = ComponentEditorBase):
-        self.fallback = fallback
+    def __init__(self):
         self._editors: dict[
             tuple[str, str | None],
             type[QWidget] | Callable,
         ] = {}
         self._profiles: dict[EditorKey, EditorProfile] = {}
+        self._frozen = False
+
+    def _require_mutable(self) -> None:
+        if self._frozen:
+            raise RuntimeError("EditorRegistry is frozen.")
+
+    def freeze(self) -> None:
+        """Prevent runtime mutation after production registration."""
+
+        self.validate_production_profiles()
+        self._frozen = True
+
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
 
     @staticmethod
     def _value_key(value) -> str:
@@ -80,7 +94,9 @@ class EditorRegistry:
         return EditorRegistry._value_key(role)
 
     def register(self, kind: str, editor=None, *, role=None):
-        """Register the supplied object and return it."""
+        """Register an editor for the explicit generic/tooling entry point."""
+
+        self._require_mutable()
 
         key = (
             self._kind_key(kind),
@@ -88,6 +104,7 @@ class EditorRegistry:
         )
 
         def decorator(editor_type):
+            self._require_mutable()
             self._editors[key] = editor_type
             return editor_type
 
@@ -95,6 +112,8 @@ class EditorRegistry:
 
     def unregister(self, kind: str, *, role=None) -> None:
         """Remove the supplied registration."""
+
+        self._require_mutable()
 
         key = (
             self._kind_key(kind),
@@ -116,6 +135,7 @@ class EditorRegistry:
     ) -> None:
         """Register one exact production ``(kind, role)`` profile."""
 
+        self._require_mutable()
         key = (ComponentKind(kind), ComponentRole(role))
         if key in self._profiles:
             raise ValueError(
@@ -144,7 +164,7 @@ class EditorRegistry:
         return self._profiles.get((kind, role))
 
     def validate_production_profiles(self) -> None:
-        """Fail fast unless every schema-v8 kind/role has one profile."""
+        """Fail fast unless every schema-v9 kind/role has one profile."""
 
         expected = {
             (kind, role)
@@ -180,13 +200,13 @@ class EditorRegistry:
             raise ValueError("Invalid production Editor profiles: " + "; ".join(details))
 
     def resolve(self, component):
-        """Resolve the requested object, returning no value when it is unavailable."""
+        """Resolve an explicitly registered generic/tooling editor."""
 
         kind = self.component_kind(component)
         role = self.component_role(component)
         return self._editors.get(
             (kind, role),
-            self._editors.get((kind, None), self.fallback),
+            self._editors.get((kind, None)),
         )
 
     def create(
@@ -207,19 +227,43 @@ class EditorRegistry:
                 "EditorRegistry requires the application ColorLibrary."
             )
         profile = self.resolve_profile(component)
-        if profile is not None:
-            if context is None:
-                raise ValueError(
-                    "Profile-driven editors require an EditorContext."
-                )
-            return ComponentInspector(
-                component,
-                context=context,
-                profile=profile,
-                color_library=color_library,
-                parent=parent,
+        if profile is None:
+            kind = self.component_kind(component) or "unknown"
+            role = self.component_role(component) or "unknown"
+            raise LookupError(
+                f"No exact Editor profile for {kind}/{role}."
             )
-        editor_type = self.resolve(component)
+        if context is None:
+            raise ValueError(
+                "Profile-driven editors require an EditorContext."
+            )
+        return ComponentInspector(
+            component,
+            context=context,
+            profile=profile,
+            color_library=color_library,
+            parent=parent,
+        )
+
+    def create_generic(
+        self,
+        component,
+        *,
+        editor_type: type[QWidget] | Callable | None = None,
+        context=None,
+        color_library=None,
+        parent=None,
+        **kwargs,
+    ):
+        """Explicitly create a generic editor for tests and maintenance tools."""
+
+        if context is not None:
+            color_library = context.color_library
+        if color_library is None:
+            raise ValueError(
+                "EditorRegistry requires the application ColorLibrary."
+            )
+        editor_type = editor_type or self.resolve(component) or ComponentEditorBase
         if context is not None:
             return editor_type(
                 component,

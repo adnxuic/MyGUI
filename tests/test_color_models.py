@@ -4,6 +4,7 @@ from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
     PaletteDefinition,
+    PaletteSource,
     all_single_colors,
     builtin_palettes,
     normalize_color,
@@ -11,6 +12,16 @@ from mygui.figuremodify.style_base.color_models import (
 
 
 class ColorModelTests(unittest.TestCase):
+    def test_palette_source_enum_preserves_schema_wire_value(self):
+        palette = PaletteDefinition(
+            "wire",
+            "Wire",
+            ("red", "blue"),
+            source=PaletteSource.MATPLOTLIB_STYLE,
+        )
+        self.assertIs(palette.source, PaletteSource.MATPLOTLIB_STYLE)
+        self.assertEqual(palette.to_dict()["source"], "matplotlib-style")
+
     def test_normalize_named_hex_and_rgba_colors(self):
         self.assertEqual(normalize_color("tab:blue"), "#1F77B4")
         self.assertEqual(normalize_color("#abc"), "#AABBCC")

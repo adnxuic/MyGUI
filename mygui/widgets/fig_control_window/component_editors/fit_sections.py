@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.widgets import qss_func
-from mygui.figuremodify.components import FitCurveController
+from mygui.figuremodify.components import FitCurveController, FitEngine
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
 from .context import EditorContext
@@ -86,8 +86,12 @@ class FitDomainSection(QFrame):
         self.engine_layout.setContentsMargins(0, 0, 0, 0)
         self.scipy_button = QPushButton("SciPy", self.engine_widget)
         self.matlab_button = QPushButton("Matlab", self.engine_widget)
-        self.scipy_button.clicked.connect(lambda: self.open_fit_window("Python"))
-        self.matlab_button.clicked.connect(lambda: self.open_fit_window("Matlab"))
+        self.scipy_button.clicked.connect(
+            lambda: self.open_fit_window(FitEngine.PYTHON)
+        )
+        self.matlab_button.clicked.connect(
+            lambda: self.open_fit_window(FitEngine.MATLAB)
+        )
         self.engine_layout.addWidget(QLabel("Engine:"))
         self.engine_layout.addWidget(self.scipy_button)
         self.engine_layout.addWidget(self.matlab_button)
@@ -193,8 +197,9 @@ class FitDomainSection(QFrame):
 
         return True
 
-    def _engine_display_name(self, engine: str) -> str:
-        return "SciPy" if engine == "Python" else engine
+    def _engine_display_name(self, engine: FitEngine | str) -> str:
+        engine = FitEngine(engine)
+        return "SciPy" if engine is FitEngine.PYTHON else engine.value
 
     def _matlab_enabled_changed(self, enabled: bool):
         if self._disposed:
@@ -229,15 +234,22 @@ class FitDomainSection(QFrame):
             pair.excluded_count,
         )
 
-    def open_fit_window(self, engine: str):
+    def open_fit_window(self, engine: FitEngine | str):
         """Open fit window."""
 
         if self._disposed:
             return None
-        if engine not in {"Python", "Matlab"}:
-            raise ValueError(f"Unsupported fitting engine: {engine}")
+        try:
+            engine = FitEngine(engine)
+        except ValueError as exc:
+            raise ValueError(
+                f"Unsupported fitting engine: {engine}"
+            ) from exc
         display_engine = self._engine_display_name(engine)
-        if engine == "Matlab" and not matlab_adapter.is_matlab_enabled():
+        if (
+            engine is FitEngine.MATLAB
+            and not matlab_adapter.is_matlab_enabled()
+        ):
             status_messages.show_error("Connect MATLAB before using Matlab fitting.")
             return None
         try:
@@ -260,7 +272,11 @@ class FitDomainSection(QFrame):
         fit_type_box = QGroupBox("Fit Type", dialog)
         fit_type_layout = QVBoxLayout()
         dialog.fit_type_input = QComboBox(dialog)
-        options_widget_class = PyScipyFitOptionsWidget if engine == "Python" else PyMatlabFitOptionsWidget
+        options_widget_class = (
+            PyScipyFitOptionsWidget
+            if engine is FitEngine.PYTHON
+            else PyMatlabFitOptionsWidget
+        )
         fit_type_groups = options_widget_class.fit_type_groups()
         dialog.fit_type_input.addItems(list(fit_type_groups.keys()))
         fit_type_layout.addWidget(dialog.fit_type_input)
@@ -310,7 +326,7 @@ class FitDomainSection(QFrame):
         except ValueError:
             pass
 
-    def _start_fit_from_dialog(self, dialog, engine: str):
+    def _start_fit_from_dialog(self, dialog, engine: FitEngine):
         if self._disposed:
             return
         from mygui.database import scipy_fit_adapter
@@ -362,7 +378,11 @@ class FitDomainSection(QFrame):
             len(x_values),
             len(y_values),
         )
-        fit_func = matlab_adapter.fit_curve_isolated if engine == "Matlab" else scipy_fit_adapter.fit_curve
+        fit_func = (
+            matlab_adapter.fit_curve_isolated
+            if engine is FitEngine.MATLAB
+            else scipy_fit_adapter.fit_curve
+        )
         dialog_ref = weakref.ref(dialog)
         fit_options_record = deepcopy(fit_options)
         start_background_task(
@@ -410,7 +430,7 @@ class FitDomainSection(QFrame):
             return False
         return True
 
-    def _fit_dialog_succeeded(self, dialog_ref, request_id, result, x_min, x_max, engine: str,
+    def _fit_dialog_succeeded(self, dialog_ref, request_id, result, x_min, x_max, engine: FitEngine,
                               fit_type=None, fit_options=None):
         if self._disposed:
             return
@@ -433,7 +453,7 @@ class FitDomainSection(QFrame):
                 f"{self._engine_display_name(engine)} fitting completed."
             )
 
-    def _fit_dialog_failed(self, dialog_ref, request_id, message, engine: str):
+    def _fit_dialog_failed(self, dialog_ref, request_id, message, engine: FitEngine):
         if self._disposed:
             return
         if not self._restore_dialog_fit_button(dialog_ref, request_id):
@@ -469,10 +489,12 @@ class FitDomainSection(QFrame):
         state_engine = _controller_data(
             self.controller,
             "engine",
-            "Python",
+            FitEngine.PYTHON.value,
         )
         engine = fit_result.get("engine", state_engine)
-        if engine not in {"Python", "Matlab"}:
+        try:
+            engine = FitEngine(engine)
+        except ValueError:
             engine = state_engine
         self.result_engine_label.setText(
             f"Engine: {self._engine_display_name(engine)}"

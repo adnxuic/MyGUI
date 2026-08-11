@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from enum import Enum, IntFlag
+from enum import Enum, IntFlag, StrEnum
 import math
 from typing import Any, Callable, Mapping
 
@@ -58,6 +58,13 @@ class ComponentRole(str, Enum):
     SCATTER = "scatter"
     IN_AXES_ZOOM = "in_axes_zoom"
     IN_AXES_IMAGE = "in_axes_image"
+
+
+class FitEngine(StrEnum):
+    """Stable schema-v9 wire values for supported fitting engines."""
+
+    PYTHON = "Python"
+    MATLAB = "Matlab"
 
 
 ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {

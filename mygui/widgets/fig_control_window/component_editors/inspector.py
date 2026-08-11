@@ -53,6 +53,10 @@ class TreePresentationSpec:
     preview: TreePreviewFactory | None = None
     sort_bucket: int = 50
     sort_key: TreeSortFactory | None = None
+    group_key: str | None = None
+    group_order: int | None = None
+    always_group: bool = False
+    delete_label: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.label, str) and not self.label.strip():
@@ -63,6 +67,14 @@ class TreePresentationSpec:
             raise TypeError("Tree preview extractor must be callable.")
         if self.sort_key is not None and not callable(self.sort_key):
             raise TypeError("Tree sort key must be callable.")
+        if self.group_key is not None and not self.group_key.strip():
+            raise ValueError("Tree group key must not be empty.")
+        if self.group_key is not None and not self.group_title:
+            raise ValueError("Tree group key requires a group title.")
+        if self.always_group and not self.group_title:
+            raise ValueError("Always-group presentation requires a group title.")
+        if self.delete_label is not None and not self.delete_label.strip():
+            raise ValueError("Tree delete label must not be empty.")
 
 
 @dataclass(frozen=True, slots=True)

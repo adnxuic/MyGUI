@@ -431,7 +431,8 @@ LINE_PROFILES = {
         ),
         placement=EditorPlacement.CHART,
         tree=TreePresentationSpec(
-            "Line", "Lines", "curve", _line_preview, 30
+            "Line", "Lines", "curve", _line_preview, 30,
+            delete_label="Line",
         ),
     ),
     ComponentRole.FUNCTION_CURVE: EditorProfile(
@@ -451,7 +452,8 @@ LINE_PROFILES = {
         ),
         placement=EditorPlacement.CHART,
         tree=TreePresentationSpec(
-            "Function Curve", "Function Curves", "curve", _line_preview, 30
+            "Function Curve", "Function Curves", "curve", _line_preview, 30,
+            delete_label="Function Curve",
         ),
     ),
     ComponentRole.DATA_PLOT: EditorProfile(
@@ -471,7 +473,8 @@ LINE_PROFILES = {
         ),
         placement=EditorPlacement.CHART,
         tree=TreePresentationSpec(
-            "Plot", "Plots", "plot", _line_preview, 30
+            "Plot", "Plots", "plot", _line_preview, 30,
+            delete_label="Plot",
         ),
     ),
     ComponentRole.FIT_CURVE: EditorProfile(
@@ -494,7 +497,8 @@ LINE_PROFILES = {
         ),
         placement=EditorPlacement.CHART,
         tree=TreePresentationSpec(
-            "Fit Curve", "Fit Curves", "fitting", _line_preview, 30
+            "Fit Curve", "Fit Curves", "fitting", _line_preview, 30,
+            delete_label="Fit Curve",
         ),
     ),
     ComponentRole.INTERPOLATION: EditorProfile(
@@ -519,7 +523,8 @@ LINE_PROFILES = {
         ),
         placement=EditorPlacement.CHART,
         tree=TreePresentationSpec(
-            "Interpolation", "Interpolations", "interpolate", _line_preview, 30
+            "Interpolation", "Interpolations", "interpolate", _line_preview, 30,
+            delete_label="Interpolation",
         ),
     ),
 }
@@ -542,7 +547,8 @@ SCATTER_PROFILE = EditorProfile(
     ),
     placement=EditorPlacement.CHART,
     tree=TreePresentationSpec(
-        "Scatter", "Scatters", "scatter", _line_preview, 30
+        "Scatter", "Scatters", "scatter", _line_preview, 30,
+        delete_label="Scatter",
     ),
 )
 
@@ -569,6 +575,7 @@ TEXT_PROFILE = EditorProfile(
         "text",
         _property_value("text"),
         40,
+        delete_label="Text",
     ),
 )
 
@@ -620,6 +627,7 @@ IN_AXES_ZOOM_PROFILE = EditorProfile(
             f"Y {tuple(state.properties.get('ylim', ()))}"
         ),
         sort_bucket=45,
+        delete_label="Zoom Inset",
     ),
 )
 
@@ -657,6 +665,7 @@ IN_AXES_IMAGE_PROFILE = EditorProfile(
         "image inset",
         preview=lambda state: state.data.get("filename", ""),
         sort_bucket=45,
+        delete_label="Image Inset",
     ),
 )
 
@@ -671,6 +680,10 @@ SEMANTIC_TEXT_PROFILE = EditorProfile(
         preview=_property_value("text"),
         sort_bucket=20,
         sort_key=_semantic_sort,
+        group_title="Axes Components",
+        group_key="axes_components",
+        group_order=-1,
+        always_group=True,
     ),
 )
 
@@ -690,6 +703,10 @@ LEGEND_PROFILE = EditorProfile(
         preview=_property_value("title"),
         sort_bucket=20,
         sort_key=_semantic_sort,
+        group_title="Axes Components",
+        group_key="axes_components",
+        group_order=-1,
+        always_group=True,
     ),
 )
 
@@ -722,6 +739,7 @@ AXES_PROFILE = EditorProfile(
         sort_key=lambda state: (
             int(state.selector.get("index", state.order)),
         ),
+        delete_label="Axes",
     ),
 )
 
@@ -834,7 +852,20 @@ def _property_profile(kind: ComponentKind) -> EditorProfile:
             ),
         ),
         placement=placement,
-        tree=presentations[kind],
+        tree=(
+            presentations[kind]
+            if kind is ComponentKind.FIGURE
+            else TreePresentationSpec(
+                presentations[kind].label,
+                preview=presentations[kind].preview,
+                sort_bucket=presentations[kind].sort_bucket,
+                sort_key=presentations[kind].sort_key,
+                group_title="Axes Components",
+                group_key="axes_components",
+                group_order=-1,
+                always_group=True,
+            )
+        ),
     )
 
 

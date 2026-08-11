@@ -26,6 +26,7 @@ from mygui import status_messages, tex_config
 from mygui.database import ColumnRef
 from mygui.figuremodify.components import ComponentKind, ComponentMutation
 from mygui.figuremodify.in_axes import embedded_image_data
+from mygui.figuremodify.style_base.color_models import PaletteSource
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     choose_palette,
 )
@@ -1025,9 +1026,9 @@ class PaletteSection(QWidget, EditorSection):
 
     @staticmethod
     def _user_palette_description(palette) -> str:
-        if palette.source == "custom":
+        if palette.source is PaletteSource.CUSTOM:
             kind = "Custom palette"
-        elif palette.source == "builtin":
+        elif palette.source is PaletteSource.BUILTIN:
             kind = "Built-in palette"
         else:
             kind = "Selected palette"

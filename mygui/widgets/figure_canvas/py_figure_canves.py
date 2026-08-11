@@ -45,6 +45,7 @@ from mygui.figuremodify.components import (
     DataPlotController,
     FigureController,
     FitCurveController,
+    FitEngine,
     FunctionCurveController,
     InterpolationController,
     ImageInAxesController,
@@ -229,6 +230,7 @@ class PyFigureCanvas(QWidget):
         )
         self.deletion_coordinator = DeletionCoordinator(self)
         self._register_component_materializers()
+        self.editor_registry.freeze()
         self.dependency_service = ComponentDependencyService(
             self.component_registry,
             restore_state=self._restore_component_state,
@@ -1766,7 +1768,7 @@ class PyFigureCanvas(QWidget):
         label,
         x_ref: ColumnRef,
         y_ref: ColumnRef,
-        engine: str = "Python",
+        engine: FitEngine | str = FitEngine.PYTHON,
         fit_type=None,
         fit_options=None,
         fit_result=None,
@@ -1792,8 +1794,12 @@ class PyFigureCanvas(QWidget):
             preserve_gaps=False,
         )
         x, y = pair.x, pair.y
-        if engine not in {"Python", "Matlab"}:
-            raise ValueError(f"Unsupported fitting engine: {engine}")
+        try:
+            engine = FitEngine(engine)
+        except ValueError as exc:
+            raise ValueError(
+                f"Unsupported fitting engine: {engine}"
+            ) from exc
 
         color = normalize_color(color)
         object_id = object_id or new_id()
@@ -1847,7 +1853,7 @@ class PyFigureCanvas(QWidget):
                     "x_ref": x_ref.to_dict(),
                     "y_ref": y_ref.to_dict(),
                     "preprocess": preprocess.to_dict(),
-                    "engine": engine,
+                    "engine": engine.value,
                     "fit_type": deepcopy(fit_type),
                     "fit_options": deepcopy(fit_options),
                     "fit_result": deepcopy(fit_result),
@@ -2420,7 +2426,7 @@ class PyFigureCanvas(QWidget):
             state.properties.get("label", "fitting"),
             x_ref,
             y_ref,
-            engine=state.data.get("engine", "Python"),
+            engine=state.data.get("engine", FitEngine.PYTHON.value),
             fit_type=state.data.get("fit_type"),
             fit_options=state.data.get("fit_options"),
             fit_result=state.data.get("fit_result"),

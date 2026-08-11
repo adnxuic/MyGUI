@@ -1,6 +1,5 @@
 import os
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -20,6 +19,8 @@ from mygui.figuremodify.component_services import (
     TextRenderService,
 )
 from mygui.figuremodify.components import (
+    ChangeStatus,
+    ComponentChange,
     ComponentKind,
     ComponentRegistry,
     ComponentRole,
@@ -202,8 +203,20 @@ class ComponentEditorTests(unittest.TestCase):
         status_messages.set_status_handler(handler)
         results = iter(
             (
-                SimpleNamespace(status="applied", message=""),
-                SimpleNamespace(status="noop", message=""),
+                ComponentChange(
+                    "fake",
+                    None,
+                    None,
+                    None,
+                    ChangeStatus.APPLIED,
+                ),
+                ComponentChange(
+                    "fake",
+                    None,
+                    None,
+                    None,
+                    ChangeStatus.NOOP,
+                ),
             )
         )
         binding = DebouncedTextBinding(
@@ -257,9 +270,12 @@ class ComponentEditorTests(unittest.TestCase):
         status_messages.set_status_handler(handler)
         try:
             self.assertTrue(editor.apply_property("linewidth", 4.0))
-            controller.set_property = lambda _key, _value: SimpleNamespace(
-                status="noop",
-                message="",
+            controller.set_property = lambda _key, _value: ComponentChange(
+                "fake",
+                None,
+                None,
+                None,
+                ChangeStatus.NOOP,
             )
             self.assertTrue(editor.apply_property("linewidth", 4.0))
             self.assertEqual(events, [("Linewidth updated.", "success")])
@@ -271,20 +287,23 @@ class ComponentEditorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ColorLibrary"):
             ComponentEditorBase(_FakeController())
 
-    def test_editor_registry_uses_kind_and_fallback(self):
+    def test_editor_registry_generic_entry_uses_explicit_kind_registration(self):
         class CustomEditor(ComponentEditorBase):
             pass
 
         registry = EditorRegistry()
         registry.register(ComponentKind.LINE, CustomEditor)
         controller = _FakeController()
-        editor = registry.create(controller, color_library=ColorLibrary())
+        editor = registry.create_generic(
+            controller,
+            color_library=ColorLibrary(),
+        )
         try:
             self.assertIsInstance(editor, CustomEditor)
         finally:
             editor.close()
 
-    def test_editor_registry_prefers_role_specific_registration(self):
+    def test_generic_entry_prefers_role_specific_registration(self):
         class KindEditor(ComponentEditorBase):
             pass
 
@@ -300,7 +319,7 @@ class ComponentEditorTests(unittest.TestCase):
         )
         controller = _FakeController()
         controller.role = ComponentRole.FIT_CURVE
-        editor = registry.create(
+        editor = registry.create_generic(
             controller,
             color_library=ColorLibrary(),
         )
@@ -313,7 +332,7 @@ class ComponentEditorTests(unittest.TestCase):
             ComponentKind.LINE,
             role=ComponentRole.FIT_CURVE,
         )
-        fallback_editor = registry.create(
+        fallback_editor = registry.create_generic(
             controller,
             color_library=ColorLibrary(),
         )
@@ -325,6 +344,33 @@ class ComponentEditorTests(unittest.TestCase):
     def test_editor_registry_requires_shared_color_library(self):
         with self.assertRaisesRegex(ValueError, "ColorLibrary"):
             EditorRegistry().create(_FakeController())
+
+    def test_unknown_modification_result_fails_closed(self):
+        editor = QLineEdit("before")
+        binding = DebouncedTextBinding(
+            editor,
+            lambda _value: object(),
+            delay_ms=1,
+        )
+        try:
+            editor.setText("after")
+            self.assertFalse(binding.flush())
+            self.assertEqual(editor.text(), "before")
+        finally:
+            editor.close()
+
+    def test_message_presenter_rejects_unknown_result_type(self):
+        events = []
+        status_messages.set_status_handler(
+            lambda message, level: events.append((message, level))
+        )
+        try:
+            self.assertFalse(MessagePresenter().present(object()))
+            self.assertEqual(len(events), 1)
+            self.assertIn("Unsupported component result type", events[0][0])
+            self.assertEqual(events[0][1], "error")
+        finally:
+            status_messages.clear_status_handler()
 
     def test_curve_panel_uses_controller_for_range_and_rolls_back_bad_expression(self):
         figure = Figure()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import lru_cache
 from typing import Any
 
@@ -12,6 +13,14 @@ from mygui.figuremodify.style_base.color_base import color_combi_dict
 
 
 DEFAULT_COLOR = "#000000"
+
+
+class PaletteSource(StrEnum):
+    """Stable wire values describing where a palette originated."""
+
+    BUILTIN = "builtin"
+    CUSTOM = "custom"
+    MATPLOTLIB_STYLE = "matplotlib-style"
 
 
 def normalize_color(value: Any) -> str:
@@ -32,7 +41,7 @@ class PaletteDefinition:
     name: str
     colors: tuple[str, ...]
     category: str = ""
-    source: str = "builtin"
+    source: PaletteSource | str = PaletteSource.BUILTIN
 
     def __post_init__(self):
         palette_id = str(self.id).strip()
@@ -48,7 +57,8 @@ class PaletteDefinition:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "colors", colors)
         object.__setattr__(self, "category", str(self.category).strip())
-        object.__setattr__(self, "source", str(self.source).strip() or "builtin")
+        source = str(self.source).strip() or PaletteSource.BUILTIN.value
+        object.__setattr__(self, "source", PaletteSource(source))
 
     @property
     def display_name(self) -> str:
@@ -65,7 +75,7 @@ class PaletteDefinition:
             "id": self.id,
             "name": self.name,
             "category": self.category,
-            "source": self.source,
+            "source": self.source.value,
             "colors": list(self.colors),
         }
 
@@ -79,7 +89,7 @@ class PaletteDefinition:
             id=value.get("id", ""),
             name=value.get("name", ""),
             category=value.get("category", ""),
-            source=source or value.get("source", "builtin"),
+            source=source or value.get("source", PaletteSource.BUILTIN.value),
             colors=tuple(value.get("colors", ())),
         )
 

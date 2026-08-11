@@ -9,10 +9,10 @@ import matplotlib as mpl
 from matplotlib import style as mpl_style
 from matplotlib.figure import Figure
 
-from .color_models import PaletteDefinition, normalize_color
+from .color_models import PaletteDefinition, PaletteSource, normalize_color
 
 
-MATPLOTLIB_STYLE_PALETTE_SOURCE = "matplotlib-style"
+MATPLOTLIB_STYLE_PALETTE_SOURCE = PaletteSource.MATPLOTLIB_STYLE
 
 
 @dataclass(frozen=True, slots=True)

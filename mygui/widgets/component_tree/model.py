@@ -9,15 +9,10 @@ from PySide6.QtCore import QAbstractItemModel, QModelIndex, QSortFilterProxyMode
 
 from mygui.figuremodify.components import (
     ComponentEvent,
-    ComponentEventKind,
     ComponentKind,
     ComponentRole,
     ComponentState,
 )
-from mygui.widgets.fig_control_window.component_editors.inspector import (
-    EditorPlacement,
-)
-
 from .nodes import (
     COMPONENT_ID_ROLE,
     COMPONENT_KIND_ROLE,
@@ -113,6 +108,11 @@ class ComponentTreeModel(QAbstractItemModel):
 
     def _reset_from_registry(self) -> None:
         projection = self._build_projection()
+        self._publish_projection(projection)
+
+    def _publish_projection(self, projection) -> None:
+        """Atomically replace the active, already validated projection."""
+
         self.aboutToRefresh.emit()
         self.beginResetModel()
         (
@@ -187,58 +187,64 @@ class ComponentTreeModel(QAbstractItemModel):
         for parent_id, child_ids in component_children.items():
             if parent_id is None:
                 continue
-            parent_state = states_by_id[parent_id]
             parent_key = component_keys[parent_id]
             entries: list[tuple[tuple[Any, ...], TreeNodeKey]] = []
             grouped_ids: set[str] = set()
-            if parent_state.kind is ComponentKind.AXES:
-                semantic_ids = [
-                    component_id
-                    for component_id in child_ids
-                    if (
-                        (profile := self.presentation.profile(
-                            states_by_id[component_id]
-                        ))
-                        is not None
-                        and profile.placement is EditorPlacement.SEMANTIC
-                    )
-                ]
-                if semantic_ids:
-                    key = register_group(
-                        parent_id,
-                        "axes_components",
-                        "Axes Components",
-                        semantic_ids,
-                    )
-                    entries.append(((-1, 0), key))
-                    grouped_ids.update(semantic_ids)
-
-            dynamic_groups: dict[
-                tuple[ComponentKind, ComponentRole], list[str]
-            ] = {}
+            dynamic_groups: dict[str, list[str]] = {}
             for component_id in child_ids:
-                if component_id in grouped_ids:
-                    continue
                 state = states_by_id[component_id]
-                spec = self.presentation.spec(state)
-                if spec.group_title:
-                    dynamic_groups.setdefault(
-                        (state.kind, state.role), []
-                    ).append(component_id)
-            for (kind, role), member_ids in dynamic_groups.items():
-                if len(member_ids) < 2:
+                group_key = self.presentation.group_key(state)
+                if group_key is not None:
+                    dynamic_groups.setdefault(group_key, []).append(component_id)
+            for group_key, member_ids in dynamic_groups.items():
+                specs = [
+                    self.presentation.spec(states_by_id[item])
+                    for item in member_ids
+                ]
+                first_spec = specs[0]
+                first_order = (
+                    first_spec.sort_bucket
+                    if first_spec.group_order is None
+                    else first_spec.group_order
+                )
+                if any(
+                    spec.group_title != first_spec.group_title
+                    or (
+                        spec.sort_bucket
+                        if spec.group_order is None
+                        else spec.group_order
+                    )
+                    != first_order
+                    for spec in specs[1:]
+                ):
+                    raise ValueError(
+                        f"Tree group {group_key!r} has conflicting declarations."
+                    )
+                if len(member_ids) < 2 and not first_spec.always_group:
                     continue
-                spec = self.presentation.spec(states_by_id[member_ids[0]])
+                states = [states_by_id[item] for item in member_ids]
+                kind = states[0].kind if all(
+                    state.kind is states[0].kind for state in states
+                ) else None
+                role = states[0].role if all(
+                    state.role is states[0].role for state in states
+                ) else None
                 key = register_group(
                     parent_id,
-                    "component_group",
-                    str(spec.group_title),
+                    group_key,
+                    str(first_spec.group_title),
                     member_ids,
                     kind,
                     role,
                 )
                 entries.append(
-                    (self.presentation.sort_key(states_by_id[member_ids[0]]), key)
+                    (
+                        (
+                            first_order,
+                            *self.presentation.sort_key(states[0])[1:],
+                        ),
+                        key,
+                    )
                 )
                 grouped_ids.update(member_ids)
             for component_id in child_ids:
@@ -286,21 +292,15 @@ class ComponentTreeModel(QAbstractItemModel):
         events = tuple(events)
         if not events:
             return
-        if any(
-            event.kind in {ComponentEventKind.ADDED, ComponentEventKind.REMOVED}
-            for event in events
-        ):
-            self._reset_from_registry()
-            return
-        if any(
-            event.before is None
-            or event.after is None
-            or event.before.parent_id != event.after.parent_id
-            or event.before.order != event.after.order
-            or event.before.selector != event.after.selector
-            for event in events
-        ):
-            self._reset_from_registry()
+        candidate = self._build_projection()
+        current_signature = (
+            self._node_children,
+            self._node_parents,
+            self._groups,
+        )
+        candidate_signature = (candidate[0], candidate[1], candidate[5])
+        if candidate_signature != current_signature:
+            self._publish_projection(candidate)
             return
         for event in events:
             index = self.index_for_component(event.component_id)

@@ -19,6 +19,12 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
+from mygui.figuremodify.components import (
+    ChangeStatus,
+    ComponentBatchChange,
+    ComponentChange,
+    normalize_linestyle,
+)
 
 
 LINE_STYLE_OPTIONS = (
@@ -28,78 +34,65 @@ LINE_STYLE_OPTIONS = (
     ("Dotted", ":"),
 )
 
-_LINE_STYLE_ALIASES = {
-    "-": "-",
-    "solid": "-",
-    "--": "--",
-    "dashed": "--",
-    "-.": "-.",
-    "dashdot": "-.",
-    "dash-dot": "-.",
-    ":": ":",
-    "dotted": ":",
-    "none": "None",
-    "": "None",
-    " ": "None",
-    "null": "None",
-    "None": "None",
-}
-
-
 def normalize_line_style(style: Any) -> str:
-    """Return Matplotlib's canonical short notation for a line style."""
+    """Use the domain codec for Matplotlib line-style normalization."""
 
-    text = str(style)
-    return _LINE_STYLE_ALIASES.get(text, _LINE_STYLE_ALIASES.get(text.casefold(), text))
-
-
-def _result_status_text(result: Any) -> str:
-    for attribute in ("result", "status", "outcome"):
-        value = getattr(result, attribute, None)
-        if value is None:
-            continue
-        value = getattr(value, "value", value)
-        return str(value).casefold()
-    return ""
+    return normalize_linestyle(style)
 
 
 def modification_succeeded(result: Any) -> bool:
-    """Interpret callback results and component changes uniformly."""
+    """Interpret only the closed component modification result union."""
 
     if result is None:
         return True
     if isinstance(result, bool):
         return result
-    success = getattr(result, "success", None)
-    if success is not None:
-        return bool(success() if callable(success) else success)
-    ok = getattr(result, "ok", None)
-    if ok is not None:
-        return bool(ok() if callable(ok) else ok)
-    status = _result_status_text(result)
-    if status:
-        return status not in {"rejected", "failed", "failure", "error", "invalid"}
-    return True
+    if isinstance(result, (ComponentChange, ComponentBatchChange)):
+        return result.ok
+    return False
 
 
 def modification_message(result: Any) -> str:
     """Return a user-facing message for a component change."""
 
-    message = getattr(result, "message", "")
-    return str(message) if message else ""
+    if isinstance(result, (ComponentChange, ComponentBatchChange)):
+        return str(result.message) if result.message else ""
+    if result is None or isinstance(result, bool):
+        return ""
+    return f"Unsupported component result type: {type(result).__name__}."
 
 
 def modification_status(result: Any) -> str:
     """Map a component change to a Message Bar status level."""
 
-    return _result_status_text(result)
+    if isinstance(result, ComponentChange):
+        return result.status.value
+    if isinstance(result, ComponentBatchChange):
+        if not result.ok:
+            return ChangeStatus.REJECTED.value
+        if any(change.status is ChangeStatus.EMPTY for change in result.changes):
+            return ChangeStatus.EMPTY.value
+        return (
+            ChangeStatus.APPLIED.value
+            if result.changed
+            else ChangeStatus.NOOP.value
+        )
+    if result is None:
+        return ChangeStatus.NOOP.value
+    if isinstance(result, bool):
+        return (
+            ChangeStatus.APPLIED.value
+            if result
+            else ChangeStatus.REJECTED.value
+        )
+    return ChangeStatus.REJECTED.value
 
 
 class DebouncedTextBinding(QObject):
     """Apply text after a short pause and restore the last accepted value.
 
-    The callback may return ``None``, a bool, or a component change object
-    exposing ``success``/``status`` and optionally ``message``.
+    The callback returns ``ComponentChange``, ``ComponentBatchChange``, bool,
+    or ``None``. Unknown result objects fail closed.
     """
 
     applied = Signal(str)
