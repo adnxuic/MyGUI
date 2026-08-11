@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.figuremodify.components import FitCurveController, FitEngine
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
@@ -30,20 +30,8 @@ from .lifecycle import CallbackLifecycle
 from mygui import status_messages
 from mygui.database import ColumnRef, matlab_adapter
 import math
-import os
 import weakref
 from copy import deepcopy
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.normpath(
-    os.path.join(
-        current_path,
-        "..",
-        "all_mod_widgets",
-        "chart_mod_style.qss",
-    )
-)
-
 
 def _controller_state(controller):
     return controller.read_state()
@@ -67,7 +55,10 @@ class FitDomainSection(QFrame):
         super().__init__(parent)
         del color_library
 
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/fig_control_window/all_mod_widgets/"
+            "chart_mod_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.controller = controller

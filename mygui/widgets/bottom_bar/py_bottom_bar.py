@@ -1,17 +1,12 @@
 """Compose the application's message and state bars."""
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.bottom_bar.py_message_bar import PyMessageBar
 from mygui.widgets.bottom_bar.py_state_bar import FeatureIndicator, PyStateBar
 
 from mygui import tex_config
 from mygui.database import matlab_adapter
-
-import os
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
-
 
 def _feature_indicators():
     """Central, extensible registry of State Bar features.
@@ -44,7 +39,7 @@ class PyBottomBar(QFrame):
         super().__init__()
 
         self.setObjectName("bottom_bar")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource("mygui/widgets/bottom_bar/style.qss")
         self.setStyleSheet(qss_file)
 
         self.layout = QHBoxLayout(self)

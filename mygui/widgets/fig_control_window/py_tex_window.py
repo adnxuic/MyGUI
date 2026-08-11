@@ -2,7 +2,7 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QFrame, QGroupBox, QPlainTextEdit, QPushButton, QVBoxLayout
-from mygui.widgets.qss_func import qss_loader
+from mygui.resources import load_qss_resource
 from mygui.widgets.fig_control_window.background_task import (
     cancel_background_tasks,
     start_background_task,
@@ -12,12 +12,7 @@ from mygui import status_messages
 
 import matplotlib as mpl
 
-import os
 import time
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
-
 
 class PyTexWindow(QFrame):
     """Provide the py tex window Qt widget."""
@@ -29,8 +24,11 @@ class PyTexWindow(QFrame):
         self.setObjectName("tex_window")
         self._validation_request_id = 0
 
-        qss_path = os.path.join(current_path, "style.qss")
-        self.setStyleSheet(qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/fig_control_window/style.qss"
+            )
+        )
 
         self.layout = QVBoxLayout()
 

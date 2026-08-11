@@ -1,20 +1,14 @@
 """Host the component inspector beside the active figure."""
 
-import os
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QScrollArea, QSizePolicy, QStackedLayout
 
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorHost,
 )
 from mygui.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 from mygui.widgets.fig_control_window.py_tex_window import PyTexWindow
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyFigControlWindow(QFrame):
@@ -23,7 +17,11 @@ class PyFigControlWindow(QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("fig_control_window")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/fig_control_window/style.qss"
+            )
+        )
         self.setMouseTracking(True)
         self.setMinimumWidth(240)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

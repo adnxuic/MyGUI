@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
@@ -16,8 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
-from mygui.resources import icon_path
-from mygui.widgets import qss_func
+from mygui.resources import icon_path, load_qss_resource
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from mygui.widgets.theme import COLORS
 from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
@@ -27,10 +24,6 @@ from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
 )
 
 
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "dialog_style.qss")
-
-
 class PyStyleDialog(QDialog):
     """Collect the basic values used to create one Figure project."""
 
@@ -38,7 +31,11 @@ class PyStyleDialog(QDialog):
         super().__init__(parent)
         self.style = dialog_name
         self.setObjectName("style_dialog")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+            )
+        )
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("style.svg")))
         self.figure_window = figure_window
@@ -99,7 +96,11 @@ class PyLayoutDialog(QDialog):
     ):
         super().__init__(parent)
         self.setObjectName("layout_dialog")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+            )
+        )
         self.figure_window: PyFigureWindow = figure_window
         self.layout_id = str(layout_id) if layout_id is not None else None
         self.preset_key = None if self.layout_id else str(preset_key or "single")

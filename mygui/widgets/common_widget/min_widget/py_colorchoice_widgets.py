@@ -829,7 +829,11 @@ class ColorChoiceWidget(QFrame):
     ):
         super().__init__(parent)
         self.setObjectName("color_choice_widget")
-        self.color_library = color_library or ColorLibrary()
+        if color_library is None:
+            raise ValueError(
+                "ColorChoiceWidget requires the shared ColorLibrary."
+            )
+        self.color_library = color_library
         self.colorselector = colorselector
         if selection is None and colorselector is not None:
             selection = colorselector.peek()

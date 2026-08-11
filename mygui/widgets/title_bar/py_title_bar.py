@@ -1,11 +1,9 @@
 """Compose the custom application title bar."""
 
-import os
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QStackedLayout, QVBoxLayout
 
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.table.py_table import PyTable
 from mygui.widgets.title_bar.py_title_button import ChangeButton
 from mygui.widgets.title_bar.py_title_menu import (
@@ -16,10 +14,6 @@ from mygui.widgets.title_bar.py_title_menu import (
     SelectorMenuBar,
     SelectorStyleMenuBar,
 )
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
 
 
 class PyTitleBar(QFrame):
@@ -36,7 +30,9 @@ class PyTitleBar(QFrame):
         self.parent = parent
         self.figure_window = figure_window
         self.setObjectName("title_bar")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource("mygui/widgets/title_bar/style.qss")
+        )
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.layout = QVBoxLayout(self)

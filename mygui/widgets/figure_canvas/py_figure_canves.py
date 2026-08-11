@@ -164,7 +164,9 @@ class PyFigureCanvas(QWidget):
         self._tex_state_listener = None
         self._restoring_component_tree_now = False
         self._selection_repair_pending = False
-        self.color_library = color_library or ColorLibrary(parent=self)
+        if color_library is None:
+            raise ValueError("PyFigureCanvas requires the shared ColorLibrary.")
+        self.color_library = color_library
         self._component_id_overrides = self._component_paths_from_tree(
             component_tree
         )

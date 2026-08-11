@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from typing import Optional
 
 from PySide6.QtWidgets import QFrame, QStackedWidget, QVBoxLayout
@@ -25,11 +24,7 @@ from mygui.widgets.fig_control_window.component_editors.containers import (
     InspectorRemoval,
     InspectorToolBox,
 )
-from mygui.widgets.qss_func import qss_loader
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
+from mygui.resources import load_qss_resource
 
 
 @dataclass(slots=True)
@@ -743,7 +738,11 @@ class FigureInspectorHost(QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("figure_inspector_host")
-        self.setStyleSheet(qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/fig_control_window/style.qss"
+            )
+        )
 
         self._figure_stack = QStackedWidget(self)
         self.empty_state = PyEmptyState(

@@ -22,13 +22,7 @@ from mygui.widgets.fig_control_window.figure_inspector import (
 )
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
-
-from mygui.widgets import qss_func
-
-import os
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
+from mygui.resources import load_qss_resource
 
 class FigureTabWidget(QTabWidget):
     """Provide the figure tab widget Qt widget."""
@@ -73,7 +67,9 @@ class PyFigureWindow(QFrame):
         super().__init__()
 
         self.setObjectName('figure_window')
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/figure_canvas/style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.figure_inspector_host = figure_inspector_host
@@ -81,7 +77,9 @@ class PyFigureWindow(QFrame):
         if repository is None:
             raise ValueError("PyFigureWindow requires a TableRepository.")
         self.repository = repository
-        self.color_library = color_library or ColorLibrary(parent=self)
+        if color_library is None:
+            raise ValueError("PyFigureWindow requires the shared ColorLibrary.")
+        self.color_library = color_library
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
         self._clean_fingerprints: dict[str, str] = {}

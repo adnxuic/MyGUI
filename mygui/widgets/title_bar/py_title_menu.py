@@ -31,14 +31,11 @@ from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
 from mygui.excel_io import EXCEL_FILE_FILTER, import_excel_into_workspace
 from mygui.text_io import import_text_into_workspace
 from mygui.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
-from mygui.resources import icon_path
+from mygui.resources import icon_path, load_json_resource
 from mygui import status_messages
 
-import json
 import os
 from pathlib import Path
-
-current_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class SelectorMenuBar(QFrame):
@@ -429,9 +426,9 @@ class LegacySelectorStyleMenuBar(QFrame):
         super().__init__()
 
         # 读取可用的样式
-        style_json_path = os.path.join(current_path, 'available_styles.json')
-        with open(style_json_path, 'r') as json_file:
-            self.available_styles_dict = json.load(json_file)
+        self.available_styles_dict = load_json_resource(
+            "mygui/widgets/title_bar/available_styles.json"
+        )
 
         # 设置对象名称
         self.setObjectName("selector_menu")
@@ -557,9 +554,9 @@ class SelectorStyleMenuBar(ResponsiveActionGallery):
 
     def __init__(self, figure_window=None, fig_control_window=None):
         super().__init__()
-        style_json_path = os.path.join(current_path, "available_styles.json")
-        with open(style_json_path, "r", encoding="utf-8") as json_file:
-            self.available_styles_dict = json.load(json_file)
+        self.available_styles_dict = load_json_resource(
+            "mygui/widgets/title_bar/available_styles.json"
+        )
 
         for style in self.available_styles_dict:
             self.add_dialog_action(

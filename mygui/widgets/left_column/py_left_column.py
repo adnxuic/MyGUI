@@ -1,19 +1,11 @@
 """Provide project actions and Explorer shortcuts in the left activity rail."""
 
-import os
-
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
-from mygui.resources import icon_path as resolve_icon_path
-
-from mygui.widgets import qss_func
+from mygui.resources import icon_path as resolve_icon_path, load_qss_resource
 from mygui.widgets.left_column.py_setting_dialog import PySettingDialog
 from mygui.widgets.theme import COLORS
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
 
 
 def _tinted_icon(icon_path, color):
@@ -38,7 +30,9 @@ class PyLeftColumn(QFrame):
         self._reset_layout_callback = None
 
         self.setObjectName("left_column")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource("mygui/widgets/left_column/style.qss")
+        )
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)

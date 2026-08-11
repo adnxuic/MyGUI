@@ -24,7 +24,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     MultiSeriesDataReferenceInput,
     ScatterStyleEditor,
 )
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 
 from mygui.database import (
     ColumnRef,
@@ -36,12 +36,6 @@ from mygui.figuremodify.style_base.creation_defaults import (
 )
 from mygui import status_messages
 from mygui.resources import icon_path
-
-import os
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "dialog_style.qss")
-
 
 def _selected_ref(combo: QComboBox) -> ColumnRef | None:
     value = combo.currentData(Qt.UserRole)
@@ -167,7 +161,9 @@ class PyCurveDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
@@ -269,7 +265,9 @@ class PyPlotDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
@@ -381,7 +379,9 @@ class PyScatterDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
@@ -490,7 +490,9 @@ class PyFitDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("fit_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
@@ -587,7 +589,9 @@ class PyInterpolationDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("interpolation_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)

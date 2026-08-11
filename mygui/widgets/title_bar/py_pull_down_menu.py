@@ -1,12 +1,9 @@
 """Provide the title bar's style pull-down menu."""
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QMenu, QVBoxLayout, QWidgetAction
-from mygui.widgets import qss_func
-import os
+from mygui.resources import load_qss_resource
 
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
-qss_file = qss_func.qss_loader(qss_path)
+qss_file = load_qss_resource("mygui/widgets/title_bar/style.qss")
 
 class StyleMenu(QMenu):
     """Provide the style menu Qt widget."""

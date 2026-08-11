@@ -2,18 +2,13 @@
 
 from PySide6.QtWidgets import QFrame, QLabel, QMessageBox, QPushButton, QVBoxLayout
 
-from mygui.widgets.qss_func import qss_loader
+from mygui.resources import load_qss_resource
 
 from mygui import status_messages
 from mygui.database import matlab_adapter
 from mygui.widgets.fig_control_window.background_task import start_background_task
 
 import time
-import os
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
-
 
 def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
     """Start matlab task."""
@@ -39,8 +34,11 @@ class PyMatlabWindow(QFrame):
         self.setMouseTracking(True)
         self.setObjectName("matlab_window")
 
-        qss_path = os.path.join(current_path, "style.qss")
-        self.setStyleSheet(qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/fig_control_window/style.qss"
+            )
+        )
 
         self._connect_request_id = 0
 

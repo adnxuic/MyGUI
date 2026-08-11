@@ -1,7 +1,7 @@
 """Shared visual tokens for the MyGUI widget layer.
 
 The mappings keep Python-side semantics readable while ``QSS_TOKENS`` exposes
-the flat, string-only values consumed by :func:`mygui.widgets.qss_func.qss_loader`.
+the flat, string-only values consumed by :func:`mygui.resources.load_qss_resource`.
 QSS files use tokens in the form ``{{TOKEN_NAME}}``.
 """
 

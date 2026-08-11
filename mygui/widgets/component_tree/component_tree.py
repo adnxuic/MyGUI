@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import os
 
 from PySide6.QtCore import QModelIndex, QPoint, Qt
 from PySide6.QtWidgets import (
@@ -21,17 +20,13 @@ from mygui.figuremodify.components import (
     DeletionPolicy,
 )
 from mygui import status_messages
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 
 from .dialogs import ComponentBatchDeleteDialog, DeleteCandidate
 from .model import ComponentTreeFilterProxyModel, ComponentTreeModel
 from .nodes import ComponentNodeKey, TreeNodeKey
 from .view import ComponentTreeView
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
 
 
 @dataclass(slots=True)
@@ -45,7 +40,9 @@ class ComponentTreeHost(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("component_tree_host")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource("mygui/widgets/component_tree/style.qss")
+        )
         self._canvas = None
         self._canvas_selection_connection = None
         self._project_id: str | None = None

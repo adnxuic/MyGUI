@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -24,7 +23,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from mygui.resources import icon_directory, icon_path as resolve_icon_path
+from mygui.resources import (
+    icon_directory,
+    icon_path as resolve_icon_path,
+    load_json_resource,
+)
 
 from mygui.figuremodify.axes_layout import (
     AxesCellSpec,
@@ -38,7 +41,6 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
 from mygui.widgets.theme import COLORS
 
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "available_layout.json"
 _ICON_DIRECTORY = icon_directory("layout_images")
 _EXPECTED_PRESET_KEYS = (
     "single",
@@ -173,8 +175,9 @@ def normalized_layout_icon(
 def axes_layout_presets() -> tuple[AxesLayoutPreset, ...]:
     """Load and validate the seven fixed layout templates."""
 
-    with _CONFIG_PATH.open("r", encoding="utf-8") as stream:
-        payload = json.load(stream)
+    payload = load_json_resource(
+        "mygui/widgets/title_bar/available_layout.json"
+    )
     if not isinstance(payload, dict) or tuple(payload) != _EXPECTED_PRESET_KEYS:
         raise ValueError(
             "available_layout.json must define the seven fixed templates in order."

@@ -1,17 +1,10 @@
 """Edit general application settings."""
 
-import os
-
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout
-from mygui.resources import icon_path
+from mygui.resources import icon_path, load_qss_resource
 
 from mygui import status_messages
-from mygui.widgets import qss_func
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "setting_dialog_style.qss")
 
 
 class PySettingDialog(QDialog):
@@ -21,7 +14,11 @@ class PySettingDialog(QDialog):
         super().__init__(parent)
         self._reset_layout_callback = reset_layout_callback
         self.setObjectName("setting_dialog")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/left_column/setting_dialog_style.qss"
+            )
+        )
         self.setWindowTitle("Settings")
         self.setWindowIcon(QIcon(icon_path("setting.svg")))
 

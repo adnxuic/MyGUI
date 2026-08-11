@@ -1,9 +1,6 @@
 """Load the main-window stylesheet without unrelated import-time state."""
 
-from pathlib import Path
-
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 
 
-qss_path = Path(__file__).with_name("style.qss")
-mainwindow_qss = qss_func.qss_loader(str(qss_path))
+mainwindow_qss = load_qss_resource("mygui/widgets/mainwindow_init/style.qss")

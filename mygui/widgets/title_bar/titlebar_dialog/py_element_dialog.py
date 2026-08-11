@@ -29,11 +29,7 @@ from mygui.figuremodify.style_base.creation_defaults import (
 )
 from mygui.widgets.fig_control_window.component_editors import InAxesInput
 
-from mygui.widgets import qss_func
-import os
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "dialog_style.qss")
+from mygui.resources import load_qss_resource
 
 
 class PyTextDialog(QDialog):
@@ -42,7 +38,9 @@ class PyTextDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("text_dialog")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)

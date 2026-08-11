@@ -3,27 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
-
 from PySide6.QtWidgets import QFrame, QStackedWidget, QVBoxLayout, QWidget
 
 from mygui.figuremodify.components import (
     AxesController,
     ComponentKind,
 )
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 
 from .context import EditorContext
 from .inspector import EditorPlacement
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(
-    os.path.dirname(current_path),
-    "all_mod_widgets",
-    "style.qss",
-)
 
 
 @dataclass(slots=True)
@@ -54,7 +44,11 @@ class AxesSemanticInspectorPanel(QFrame):
         self._disposed = False
 
         self.setObjectName("axes_semantic_inspector_panel")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/fig_control_window/all_mod_widgets/style.qss"
+            )
+        )
         self.inspector_stack = QStackedWidget(self)
 
         layout = QVBoxLayout(self)
@@ -226,7 +220,11 @@ class InspectorToolBox(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("inspector_toolbox")
-        self.setStyleSheet(qss_func.qss_loader(qss_path))
+        self.setStyleSheet(
+            load_qss_resource(
+                "mygui/widgets/fig_control_window/all_mod_widgets/style.qss"
+            )
+        )
         self._entries: list[tuple[str, QWidget]] = []
         self._entry_by_id: dict[str, QWidget] = {}
         self._empty_callback = None

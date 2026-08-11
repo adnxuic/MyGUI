@@ -2,13 +2,7 @@
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
-from mygui.resources import icon_path
-from mygui.widgets import qss_func
-
-import os
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
+from mygui.resources import icon_path, load_qss_resource
 
 
 class PyRightColumn(QFrame):
@@ -20,7 +14,7 @@ class PyRightColumn(QFrame):
         self.fig_control_layout = fig_control_layout
 
         self.setObjectName("right_column")
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource("mygui/widgets/right_column/style.qss")
         self.setStyleSheet(qss_file)
 
 

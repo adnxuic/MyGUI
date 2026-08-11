@@ -18,6 +18,7 @@ PROBE = textwrap.dedent(
 
     from PySide6.QtWidgets import QApplication
     from mygui.database import TableRepository
+    from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
     from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 
     app = QApplication([])
@@ -31,6 +32,7 @@ PROBE = textwrap.dedent(
         repository=repository,
         project_id=project.id,
         project_name=project.name,
+        color_library=ColorLibrary(),
     )
     canvas.show()
     app.processEvents()

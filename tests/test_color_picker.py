@@ -22,14 +22,19 @@ class ColorPickerWidgetTests(unittest.TestCase):
 
     def test_initialization_is_silent_and_does_not_create_actions(self):
         emissions = []
-        widget = ColorChoiceWidget("tab:blue", connect_signal=emissions.append)
+        library = ColorLibrary()
+        widget = ColorChoiceWidget(
+            "tab:blue",
+            connect_signal=emissions.append,
+            color_library=library,
+        )
         self.assertEqual(widget.color(), "#1F77B4")
         self.assertEqual(emissions, [])
         self.assertEqual(len(widget.findChildren(QAction)), 0)
         widget.deleteLater()
 
     def test_set_color_emits_at_most_once_when_requested(self):
-        widget = ColorChoiceWidget("black")
+        widget = ColorChoiceWidget("black", color_library=ColorLibrary())
         emissions = []
         widget.colorChanged.connect(emissions.append)
         widget.set_color("red", emit=True)
@@ -40,7 +45,10 @@ class ColorPickerWidgetTests(unittest.TestCase):
     def test_cycle_preview_is_not_committed_by_widget_construction(self):
         palette = PaletteDefinition("test", "Test", ("red", "blue"))
         state = ColorCycleState(palette)
-        widget = ColorChoiceWidget(colorselector=state)
+        widget = ColorChoiceWidget(
+            colorselector=state,
+            color_library=ColorLibrary(),
+        )
         self.assertEqual(widget.color(), "#FF0000")
         self.assertEqual(state.next_index, 0)
         widget.deleteLater()
@@ -57,6 +65,10 @@ class ColorPickerWidgetTests(unittest.TestCase):
         dialog.close()
         dialog.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_widget_rejects_missing_application_library(self):
+        with self.assertRaisesRegex(ValueError, "shared ColorLibrary"):
+            ColorChoiceWidget("black")
 
 
 if __name__ == "__main__":

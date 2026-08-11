@@ -31,6 +31,7 @@ from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorHost,
 )
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
 def image_payload(
@@ -63,6 +64,7 @@ class InAxesTests(unittest.TestCase):
             repository=self.repository,
             project_id=self.project.id,
             project_name=self.project.name,
+            color_library=ColorLibrary(),
         )
         self.host = FigureInspectorHost()
         panel = self.host.add_figure_inspector(
@@ -256,6 +258,7 @@ class InAxesTests(unittest.TestCase):
             project_id=self.project.id,
             project_name=self.project.name,
             component_tree=before,
+            color_library=ColorLibrary(),
         )
         second_host = FigureInspectorHost()
         panel = second_host.add_figure_inspector(

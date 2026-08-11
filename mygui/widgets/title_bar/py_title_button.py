@@ -5,11 +5,6 @@ from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPixmap, QTr
 from PySide6.QtWidgets import QPushButton, QToolButton, QToolTip
 from mygui.resources import icon_path
 from mygui.widgets.theme import COLORS
-import os
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.join(current_path, "style.qss")
 
 class ChangeButton(QPushButton):
     """Provide the change button Qt widget."""

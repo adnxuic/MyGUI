@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from PySide6.QtWidgets import QFrame, QGroupBox, QLineEdit, QSizePolicy, QVBoxLayout
 
 from mygui.database import ColumnRef
@@ -11,24 +9,13 @@ from mygui.figuremodify.components import (
     FunctionCurveController,
     InterpolationController,
 )
-from mygui.widgets import qss_func
+from mygui.resources import load_qss_resource
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 from .common import DebouncedTextBinding, RangeEditor
 from .context import EditorContext
 from .inputs import InterpolationOptionsInput
 from .inspector import EditorSection
-
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-qss_path = os.path.normpath(
-    os.path.join(
-        current_path,
-        "..",
-        "all_mod_widgets",
-        "chart_mod_style.qss",
-    )
-)
 
 
 def _controller_state(controller):
@@ -51,7 +38,10 @@ class FunctionCurveSection(QFrame, EditorSection):
         super().__init__(parent)
         del color_library
 
-        qss_file = qss_func.qss_loader(qss_path)
+        qss_file = load_qss_resource(
+            "mygui/widgets/fig_control_window/all_mod_widgets/"
+            "chart_mod_style.qss"
+        )
         self.setStyleSheet(qss_file)
 
         self.controller = controller
