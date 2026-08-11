@@ -121,12 +121,18 @@ class DeletionCoordinator:
         )
         panel = canvas.figure_inspector
         axes_handles = []
+        component_handles = []
         fallback_inspector_existed = bool(
             panel is None or panel.inspector(fallback_id) is not None
         )
 
         def rollback_ui() -> list[str]:
             errors = []
+            for handle in reversed(component_handles):
+                try:
+                    panel.restore_component_inspector(handle)
+                except Exception as exc:
+                    errors.append(str(exc))
             for handle in reversed(axes_handles):
                 try:
                     panel.restore_axes_inspector(handle)
@@ -165,6 +171,9 @@ class DeletionCoordinator:
                 for component_id in prepared.plan.root_ids:
                     controller = canvas.component_registry.get(component_id)
                     if controller.state.kind is not ComponentKind.AXES:
+                        handle = panel.take_component_inspector(component_id)
+                        if handle is not None:
+                            component_handles.append(handle)
                         continue
                     handle = panel.take_axes_inspector(component_id)
                     if handle is not None:
@@ -223,12 +232,22 @@ class DeletionCoordinator:
             return presenter.present(outcome.as_batch_change())
 
         cleanup_notices = list(outcome.notices)
+        from mygui.figuremodify.components import ComponentNotice, MessageLevel
+
+        for handle in component_handles:
+            try:
+                panel.finalize_component_inspector_removal(handle)
+            except Exception as exc:
+                cleanup_notices.append(
+                    ComponentNotice(
+                        MessageLevel.WARNING,
+                        f"Components were deleted, but Inspector cleanup reported: {exc}",
+                    )
+                )
         for handle in axes_handles:
             try:
                 panel.finalize_axes_inspector_removal(handle)
             except Exception as exc:
-                from mygui.figuremodify.components import ComponentNotice, MessageLevel
-
                 cleanup_notices.append(
                     ComponentNotice(
                         MessageLevel.WARNING,
@@ -236,7 +255,15 @@ class DeletionCoordinator:
                     )
                 )
         canvas._axes_component_ids = candidate_axes_map
-        canvas.axes_layout_service.restore_runtime_relationships(refresh=True)
+        try:
+            canvas.axes_layout_service.restore_runtime_relationships(refresh=True)
+        except Exception as exc:
+            cleanup_notices.append(
+                ComponentNotice(
+                    MessageLevel.WARNING,
+                    f"Components were deleted, but runtime relationship refresh reported: {exc}",
+                )
+            )
         fallback_axes_id = canvas._axes_ancestor_id(fallback_id)
         canvas.current_axes_component_id = (
             fallback_axes_id
@@ -255,13 +282,16 @@ class DeletionCoordinator:
         )
         presenter.discard_pending()
         if not present_success:
-            return True
+            return (
+                presenter.present(outcome.as_batch_change())
+                if cleanup_notices
+                else True
+            )
         count = deleted_axes_count or len(request.component_ids)
         if role_label.casefold() == "axes":
             success = "Axes deleted." if count == 1 else f"{count} Axes deleted."
         else:
             success = (
-                f"{count} {role_label} component"
-                f"{'' if count == 1 else 's'} deleted."
+                f"{count} {role_label} component{'' if count == 1 else 's'} deleted."
             )
         return presenter.present(outcome.as_batch_change(), success=success)

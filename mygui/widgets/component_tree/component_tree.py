@@ -297,15 +297,16 @@ class ComponentTreeHost(QFrame):
         if action is delete_action:
             if not self._confirm_single_delete(component_id):
                 return
-            if state.kind is ComponentKind.AXES:
-                canvas.delete_axes(component_id)
-            else:
-                canvas.delete_components(
-                    (component_id,),
-                    anchor_id=component_id,
-                    reason="single",
-                    role_label=state.role.value.replace("_", " "),
-                )
+            canvas.delete_components(
+                (component_id,),
+                anchor_id=component_id,
+                reason=("axes" if state.kind is ComponentKind.AXES else "single"),
+                role_label=(
+                    "axes"
+                    if state.kind is ComponentKind.AXES
+                    else state.role.value.replace("_", " ")
+                ),
+            )
             return
         if action is batch_action:
             self._run_batch_delete(state)

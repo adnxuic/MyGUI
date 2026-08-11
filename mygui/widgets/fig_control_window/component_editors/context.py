@@ -97,11 +97,7 @@ class MessagePresenter:
     @classmethod
     def _coalesce_key(cls, change: ComponentChange):
         state = cls._change_state(change)
-        parent_id = (
-            getattr(state, "parent_id", None)
-            if state is not None
-            else None
-        )
+        parent_id = getattr(state, "parent_id", None) if state is not None else None
         if parent_id is None or change.property_key is None:
             return ("component", id(change))
         return (
@@ -304,8 +300,9 @@ class ComponentEditorManager:
             (editor_ref, remover)
         )
         editor.destroyed.connect(
-            lambda *_args, target=component_id, reference=editor_ref:
-            self._remove_registration(target, reference)
+            lambda *_args, target=component_id, reference=editor_ref: (
+                self._remove_registration(target, reference)
+            )
         )
 
     def _remove_registration(
@@ -333,6 +330,20 @@ class ComponentEditorManager:
             ]
             if not registrations:
                 self._editors.pop(component_id, None)
+
+    def track_existing(
+        self,
+        component_id: str,
+        editor,
+        *,
+        remover: Callable | None = None,
+    ) -> None:
+        """Reattach a prepared Editor after a deletion rollback."""
+
+        if self._closed:
+            raise RuntimeError("ComponentEditorManager is closed.")
+        self.release(editor)
+        self._track(str(component_id), editor, remover=remover)
 
     def editor(self, component_id: str):
         """Return the editor widget used for the property."""

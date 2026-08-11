@@ -19,6 +19,7 @@ from mygui.widgets.fig_control_window.component_editors import (
 from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
+    ColorConsumptionLedger,
     ComponentDeletionService,
     ComponentDependencySnapshot,
     ComponentDependencyService,
@@ -81,7 +82,10 @@ from mygui.database import (
     validate_component_name,
 )
 from mygui.database.table_document import new_id
-from mygui.database.interpolate_func import DEFAULT_INTERPOLATION_SAMPLES, interpolate_curve
+from mygui.database.interpolate_func import (
+    DEFAULT_INTERPOLATION_SAMPLES,
+    interpolate_curve,
+)
 from mygui.database.safe_expression import evaluate_curve_expression
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.figuremodify.style_base.color_models import (
@@ -131,11 +135,20 @@ class PyFigureCanvas(QWidget):
 
     componentSelectionChanged = Signal(str)
 
-    def __init__(self, parent=None, width=4, height=3, dpi=200, style=None,
-                 repository: TableRepository | None = None, project_id: str | None = None,
-                 project_name: str | None = None, project_path: str | None = None,
-                 color_library: ColorLibrary | None = None,
-                 component_tree: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        parent=None,
+        width=4,
+        height=3,
+        dpi=200,
+        style=None,
+        repository: TableRepository | None = None,
+        project_id: str | None = None,
+        project_name: str | None = None,
+        project_path: str | None = None,
+        color_library: ColorLibrary | None = None,
+        component_tree: dict[str, Any] | None = None,
+    ):
         super().__init__(parent)
         self.figure_window = parent if hasattr(parent, "current_canva") else None
         if repository is None or project_id is None:
@@ -184,9 +197,7 @@ class PyFigureCanvas(QWidget):
             self.repository,
             self.component_registry,
         )
-        self.chart_data_service.interpolation_service = (
-            self.interpolation_service
-        )
+        self.chart_data_service.interpolation_service = self.interpolation_service
         self.fit_service = FitService(
             self.repository,
             self.component_registry,
@@ -205,8 +216,10 @@ class PyFigureCanvas(QWidget):
             self.component_registry,
             self.editor_registry,
         )
+        self.color_consumption_ledger = ColorConsumptionLedger()
         self.deletion_service = ComponentDeletionService(
-            self.component_registry
+            self.component_registry,
+            color_ledger=self.color_consumption_ledger,
         )
         self.deletion_coordinator = DeletionCoordinator(self)
         self._register_component_materializers()
@@ -421,12 +434,8 @@ class PyFigureCanvas(QWidget):
             semantic_path,
             deterministic_component_id(self.project_id, semantic_path),
         )
-        while (
-            candidate in self._allocated_component_ids
-            or (
-                hasattr(self, "component_registry")
-                and candidate in self.component_registry
-            )
+        while candidate in self._allocated_component_ids or (
+            hasattr(self, "component_registry") and candidate in self.component_registry
         ):
             candidate = new_id()
         self._allocated_component_ids.add(candidate)
@@ -507,9 +516,7 @@ class PyFigureCanvas(QWidget):
                     if level not in {"major", "minor"}:
                         continue
                     if kind == ComponentKind.TICK_GROUP.value:
-                        tick_path = (
-                            f"{axes_path}/axis/{axis_name}/tick/{level}"
-                        )
+                        tick_path = f"{axes_path}/axis/{axis_name}/tick/{level}"
                         paths[tick_path] = component_id
                         label = next(
                             (
@@ -523,9 +530,9 @@ class PyFigureCanvas(QWidget):
                         if label is not None and isinstance(label.get("id"), str):
                             paths[f"{tick_path}/label"] = label["id"]
                     elif kind == ComponentKind.GRID.value:
-                        paths[
-                            f"{axes_path}/axis/{axis_name}/grid/{level}"
-                        ] = component_id
+                        paths[f"{axes_path}/axis/{axis_name}/grid/{level}"] = (
+                            component_id
+                        )
         return paths
 
     def _source_component_state(
@@ -535,10 +542,7 @@ class PyFigureCanvas(QWidget):
         if not isinstance(tree, dict):
             return None
         for raw_state in tree.get("components", []):
-            if (
-                isinstance(raw_state, dict)
-                and raw_state.get("id") == component_id
-            ):
+            if isinstance(raw_state, dict) and raw_state.get("id") == component_id:
                 return ComponentState.from_dict(raw_state)
         return None
 
@@ -1023,7 +1027,12 @@ class PyFigureCanvas(QWidget):
         self,
         selection: ColorSelection,
         count: int,
-    ) -> tuple[tuple[str, ...], dict[str, Any] | None, bool]:
+    ) -> tuple[
+        tuple[str, ...],
+        dict[str, Any] | None,
+        bool,
+        tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
+    ]:
         if not isinstance(selection, ColorSelection):
             raise TypeError("Batch chart color must be a ColorSelection.")
         if selection.palette is None:
@@ -1031,19 +1040,23 @@ class PyFigureCanvas(QWidget):
                 tuple(selection.color for _index in range(count)),
                 None,
                 False,
+                (),
             )
         axes_id = self.current_axes_component_id
         if axes_id is None:
             raise ValueError("Select an axes before adding charts.")
         cycle = self.axes_commands.cycle_state(axes_id)
         colors: list[str] = []
+        transitions = []
         next_selection = selection
         for index in range(count):
             if index:
                 next_selection = cycle.peek()
             colors.append(next_selection.color)
+            before = cycle.to_dict()
             cycle.commit(next_selection)
-        return tuple(colors), cycle.to_dict(), True
+            transitions.append((before, cycle.to_dict()))
+        return tuple(colors), cycle.to_dict(), True, tuple(transitions)
 
     def _prepare_data_batch(
         self,
@@ -1057,6 +1070,7 @@ class PyFigureCanvas(QWidget):
         tuple[_PreparedChartSeries, ...],
         dict[str, Any] | None,
         bool,
+        tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
     ]:
         x_ref, normalized_y = self._normalize_batch_refs(x_ref, y_refs)
         spec = DataPreprocessSpec.from_dict(preprocess)
@@ -1073,13 +1087,12 @@ class PyFigureCanvas(QWidget):
                 )
                 if not pair.valid_mask.any():
                     raise ValueError(
-                        "X Data and Y Data have no valid row pairs after "
-                        "preprocessing."
+                        "X Data and Y Data have no valid row pairs after preprocessing."
                     )
             except Exception as exc:
                 raise ValueError(f"{label}: {exc}") from exc
             resolved.append((y_ref, label, pair))
-        colors, final_cycle, commit_cycle = self._batch_color_plan(
+        colors, final_cycle, commit_cycle, transitions = self._batch_color_plan(
             color_selection,
             len(resolved),
         )
@@ -1095,7 +1108,7 @@ class PyFigureCanvas(QWidget):
             )
             for (y_ref, label, pair), color in zip(resolved, colors)
         )
-        return prepared, final_cycle, commit_cycle
+        return prepared, final_cycle, commit_cycle, transitions
 
     def _stage_plot(
         self,
@@ -1119,7 +1132,7 @@ class PyFigureCanvas(QWidget):
         if linewidth is not None:
             plot_kwargs["linewidth"] = float(linewidth)
         with mpl_style.context(self.component_style):
-            line, = self.current_axes.plot(series.x, series.y, **plot_kwargs)
+            (line,) = self.current_axes.plot(series.x, series.y, **plot_kwargs)
         transaction.on_rollback(
             lambda line=line: self._remove_created_artist(line)
         )
@@ -1208,15 +1221,13 @@ class PyFigureCanvas(QWidget):
     ):
         object_id = object_id or new_id()
         with mpl_style.context(self.component_style):
-            line, = self.current_axes.plot(
+            (line,) = self.current_axes.plot(
                 series.x,
                 series.y,
                 color=series.color,
                 label=series.label,
             )
-        transaction.on_rollback(
-            lambda line=line: self._remove_created_artist(line)
-        )
+        transaction.on_rollback(lambda line=line: self._remove_created_artist(line))
         component_order = self._claim_color_order(color_order)
         controller = self._register_chart_controller(
             InterpolationController,
@@ -1250,6 +1261,7 @@ class PyFigureCanvas(QWidget):
         *,
         final_cycle: dict[str, Any] | None,
         commit_cycle: bool,
+        color_transitions: tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
     ) -> ChartBatchCreationResult:
         axes_id = self.current_axes_component_id
         axes_controller = self.current_axes_controller
@@ -1271,6 +1283,16 @@ class PyFigureCanvas(QWidget):
                     raise ValueError(
                         change.message or "Could not commit the chart color cycle."
                     )
+        for controller, (before, after) in zip(
+            controllers,
+            color_transitions,
+        ):
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                before,
+                after,
+            )
         self._select_created_component(controllers[-1])
         self.redraw()
         colors = tuple(series.color for series in prepared)
@@ -1291,15 +1313,18 @@ class PyFigureCanvas(QWidget):
         transaction,
         selection: ColorSelection | None,
         preview_cycle: ColorCycleState | None,
-    ) -> bool:
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]] | None:
         """Commit one previewed chart color inside component registration."""
 
         if selection is None:
-            return False
+            return None
         axes_id = self.current_axes_component_id
         if axes_id is None:
             raise ValueError("Select an axes before committing a chart color.")
         transaction.watch_existing(axes_id)
+        before = deepcopy(
+            self.component_registry.get(axes_id).state.properties.get("color_cycle")
+        )
         change = self.axes_commands.commit_color_selection(
             axes_id,
             selection,
@@ -1309,7 +1334,8 @@ class PyFigureCanvas(QWidget):
             raise ValueError(
                 change.message or "Could not commit the chart color cycle."
             )
-        return True
+        after = self.component_registry.get(axes_id).state.properties.get("color_cycle")
+        return (before, deepcopy(after)) if after is not None else None
 
     def delete_component_group(
         self,
@@ -1398,7 +1424,9 @@ class PyFigureCanvas(QWidget):
         y = evaluate_curve_expression(func_text, x)
         with self.component_registry.registration_transaction() as transaction:
             with mpl_style.context(self.component_style):
-                line, = self.current_axes.plot(x, y, ls=style, color=color, label=label)
+                (line,) = self.current_axes.plot(
+                    x, y, ls=style, color=color, label=label
+                )
             transaction.on_rollback(
                 lambda: self._remove_created_artist(line)
             )
@@ -1421,13 +1449,19 @@ class PyFigureCanvas(QWidget):
                 },
             )
             self._prepare_created_component(controller, transaction)
-            color_committed = self._commit_single_creation_color(
+            color_transition = self._commit_single_creation_color(
                 transaction,
                 color_selection,
                 preview_cycle,
             )
+            axes_id = self.current_axes_component_id
         self._finish_created_component(controller)
-        if color_committed:
+        if color_transition is not None and axes_id is not None:
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                *color_transition,
+            )
             self.color_library.record_recent(color)
         return line
 
@@ -1448,16 +1482,14 @@ class PyFigureCanvas(QWidget):
         object_id = object_id or new_id()
         with self.component_registry.registration_transaction() as transaction:
             with mpl_style.context(self.component_style):
-                line, = self.current_axes.plot(
+                (line,) = self.current_axes.plot(
                     np.asarray(x),
                     np.asarray(y),
                     linestyle=style,
                     color=color,
                     label=label,
                 )
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(line)
-            )
+            transaction.on_rollback(lambda: self._remove_created_artist(line))
             component_order = self._claim_color_order(color_order)
             controller = self._register_chart_controller(
                 LineController,
@@ -1480,11 +1512,22 @@ class PyFigureCanvas(QWidget):
         return line
 
     # Add line plot
-    def add_plot(self, x, y, style, size, color, label, x_ref: ColumnRef, y_ref: ColumnRef,
-                 object_id: str | None = None,
-                 color_order: int | None = None,
-                 *, linewidth: float | None = None,
-                 preprocess: DataPreprocessSpec | dict[str, Any] | None = None):
+    def add_plot(
+        self,
+        x,
+        y,
+        style,
+        size,
+        color,
+        label,
+        x_ref: ColumnRef,
+        y_ref: ColumnRef,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        *,
+        linewidth: float | None = None,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+    ):
         """Add plot."""
 
         preprocess = DataPreprocessSpec.from_dict(preprocess)
@@ -1536,7 +1579,7 @@ class PyFigureCanvas(QWidget):
         """Atomically create one Plot component for every selected Y column."""
 
         spec = DataPreprocessSpec.from_dict(preprocess)
-        prepared, final_cycle, commit_cycle = self._prepare_data_batch(
+        prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
             spec,
@@ -1555,13 +1598,24 @@ class PyFigureCanvas(QWidget):
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
+            color_transitions=transitions,
         )
 
     # Add scatter plot
-    def add_scatter(self, x, y, size, color, marker, label, x_ref: ColumnRef, y_ref: ColumnRef,
-                    object_id: str | None = None,
-                    color_order: int | None = None,
-                    preprocess: DataPreprocessSpec | dict[str, Any] | None = None):
+    def add_scatter(
+        self,
+        x,
+        y,
+        size,
+        color,
+        marker,
+        label,
+        x_ref: ColumnRef,
+        y_ref: ColumnRef,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+    ):
         """Add scatter."""
 
         preprocess = DataPreprocessSpec.from_dict(preprocess)
@@ -1611,7 +1665,7 @@ class PyFigureCanvas(QWidget):
         """Atomically create one Scatter component for every selected Y."""
 
         spec = DataPreprocessSpec.from_dict(preprocess)
-        prepared, final_cycle, commit_cycle = self._prepare_data_batch(
+        prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
             spec,
@@ -1629,6 +1683,7 @@ class PyFigureCanvas(QWidget):
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
+            color_transitions=transitions,
         )
 
     # Add fit curve
@@ -1697,7 +1752,7 @@ class PyFigureCanvas(QWidget):
             plot_kwargs["linestyle"] = style
         with self.component_registry.registration_transaction() as transaction:
             with mpl_style.context(self.component_style):
-                line, = self.current_axes.plot(
+                (line,) = self.current_axes.plot(
                     line_x,
                     line_y,
                     **plot_kwargs,
@@ -1731,24 +1786,42 @@ class PyFigureCanvas(QWidget):
                 },
             )
             self._prepare_created_component(controller, transaction)
-            color_committed = self._commit_single_creation_color(
+            color_transition = self._commit_single_creation_color(
                 transaction,
                 color_selection,
                 preview_cycle,
             )
+            axes_id = self.current_axes_component_id
         self._finish_created_component(controller)
-        if color_committed:
+        if color_transition is not None and axes_id is not None:
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                *color_transition,
+            )
             self.color_library.record_recent(color)
         return line
 
     # Add interpolation curve
-    def add_interpolate_curve(self, x, y, x_ref: ColumnRef, y_ref: ColumnRef, method, k=3, label='interpolate',
-                              color='black',
-                              samples=DEFAULT_INTERPOLATION_SAMPLES,
-                              lam=None, lam_auto=True, object_id: str | None = None,
-                              color_order: int | None = None, allow_empty: bool = False,
-                              preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
-                              announce: bool = True):
+    def add_interpolate_curve(
+        self,
+        x,
+        y,
+        x_ref: ColumnRef,
+        y_ref: ColumnRef,
+        method,
+        k=3,
+        label="interpolate",
+        color="black",
+        samples=DEFAULT_INTERPOLATION_SAMPLES,
+        lam=None,
+        lam_auto=True,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        allow_empty: bool = False,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        announce: bool = True,
+    ):
         """Add interpolate curve."""
 
         preprocess = DataPreprocessSpec.from_dict(preprocess)
@@ -1840,7 +1913,7 @@ class PyFigureCanvas(QWidget):
         """Atomically create one interpolation component for every Y."""
 
         spec = DataPreprocessSpec.from_dict(preprocess)
-        sources, final_cycle, commit_cycle = self._prepare_data_batch(
+        sources, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
             spec,
@@ -1886,6 +1959,7 @@ class PyFigureCanvas(QWidget):
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
+            color_transitions=transitions,
         )
 
     # Add text
@@ -1895,9 +1969,16 @@ class PyFigureCanvas(QWidget):
             return tex_config.is_tex_enabled()
         return bool(usetex) and tex_config.is_tex_enabled()
 
-    def add_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: float,
-                 usetex: bool | None = None,
-                 object_id: str | None = None):
+    def add_text(
+        self,
+        x: float,
+        y: float,
+        text: str,
+        fontfamily: str,
+        fontsize: float,
+        usetex: bool | None = None,
+        object_id: str | None = None,
+    ):
         """Add text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
@@ -1932,17 +2013,21 @@ class PyFigureCanvas(QWidget):
                 {"usetex": desired_usetex},
             )
             self._prepare_created_component(controller, transaction)
-        if (
-            not self._restoring_component_tree_now
-            and (not result.ok or result.notices)
-        ):
+        if not self._restoring_component_tree_now and (not result.ok or result.notices):
             self.message_presenter.present(result)
         self._finish_created_component(controller)
         return text_artist
 
-    def add_global_text(self, x: float, y: float, text: str, fontfamily: str, fontsize: float,
-                        usetex: bool | None = None,
-                        object_id: str | None = None):
+    def add_global_text(
+        self,
+        x: float,
+        y: float,
+        text: str,
+        fontfamily: str,
+        fontsize: float,
+        usetex: bool | None = None,
+        object_id: str | None = None,
+    ):
         """Add global text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
@@ -1975,10 +2060,7 @@ class PyFigureCanvas(QWidget):
                 {"usetex": desired_usetex},
             )
             self._prepare_created_component(controller, transaction)
-        if (
-            not self._restoring_component_tree_now
-            and (not result.ok or result.notices)
-        ):
+        if not self._restoring_component_tree_now and (not result.ok or result.notices):
             self.message_presenter.present(result)
         self._finish_created_component(controller)
         return text_artist
@@ -2085,13 +2167,29 @@ class PyFigureCanvas(QWidget):
 
     def _register_component_materializers(self) -> None:
         declarations = (
-            (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM, self._materialize_in_axes),
-            (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE, self._materialize_in_axes),
-            (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE, self._materialize_function_curve),
+            (
+                ComponentKind.IN_AXES,
+                ComponentRole.IN_AXES_ZOOM,
+                self._materialize_in_axes,
+            ),
+            (
+                ComponentKind.IN_AXES,
+                ComponentRole.IN_AXES_IMAGE,
+                self._materialize_in_axes,
+            ),
+            (
+                ComponentKind.LINE,
+                ComponentRole.FUNCTION_CURVE,
+                self._materialize_function_curve,
+            ),
             (ComponentKind.LINE, ComponentRole.LINE, self._materialize_line),
             (ComponentKind.LINE, ComponentRole.DATA_PLOT, self._materialize_data_plot),
             (ComponentKind.SCATTER, ComponentRole.SCATTER, self._materialize_scatter),
-            (ComponentKind.LINE, ComponentRole.INTERPOLATION, self._materialize_interpolation),
+            (
+                ComponentKind.LINE,
+                ComponentRole.INTERPOLATION,
+                self._materialize_interpolation,
+            ),
             (ComponentKind.LINE, ComponentRole.FIT_CURVE, self._materialize_fit),
             (ComponentKind.TEXT, ComponentRole.TEXT, self._materialize_text),
         )
@@ -2388,10 +2486,7 @@ class PyFigureCanvas(QWidget):
             if self.current_axes_component_id in self.component_registry
             else self.root_component_id
         )
-        if (
-            self.figure_inspector is not None
-            and target in self.component_registry
-        ):
+        if self.figure_inspector is not None and target in self.component_registry:
             self.select_component(target)
 
     def _restore_component_tree_impl(
@@ -2495,13 +2590,9 @@ class PyFigureCanvas(QWidget):
             )
 
         figure_states = [
-            state for state in states
-            if state.kind is ComponentKind.FIGURE
+            state for state in states if state.kind is ComponentKind.FIGURE
         ]
-        axes_states = [
-            state for state in states
-            if state.kind is ComponentKind.AXES
-        ]
+        axes_states = [state for state in states if state.kind is ComponentKind.AXES]
         legend_states = [
             state for state in states
             if state.kind is ComponentKind.LEGEND
@@ -2542,8 +2633,7 @@ class PyFigureCanvas(QWidget):
                     change = controller.apply_state(source_state)
                     if not change.ok:
                         raise ValueError(
-                            f"Could not restore component {source_state.id}: "
-                            f"{change.message}"
+                            f"Could not restore component {source_state.id}: {change.message}"
                         )
                     if use_effective_fallback:
                         controller.resolve_target().set_usetex(False)

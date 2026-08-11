@@ -15,7 +15,10 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
 )
-from mygui.figuremodify.style_base.color_models import PaletteDefinition
+from mygui.figuremodify.style_base.color_models import (
+    ColorSelection,
+    PaletteDefinition,
+)
 from mygui.project_io import (
     load_project_file,
     project_snapshot,
@@ -262,6 +265,60 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0][1], "success")
 
+    def test_post_commit_runtime_refresh_failure_keeps_selection_and_warns(self):
+        self._add_curves()
+        self.assertTrue(self.canvas.select_component("curve-first"))
+        messages = []
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+
+        with mock.patch.object(
+            self.canvas.axes_layout_service,
+            "restore_runtime_relationships",
+            side_effect=RuntimeError("injected runtime refresh failure"),
+        ):
+            self.assertTrue(
+                self.canvas.delete_component_group(
+                    ("curve-first",),
+                    "function curve",
+                )
+            )
+
+        self.assertNotIn("curve-first", self.canvas.component_registry)
+        self.assertEqual(self.canvas.current_component_id, "curve-second")
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "warning")
+        self.assertIn("runtime relationship", messages[0][0])
+
+    def test_leaf_inspector_cleanup_failure_is_one_committed_warning(self):
+        _panel, toolbox = self._add_curves()
+        editor = self.canvas.component_editor_manager.editor("curve-first")
+        self.assertIsNotNone(editor)
+        messages = []
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+
+        with mock.patch.object(
+            editor,
+            "dispose",
+            side_effect=RuntimeError("injected leaf Inspector cleanup failure"),
+        ):
+            self.assertTrue(
+                self.canvas.delete_component_group(
+                    ("curve-first",),
+                    "function curve",
+                )
+            )
+
+        self.assertNotIn("curve-first", self.canvas.component_registry)
+        self.assertIsNone(self.canvas.component_editor_manager.editor("curve-first"))
+        self.assertEqual(toolbox.component_ids(), ("curve-second",))
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "warning")
+        self.assertIn("Inspector cleanup", messages[0][0])
+
     def test_role_dialog_partial_selection_deletes_only_checked_instance(self):
         _inspector, toolbox = self._add_curves()
         host = self.window.component_tree_host
@@ -310,10 +367,8 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             self.window.figure_window,
             canvas=self.canvas,
         )
-        original_fingerprint = (
-            self.window.figure_window._snapshot_fingerprint(
-                original_project
-            )
+        original_fingerprint = self.window.figure_window._snapshot_fingerprint(
+            original_project
         )
         events = []
         cleanup = []
@@ -392,7 +447,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0][1], "error")
 
-    def test_chart_delete_releases_palette_slot_and_failure_restores_cursor(self):
+    def test_unknown_color_history_does_not_guess_a_palette_release(self):
         self._add_curves()
         self.canvas.add_curve(
             "x**3",
@@ -430,7 +485,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
 
         cycle = self.canvas.axes_commands.cycle_state(axes_id)
         self.assertEqual(cycle.active_palette, palette)
-        self.assertEqual(cycle.next_index, 1)
+        self.assertEqual(cycle.next_index, 0)
         self.assertEqual(
             self.canvas.creation_color_cycle().peek().color,
             palette.colors[1],
@@ -471,6 +526,76 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertEqual(
             self.canvas.creation_color_cycle().peek().color,
             palette.colors[1],
+        )
+
+    def test_color_ledger_releases_only_confirmed_contiguous_tail(self):
+        axes_id = self.canvas.current_axes_component_id
+        palette = PaletteDefinition(
+            "test:ledger-duplicates",
+            "Ledger duplicates",
+            ("red", "red", "blue"),
+        )
+        self.assertTrue(self.canvas.axes_commands.apply_palette(axes_id, palette).ok)
+
+        for index in range(3):
+            selection = ColorSelection(
+                palette.colors[index],
+                palette,
+                index,
+            )
+            self.canvas.add_curve(
+                "x",
+                0.0,
+                1.0,
+                "-",
+                selection.color,
+                f"ledger-{index}",
+                object_id=f"ledger-{index}",
+                color_selection=selection,
+            )
+
+        self.assertEqual(
+            self.canvas.axes_commands.cycle_state(axes_id).next_index,
+            0,
+        )
+        self.assertTrue(
+            self.canvas.component_registry.get("ledger-2")
+            .set_property(
+                "color",
+                "#123456",
+            )
+            .ok
+        )
+        self.assertTrue(
+            self.canvas.delete_component_group(("ledger-1",), "function curve")
+        )
+        self.assertEqual(
+            self.canvas.axes_commands.cycle_state(axes_id).next_index,
+            0,
+        )
+        self.assertTrue(
+            self.canvas.delete_component_group(("ledger-2",), "function curve")
+        )
+        self.assertEqual(
+            self.canvas.axes_commands.cycle_state(axes_id).next_index,
+            1,
+        )
+        first = self.canvas.component_registry.get("ledger-0")
+        with mock.patch.object(
+            first,
+            "commit_remove",
+            side_effect=RuntimeError("injected ledger rollback failure"),
+        ):
+            self.assertFalse(
+                self.canvas.delete_component_group(
+                    ("ledger-0",),
+                    "function curve",
+                )
+            )
+        self.assertIn("ledger-0", self.canvas.component_registry)
+        self.assertEqual(
+            self.canvas.axes_commands.cycle_state(axes_id).next_index,
+            1,
         )
 
     def test_inspector_add_failure_rolls_back_stack_and_manager_tracking(self):
@@ -770,9 +895,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             target.component_id
         )
         self.assertTrue(self.canvas.select_component(target.component_id))
-        tree_selection = (
-            self.window.component_tree_host.tree.selected_component_id()
-        )
+        tree_selection = self.window.component_tree_host.tree.selected_component_id()
         original_figure_axes = tuple(self.canvas.fig.axes)
         original_stack = dict(self.canvas.fig._axstack._axes)
         original_current_axes = self.canvas.fig._axstack.current()
@@ -1104,9 +1227,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 loaded.table,
                 loaded.figure_window,
             )
-            registry = (
-                loaded.figure_window.current_canva.component_registry
-            )
+            registry = loaded.figure_window.current_canva.component_registry
             self.assertNotIn("curve-first", registry)
             restored = registry.get("curve-second").state
             self.assertEqual(restored.id, survivor_state.id)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 
 from PySide6.QtWidgets import QFrame, QStackedWidget, QVBoxLayout, QWidget
@@ -23,6 +24,16 @@ qss_path = os.path.join(
     "all_mod_widgets",
     "style.qss",
 )
+
+
+@dataclass(slots=True)
+class InspectorRemoval:
+    """Reversible detachment token for one cached component Inspector."""
+
+    component_id: str
+    inspector: QWidget
+    index: int
+    was_current: bool
 
 
 class AxesSemanticInspectorPanel(QFrame):
@@ -121,6 +132,40 @@ class AxesSemanticInspectorPanel(QFrame):
         finally:
             inspector.deleteLater()
         return True
+
+    def take_inspector(self, inspector) -> InspectorRemoval | None:
+        """Detach an Inspector without disposing it or notifying Manager."""
+
+        component_id = next(
+            (
+                item_id
+                for item_id, candidate in self._inspectors.items()
+                if candidate is inspector
+            ),
+            None,
+        )
+        if component_id is None:
+            return None
+        index = self.inspector_stack.indexOf(inspector)
+        was_current = self.inspector_stack.currentWidget() is inspector
+        self._inspectors.pop(component_id)
+        self.inspector_stack.removeWidget(inspector)
+        if was_current and self._inspectors:
+            self.inspector_stack.setCurrentWidget(next(iter(self._inspectors.values())))
+        return InspectorRemoval(component_id, inspector, index, was_current)
+
+    def restore_inspector(self, handle: InspectorRemoval) -> None:
+        """Restore the exact semantic Inspector after deletion rollback."""
+
+        if handle.component_id in self._inspectors:
+            return
+        self.inspector_stack.insertWidget(
+            max(0, min(handle.index, self.inspector_stack.count())),
+            handle.inspector,
+        )
+        self._inspectors[handle.component_id] = handle.inspector
+        if handle.was_current:
+            self.inspector_stack.setCurrentWidget(handle.inspector)
 
     def show_component(self, component_id: str) -> bool:
         """Show the semantic Inspector associated with a stable ID."""
@@ -249,6 +294,39 @@ class InspectorToolBox(QFrame):
             except Exception:
                 pass
         return True
+
+    def take_inspector(self, inspector) -> InspectorRemoval | None:
+        """Detach one Inspector while preserving its identity for rollback."""
+
+        index = self.indexOf(inspector)
+        if index < 0:
+            return None
+        component_id, _candidate = self._entries.pop(index)
+        self._entry_by_id.pop(component_id, None)
+        was_current = self.inspector_stack.currentWidget() is inspector
+        self.inspector_stack.removeWidget(inspector)
+        if was_current and self._entries:
+            next_index = min(index, len(self._entries) - 1)
+            self.inspector_stack.setCurrentWidget(self._entries[next_index][1])
+        return InspectorRemoval(component_id, inspector, index, was_current)
+
+    def restore_inspector(self, handle: InspectorRemoval) -> None:
+        """Restore one detached Inspector at its exact toolbox position."""
+
+        if handle.component_id in self._entry_by_id:
+            return
+        index = max(0, min(handle.index, len(self._entries)))
+        self._entries.insert(index, (handle.component_id, handle.inspector))
+        self._entry_by_id[handle.component_id] = handle.inspector
+        self.inspector_stack.insertWidget(index, handle.inspector)
+        if handle.was_current:
+            self.inspector_stack.setCurrentWidget(handle.inspector)
+
+    def notify_empty(self) -> None:
+        """Finalize the empty-toolbox lifecycle after a committed removal."""
+
+        if not self._entries and callable(self._empty_callback):
+            self._empty_callback()
 
     def count(self) -> int:
         return len(self._entries)
@@ -380,6 +458,14 @@ class _ComponentInspectorStack(QFrame):
             inspector = toolbox.inspector(component_id)
             if inspector is not None:
                 return inspector
+        return None
+
+    def toolbox_for_component(self, component_id: str):
+        """Return the existing owner toolbox without creating UI state."""
+
+        for toolbox in self._toolboxes.values():
+            if toolbox.inspector(component_id) is not None:
+                return toolbox
         return None
 
     def remove_component(self, component_id: str) -> bool:

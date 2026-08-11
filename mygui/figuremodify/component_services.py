@@ -74,8 +74,7 @@ def _controller(
     result = registry.get(value) if isinstance(value, str) else value
     if expected_type is not None and not isinstance(result, expected_type):
         raise TypeError(
-            f"Expected {expected_type.__name__}, got "
-            f"{type(result).__name__}."
+            f"Expected {expected_type.__name__}, got {type(result).__name__}."
         )
     return result
 
@@ -141,6 +140,105 @@ class DeletionRequest:
 @dataclass(frozen=True, slots=True)
 class ColorCycleDeletionEffect:
     """Declare that deletion releases an ordered Axes palette slot."""
+
+
+@dataclass(slots=True)
+class _ColorConsumption:
+    component_id: str
+    before: dict[str, Any] | None
+    after: dict[str, Any]
+    deleted: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ColorLedgerDeletionPlan:
+    """Prepared runtime-only ledger changes for a committed deletion."""
+
+    removed_ids: frozenset[str]
+    released_axes_ids: frozenset[str]
+
+
+class ColorConsumptionLedger:
+    """Track only palette slots confirmed by this live Canvas session."""
+
+    def __init__(self) -> None:
+        self._entries: dict[str, list[_ColorConsumption]] = {}
+
+    def record(
+        self,
+        axes_id: str,
+        component_id: str,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
+    ) -> None:
+        """Record one committed palette advance, ignoring custom colors."""
+
+        if after is None or before == after:
+            return
+        ColorCycleState.from_dict(after)
+        self._entries.setdefault(str(axes_id), []).append(
+            _ColorConsumption(
+                str(component_id),
+                deepcopy(before),
+                deepcopy(after),
+            )
+        )
+
+    def prepare_deletion(
+        self,
+        registry: ComponentRegistry,
+        removed_ids: Iterable[str],
+    ) -> tuple[tuple[ComponentState, ...], ColorLedgerDeletionPlan]:
+        """Release only a confirmed, contiguous deleted ledger tail."""
+
+        removed = frozenset(str(component_id) for component_id in removed_ids)
+        replacements: list[ComponentState] = []
+        released_axes: set[str] = set()
+        for axes_id, entries in self._entries.items():
+            if not entries or axes_id not in registry:
+                continue
+            if axes_id in removed:
+                released_axes.add(axes_id)
+                continue
+            future_deleted = [
+                entry.deleted or entry.component_id in removed for entry in entries
+            ]
+            suffix_start = len(entries)
+            while suffix_start and future_deleted[suffix_start - 1]:
+                suffix_start -= 1
+            if suffix_start == len(entries):
+                continue
+            if not any(
+                entry.component_id in removed for entry in entries[suffix_start:]
+            ):
+                continue
+            axes = registry.get(axes_id)
+            current = axes.state.properties.get("color_cycle")
+            if current != entries[-1].after:
+                # A palette reapply or other explicit edit superseded this
+                # session ledger. Never infer a release from artist colors.
+                continue
+            properties = dict(axes.state.properties)
+            properties["color_cycle"] = deepcopy(entries[suffix_start].before)
+            replacements.append(axes.state.clone(properties=properties))
+            released_axes.add(axes_id)
+        return (
+            tuple(replacements),
+            ColorLedgerDeletionPlan(removed, frozenset(released_axes)),
+        )
+
+    def commit_deletion(self, plan: ColorLedgerDeletionPlan) -> None:
+        """Advance the ledger only after structural deletion commits."""
+
+        for axes_id, entries in tuple(self._entries.items()):
+            for entry in entries:
+                if entry.component_id in plan.removed_ids:
+                    entry.deleted = True
+            if axes_id in plan.released_axes_ids:
+                while entries and entries[-1].deleted:
+                    entries.pop()
+            if not entries:
+                self._entries.pop(axes_id, None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +357,7 @@ class DeletionPlan:
     removed_ids: tuple[str, ...]
     state_replacements: tuple[ComponentState, ...]
     fallback_id: str | None = None
+    color_ledger_plan: ColorLedgerDeletionPlan | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +418,8 @@ class PreparedDeletion:
             state_replacements=self.plan.state_replacements,
             verifier=verifier,
         )
+        if result.committed and self.plan.color_ledger_plan is not None:
+            self.service.color_ledger.commit_deletion(self.plan.color_ledger_plan)
         return DeletionOutcome(
             committed=result.committed,
             rollback_complete=result.rollback_complete,
@@ -330,137 +431,6 @@ class PreparedDeletion:
             notices=result.notices,
             message=result.message,
         )
-
-
-def _color_cycle_replacements_for_deletion(
-    registry: ComponentRegistry,
-    component_ids: Iterable[str],
-    *,
-    is_palette_component: Callable[[Any], bool] | None = None,
-) -> tuple[ComponentState, ...]:
-    """Release palette slots consumed by chart components being removed.
-
-    The replacement states are submitted with the structural deletion, so a
-    failed detach/tree verification restores the exact original cursor.
-    """
-
-    requested = tuple(
-        dict.fromkeys(str(component_id) for component_id in component_ids)
-    )
-    existing = {
-        component_id: registry.get(component_id)
-        for component_id in requested
-        if component_id in registry
-    }
-    requested_set = set(existing)
-    roots = []
-    for component_id, controller in existing.items():
-        parent_id = controller.state.parent_id
-        visited: set[str] = set()
-        while parent_id is not None and parent_id not in requested_set:
-            if parent_id in visited:
-                return ()
-            visited.add(parent_id)
-            parent = registry.get(parent_id) if parent_id in registry else None
-            parent_id = parent.state.parent_id if parent is not None else None
-        if parent_id is None:
-            roots.append(component_id)
-
-    removed_ids: set[str] = set()
-    for component_id in roots:
-        removed_ids.add(component_id)
-        removed_ids.update(
-            controller.component_id
-            for controller in registry.descendants(component_id)
-        )
-
-    is_palette_component = is_palette_component or (
-        lambda controller: {"color", "data"}.issubset(
-            controller.capabilities()
-        )
-    )
-    deleted_by_axes: dict[str, list[Any]] = {}
-    for component_id in removed_ids:
-        controller = registry.get(component_id)
-        if not is_palette_component(controller):
-            continue
-        parent_id = controller.state.parent_id
-        if parent_id is None or parent_id in removed_ids:
-            continue
-        try:
-            parent = registry.get(parent_id)
-        except Exception:
-            continue
-        if parent.state.kind is not ComponentKind.AXES:
-            continue
-        deleted_by_axes.setdefault(parent_id, []).append(controller)
-
-    replacements: list[ComponentState] = []
-    for axes_id, deleted in deleted_by_axes.items():
-        axes = registry.get(axes_id)
-        cycle = ColorCycleState.from_dict(
-            axes.state.properties.get("color_cycle")
-        )
-        palette = cycle.active_palette
-        if palette is None:
-            continue
-
-        occupied: set[int] = set()
-        for controller in registry.query(
-            parent_id=axes_id,
-            recursive=True,
-        ):
-            if not is_palette_component(controller):
-                continue
-            if controller.component_id in removed_ids:
-                continue
-            try:
-                color = normalize_color(
-                    controller.state.properties["color"]
-                )
-            except (KeyError, TypeError, ValueError):
-                continue
-            occupied.update(
-                index
-                for index, palette_color in enumerate(palette.colors)
-                if palette_color == color
-            )
-
-        released: list[tuple[int, int, str]] = []
-        for controller in deleted:
-            state = controller.state
-            try:
-                color = normalize_color(state.properties["color"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            matching = [
-                index
-                for index, palette_color in enumerate(palette.colors)
-                if palette_color == color
-            ]
-            if not matching:
-                # A one-off custom color never advanced this palette.
-                continue
-            expected = int(state.order) % len(palette.colors)
-            index = expected if expected in matching else matching[0]
-            released.append((int(state.order), index, state.id))
-
-        available = [
-            index
-            for _order, index, _component_id in sorted(released)
-            if index not in occupied
-        ]
-        if not available:
-            continue
-        next_index = available[0]
-        if cycle.next_index == next_index:
-            continue
-        cycle.activate(palette, next_index)
-        state = axes.state
-        properties = dict(state.properties)
-        properties["color_cycle"] = cycle.to_dict()
-        replacements.append(state.clone(properties=properties))
-    return tuple(replacements)
 
 
 def _axes_replacements_for_deletion(
@@ -490,10 +460,7 @@ def _axes_replacements_for_deletion(
     replacements = []
     for index, controller in enumerate(remaining):
         cached_state = controller.state
-        if (
-            cached_state.order == index
-            and cached_state.selector.get("index") == index
-        ):
+        if cached_state.order == index and cached_state.selector.get("index") == index:
             continue
         live_state = controller.read_state(strict=True)
         replacements.append(
@@ -723,11 +690,7 @@ class AxesCommandService:
         """Set spine visible."""
 
         axis_name = "y" if side in {"left", "right"} else "x"
-        axis_role = (
-            ComponentRole.X_AXIS
-            if axis_name == "x"
-            else ComponentRole.Y_AXIS
-        )
+        axis_role = ComponentRole.X_AXIS if axis_name == "x" else ComponentRole.Y_AXIS
         spine = self.semantic(
             axes_id,
             kind=ComponentKind.SPINE,
@@ -823,10 +786,7 @@ class AxesCommandService:
         figure_style = self._figure_style(axes_id)
         style_palette = self.style_palette(axes_id)
         active = self.cycle_state(axes_id).active_palette
-        if (
-            active is not None
-            and active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE
-        ):
+        if active is not None and active.source != MATPLOTLIB_STYLE_PALETTE_SOURCE:
             return AxesPaletteStatus(
                 "user",
                 active,
@@ -1039,10 +999,7 @@ class ChartDataService:
         x_ref: ColumnRef,
         y_ref: ColumnRef,
     ) -> None:
-        if (
-            not self.repository.has_ref(x_ref)
-            or not self.repository.has_ref(y_ref)
-        ):
+        if not self.repository.has_ref(x_ref) or not self.repository.has_ref(y_ref):
             raise ValueError("Chart data source was removed.")
 
     @staticmethod
@@ -1109,10 +1066,7 @@ class ChartDataService:
             )
         if change.status is ChangeStatus.EMPTY:
             notices.append(
-                _warning(
-                    "Chart has no valid data yet; its editor and style "
-                    "were kept."
-                )
+                _warning("Chart has no valid data yet; its editor and style were kept.")
             )
         return _notices(change, *notices)
 
@@ -1194,10 +1148,7 @@ class InterpolationService:
         try:
             x_ref = _column_ref(x_ref)
             y_ref = _column_ref(y_ref)
-            if (
-                not self.repository.has_ref(x_ref)
-                or not self.repository.has_ref(y_ref)
-            ):
+            if not self.repository.has_ref(x_ref) or not self.repository.has_ref(y_ref):
                 raise ValueError("Interpolation data source was removed.")
             spec = DataPreprocessSpec.from_dict(
                 preprocess
@@ -1263,8 +1214,7 @@ class InterpolationService:
         if change.status is ChangeStatus.EMPTY:
             notices.append(
                 _warning(
-                    "Interpolation has no valid data yet; its editor and "
-                    "style were kept."
+                    "Interpolation has no valid data yet; its editor and style were kept."
                 )
             )
         return _notices(change, *notices)
@@ -1355,10 +1305,7 @@ class FitService:
         try:
             x_ref = _column_ref(x_ref)
             y_ref = _column_ref(y_ref)
-            if (
-                not self.repository.has_ref(x_ref)
-                or not self.repository.has_ref(y_ref)
-            ):
+            if not self.repository.has_ref(x_ref) or not self.repository.has_ref(y_ref):
                 raise ValueError("Fit data source was removed.")
             spec = DataPreprocessSpec.from_dict(
                 preprocess
@@ -1388,10 +1335,7 @@ class FitService:
             self._pending_source_changes.add(controller.component_id)
         message = "Fit preprocessing updated; run fitting to recompute."
         if pair.excluded_count:
-            message = (
-                f"Fit preprocessing excluded {pair.excluded_count} rows; "
-                "run fitting to recompute."
-            )
+            message = f"Fit preprocessing excluded {pair.excluded_count} rows; run fitting to recompute."
         return _notices(change, _warning(message)) if change.changed else change
 
     def resolve_sources(self, component) -> PreprocessedPair:
@@ -1516,14 +1460,10 @@ def _missing_glyph_message(message: str) -> str | None:
         return None
     match = re.search(r"Glyph\s+(\d+)", message)
     if not match:
-        return (
-            "Current font is missing a glyph; text may render "
-            "incorrectly."
-        )
+        return "Current font is missing a glyph; text may render incorrectly."
     codepoint = int(match.group(1))
     return (
-        f"Current font is missing glyph U+{codepoint:04X}; "
-        "text may render incorrectly."
+        f"Current font is missing glyph U+{codepoint:04X}; text may render incorrectly."
     )
 
 
@@ -1562,8 +1502,7 @@ class TextRenderService:
             return replace(
                 change,
                 message=(
-                    "Text render failed; keeping the last valid text "
-                    "and rendering settings."
+                    "Text render failed; keeping the last valid text and rendering settings."
                 ),
             )
         return _notices(change, *result.notices)
@@ -1620,8 +1559,7 @@ class TextRenderService:
                     glyph_message = _missing_glyph_message(message)
                     if glyph_message is not None:
                         tex_config.tex_logger().warning(
-                            "Matplotlib text glyph warning "
-                            "action=component-render message=%s",
+                            "Matplotlib text glyph warning action=component-render message=%s",
                             message,
                         )
                         glyph_notices.append(_warning(glyph_message))
@@ -1650,8 +1588,7 @@ class TextRenderService:
             return replace(
                 result,
                 message=(
-                    "Text render failed; keeping the last valid text "
-                    "and rendering settings."
+                    "Text render failed; keeping the last valid text and rendering settings."
                 ),
             )
         return replace(
@@ -1668,19 +1605,11 @@ class ComponentDeletionService:
         registry: ComponentRegistry,
         *,
         handlers: DeletionHandlerRegistry | None = None,
+        color_ledger: ColorConsumptionLedger | None = None,
     ):
         self.registry = registry
         self.handlers = handlers or production_deletion_handlers()
-
-    def _palette_component(self, controller) -> bool:
-        handler = self.handlers.resolve(controller)
-        return bool(
-            handler
-            and any(
-                isinstance(effect, ColorCycleDeletionEffect)
-                for effect in handler.effects
-            )
-        )
+        self.color_ledger = color_ledger or ColorConsumptionLedger()
 
     def prepare(self, request: DeletionRequest) -> PreparedDeletion:
         """Validate IDs, ownership, subtree coverage, and survivor effects."""
@@ -1751,8 +1680,7 @@ class ComponentDeletionService:
             if handler is None:
                 state = controller.state
                 raise ComponentValidationError(
-                    "No deletion handler is registered for "
-                    f"{state.kind.value}/{state.role.value}."
+                    f"No deletion handler is registered for {state.kind.value}/{state.role.value}."
                 )
             owns_descendants = False
             for item_id in removed:
@@ -1770,9 +1698,7 @@ class ComponentDeletionService:
                         if parent_id in self.registry
                         else None
                     )
-                    parent_id = (
-                        parent.state.parent_id if parent is not None else None
-                    )
+                    parent_id = parent.state.parent_id if parent is not None else None
                 if owns_descendants:
                     break
             if owns_descendants and not handler.owns_subtree:
@@ -1781,14 +1707,13 @@ class ComponentDeletionService:
                     "registered child components."
                 )
 
+        color_replacements, color_ledger_plan = self.color_ledger.prepare_deletion(
+            self.registry, removed
+        )
         replacements = [
             *_axes_replacements_for_deletion(self.registry, removed),
             *_layout_replacements_for_deletion(self.registry, removed),
-            *_color_cycle_replacements_for_deletion(
-                self.registry,
-                roots,
-                is_palette_component=self._palette_component,
-            ),
+            *color_replacements,
         ]
         replacement_by_id: dict[str, ComponentState] = {}
         changed_fields: dict[str, dict[str, Any]] = {}
@@ -1810,6 +1735,7 @@ class ComponentDeletionService:
             root_ids=tuple(roots),
             removed_ids=tuple(postorder),
             state_replacements=tuple(replacement_by_id.values()),
+            color_ledger_plan=color_ledger_plan,
         )
         return PreparedDeletion(self, request, plan)
 
@@ -1830,6 +1756,7 @@ class ComponentDeletionService:
                 message=str(exc),
             )
         return prepared.execute(verifier=verifier)
+
 
 @dataclass(frozen=True, slots=True)
 class ComponentDependencySnapshot:

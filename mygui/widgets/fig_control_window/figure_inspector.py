@@ -22,6 +22,7 @@ from mygui.widgets.fig_control_window.component_editors.containers import (
     AxesSemanticInspectorPanel,
     ChartInspectorStack,
     ElementInspectorStack,
+    InspectorRemoval,
     InspectorToolBox,
 )
 from mygui.widgets.qss_func import qss_loader
@@ -39,6 +40,15 @@ class AxesInspectorRemoval:
     panel: "AxesInspectorPanel"
     index: int
     was_current: bool
+
+
+@dataclass(slots=True)
+class ComponentInspectorRemoval:
+    """Reversible detachment token for one leaf Component Inspector."""
+
+    component_id: str
+    owner: object
+    handle: InspectorRemoval
 
 
 class AxesInspectorPanel(QFrame):
@@ -111,8 +121,9 @@ class AxesInspectorPanel(QFrame):
         editor_key: EditorKey = (controller.state.kind, controller.state.role)
         toolbox = stack.ensure_toolbox(editor_key)
         toolbox.set_empty_callback(
-            lambda target_stack=stack, target_key=editor_key:
-            self._remove_component_toolbox(target_stack, target_key)
+            lambda target_stack=stack, target_key=editor_key: (
+                self._remove_component_toolbox(target_stack, target_key)
+            )
         )
         inspector = self.context.editor_manager.create(
             controller,
@@ -148,8 +159,9 @@ class AxesInspectorPanel(QFrame):
             raise ValueError("Semantic/Figure profiles do not use a toolbox.")
         toolbox = stack.ensure_toolbox(editor_key)
         toolbox.set_empty_callback(
-            lambda target_stack=stack, target_key=editor_key:
-            self._remove_component_toolbox(target_stack, target_key)
+            lambda target_stack=stack, target_key=editor_key: (
+                self._remove_component_toolbox(target_stack, target_key)
+            )
         )
         return toolbox
 
@@ -159,9 +171,8 @@ class AxesInspectorPanel(QFrame):
     ) -> InspectorToolBox | None:
         """Return an existing internal toolbox without creating one."""
 
-        return (
-            self._chart_stack.toolbox(editor_key)
-            or self._element_stack.toolbox(editor_key)
+        return self._chart_stack.toolbox(editor_key) or self._element_stack.toolbox(
+            editor_key
         )
 
     def _remove_component_toolbox(self, stack, key) -> bool:
@@ -204,6 +215,15 @@ class AxesInspectorPanel(QFrame):
             or self._chart_stack.inspector(component_id)
             or self._element_stack.inspector(component_id)
         )
+
+    def inspector_owner(self, component_id: str):
+        """Return the existing container that owns a cached Inspector."""
+
+        if self.semantic_panel.inspector(component_id) is not None:
+            return self.semantic_panel
+        return self._chart_stack.toolbox_for_component(
+            component_id
+        ) or self._element_stack.toolbox_for_component(component_id)
 
     def remove_component(self, component_id: str) -> bool:
         """Remove one cached Inspector without mutating business state."""
@@ -314,6 +334,9 @@ class FigureElementInspectorPanel(QFrame):
 
     def inspector(self, component_id: str):
         return self._element_stack.inspector(component_id)
+
+    def inspector_owner(self, component_id: str):
+        return self._element_stack.toolbox_for_component(component_id)
 
     def remove_component(self, component_id: str) -> bool:
         return self._element_stack.remove_component(component_id)
@@ -449,8 +472,6 @@ class FigureInspectorPanel(QFrame):
 
         try:
             handle.panel.dispose()
-        except Exception:
-            pass
         finally:
             handle.panel.setParent(None)
             handle.panel.deleteLater()
@@ -584,6 +605,67 @@ class FigureInspectorPanel(QFrame):
             else None
         )
         return panel.remove_component(component_id) if panel is not None else False
+
+    def take_component_inspector(
+        self,
+        component_id: str,
+    ) -> ComponentInspectorRemoval | None:
+        """Detach one cached leaf Inspector for transactional deletion."""
+
+        component_id = str(component_id)
+        if component_id == self.root_component_id:
+            return None
+        owner = self._figure_elements_panel.inspector_owner(component_id)
+        if owner is None:
+            axes_controller = self.context.registry.ancestor(
+                component_id,
+                kind=ComponentKind.AXES,
+            )
+            panel = (
+                self._axes_panels.get(axes_controller.component_id)
+                if axes_controller is not None
+                else None
+            )
+            owner = panel.inspector_owner(component_id) if panel is not None else None
+        if owner is None:
+            return None
+        inspector = owner.inspector(component_id)
+        if inspector is None:
+            return None
+        handle = owner.take_inspector(inspector)
+        if handle is None:
+            return None
+        self.context.editor_manager.release(inspector)
+        return ComponentInspectorRemoval(component_id, owner, handle)
+
+    def restore_component_inspector(
+        self,
+        removal: ComponentInspectorRemoval,
+    ) -> None:
+        """Restore an exact leaf Inspector and its Manager registration."""
+
+        removal.owner.restore_inspector(removal.handle)
+        self.context.editor_manager.track_existing(
+            removal.component_id,
+            removal.handle.inspector,
+            remover=removal.owner.remove_inspector,
+        )
+
+    @staticmethod
+    def finalize_component_inspector_removal(
+        removal: ComponentInspectorRemoval,
+    ) -> None:
+        """Dispose a detached leaf Inspector after business commit."""
+
+        inspector = removal.handle.inspector
+        try:
+            inspector.dispose()
+        finally:
+            inspector.setParent(None)
+            inspector.deleteLater()
+        notify_empty = getattr(removal.owner, "notify_empty", None)
+        if callable(notify_empty):
+            notify_empty()
 
     def current_panel(self):
         return self._inspector_stack.currentWidget()
