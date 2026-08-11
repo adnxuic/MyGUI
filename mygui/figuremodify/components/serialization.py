@@ -150,6 +150,26 @@ def _state_from_raw(raw: Any, path: str) -> ComponentState:
 
 
 def _validate_controller_contract(state: ComponentState, path: str) -> None:
+    if (
+        state.kind is ComponentKind.LINE
+        and state.role is ComponentRole.LINE
+    ):
+        x_values = _expect_list(state.data.get("x"), f"{path}.data.x")
+        y_values = _expect_list(state.data.get("y"), f"{path}.data.y")
+        if set(state.data) != {"x", "y"}:
+            raise ValueError(
+                f"Invalid project field {path}.data: expected only x and y."
+            )
+        if len(x_values) != len(y_values):
+            raise ValueError(
+                f"Invalid project field {path}.data: x and y must have equal length."
+            )
+        for index, value in enumerate(y_values):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"Invalid project field {path}.data.y[{index}]: "
+                    "expected number."
+                )
     try:
         for key in _COLOR_PROPERTIES.intersection(state.properties):
             value = state.properties[key]
@@ -357,7 +377,7 @@ def _require_fixed_axes_components(
     if sum(child.role is ComponentRole.TITLE for child in direct) != 1:
         raise ValueError(f"{axes_path} must contain one Title.")
     if sum(child.kind is ComponentKind.LEGEND for child in direct) != 1:
-        raise ValueError(f"{axes_path} must contain one Legend.")
+        raise ValueError(f"{axes_path} must contain one legend component.")
 
     for axis_name, axis in axes_by_name.items():
         axis_children = children.get(axis.id, [])
