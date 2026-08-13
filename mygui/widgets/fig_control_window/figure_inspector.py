@@ -53,7 +53,6 @@ class AxesInspectorPanel(QFrame):
         self,
         axes_controller: AxesController,
         context: EditorContext,
-        color_library=None,
     ):
         super().__init__()
         self.setObjectName("axes_inspector_panel")
@@ -69,7 +68,6 @@ class AxesInspectorPanel(QFrame):
             self.semantic_panel = AxesSemanticInspectorPanel(
                 axes_controller,
                 context,
-                color_library,
             )
             self._chart_stack = ChartInspectorStack(self.axes)
             self._element_stack = ElementInspectorStack(self.axes)
@@ -81,7 +79,6 @@ class AxesInspectorPanel(QFrame):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             layout.addWidget(self._inspector_stack)
-            self.show_component(axes_controller.component_id)
         except Exception:
             self.dispose()
             raise
@@ -375,7 +372,6 @@ class FigureInspectorPanel(QFrame):
         self,
         root_controller,
         context: EditorContext,
-        color_library=None,
     ):
         super().__init__()
         self.setObjectName("figure_inspector_panel")
@@ -410,7 +406,6 @@ class FigureInspectorPanel(QFrame):
         self,
         axes_controller: AxesController,
         context: EditorContext,
-        color_library=None,
     ) -> AxesInspectorPanel:
         """Add and return the single-Component panel for one Axes."""
 
@@ -420,7 +415,6 @@ class FigureInspectorPanel(QFrame):
         panel = AxesInspectorPanel(
             axes_controller,
             context,
-            color_library,
         )
         try:
             self._inspector_stack.addWidget(panel)
@@ -761,7 +755,6 @@ class FigureInspectorHost(QFrame):
         self,
         root_controller,
         context: EditorContext,
-        color_library=None,
         *,
         publish: bool = True,
     ) -> FigureInspectorPanel:
@@ -770,7 +763,6 @@ class FigureInspectorHost(QFrame):
         panel = FigureInspectorPanel(
             root_controller,
             context,
-            color_library,
         )
         if not publish:
             return panel

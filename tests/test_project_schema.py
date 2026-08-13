@@ -5,6 +5,8 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
@@ -34,7 +36,7 @@ class ProjectSchemaV9Tests(unittest.TestCase):
             canva_name="ProjectA",
         )
         self.canvas = self.window.figure_window.current_canva
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         self.sheet = self.window.table.current_subtable().get_table(0).table_model.sheet
         self.sheet.set_block(0, 0, [[0, 1], [1, 2], [2, 4]])
         self.x_ref = ColumnRef(

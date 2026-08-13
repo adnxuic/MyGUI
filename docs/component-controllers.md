@@ -160,8 +160,9 @@ presentation for an exact `EditorKey` kind/role pair, while
 `PropertySection` generates an ordered subset of Controller `PropertySpec`
 controls. `register_production_profiles()` installs all first-party mappings,
 and `ComponentEditorManager.create()` is the production create-and-track
-entry. `EditorRegistry` resolves profiles before custom editor factories;
-`ComponentEditorBase` remains the all-properties fallback. Line roles share one
+entry. `EditorRegistry` resolves profiles before custom editor factories.
+`ComponentEditorBase` is available only when explicitly selected by tests or
+non-production tooling; production profile resolution fails closed. Line roles share one
 appearance section, Text roles share one render-verified section set, Legend
 reuses only its intersecting title/font-size fields, and Axes pages bind their
 semantic child Controllers. See `docs/component-inspector.md` for the complete

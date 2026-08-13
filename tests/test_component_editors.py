@@ -76,7 +76,7 @@ class _FakeController:
                 "choices": {"Solid": "-", "Dashed": "--"},
             },
             "label": {"editor": "text", "debounce_ms": 1},
-            "color": {"editor": "auto"},
+            "color": {"editor": "color"},
         }
         self.calls = []
 

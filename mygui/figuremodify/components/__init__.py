@@ -34,6 +34,7 @@ from .controllers import (
     create_controller,
     decode_in_axes_image,
     normalize_linestyle,
+    validate_controller_contracts,
 )
 from .errors import (
     ComponentDeletedError,
@@ -58,10 +59,12 @@ from .models import (
     ComponentRole,
     ComponentState,
     DeletionPolicy,
+    EditorKind,
     FitEngine,
     KEEP_RUNTIME_DATA,
     MessageLevel,
     PropertySpec,
+    RestorePhase,
     UpdateImpact,
     XYData,
 )
@@ -82,6 +85,7 @@ __all__ = [
     "ComponentController",
     "ComponentDeletedError",
     "DeletionPolicy",
+    "EditorKind",
     "ComponentError",
     "ComponentEvent",
     "ComponentEventKind",
@@ -113,6 +117,7 @@ __all__ = [
     "LineController",
     "MessageLevel",
     "PropertySpec",
+    "RestorePhase",
     "RemovalHandle",
     "ScatterController",
     "SpineController",
@@ -130,5 +135,6 @@ __all__ = [
     "create_controller",
     "decode_in_axes_image",
     "normalize_linestyle",
+    "validate_controller_contracts",
     "register_figure_components",
 ]

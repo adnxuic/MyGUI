@@ -11,6 +11,8 @@ from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
     ComponentDependencyService,
+    DeleteReason,
+    DeletionRequest,
     FitService,
     InterpolationService,
 )
@@ -743,7 +745,12 @@ class ComponentServiceTests(unittest.TestCase):
         )
 
         snapshots = service.dependent_states({self.x_ref})
-        service.delete_states(snapshots)
+        service.deletion_service.delete(
+            DeletionRequest(
+                tuple(state.id for state in snapshots),
+                reason=DeleteReason.DATA_DEPENDENCY,
+            )
+        )
         service.restore_states(snapshots)
 
         self.assertNotIn(controller.component_id, self.registry)
@@ -769,7 +776,12 @@ class ComponentServiceTests(unittest.TestCase):
             restore_state=restore,
         )
         snapshots = service.dependent_states({self.x_ref})
-        service.delete_states(snapshots)
+        service.deletion_service.delete(
+            DeletionRequest(
+                tuple(state.id for state in snapshots),
+                reason=DeleteReason.DATA_DEPENDENCY,
+            )
+        )
 
         with self.assertRaisesRegex(RuntimeError, "second restore failure"):
             service.restore_states(snapshots)

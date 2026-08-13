@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.axes_helpers import create_regular_axes
+
 from mygui.resources import (
     icon_path,
     load_json_resource,
@@ -83,7 +85,7 @@ class ResourceLocatorTests(unittest.TestCase):
                     style="default",
                     canva_name="Resource Identity",
                 )
-                canvas.add_axes(1, 1)
+                create_regular_axes(canvas, 1, 1)
                 dialog = PyCurveDialog(
                     "Function Curve",
                     window.figure_window,

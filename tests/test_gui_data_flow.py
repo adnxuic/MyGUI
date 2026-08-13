@@ -2,6 +2,8 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
@@ -32,7 +34,7 @@ class GuiDataFlowV4Tests(unittest.TestCase):
             width=4, height=3, dpi=100, style="default", canva_name=name
         )
         canvas = self.window.figure_window.current_canva
-        canvas.add_axes()
+        create_regular_axes(canvas)
         view = self.window.table.current_subtable().get_table(0)
         model = view.table_model
         for row, (x, y) in enumerate([(1, 10), (2, 20), (3, 30)]):

@@ -30,7 +30,10 @@ from mygui.database.fit_result import (
     normalize_fit_options_for_storage,
     normalize_fit_result_for_storage,
 )
-from mygui.database.safe_expression import evaluate_curve_expression
+from mygui.database.safe_expression import (
+    GENERATED_FIT_EXPRESSION_LIMITS,
+    evaluate_curve_expression,
+)
 from mygui.figuremodify.components import (
     AxesController,
     ChangeStatus,
@@ -1449,7 +1452,11 @@ class FitService:
             persisted_options = normalize_fit_options_for_storage(fit_options)
             persisted_result = normalize_fit_result_for_storage(fit_result)
             x_values = np.linspace(start, stop, 1000)
-            y_values = evaluate_curve_expression(expression, x_values)
+            y_values = evaluate_curve_expression(
+                expression,
+                x_values,
+                limits=GENERATED_FIT_EXPRESSION_LIMITS,
+            )
         except Exception as exc:
             return _rejected(controller, str(exc))
         data = deepcopy(controller.state.data)
@@ -1980,26 +1987,6 @@ class ComponentDependencyService:
                 else None
             ),
         )
-
-    def delete_states(
-        self,
-        snapshots: ComponentDependencySnapshot | Iterable[ComponentState],
-    ) -> ComponentBatchChange:
-        """Delete table dependents through the shared physical transaction."""
-
-        states = (
-            snapshots.component_states
-            if isinstance(snapshots, ComponentDependencySnapshot)
-            else tuple(snapshots)
-        )
-        ids = tuple(
-            state.id
-            for state in states
-            if state.id in self.registry
-        )
-        return self.deletion_service.delete(
-            DeletionRequest(ids, reason=DeleteReason.DATA_DEPENDENCY)
-        ).as_batch_change()
 
     def restore_states(
         self,

@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
@@ -48,7 +50,7 @@ class BatchChartCreationTests(unittest.TestCase):
             canva_name="Batch",
         )
         self.canvas = self.window.figure_window.current_canva
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         self.sheet = (
             self.window.table.current_subtable()
             .get_table(0)

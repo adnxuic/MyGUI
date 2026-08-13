@@ -5,7 +5,7 @@ Run these checks from the repository root after GUI-facing changes.
 ## Start
 
 ```powershell
-python main.py
+E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe main.py
 ```
 
 Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX.

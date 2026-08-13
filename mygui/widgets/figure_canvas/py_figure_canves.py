@@ -31,7 +31,9 @@ from mygui.figuremodify.component_services import (
     TextRenderService,
 )
 from mygui.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
+from mygui.widgets.figure_canvas.project_metadata import ProjectMetadataPort
 from mygui.widgets.figure_canvas.component_materializers import (
+    ComponentMaterializer,
     ComponentMaterializerRegistry,
 )
 from mygui.figuremodify.components import (
@@ -57,6 +59,7 @@ from mygui.figuremodify.components import (
     ZoomInAxesController,
     create_semantic_children,
     decode_in_axes_image,
+    validate_controller_contracts,
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
@@ -88,7 +91,10 @@ from mygui.database.interpolate_func import (
     DEFAULT_INTERPOLATION_SAMPLES,
     interpolate_curve,
 )
-from mygui.database.safe_expression import evaluate_curve_expression
+from mygui.database.safe_expression import (
+    GENERATED_FIT_EXPRESSION_LIMITS,
+    evaluate_curve_expression,
+)
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
@@ -146,7 +152,7 @@ class PyFigureCanvas(QWidget):
         style=None,
         repository: TableRepository | None = None,
         project_id: str | None = None,
-        project_name: str | None = None,
+        project_metadata: ProjectMetadataPort | None = None,
         project_path: str | None = None,
         color_library: ColorLibrary | None = None,
         component_tree: dict[str, Any] | None = None,
@@ -155,10 +161,13 @@ class PyFigureCanvas(QWidget):
         self.figure_window = parent if hasattr(parent, "current_canva") else None
         if repository is None or project_id is None:
             raise ValueError("PyFigureCanvas requires a repository and project id.")
+        if project_metadata is None:
+            raise ValueError("PyFigureCanvas requires project metadata services.")
         self.repository = repository
-        self.project_id = project_id
+        self.project_id = str(project_id)
+        self.repository.project(self.project_id)
+        self.project_metadata = project_metadata
         self.style = style
-        self._project_name_fallback = project_name or ""
         self.project_path = project_path
         self._disposed = False
         self._tex_state_listener = None
@@ -189,6 +198,7 @@ class PyFigureCanvas(QWidget):
             self._queue_observer_failures
         )
         self.component_materializers = ComponentMaterializerRegistry()
+        materializer_contracts = validate_controller_contracts()
         self.editor_registry = EditorRegistry()
         register_production_profiles(self.editor_registry)
         self.editor_registry.validate_production_profiles()
@@ -230,7 +240,7 @@ class PyFigureCanvas(QWidget):
             color_ledger=self.color_consumption_ledger,
         )
         self.deletion_coordinator = DeletionCoordinator(self)
-        self._register_component_materializers()
+        self._register_component_materializers(materializer_contracts)
         self.editor_registry.freeze()
         self.dependency_service = ComponentDependencyService(
             self.component_registry,
@@ -328,10 +338,7 @@ class PyFigureCanvas(QWidget):
     def project_name(self) -> str:
         """Return the authoritative repository project name."""
 
-        try:
-            return self.repository.project(self.project_id).name
-        except KeyError:
-            return self._project_name_fallback
+        return self.repository.project(self.project_id).name
 
     @property
     def current_axes(self) -> Axes | None:
@@ -369,20 +376,10 @@ class PyFigureCanvas(QWidget):
 
         if key == "name":
             name = validate_component_name(value, "Project name")
-            owner = self.figure_window
-            metadata = getattr(owner, "project_metadata", None)
-            if metadata is not None:
-                metadata.apply_controller_name(self.project_id, name)
-            else:
-                project = self.repository.project(self.project_id)
-                with self.repository.mutate(
-                    TableChangeSet(
-                        self.project_id,
-                        metadata_changed=True,
-                        reason="rename-project",
-                    )
-                ):
-                    project.name = name
+            self.project_metadata.apply_controller_name(
+                self.project_id,
+                name,
+            )
             return
         if key == "style":
             self.style = str(value)
@@ -629,14 +626,17 @@ class PyFigureCanvas(QWidget):
         properties: dict[str, Any],
         data: dict[str, Any],
     ):
-        axes_id = self._axes_component_ids[self.current_axes]
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before registering a chart.")
+        if controller_type.KIND is None or role not in controller_type.ROLES:
+            raise ValueError(
+                f"Controller {controller_type.__name__} does not support "
+                f"role {role.value}."
+            )
         state = ComponentState(
             id=component_id,
-            kind=(
-                ComponentKind.SCATTER
-                if role is ComponentRole.SCATTER
-                else ComponentKind.LINE
-            ),
+            kind=controller_type.KIND,
             role=role,
             parent_id=axes_id,
             order=int(order),
@@ -777,19 +777,12 @@ class PyFigureCanvas(QWidget):
         if target in self.component_registry:
             self.select_component(target)
 
-    def update_current_axes(self, component) -> None:
-        """Select an Axes by Controller/ID/artist and show its Inspector."""
+    def update_current_axes(self, component_id: str) -> None:
+        """Select an Axes by stable component ID and show its Inspector."""
 
-        if isinstance(component, AxesController):
-            controller = component
-        elif isinstance(component, str):
-            controller = self.component_registry.get(component)
-        elif isinstance(component, Axes):
-            controller = self.component_registry.get(
-                self._axes_component_ids[component]
-            )
-        else:
-            raise TypeError("Current axes must be an Axes Controller, ID, or artist.")
+        if not isinstance(component_id, str):
+            raise TypeError("Current axes must be selected by component ID.")
+        controller = self.component_registry.get(component_id)
         if not isinstance(controller, AxesController):
             raise TypeError("The selected component is not an Axes.")
         self.select_component(controller.component_id)
@@ -804,7 +797,7 @@ class PyFigureCanvas(QWidget):
             )
         except Exception as exc:
             raise IndexError(f"Invalid axes index: {axes_index}") from exc
-        self.update_current_axes(controller)
+        self.update_current_axes(controller.component_id)
 
     def delete_axes(self, axes_id: str) -> bool:
         """Delete an Axes through the unified deletion coordinator."""
@@ -1446,25 +1439,6 @@ class PyFigureCanvas(QWidget):
             role_label=role_label,
         )
 
-    # Add axes
-    def add_axes(
-        self,
-        nrows=1,
-        ncols=1,
-        slots: list[int] | tuple[int, ...] | None = None,
-    ):
-        """Add a compatibility regular grid through the layout service."""
-
-        return self.create_axes_layout(
-            AxesLayoutSpec.grid(
-                int(nrows),
-                int(ncols),
-                slots=(tuple(int(slot) for slot in slots) if slots is not None else None),
-                cell_view=self.axes_layout_service.creation_view_defaults(),
-                constrained_layout=bool(self.fig.get_constrained_layout()),
-            )
-        )
-
     def create_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
         """Create a validated Axes layout through the domain service."""
 
@@ -1820,7 +1794,11 @@ class PyFigureCanvas(QWidget):
         if expression:
             try:
                 line_x = np.linspace(x_start, x_stop, 1000)
-                line_y = evaluate_curve_expression(expression, line_x)
+                line_y = evaluate_curve_expression(
+                    expression,
+                    line_x,
+                    limits=GENERATED_FIT_EXPRESSION_LIMITS,
+                )
             except ValueError:
                 status_messages.show_error("Saved fit expression could not be restored; showing source data.")
                 expression = ""
@@ -2243,78 +2221,116 @@ class PyFigureCanvas(QWidget):
             selected_component_id=self.current_component_id,
         )
 
-    def _register_component_materializers(self) -> None:
+    def _register_component_materializers(self, expected_phases) -> None:
         declarations = (
-            (
-                ComponentKind.IN_AXES,
-                ComponentRole.IN_AXES_ZOOM,
-                self._materialize_in_axes,
+            ComponentMaterializer(
+                (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM),
+                self._materialize_zoom_in_axes,
+                expected_phases[
+                    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM)
+                ],
             ),
-            (
-                ComponentKind.IN_AXES,
-                ComponentRole.IN_AXES_IMAGE,
-                self._materialize_in_axes,
+            ComponentMaterializer(
+                (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE),
+                self._materialize_image_in_axes,
+                expected_phases[
+                    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE)
+                ],
             ),
-            (
-                ComponentKind.LINE,
-                ComponentRole.FUNCTION_CURVE,
+            ComponentMaterializer(
+                (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE),
                 self._materialize_function_curve,
+                expected_phases[
+                    (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE)
+                ],
             ),
-            (ComponentKind.LINE, ComponentRole.LINE, self._materialize_line),
-            (ComponentKind.LINE, ComponentRole.DATA_PLOT, self._materialize_data_plot),
-            (ComponentKind.SCATTER, ComponentRole.SCATTER, self._materialize_scatter),
-            (
-                ComponentKind.LINE,
-                ComponentRole.INTERPOLATION,
+            ComponentMaterializer(
+                (ComponentKind.LINE, ComponentRole.LINE),
+                self._materialize_line,
+                expected_phases[(ComponentKind.LINE, ComponentRole.LINE)],
+            ),
+            ComponentMaterializer(
+                (ComponentKind.LINE, ComponentRole.DATA_PLOT),
+                self._materialize_data_plot,
+                expected_phases[
+                    (ComponentKind.LINE, ComponentRole.DATA_PLOT)
+                ],
+            ),
+            ComponentMaterializer(
+                (ComponentKind.SCATTER, ComponentRole.SCATTER),
+                self._materialize_scatter,
+                expected_phases[
+                    (ComponentKind.SCATTER, ComponentRole.SCATTER)
+                ],
+            ),
+            ComponentMaterializer(
+                (ComponentKind.LINE, ComponentRole.INTERPOLATION),
                 self._materialize_interpolation,
+                expected_phases[
+                    (ComponentKind.LINE, ComponentRole.INTERPOLATION)
+                ],
             ),
-            (ComponentKind.LINE, ComponentRole.FIT_CURVE, self._materialize_fit),
-            (ComponentKind.TEXT, ComponentRole.TEXT, self._materialize_text),
+            ComponentMaterializer(
+                (ComponentKind.LINE, ComponentRole.FIT_CURVE),
+                self._materialize_fit,
+                expected_phases[
+                    (ComponentKind.LINE, ComponentRole.FIT_CURVE)
+                ],
+            ),
+            ComponentMaterializer(
+                (ComponentKind.TEXT, ComponentRole.TEXT),
+                self._materialize_text,
+                expected_phases[(ComponentKind.TEXT, ComponentRole.TEXT)],
+            ),
         )
-        for kind, role, handler in declarations:
-            self.component_materializers.register(kind, role, handler)
-        self.component_materializers.validate_complete(
-            (kind, role) for kind, role, _handler in declarations
-        )
+        for declaration in declarations:
+            self.component_materializers.register(declaration)
+        self.component_materializers.validate_complete(expected_phases)
 
-    def _materialize_in_axes(self, state, _transaction) -> None:
+    def _materialize_zoom_in_axes(self, state, _transaction) -> None:
+        if state.role is not ComponentRole.IN_AXES_ZOOM:
+            raise ValueError("Zoom materializer requires an in-axes Zoom state.")
+        properties = state.properties
+        spec = ZoomInAxesCreateSpec(
+            bounds=tuple(properties["bounds"]),
+            xlim=tuple(properties["xlim"]),
+            ylim=tuple(properties["ylim"]),
+            facecolor=properties["facecolor"],
+            edgecolor=properties["edgecolor"],
+            linewidth=properties["linewidth"],
+            indicator_color=properties["indicator_color"],
+            indicator_linestyle=properties["indicator_linestyle"],
+            indicator_linewidth=properties["indicator_linewidth"],
+            indicator_alpha=properties["indicator_alpha"],
+            visible=properties["visible"],
+            zorder=properties["zorder"],
+            frameon=properties["frameon"],
+            ticks_visible=properties["ticks_visible"],
+            region_visible=properties["region_visible"],
+            connectors_visible=properties["connectors_visible"],
+        )
+        self.add_in_axes(spec, object_id=state.id)
+
+    def _materialize_image_in_axes(self, state, _transaction) -> None:
+        if state.role is not ComponentRole.IN_AXES_IMAGE:
+            raise ValueError("Image materializer requires an in-axes Image state.")
         properties = state.properties
         data = state.data
-        if state.role is ComponentRole.IN_AXES_ZOOM:
-            spec = ZoomInAxesCreateSpec(
-                bounds=tuple(properties["bounds"]),
-                xlim=tuple(properties["xlim"]),
-                ylim=tuple(properties["ylim"]),
-                facecolor=properties["facecolor"],
-                edgecolor=properties["edgecolor"],
-                linewidth=properties["linewidth"],
-                indicator_color=properties["indicator_color"],
-                indicator_linestyle=properties["indicator_linestyle"],
-                indicator_linewidth=properties["indicator_linewidth"],
-                indicator_alpha=properties["indicator_alpha"],
-                visible=properties["visible"],
-                zorder=properties["zorder"],
-                frameon=properties["frameon"],
-                ticks_visible=properties["ticks_visible"],
-                region_visible=properties["region_visible"],
-                connectors_visible=properties["connectors_visible"],
-            )
-        else:
-            spec = ImageInAxesCreateSpec(
-                bounds=tuple(properties["bounds"]),
-                filename=data["filename"],
-                mime_type=data["mime_type"],
-                payload_base64=data["payload_base64"],
-                facecolor=properties["facecolor"],
-                edgecolor=properties["edgecolor"],
-                linewidth=properties["linewidth"],
-                opacity=properties["opacity"],
-                fit_mode=properties["fit_mode"],
-                interpolation=properties["interpolation"],
-                visible=properties["visible"],
-                zorder=properties["zorder"],
-                frameon=properties["frameon"],
-            )
+        spec = ImageInAxesCreateSpec(
+            bounds=tuple(properties["bounds"]),
+            filename=data["filename"],
+            mime_type=data["mime_type"],
+            payload_base64=data["payload_base64"],
+            facecolor=properties["facecolor"],
+            edgecolor=properties["edgecolor"],
+            linewidth=properties["linewidth"],
+            opacity=properties["opacity"],
+            fit_mode=properties["fit_mode"],
+            interpolation=properties["interpolation"],
+            visible=properties["visible"],
+            zorder=properties["zorder"],
+            frameon=properties["frameon"],
+        )
         self.add_in_axes(spec, object_id=state.id)
 
     def _materialize_function_curve(self, state, _transaction) -> None:
@@ -2596,45 +2612,12 @@ class PyFigureCanvas(QWidget):
             # component tree has been applied successfully.
             self.current_axes_component_id = axes_ids[0]
 
-        dynamic_states = [
-            state
-            for state in states
-            if (
-                state.role
-                in {
-                    ComponentRole.LINE,
-                    ComponentRole.FUNCTION_CURVE,
-                    ComponentRole.DATA_PLOT,
-                    ComponentRole.FIT_CURVE,
-                    ComponentRole.INTERPOLATION,
-                    ComponentRole.SCATTER,
-                }
-                or (
-                    state.kind is ComponentKind.TEXT
-                    and state.role is ComponentRole.TEXT
-                )
-            )
-        ]
-        for state in sorted(
-            dynamic_states,
-            key=lambda item: (
-                item.parent_id or "",
-                item.order,
-                item.id,
-            ),
-        ):
-            self._restore_component_state(state)
-
-        in_axes_states = [
-            state
-            for state in states
-            if state.kind is ComponentKind.IN_AXES
-        ]
-        for state in sorted(
-            in_axes_states,
-            key=lambda item: (item.parent_id or "", item.order, item.id),
-        ):
-            self._restore_component_state(state)
+        for phase in self.component_materializers.phases:
+            for state in self.component_materializers.states_for_phase(
+                states,
+                phase,
+            ):
+                self._restore_component_state(state)
 
         self.apply_component_tree(source)
 
@@ -2748,17 +2731,9 @@ class PyFigureCanvas(QWidget):
             try:
                 controller.resolve_target()
             except Exception:
-                parent = self.component_registry.resolve_target(
-                    legend_state.parent_id
-                )
-                if isinstance(parent, Axes) and bool(
-                    legend_state.properties.get("visible", True)
-                ):
-                    handles, labels = parent.get_legend_handles_labels()
-                    legend = parent.legend(handles, labels)
-                    self.component_registry.locator.bind(
-                        legend_state.id,
-                        legend,
+                if bool(legend_state.properties.get("visible", True)):
+                    self.axes_commands.ensure_legend(
+                        legend_state.parent_id
                     )
         apply_states(legend_states)
         self.axes_layout_service.restore_runtime_relationships(refresh=True)
@@ -2770,18 +2745,6 @@ class PyFigureCanvas(QWidget):
             )
 
         self.redraw()
-
-    def set_project_name(self, name: str):
-        """Set project name."""
-
-        metadata = getattr(self.figure_window, "project_metadata", None)
-        if metadata is not None:
-            metadata.rename(self.project_id, name)
-            return
-        controller = self.component_registry.get(self.root_component_id)
-        change = controller.set_property("name", name)
-        if not change.ok:
-            raise ValueError(change.message)
 
     @staticmethod
     def _json_component_value(value):

@@ -27,6 +27,11 @@ class ExpressionLimits:
 
 
 DEFAULT_EXPRESSION_LIMITS = ExpressionLimits()
+GENERATED_FIT_EXPRESSION_LIMITS = ExpressionLimits(
+    max_length=4096,
+    max_ast_nodes=1024,
+    max_ast_depth=128,
+)
 
 MAX_EXPRESSION_LENGTH = DEFAULT_EXPRESSION_LIMITS.max_length
 MAX_EXPRESSION_AST_NODES = DEFAULT_EXPRESSION_LIMITS.max_ast_nodes

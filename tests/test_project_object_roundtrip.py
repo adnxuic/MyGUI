@@ -1,16 +1,28 @@
 import os
+import base64
+from io import BytesIO
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
+from PIL import Image
 
 from mygui.database import ColumnRef
 from mygui.database.interpolate_func import interpolate_dict
-from mygui.figuremodify.components import ComponentRole
+from mygui.figuremodify.components import (
+    ComponentRole,
+    validate_controller_contracts,
+)
+from mygui.figuremodify.in_axes import (
+    ImageInAxesCreateSpec,
+    ZoomInAxesCreateSpec,
+)
 from mygui import tex_config
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
@@ -37,7 +49,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
         )
         canvas = self.window.figure_window.current_canva
-        canvas.add_axes()
+        create_regular_axes(canvas)
         sheet = self.window.table.current_subtable().get_table(0).table_model.sheet
         sheet.set_block(0, 0, [[0, 1], [1, 2], [2, 4], [3, 8]])
         x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
@@ -48,6 +60,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         canvas.add_plot(line_pair.x, line_pair.y, "-", 2, "black", "plot", x_ref, y_ref)
         canvas.add_scatter(valid_pair.x, valid_pair.y, 20, "red", "o", "scatter", x_ref, y_ref)
         canvas.add_curve("x", 0, 3, "-", "green", "curve")
+        canvas.add_component_line([0, 1], [2, 3], "-", "cyan", "line")
         linear_method = list(interpolate_dict)[2]
         canvas.add_interpolate_curve(
             valid_pair.x, valid_pair.y, x_ref, y_ref, linear_method, samples=64, label="interpolate"
@@ -59,6 +72,31 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         )
         canvas.add_text(0.25, 0.75, "axes text", "DejaVu Sans", 12)
         canvas.add_global_text(0.5, 0.5, "figure text", "DejaVu Sans", 14)
+        canvas.add_in_axes(
+            ZoomInAxesCreateSpec(
+                bounds=(0.55, 0.55, 0.35, 0.35),
+                xlim=(0.0, 1.0),
+                ylim=(0.0, 2.0),
+                facecolor="#ffffff",
+                edgecolor="#000000",
+                linewidth=0.8,
+                indicator_color="#000000",
+            )
+        )
+        image = Image.new("RGBA", (2, 2), (20, 40, 80, 255))
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        canvas.add_in_axes(
+            ImageInAxesCreateSpec(
+                bounds=(0.05, 0.55, 0.35, 0.35),
+                filename="embedded.png",
+                mime_type="image/png",
+                payload_base64=base64.b64encode(buffer.getvalue()).decode("ascii"),
+                facecolor="#ffffff",
+                edgecolor="#000000",
+                linewidth=0.8,
+            )
+        )
 
         data_roles = {
             ComponentRole.DATA_PLOT,
@@ -83,6 +121,24 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 if controller.state.role in data_roles
             }
             self.assertEqual(restored_ids, object_ids)
+            expected_dynamic_keys = set(validate_controller_contracts())
+            self.assertEqual(
+                {
+                    (controller.state.kind, controller.state.role)
+                    for controller in restored.component_registry.query()
+                    if (controller.state.kind, controller.state.role)
+                    in expected_dynamic_keys
+                },
+                expected_dynamic_keys,
+            )
+            for key in expected_dynamic_keys:
+                with self.subTest(kind=key[0].value, role=key[1].value):
+                    self.assertTrue(
+                        restored.component_registry.query(
+                            kind=key[0],
+                            role=key[1],
+                        )
+                    )
             for role in data_roles:
                 self.assertEqual(
                     len(
@@ -105,7 +161,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                     recursive=True,
                 )
             ]
-            self.assertEqual(restored_order, [0, 1, 2, 3, 4])
+            self.assertEqual(restored_order, [0, 1, 2, 3, 4, 5])
             self.assertEqual(
                 len(
                     restored.component_registry.query(
@@ -123,7 +179,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
         )
         canvas = self.window.figure_window.current_canva
-        canvas.add_axes()
+        create_regular_axes(canvas)
         tex_config.set_tex_enabled(True, notify=False)
         with patch.object(canvas.fig.canvas, "draw"):
             canvas.add_text(

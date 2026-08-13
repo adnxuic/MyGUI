@@ -1,15 +1,15 @@
 from contextlib import contextmanager
 import os
-import importlib.util
 import json
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
+
+from tests.axes_helpers import create_regular_axes
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -46,14 +46,6 @@ from mygui.widgets.fig_control_window import py_fit_options_window as fit_option
 from mygui.widgets.fig_control_window.py_fit_options_window import PyMatlabFitOptionsWidget
 from mygui.widgets.fig_control_window.py_matlab_window import PyMatlabWindow
 from mygui.widgets.fig_control_window.py_tex_window import PyTexWindow
-
-
-def load_module_from_file(module_name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def make_text_controller(figure, text_artist):
@@ -655,7 +647,7 @@ class OptionalDependencyTests(unittest.TestCase):
         try:
             window.figure_window.add_figure(width=6.4, height=4.8, dpi=100, style="default", canva_name="tex")
             canvas = window.figure_window.current_canva
-            canvas.add_axes(nrows=1, ncols=1)
+            create_regular_axes(canvas, nrows=1, ncols=1)
             tex_config.set_tex_enabled(True, notify=False)
 
             with patch.object(canvas.fig.canvas, "draw"), patch.object(canvas, "redraw"):
@@ -1476,26 +1468,6 @@ class OptionalDependencyTests(unittest.TestCase):
         with patch.object(matlab_adapter.importlib, "import_module", side_effect=fake_import):
             result = matlab_adapter.fit_curve([1.0], [2.0], "poly9")
             self.assertEqual(result["value_expression"], "10.0*x+2.0")
-
-    def test_matlab_helpers_raise_runtime_errors_instead_of_exiting(self):
-        root = Path(__file__).resolve().parents[1]
-        matlab_fitting_module = load_module_from_file(
-            "matlab_fitting_under_test",
-            root / "mygui" / "database" / "matlab_func" / "curve_fitting" / "matlab_fitting.py",
-        )
-        get_func_exp_module = load_module_from_file(
-            "get_func_exp_under_test",
-            root / "mygui" / "database" / "matlab_func" / "get_func" / "get_func_exp.py",
-        )
-
-        with patch.object(matlab_adapter.importlib, "import_module", side_effect=ImportError("missing matlab")):
-            with self.assertRaisesRegex(RuntimeError, "MATLAB runtime unavailable"):
-                matlab_fitting_module.matlab_fitting([1.0], [2.0], "poly1")
-
-        with patch.object(matlab_adapter.importlib, "import_module", side_effect=ImportError("missing matlab runtime")):
-            with self.assertRaisesRegex(RuntimeError, "MATLAB package import failed"):
-                get_func_exp_module.get_func_exp("poly1")
-
 
 if __name__ == "__main__":
     unittest.main()

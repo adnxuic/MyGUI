@@ -7,6 +7,8 @@ from typing import Callable
 
 import numpy as np
 
+from mygui.database.fit_catalog import FIT_MODEL_GROUPS
+
 
 Array = np.ndarray
 
@@ -615,6 +617,25 @@ def _build_registry() -> dict[str, FitModelSpec]:
 
 
 SCIPY_FIT_MODELS = _build_registry()
+
+_expected_fit_models = {
+    model
+    for models in FIT_MODEL_GROUPS.values()
+    for model in models
+}
+if set(SCIPY_FIT_MODELS) != _expected_fit_models:
+    missing = sorted(_expected_fit_models - set(SCIPY_FIT_MODELS))
+    extra = sorted(set(SCIPY_FIT_MODELS) - _expected_fit_models)
+    raise RuntimeError(
+        "SciPy fitting registry does not match the canonical catalog: "
+        f"missing={missing!r}, extra={extra!r}."
+    )
+for _model_id, _model_spec in SCIPY_FIT_MODELS.items():
+    if _model_id not in FIT_MODEL_GROUPS.get(_model_spec.group, ()):
+        raise RuntimeError(
+            f"SciPy fitting model {_model_id!r} declares non-canonical group "
+            f"{_model_spec.group!r}."
+        )
 
 
 def get_model_spec(fit_type: str) -> FitModelSpec:

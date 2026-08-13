@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
@@ -28,7 +30,7 @@ class GuiFileFlowTests(unittest.TestCase):
         self.window.figure_window.add_figure(
             width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
         )
-        self.window.figure_window.current_canva.add_axes()
+        create_regular_axes(self.window.figure_window.current_canva)
         model = self.window.table.current_subtable().get_table(0).table_model
         model.setData(model.index(0, 0), "1", Qt.EditRole)
         self.menu = MenuBar(self.window.table, self.window.figure_window)
@@ -60,6 +62,11 @@ class GuiFileFlowTests(unittest.TestCase):
             self.assertEqual(loaded.table.table_names(), ["ProjectA"])
             self.assertEqual(loaded.figure_window.tabwindow.count(), 1)
             self.assertEqual(loaded.table.current_project_id, loaded.figure_window.current_canva.project_id)
+            self.assertFalse(
+                loaded.figure_window.is_canvas_dirty(
+                    loaded.figure_window.current_canva
+                )
+            )
         finally:
             loaded.close()
             self.app.processEvents()

@@ -66,11 +66,21 @@ class ComponentTreeModel(QAbstractItemModel):
 
         if registry is self.registry and editor_registry is self.editor_registry:
             return
+        candidate = type(self)()
+        try:
+            candidate.registry = registry
+            candidate.editor_registry = editor_registry
+            candidate.presentation = TreePresentationResolver(editor_registry)
+            projection = candidate._build_projection()
+        finally:
+            candidate.registry = None
+            candidate.editor_registry = None
+            candidate.deleteLater()
         self._detach_registry()
         self.registry = registry
         self.editor_registry = editor_registry
         self.presentation = TreePresentationResolver(editor_registry)
-        self._reset_from_registry()
+        self._publish_projection(projection)
         if registry is not None:
             subscribe_batches = getattr(registry, "subscribe_batches", None)
             self._unsubscribe = (
@@ -143,6 +153,10 @@ class ComponentTreeModel(QAbstractItemModel):
             )
 
         states = list(self.registry.states())
+        if states and self.editor_registry is None:
+            raise ValueError(
+                "A non-empty component tree requires an EditorRegistry."
+            )
         states_by_id = {state.id: state for state in states}
         if len(states_by_id) != len(states):
             raise ValueError("Component tree contains duplicate component IDs.")

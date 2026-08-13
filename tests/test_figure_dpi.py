@@ -24,6 +24,9 @@ PROBE = textwrap.dedent(
     app = QApplication([])
     repository = TableRepository()
     project = repository.create_project("DPI Probe")
+    class ProjectMetadataStub:
+        def apply_controller_name(self, _project_id, _new_name):
+            pass
     canvas = PyFigureCanvas(
         width=6.4,
         height=4.8,
@@ -31,7 +34,7 @@ PROBE = textwrap.dedent(
         style="default",
         repository=repository,
         project_id=project.id,
-        project_name=project.name,
+        project_metadata=ProjectMetadataStub(),
         color_library=ColorLibrary(),
     )
     canvas.show()

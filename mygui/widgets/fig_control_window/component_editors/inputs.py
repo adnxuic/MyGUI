@@ -551,11 +551,6 @@ class MultiSeriesDataReferenceInput(QFrame):
         self._initialized = True
         self._emit_refs_changed()
 
-    def select_filtered(self) -> None:
-        """Compatibility helper that selects every dropdown item."""
-
-        self.y_data_input.select_all()
-
     def clear_all(self) -> None:
         """Clear every Y selection."""
 

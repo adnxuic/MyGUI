@@ -23,13 +23,13 @@ from mygui.bounded_process import (
     run_bounded_process,
 )
 from mygui.database import fit_result as shared_fit_result
-from mygui.database.py_matlab_fit import fit_type
+from mygui.database.fit_catalog import FIT_MODEL_GROUPS
 from mygui.resource_limits import load_resource_limits
 
 
 GET_FUNC_PACKAGE = "mygui.database.matlab_func.get_func"
 CURVE_FITTING_PACKAGE = "mygui.database.matlab_func.curve_fitting"
-FIT_TYPES = fit_type
+FIT_TYPES = FIT_MODEL_GROUPS
 _RESULT_PREFIX = "__MATLAB_ADAPTER_RESULT__"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MCR_CACHE_PARENT = user_cache_directory() / "matlab_runtime"

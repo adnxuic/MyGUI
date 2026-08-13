@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent
@@ -48,7 +50,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             canva_name="DeleteProject",
         )
         self.canvas = self.window.figure_window.current_canva
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
 
     def tearDown(self):
         status_messages.clear_status_handler()
@@ -89,7 +91,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
         for controller in reversed(existing):
             self.assertTrue(self.canvas.delete_axes(controller.component_id))
-        self.canvas.add_axes(2, 2)
+        create_regular_axes(self.canvas, 2, 2)
         self.canvas.fig.canvas.draw()
         axes = sorted(
             self.canvas.component_registry.query(kind=ComponentKind.AXES),
@@ -672,7 +674,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 side_effect=RuntimeError("injected Axes Inspector failure"),
             ):
                 with self.assertRaisesRegex(RuntimeError, "Axes Inspector"):
-                    self.canvas.add_axes()
+                    create_regular_axes(self.canvas)
         finally:
             unsubscribe()
 
@@ -782,8 +784,8 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
 
     def test_axes_delete_cascades_reindexes_and_does_not_reuse_ids(self):
-        self.canvas.add_axes()
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
+        create_regular_axes(self.canvas)
         axes = sorted(
             self.canvas.component_registry.query(kind=ComponentKind.AXES),
             key=lambda item: item.state.selector["index"],
@@ -801,7 +803,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             axes[0].state.data["subplot"].copy(),
             axes[2].state.data["subplot"].copy(),
         ]
-        self.canvas.update_current_axes(deleted)
+        self.canvas.update_current_axes(deleted.component_id)
 
         axes_events = []
         observer_id = self.canvas.fig._axobservers.connect(
@@ -858,7 +860,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             item.component_id
             for item in self.canvas.component_registry.query()
         }
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         added = max(
             self.canvas.component_registry.query(kind=ComponentKind.AXES),
             key=lambda item: item.state.selector["index"],
@@ -877,7 +879,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self._assert_two_by_two_delete_preserves_layout(3)
 
     def test_axes_delete_failures_preserve_matplotlib_registry_and_ui_identity(self):
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         registry = self.canvas.component_registry
         axes_controllers = sorted(
             registry.query(kind=ComponentKind.AXES),
@@ -888,7 +890,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         survivor_axes = survivor.resolve_target()
         target_axes._shared_axes["x"].join(target_axes, survivor_axes)
         target_axes._twinned_axes.join(target_axes, survivor_axes)
-        self.canvas.update_current_axes(target)
+        self.canvas.update_current_axes(target.component_id)
         self.canvas.canva.grab_mouse(target_axes)
 
         panel = self.canvas.figure_inspector.axes_inspector(
@@ -1397,7 +1399,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             canva_name="ForegroundProject",
         )
         second = self.window.figure_window.current_canva
-        second.add_axes()
+        create_regular_axes(second)
         target = Path(self.directory.name, "background.mygui.json")
 
         self.assertTrue(
@@ -1425,7 +1427,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             canva_name="ForegroundProject",
         )
         second = self.window.figure_window.current_canva
-        second.add_axes()
+        create_regular_axes(second)
 
         with mock.patch.object(
             self.window,
@@ -1546,7 +1548,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             canva_name="SecondProject",
         )
         second = self.window.figure_window.current_canva
-        second.add_axes()
+        create_regular_axes(second)
         event = mock.Mock()
 
         with (

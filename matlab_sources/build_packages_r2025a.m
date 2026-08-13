@@ -1,7 +1,7 @@
 % Build MATLAB Compiler SDK Python packages for the GUI MATLAB adapter.
 % Run this file from MATLAB R2025a:
 %
-%   run("E:\PycharmProjects\MyGUI\matlab_sources\build_packages_r2025a.m")
+%   run(fullfile(pwd, "matlab_sources", "build_packages_r2025a.m"))
 %
 % The output directory is timestamped so existing generated packages are not
 % overwritten accidentally.
@@ -37,5 +37,5 @@ disp("Generated packages:");
 disp(fullfile(buildRoot, "get_funcpythonPackage", "get_func"));
 disp(fullfile(buildRoot, "curve_fittingpythonPackage", "curve_fitting"));
 disp("Copy only __init__.py and *.ctf from those package folders into:");
-disp(fullfile(repoRoot, "code", "database", "matlab_func", "get_func"));
-disp(fullfile(repoRoot, "code", "database", "matlab_func", "curve_fitting"));
+disp(fullfile(repoRoot, "mygui", "database", "matlab_func", "get_func"));
+disp(fullfile(repoRoot, "mygui", "database", "matlab_func", "curve_fitting"));

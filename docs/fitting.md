@@ -47,6 +47,9 @@ The fit dialog range uses the minimum and maximum preprocessed X values.
 
 ## Fit Types
 
+The backend-independent `mygui.database.fit_catalog` is the authoritative
+ordered catalog used by SciPy, MATLAB, and the fit selectors.
+
 - Polynomial: `poly1` through `poly9`
 - Exponential: `exp1`, `exp2`
 - Logarithmic: `log`

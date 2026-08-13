@@ -44,12 +44,12 @@ class TreePresentationResolver:
 
     def spec(self, state: ComponentState) -> TreePresentationSpec:
         profile = self.profile(state)
-        if profile is not None:
-            return profile.tree
-        return TreePresentationSpec(
-            state.role.value.replace("_", " ").title(),
-            sort_bucket=50,
-        )
+        if profile is None:
+            raise LookupError(
+                "No exact tree presentation profile for "
+                f"{state.kind.value}/{state.role.value}."
+            )
+        return profile.tree
 
     def display_label(self, state: ComponentState) -> str:
         spec = self.spec(state)

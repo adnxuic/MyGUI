@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QModelIndex, Qt
@@ -52,7 +54,7 @@ class ComponentTreeTests(unittest.TestCase):
             canva_name="TreeProject",
         )
         self.canvas = self.window.figure_window.current_canva
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         self.app.processEvents()
 
     def tearDown(self):
@@ -81,6 +83,25 @@ class ComponentTreeTests(unittest.TestCase):
             ):
                 return index
         return QModelIndex()
+
+    def _editor_registry_with_overrides(self, overrides=None):
+        overrides = overrides or {}
+        editor_registry = EditorRegistry()
+        keys = {
+            (state.kind, state.role)
+            for state in self.canvas.component_registry.states()
+        }
+        for key in keys:
+            profile = overrides.get(
+                key,
+                self.canvas.editor_registry.profile_for(*key),
+            )
+            editor_registry.register_profile(
+                key[0],
+                profile,
+                role=key[1],
+            )
+        return editor_registry
 
     @staticmethod
     def _menu_type(selected_text: str | None):
@@ -511,7 +532,7 @@ class ComponentTreeTests(unittest.TestCase):
             canva_name="SecondTreeProject",
         )
         second = self.window.figure_window.current_canva
-        second.add_axes()
+        create_regular_axes(second)
         self.window.figure_window.tabwindow.setCurrentIndex(0)
         self.app.processEvents()
 
@@ -629,17 +650,37 @@ class ComponentTreeTests(unittest.TestCase):
         registry = self.canvas.component_registry
         baseline = len(registry._batch_subscribers)
         model = ComponentTreeModel()
-        model.set_registry(registry)
+        model.set_registry(registry, self.canvas.editor_registry)
         self.assertEqual(len(registry._batch_subscribers), baseline + 1)
         model.dispose()
         self.assertEqual(len(registry._batch_subscribers), baseline)
+
+    def test_missing_profile_rejects_candidate_and_keeps_previous_projection(self):
+        registry = self.canvas.component_registry
+        model = ComponentTreeModel()
+        model.set_registry(registry, self.canvas.editor_registry)
+        before_ids = self._model_ids(model)
+        incomplete = EditorRegistry()
+        incomplete.register_profile(
+            ComponentKind.FIGURE,
+            self.canvas.editor_registry.profile_for(
+                ComponentKind.FIGURE,
+                ComponentRole.FIGURE,
+            ),
+            role=ComponentRole.FIGURE,
+        )
+        with self.assertRaisesRegex(LookupError, "No exact tree"):
+            model.set_registry(registry, incomplete)
+        self.assertIs(model.editor_registry, self.canvas.editor_registry)
+        self.assertEqual(self._model_ids(model), before_ids)
+        model.dispose()
 
     def test_axes_creation_rebuilds_tree_once_per_registry_batch(self):
         refreshes = []
         self.window.component_tree_host.model.refreshed.connect(
             lambda: refreshes.append(True)
         )
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         self.assertEqual(refreshes, [True])
 
     def test_property_driven_sort_rebuilds_from_projection_signature(self):
@@ -651,11 +692,10 @@ class ComponentTreeTests(unittest.TestCase):
             "x**2", 0.0, 1.0, "-", "#445566", "A",
             object_id="sort-a",
         )
-        editor_registry = EditorRegistry()
         profile = LINE_PROFILES[ComponentRole.FUNCTION_CURVE]
-        editor_registry.register_profile(
-            ComponentKind.LINE,
-            replace(
+        editor_registry = self._editor_registry_with_overrides(
+            {
+                (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE): replace(
                 profile,
                 tree=TreePresentationSpec(
                     "Function Curve",
@@ -664,8 +704,8 @@ class ComponentTreeTests(unittest.TestCase):
                         state.properties.get("label", ""),
                     ),
                 ),
-            ),
-            role=ComponentRole.FUNCTION_CURVE,
+                )
+            }
         )
         model = ComponentTreeModel()
         model.set_registry(self.canvas.component_registry, editor_registry)
@@ -697,28 +737,23 @@ class ComponentTreeTests(unittest.TestCase):
             10,
             object_id="figure-note",
         )
-        editor_registry = EditorRegistry()
         shared_group = {
             "group_title": "Figure Contents",
             "group_key": "figure_contents",
             "group_order": 0,
             "always_group": True,
         }
-        editor_registry.register_profile(
-            ComponentKind.AXES,
-            replace(
-                AXES_PROFILE,
-                tree=TreePresentationSpec("Axes", **shared_group),
-            ),
-            role=ComponentRole.AXES,
-        )
-        editor_registry.register_profile(
-            ComponentKind.TEXT,
-            replace(
-                TEXT_PROFILE,
-                tree=TreePresentationSpec("Text", **shared_group),
-            ),
-            role=ComponentRole.TEXT,
+        editor_registry = self._editor_registry_with_overrides(
+            {
+                (ComponentKind.AXES, ComponentRole.AXES): replace(
+                    AXES_PROFILE,
+                    tree=TreePresentationSpec("Axes", **shared_group),
+                ),
+                (ComponentKind.TEXT, ComponentRole.TEXT): replace(
+                    TEXT_PROFILE,
+                    tree=TreePresentationSpec("Text", **shared_group),
+                ),
+            }
         )
         model = ComponentTreeModel()
         model.set_registry(self.canvas.component_registry, editor_registry)
@@ -792,7 +827,7 @@ class ComponentTreeTests(unittest.TestCase):
             object_id="curve-b",
         )
         first_axes_id = self.canvas.current_axes_component_id
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         self.canvas.add_curve(
             "x**3",
             0.0,

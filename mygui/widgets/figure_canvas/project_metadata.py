@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from mygui.database import (
     TableChangeSet,
     TableRepository,
     validate_component_name,
 )
+
+
+class ProjectMetadataPort(Protocol):
+    """Minimal Canvas-facing project metadata transaction contract."""
+
+    def apply_controller_name(self, project_id: str, new_name: str) -> None:
+        """Apply one Controller-originated project name atomically."""
 
 
 class ProjectMetadataService:

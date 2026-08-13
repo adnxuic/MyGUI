@@ -457,7 +457,6 @@ class AxesLayoutService:
             self.canvas.figure_inspector.add_axes_inspector(
                 axes_controller,
                 self.canvas.editor_context,
-                self.canvas.color_library,
             )
             transaction.on_rollback(
                 lambda target_id=axes_id:
@@ -577,7 +576,7 @@ class AxesLayoutService:
         self.restore_runtime_relationships()
         self.canvas.message_presenter.discard_pending()
         if select and first_controller is not None:
-            self.canvas.update_current_axes(first_controller)
+            self.canvas.update_current_axes(first_controller.component_id)
         self.canvas.redraw()
         return component_ids
 

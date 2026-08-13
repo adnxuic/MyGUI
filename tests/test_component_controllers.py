@@ -24,6 +24,7 @@ from mygui.figuremodify.components import (
     ComponentState,
     ComponentValidationError,
     DataPlotController,
+    EditorKind,
     GridController,
     LegendController,
     PropertySpec,
@@ -136,6 +137,13 @@ class ComponentModelTests(unittest.TestCase):
             spec.normalize(-1)
         with self.assertRaises(ComponentValidationError):
             spec.normalize(True)
+
+    def test_property_spec_editor_contract_rejects_typos(self):
+        spec = PropertySpec("visible", bool, True, editor="check")
+        self.assertIs(spec.editor, EditorKind.BOOL)
+        self.assertEqual(spec.metadata()["editor"], "bool")
+        with self.assertRaisesRegex(ComponentValidationError, "unknown editor"):
+            PropertySpec("color", str, "black", editor="colro")
 
     def test_controller_mapping_covers_every_controlled_kind_and_role(self):
         expected = {
@@ -348,8 +356,8 @@ class ComponentControllerContractTests(unittest.TestCase):
         self.registry.add_cleanup_callback(
             "plot-1", lambda removed: cleaned.append(removed.id)
         )
-        first = self.line_controller.delete()
-        second = self.line_controller.delete()
+        first = self.line_controller._delete_component()
+        second = self.line_controller._delete_component()
         self.assertEqual(first.status, ChangeStatus.DELETED)
         self.assertEqual(second.status, ChangeStatus.NOOP)
         self.assertNotIn("plot-1", self.registry)
@@ -535,7 +543,7 @@ class SemanticControllerTests(unittest.TestCase):
         legend = self._one(LegendController)
 
         for controller in (title, x_axis, legend):
-            change = controller.delete()
+            change = controller._delete_component()
             self.assertTrue(change.ok)
             self.assertIn(controller.component_id, self.registry)
             self.assertFalse(controller.state.properties["visible"])

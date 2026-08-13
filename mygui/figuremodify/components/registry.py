@@ -20,6 +20,7 @@ from .errors import (
     ComponentValidationError,
 )
 from .locator import ComponentLocator
+from .matplotlib_removal import MATPLOTLIB_REMOVAL
 from .models import (
     ChangeStatus,
     ComponentBatchChange,
@@ -508,11 +509,6 @@ class ComponentRegistry:
             self._flush_events()
         return ComponentBatchChange(tuple(changes), True)
 
-    def delete(self, component_id: str) -> ComponentChange:
-        """Remove the component through its controller."""
-
-        return self.get(component_id).delete()
-
     def delete_transaction(
         self,
         component_ids: Iterable[str],
@@ -914,47 +910,7 @@ class ComponentRegistry:
     def _force_restore_removal_handle(handle) -> None:
         """Rebuild a detached artist container from its in-memory handle."""
 
-        if hasattr(handle, "localaxes") and hasattr(handle, "stack_axes"):
-            figure = handle.figure
-            target = handle.target
-            figure._localaxes[:] = handle.localaxes
-            figure._axstack._axes = dict(handle.stack_axes)
-            figure.stale = handle.stale
-            target.stale = handle.target_stale
-            target.stale_callback = handle.stale_callback
-            target.figure = figure
-            target.axes = target
-            canvas = figure.canvas
-            if canvas is not None and hasattr(canvas, "mouse_grabber"):
-                canvas.mouse_grabber = handle.mouse_grabber
-            handle.detached = False
-            return
-        owner = handle.owner
-        target = handle.target
-        if target not in owner:
-            owner.insert(min(handle.index, len(owner)), target)
-        handle.detached = False
-        target.stale_callback = handle.stale_callback
-        if handle.axes is not None:
-            target.axes = handle.axes
-            if handle.axes_stale is not None:
-                handle.axes.stale = handle.axes_stale
-        if handle.figure is not None:
-            target.figure = handle.figure
-            if handle.figure_stale is not None:
-                handle.figure.stale = handle.figure_stale
-        for auxiliary in sorted(
-            getattr(handle, "auxiliary_handles", ()),
-            key=lambda item: item.index,
-        ):
-            if auxiliary.target not in auxiliary.owner:
-                auxiliary.owner.insert(
-                    min(auxiliary.index, len(auxiliary.owner)),
-                    auxiliary.target,
-                )
-            auxiliary.target.stale_callback = auxiliary.stale_callback
-            auxiliary.target.axes = auxiliary.axes
-            auxiliary.target.figure = auxiliary.figure
+        MATPLOTLIB_REMOVAL.force_restore(handle)
 
     def add_cleanup_callback(
         self,
@@ -1050,26 +1006,17 @@ class ComponentRegistry:
 
         return unsubscribe
 
-    def clear(self, *, delete_targets: bool = False) -> None:
+    def clear(self) -> None:
         """Remove all owned entries and detach their callbacks."""
 
-        roots = [
-            controller.component_id
-            for controller in self.children(None)
-        ]
-        if delete_targets:
-            for component_id in roots:
-                if component_id in self._controllers:
-                    self._controllers[component_id].delete()
-        else:
-            for component_id in list(self._controllers):
-                controller = self._controllers[component_id]
-                self._notify_removed(controller.state)
-                controller._deleted = True
-                self.locator.unbind(component_id)
-            self._controllers.clear()
-            self._children.clear()
-            self._cleanup_callbacks.clear()
+        for component_id in list(self._controllers):
+            controller = self._controllers[component_id]
+            self._notify_removed(controller.state)
+            controller._deleted = True
+            self.locator.unbind(component_id)
+        self._controllers.clear()
+        self._children.clear()
+        self._cleanup_callbacks.clear()
         self._pending.clear()
 
     def states(self) -> list[ComponentState]:

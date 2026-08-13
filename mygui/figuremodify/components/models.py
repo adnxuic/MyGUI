@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from enum import Enum, IntFlag, StrEnum
+from enum import Enum, IntEnum, IntFlag, StrEnum
 import math
 from typing import Any, Callable, Mapping
 
@@ -65,6 +65,54 @@ class FitEngine(StrEnum):
 
     PYTHON = "Python"
     MATLAB = "Matlab"
+
+
+class EditorKind(StrEnum):
+    """Closed set of UI editor contracts used by ``PropertySpec``.
+
+    The enum values intentionally match the existing first-party declarations
+    so loading the controller module normalizes every declaration to this
+    closed type.  Unknown or misspelled editor hints therefore fail during
+    startup instead of silently becoming text inputs.
+    """
+
+    AUTO = "auto"
+    BOOL = "bool"
+    INT = "int"
+    NUMBER = "number"
+    ENUM = "enum"
+    TEXT = "text"
+    COLOR = "color"
+    FONT = "font"
+    POSITION = "position"
+    SIZE = "size"
+    RANGE = "range"
+    RECTANGLE = "rectangle"
+    SPINE_POSITION = "spine_position"
+    ASPECT = "aspect"
+    ROTATION = "rotation"
+    LINE_STYLE = "line_style"
+    FONT_WEIGHT = "font_weight"
+    LEGEND_POSITION = "legend_position"
+    MARKER = "marker"
+    JSON = "json"
+
+    @classmethod
+    def _missing_(cls, value):
+        migrations = {
+            "check": cls.BOOL,
+            "spin": cls.INT,
+            "double_spin": cls.NUMBER,
+            "combo": cls.ENUM,
+        }
+        return migrations.get(value)
+
+
+class RestorePhase(IntEnum):
+    """Ordered runtime materialization phases for schema-v9 components."""
+
+    DYNAMIC = 10
+    IN_AXES = 20
 
 
 ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
@@ -393,7 +441,7 @@ class PropertySpec:
     value_type: type | tuple[type, ...]
     default: Any = None
     validator: Validator | None = None
-    editor: str = "auto"
+    editor: EditorKind = EditorKind.AUTO
     persistent: bool = True
     impact: UpdateImpact = UpdateImpact.REDRAW
     choices: tuple[Any, ...] | None = None
@@ -409,6 +457,14 @@ class PropertySpec:
             )
         if not isinstance(self.impact, UpdateImpact):
             object.__setattr__(self, "impact", UpdateImpact(self.impact))
+        if not isinstance(self.editor, EditorKind):
+            try:
+                object.__setattr__(self, "editor", EditorKind(self.editor))
+            except (TypeError, ValueError) as exc:
+                raise ComponentValidationError(
+                    f"Property {self.key!r} declares unknown editor "
+                    f"{self.editor!r}."
+                ) from exc
         if self.choices is not None:
             object.__setattr__(self, "choices", tuple(self.choices))
 
@@ -469,7 +525,7 @@ class PropertySpec:
 
         return {
             "key": self.key,
-            "editor": self.editor,
+            "editor": self.editor.value,
             "default": deepcopy(self.default),
             "persistent": self.persistent,
             "impact": self.impact.to_names(),

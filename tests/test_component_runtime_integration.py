@@ -6,6 +6,8 @@ from unittest import mock
 from collections import Counter
 from pathlib import Path
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
@@ -42,7 +44,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             canva_name="RuntimeComponents",
         )
         self.canvas = self.window.figure_window.current_canva
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         self.sheet = (
             self.window.table.current_subtable()
             .get_table(0)
@@ -370,7 +372,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             tuple(first_axes.get_ylim()),
         )
 
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         second_axes = self.canvas.current_axes
         second_controller = self.canvas.current_axes_controller
         second_common = self.canvas.figure_inspector.axes_inspector(
@@ -661,9 +663,9 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             schema_editor.editor("color").color_library,
             self.window.color_library,
         )
-        change = self.canvas.component_registry.delete(object_id)
+        change = self.canvas.delete_components((object_id,))
 
-        self.assertTrue(change.ok)
+        self.assertTrue(change)
         self.assertEqual(toolbox.count(), 0)
         self.assertFalse(schema_editor.isEnabled())
         self.assertNotIn(object_id, self.canvas.component_registry)
@@ -1404,7 +1406,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         )
         first_layout_id = first.state.data["subplot"]["layout_id"]
 
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
 
         second = next(
             controller

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from matplotlib.axes import Axes
@@ -16,6 +15,7 @@ from .errors import (
     ComponentValidationError,
 )
 from .locator import ComponentLocator
+from .matplotlib_removal import MATPLOTLIB_REMOVAL, RemovalHandle
 from .models import (
     ChangeStatus,
     ComponentChange,
@@ -26,6 +26,7 @@ from .models import (
     DeletionPolicy,
     KEEP_RUNTIME_DATA,
     PropertySpec,
+    RestorePhase,
     UpdateImpact,
 )
 
@@ -34,27 +35,6 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
-
-
-@dataclass(slots=True)
-class RemovalHandle:
-    """Reversible physical-detachment state for one live component.
-
-    The Registry owns the lifetime of a handle.  Controllers may subclass it
-    for targets whose container is not a regular Matplotlib artist list.
-    """
-
-    target: Any
-    owner: list[Any]
-    index: int
-    subject: Axes | Figure | None
-    stale_callback: Any
-    axes: Axes | None
-    figure: Figure | None
-    axes_stale: bool | None
-    figure_stale: bool | None
-    mouseover: bool
-    detached: bool = False
 
 
 def _values_equal(left: Any, right: Any) -> bool:
@@ -190,6 +170,7 @@ class ComponentController(Generic[T]):
     CAPABILITIES: ClassVar[frozenset[str]] = frozenset()
     DELETION_POLICY: ClassVar[DeletionPolicy] = DeletionPolicy.FORBID
     DELETE_IMPACTS: ClassVar[UpdateImpact] = UpdateImpact.REDRAW
+    RESTORE_PHASE: ClassVar[RestorePhase | None] = None
 
     def __init__(
         self,
@@ -658,8 +639,8 @@ class ComponentController(Generic[T]):
 
         return self.apply_state(snapshot)
 
-    def delete(self) -> ComponentChange:
-        """Apply the Controller's single authoritative deletion policy."""
+    def _delete_component(self) -> ComponentChange:
+        """Package-internal primitive used by deletion transactions/tests."""
 
         before = self._safe_snapshot()
         if self._deleted:
@@ -721,77 +702,25 @@ class ComponentController(Generic[T]):
                 f"{type(self).__name__} does not support physical removal."
             )
         target = self.resolve_target()
-        remove_method = getattr(target, "_remove_method", None)
-        owner = getattr(remove_method, "__self__", None)
-        if not isinstance(owner, list) or target not in owner:
-            raise ComponentValidationError(
-                f"{type(target).__name__} has no reversible list container."
-            )
-        axes = getattr(target, "axes", None)
-        if not isinstance(axes, Axes):
-            axes = None
-        figure = getattr(target, "figure", None)
-        if not isinstance(figure, Figure):
-            figure = axes.figure if axes is not None else None
-        return RemovalHandle(
-            target=target,
-            owner=owner,
-            index=owner.index(target),
+        return MATPLOTLIB_REMOVAL.prepare_artist(
+            target,
             subject=update_subject_for(target),
-            stale_callback=getattr(target, "stale_callback", None),
-            axes=axes,
-            figure=figure,
-            axes_stale=getattr(axes, "stale", None),
-            figure_stale=getattr(figure, "stale", None),
-            mouseover=bool(getattr(target, "mouseover", False)),
         )
 
     def commit_remove(self, handle: RemovalHandle) -> None:
         """Reversibly detach a prepared target without lifecycle effects."""
 
-        if handle.detached:
-            return
-        try:
-            handle.owner.remove(handle.target)
-        except ValueError as exc:
-            raise ComponentValidationError(
-                "Prepared component is no longer in its original container."
-            ) from exc
-        handle.detached = True
+        MATPLOTLIB_REMOVAL.commit(handle)
 
     def rollback_remove(self, handle: RemovalHandle) -> None:
         """Idempotently restore the exact target at its original position."""
 
-        if not handle.detached:
-            return
-        if handle.target not in handle.owner:
-            handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
-        handle.detached = False
-        handle.target.stale_callback = handle.stale_callback
-        if handle.axes is not None:
-            handle.target.axes = handle.axes
-            if handle.axes_stale is not None:
-                handle.axes.stale = handle.axes_stale
-        if handle.figure is not None:
-            handle.target.figure = handle.figure
-            if handle.figure_stale is not None:
-                handle.figure.stale = handle.figure_stale
+        MATPLOTLIB_REMOVAL.rollback(handle)
 
     def _finalize_remove(self, handle: RemovalHandle) -> None:
         """Complete non-reversible Matplotlib cleanup after Registry commit."""
 
-        target = handle.target
-        if handle.axes is not None:
-            try:
-                handle.axes._mouseover_set.discard(target)
-            except AttributeError:
-                pass
-            handle.axes.stale = True
-            target.axes = None
-        if handle.figure is not None:
-            handle.figure.stale = True
-            target.figure = None
-        target.stale_callback = None
+        MATPLOTLIB_REMOVAL.finalize(handle)
 
     def _hide_for_delete(self) -> ComponentChange:
         """Hide a fixed semantic component while retaining its tree identity."""

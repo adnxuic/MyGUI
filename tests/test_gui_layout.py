@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QObject, QSettings, Qt
@@ -249,7 +251,7 @@ class GuiLayoutTests(unittest.TestCase):
                 figure_window.current_canva.root_component_id,
             )
 
-            figure_window.current_canva.add_axes()
+            create_regular_axes(figure_window.current_canva)
             self.app.processEvents()
             self.assertIsInstance(
                 figure_window.current_figure_inspector.current_panel(),
@@ -285,6 +287,7 @@ class GuiLayoutTests(unittest.TestCase):
                 canva_name="First",
             )
             first_inspector = host.current_figure_inspector()
+            first_project_id = figure_window.current_canva.project_id
             figure_window.add_figure(
                 width=4,
                 height=3,
@@ -293,13 +296,14 @@ class GuiLayoutTests(unittest.TestCase):
                 canva_name="Second",
             )
             second_inspector = host.current_figure_inspector()
+            second_project_id = figure_window.current_canva.project_id
             self.assertIsNot(first_inspector, second_inspector)
 
             figure_window.tabwindow.setCurrentIndex(0)
             self.app.processEvents()
             self.assertIs(host.current_figure_inspector(), first_inspector)
 
-            figure_window.remove_project("First")
+            figure_window.remove_project_by_id(first_project_id)
             self.app.processEvents()
             self.assertEqual(figure_window.tabwindow.count(), 1)
             self.assertIs(
@@ -308,7 +312,7 @@ class GuiLayoutTests(unittest.TestCase):
             )
             self.assertIs(host.current_figure_inspector(), second_inspector)
 
-            figure_window.remove_project("Second")
+            figure_window.remove_project_by_id(second_project_id)
             self.app.processEvents()
             self.assertEqual(figure_window.tabwindow.count(), 0)
             self.assertIsNone(host.current_figure_inspector())

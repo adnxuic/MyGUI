@@ -168,7 +168,7 @@ class PyFigureWindow(QFrame):
                 style=style,
                 repository=self.repository,
                 project_id=project.id,
-                project_name=project_name,
+                project_metadata=self.project_metadata,
                 project_path=project_path,
                 color_library=self.color_library,
                 component_tree=component_tree,
@@ -176,7 +176,6 @@ class PyFigureWindow(QFrame):
             figure_inspector = self.figure_inspector_host.add_figure_inspector(
                 canva.component_registry.get(canva.root_component_id),
                 canva.editor_context,
-                self.color_library,
                 publish=False,
             )
             canva.set_figure_inspector(figure_inspector)
@@ -369,16 +368,6 @@ class PyFigureWindow(QFrame):
         if self.figure_inspector_host is not None:
             self.figure_inspector_host.clear_figure_inspectors()
 
-    def remove_project(self, project_name: str):
-        """Remove project."""
-
-        for index in range(self.tabwindow.count()):
-            canvas = self.tabwindow.widget(index)
-            if getattr(canvas, "project_name", None) != project_name:
-                continue
-            return self.remove_project_at(index)
-        return False
-
     def remove_project_by_id(self, project_id: str) -> bool:
         """Remove one Figure-side project by its stable repository id."""
 
@@ -428,14 +417,6 @@ class PyFigureWindow(QFrame):
             self.table.remove_project_table(project_id)
         self.change_current_canvas()
         return True
-
-    def cancel_pending_draws(self):
-        """Cancel pending draws."""
-
-        for index in range(self.tabwindow.count()):
-            widget = self.tabwindow.widget(index)
-            if hasattr(widget, "cancel_pending_draw"):
-                widget.cancel_pending_draw()
 
     def prepare_dependency_cascade(self, refs: list[ColumnRef], reason: str):
         """Capture dependent components before deleting table data."""
@@ -593,20 +574,3 @@ class PyFigureWindow(QFrame):
             project_path=project_path,
             component_tree=figure,
         )
-
-    def load_figure_snapshot(self, figures: list[dict[str, Any]]):
-        """Load figure snapshot."""
-
-        self.clear_figures()
-        for figure in figures:
-            root_id = figure["root_component_id"]
-            root = next(
-                component
-                for component in figure["components"]
-                if component["id"] == root_id
-            )
-            name = (
-                root.get("properties", {}).get("name")
-                or self._default_project_name()
-            )
-            self.load_project_figure_snapshot(figure, name)

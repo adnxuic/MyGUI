@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 from copy import deepcopy
-from dataclasses import dataclass
 from io import BytesIO
 import math
 from pathlib import Path
@@ -41,6 +40,11 @@ from mygui.resource_limits import load_resource_limits
 
 from .base import ComponentController
 from .errors import ComponentNotFoundError, ComponentValidationError
+from .matplotlib_removal import (
+    MATPLOTLIB_REMOVAL,
+    AxesRemovalHandle,
+    InAxesRemovalHandle,
+)
 from .models import (
     ChangeStatus,
     ComponentChange,
@@ -49,8 +53,10 @@ from .models import (
     ComponentRole,
     ComponentState,
     DeletionPolicy,
+    EditorKind,
     FitEngine,
     PropertySpec,
+    RestorePhase,
     UpdateImpact,
     XYData,
 )
@@ -774,95 +780,22 @@ class AxesController(ContainerController):
     def prepare_remove(self) -> "AxesRemovalHandle":
         """Capture Matplotlib's pinned Axes containers without mutating them."""
 
-        target = self.resolve_target()
-        figure = target.figure
-        if figure is None or target not in figure._localaxes:
-            raise ComponentValidationError(
-                "Axes is not attached to its registered Figure."
-            )
-        stack_axes = dict(figure._axstack._axes)
-        if target not in stack_axes:
-            raise ComponentValidationError(
-                "Axes is missing from the Figure Axes stack."
-            )
-        canvas = figure.canvas
-        return AxesRemovalHandle(
-            target=target,
-            figure=figure,
-            subject=figure,
-            child_axes=tuple(target.child_axes),
-            localaxes=tuple(figure._localaxes),
-            stack_axes=stack_axes,
-            stale=figure.stale,
-            target_stale=target.stale,
-            stale_callback=target.stale_callback,
-            mouse_grabber=getattr(canvas, "mouse_grabber", None),
-            detached=False,
-        )
+        return MATPLOTLIB_REMOVAL.prepare_axes(self.resolve_target())
 
     def commit_remove(self, handle: "AxesRemovalHandle") -> None:
         """Temporarily detach an Axes without notifying Matplotlib observers."""
 
-        if handle.detached:
-            return
-        handle.detached = True
-        try:
-            handle.figure._localaxes.remove(handle.target)
-            handle.figure._axstack.remove(handle.target)
-        except (KeyError, ValueError) as exc:
-            self.rollback_remove(handle)
-            raise ComponentValidationError(
-                "Prepared Axes is no longer in its original Figure containers."
-            ) from exc
+        MATPLOTLIB_REMOVAL.commit(handle)
 
     def rollback_remove(self, handle: "AxesRemovalHandle") -> None:
         """Restore the exact Axes containers and current-Axes stack."""
 
-        if not handle.detached:
-            return
-        handle.figure._localaxes[:] = handle.localaxes
-        handle.figure._axstack._axes = dict(handle.stack_axes)
-        handle.figure.stale = handle.stale
-        handle.target.stale = handle.target_stale
-        handle.target.stale_callback = handle.stale_callback
-        handle.target.figure = handle.figure
-        handle.target.axes = handle.target
-        canvas = handle.figure.canvas
-        if canvas is not None and hasattr(canvas, "mouse_grabber"):
-            canvas.mouse_grabber = handle.mouse_grabber
-        handle.detached = False
+        MATPLOTLIB_REMOVAL.rollback(handle)
 
     def _finalize_remove(self, handle: "AxesRemovalHandle") -> None:
         """Publish Matplotlib's Axes removal only after Registry commit."""
 
-        figure = handle.figure
-        target = handle.target
-        figure._remove_axes(target, owners=())
-        for child_axes in handle.child_axes:
-            try:
-                child_axes.remove()
-            except (RuntimeError, ValueError):
-                pass
-        target.stale_callback = None
-        target.axes = None
-        target.figure = None
-
-
-@dataclass(slots=True)
-class AxesRemovalHandle:
-    """Pinned Matplotlib 3.9 Axes structures needed for exact rollback."""
-
-    target: Axes
-    figure: Figure
-    subject: Figure
-    child_axes: tuple[Axes, ...]
-    localaxes: tuple[Axes, ...]
-    stack_axes: dict[Axes, int]
-    stale: bool
-    target_stale: bool
-    stale_callback: Any
-    mouse_grabber: Any
-    detached: bool
+        MATPLOTLIB_REMOVAL.finalize(handle)
 
 
 class AxisComponentController(ComponentController[Any]):
@@ -1460,6 +1393,7 @@ class TextController(ComponentController[Text]):
     """Coordinate state changes for text components."""
 
     KIND = ComponentKind.TEXT
+    RESTORE_PHASE = RestorePhase.DYNAMIC
     DELETION_POLICY = DeletionPolicy.REMOVE
     ROLES = frozenset(
         {
@@ -1567,6 +1501,7 @@ class TitleController(TextController):
     """Coordinate state changes for title components."""
 
     ROLES = frozenset({ComponentRole.TITLE})
+    RESTORE_PHASE = None
     DELETION_POLICY = DeletionPolicy.HIDE
 
     def _write_property(
@@ -1581,6 +1516,7 @@ class AxisLabelController(TextController):
     """Coordinate state changes for axis label components."""
 
     ROLES = frozenset({ComponentRole.X_LABEL, ComponentRole.Y_LABEL})
+    RESTORE_PHASE = None
     DELETION_POLICY = DeletionPolicy.HIDE
 
     def _validate_candidate(self, state: ComponentState) -> None:
@@ -1834,38 +1770,6 @@ class LegendController(ComponentController[Legend]):
         super()._write_property(target, spec, value)
 
 
-@dataclass(slots=True)
-class AuxiliaryRemovalState:
-    """Reversible location for one indicator artist owned by a parent Axes."""
-
-    target: Any
-    owner: list[Any]
-    index: int
-    stale_callback: Any
-    axes: Axes | None
-    figure: Figure | None
-
-
-@dataclass(slots=True)
-class InAxesRemovalHandle:
-    """Pinned child-Axes and indicator state for atomic inset deletion."""
-
-    target: Axes
-    owner: list[Any]
-    index: int
-    subject: Axes
-    stale_callback: Any
-    axes: Axes
-    figure: Figure
-    axes_stale: bool | None
-    figure_stale: bool | None
-    mouseover: bool
-    target_stale: bool
-    runtime: Any
-    auxiliary_handles: tuple[AuxiliaryRemovalState, ...]
-    detached: bool = False
-
-
 _IN_AXES_COMMON_PROPERTIES = (
     PropertySpec(
         "bounds",
@@ -2112,120 +2016,23 @@ class InAxesController(ComponentController[Any]):
     def prepare_remove(self) -> InAxesRemovalHandle:
         """Capture child-Axes and indicator containers without publishing removal."""
 
-        runtime = self.resolve_target()
-        child = self._runtime_axes(runtime)
-        parent = getattr(runtime, "parent_axes", None)
-        if not isinstance(parent, Axes):
-            raise ComponentValidationError(
-                "Inset Axes has no registered parent Axes."
-            )
-        owner = parent.child_axes
-        if child not in owner:
-            raise ComponentValidationError(
-                "Inset Axes is not attached to its registered parent Axes."
-            )
-        auxiliary = []
-        for artist in (
-            getattr(runtime, "indicator_rectangle", None),
-            *tuple(getattr(runtime, "connectors", ())),
-        ):
-            if artist is None:
-                continue
-            artist_owner = parent._children
-            if artist not in artist_owner:
-                raise ComponentValidationError(
-                    "Inset indicator is detached from its parent Axes."
-                )
-            auxiliary.append(
-                AuxiliaryRemovalState(
-                    artist,
-                    artist_owner,
-                    artist_owner.index(artist),
-                    getattr(artist, "stale_callback", None),
-                    getattr(artist, "axes", None),
-                    getattr(artist, "figure", None),
-                )
-            )
-        figure = child.figure
-        if figure is None:
-            raise ComponentValidationError("Inset Axes has no Figure.")
-        return InAxesRemovalHandle(
-            target=child,
-            owner=owner,
-            index=owner.index(child),
-            subject=parent,
-            stale_callback=child.stale_callback,
-            axes=parent,
-            figure=figure,
-            axes_stale=parent.stale,
-            figure_stale=figure.stale,
-            mouseover=False,
-            target_stale=child.stale,
-            runtime=runtime,
-            auxiliary_handles=tuple(auxiliary),
-        )
+        return MATPLOTLIB_REMOVAL.prepare_in_axes(self.resolve_target())
 
     def commit_remove(self, handle: InAxesRemovalHandle) -> None:
-        if handle.detached:
-            return
-        handle.detached = True
-        try:
-            for auxiliary in handle.auxiliary_handles:
-                auxiliary.owner.remove(auxiliary.target)
-            handle.owner.remove(handle.target)
-        except ValueError as exc:
-            self.rollback_remove(handle)
-            raise ComponentValidationError(
-                "Prepared inset component changed before deletion."
-            ) from exc
+        MATPLOTLIB_REMOVAL.commit(handle)
 
     def rollback_remove(self, handle: InAxesRemovalHandle) -> None:
-        if not handle.detached and handle.target in handle.owner:
-            return
-        if handle.target not in handle.owner:
-            handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
-        handle.target.figure = handle.figure
-        handle.target.axes = handle.axes
-        handle.target.stale = handle.target_stale
-        handle.target.stale_callback = handle.stale_callback
-        for auxiliary in sorted(
-            handle.auxiliary_handles,
-            key=lambda item: item.index,
-        ):
-            if auxiliary.target not in auxiliary.owner:
-                auxiliary.owner.insert(
-                    min(auxiliary.index, len(auxiliary.owner)),
-                    auxiliary.target,
-                )
-            auxiliary.target.axes = auxiliary.axes
-            auxiliary.target.figure = auxiliary.figure
-            auxiliary.target.stale_callback = auxiliary.stale_callback
-        if handle.axes_stale is not None:
-            handle.axes.stale = handle.axes_stale
-        if handle.figure_stale is not None:
-            handle.figure.stale = handle.figure_stale
-        handle.detached = False
+        MATPLOTLIB_REMOVAL.rollback(handle)
 
     def _finalize_remove(self, handle: InAxesRemovalHandle) -> None:
-        for auxiliary in sorted(
-            handle.auxiliary_handles,
-            key=lambda item: item.index,
-        ):
-            if auxiliary.target not in auxiliary.owner:
-                auxiliary.owner.insert(
-                    min(auxiliary.index, len(auxiliary.owner)),
-                    auxiliary.target,
-                )
-            auxiliary.target.remove()
-        if handle.target not in handle.owner:
-            handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
-        handle.target.remove()
+        MATPLOTLIB_REMOVAL.finalize(handle)
 
 
 class ZoomInAxesController(InAxesController):
     """Coordinate a live zoom inset and its parent-Axes indicator."""
 
     ROLES = frozenset({ComponentRole.IN_AXES_ZOOM})
+    RESTORE_PHASE = RestorePhase.IN_AXES
     PROPERTY_SPECS = _IN_AXES_COMMON_PROPERTIES + (
         PropertySpec(
             "xlim",
@@ -2283,6 +2090,7 @@ class ImageInAxesController(InAxesController):
     """Coordinate one embedded raster image displayed in a child Axes."""
 
     ROLES = frozenset({ComponentRole.IN_AXES_IMAGE})
+    RESTORE_PHASE = RestorePhase.IN_AXES
     PROPERTY_SPECS = _IN_AXES_COMMON_PROPERTIES + (
         PropertySpec(
             "opacity",
@@ -2356,6 +2164,7 @@ class LineController(ComponentController[Line2D]):
     """Coordinate state changes for line components."""
 
     KIND = ComponentKind.LINE
+    RESTORE_PHASE = RestorePhase.DYNAMIC
     DELETION_POLICY = DeletionPolicy.REMOVE
     ROLES = frozenset(
         {
@@ -2864,6 +2673,7 @@ class ScatterController(CollectionController):
     """Coordinate state changes for scatter components."""
 
     KIND = ComponentKind.SCATTER
+    RESTORE_PHASE = RestorePhase.DYNAMIC
     ROLES = frozenset({ComponentRole.SCATTER})
     DELETION_POLICY = DeletionPolicy.REMOVE
     PROPERTY_SPECS = (
@@ -3266,6 +3076,49 @@ CONTROLLER_TYPES: dict[
         ComponentRole.IN_AXES_IMAGE,
     ): ImageInAxesController,
 }
+
+
+def validate_controller_contracts() -> dict[
+    tuple[ComponentKind, ComponentRole], RestorePhase
+]:
+    """Validate first-party Controller declarations and return materializers.
+
+    The returned mapping is derived only from the Controller contracts, so it
+    is an independent completeness source for the Canvas materializer registry.
+    """
+
+    materializers: dict[
+        tuple[ComponentKind, ComponentRole], RestorePhase
+    ] = {}
+    for key, controller_type in CONTROLLER_TYPES.items():
+        kind, role = key
+        if controller_type.KIND is not kind or role not in controller_type.ROLES:
+            raise ComponentValidationError(
+                "Controller contract does not match registry key "
+                f"{kind.value}/{role.value}."
+            )
+        specs = controller_type.PROPERTY_SPECS
+        spec_keys = [spec.key for spec in specs]
+        if len(spec_keys) != len(set(spec_keys)):
+            raise ComponentValidationError(
+                f"Controller {controller_type.__name__} declares duplicate "
+                "PropertySpec keys."
+            )
+        for spec in specs:
+            if not isinstance(spec.editor, EditorKind):
+                raise ComponentValidationError(
+                    f"Property {controller_type.__name__}.{spec.key} does not "
+                    "declare a valid EditorKind."
+                )
+        phase = controller_type.RESTORE_PHASE
+        if phase is not None:
+            if not isinstance(phase, RestorePhase):
+                raise ComponentValidationError(
+                    f"Controller {controller_type.__name__} declares an invalid "
+                    "restore phase."
+                )
+            materializers[key] = phase
+    return materializers
 
 
 def controller_type_for(

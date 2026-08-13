@@ -12,6 +12,8 @@ schema-v9 project behavior.
 2. Implement the Controller, explicit `DeletionPolicy`, property specs,
    selector/data validation, and Locator strategy. Fixed semantic components
    hide; genuinely removable artists implement reversible removal.
+   Declare every property editor with `EditorKind`; use `AUTO` only when the
+   value type or choices uniquely determine the control.
 3. Put cross-component, repository, or render-sensitive work in a domain
    Service. Inspector code submits to the Controller or Service and never
    mutates Matplotlib directly.
@@ -19,6 +21,11 @@ schema-v9 project behavior.
    Compose `ColorCycleDeletionEffect` only for palette-backed components. A
    leaf handler must have no registered children; a composite handler owns
    and tests its complete child-artist removal coverage.
+5. For every runtime-created persisted component, declare `RESTORE_PHASE` on
+   its Controller and register one exact `ComponentMaterializer`. The Canvas
+   validates missing, extra, duplicate, non-callable, and phase-mismatched
+   declarations before publishing components. Fixed semantic components use
+   `RESTORE_PHASE = None`.
 
 ## Creation
 
@@ -76,6 +83,9 @@ preview, and sort behavior. No tree or container source edit is required.
   panel/project removal disposes every callback exactly once.
 - Empty data remains a valid registered and persisted component where the
   domain permits it.
+- Every dynamic Controller key has a parameterized schema-v9 save/open test;
+  materializer failure leaves no project tab, artist, Controller, Locator,
+  Inspector, listener, selection, or color consumption behind.
 - Deletion, data refresh semantics, stable-ID save/open, and schema-v9
   round-trip are covered without persisting Profiles, typed tree keys,
   Section expansion, QWidget state, or callbacks.

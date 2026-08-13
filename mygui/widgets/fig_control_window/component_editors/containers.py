@@ -33,10 +33,8 @@ class AxesSemanticInspectorPanel(QFrame):
         self,
         axes_controller: AxesController,
         context: EditorContext,
-        color_library=None,
     ):
         super().__init__()
-        del color_library
         self.axes_controller = axes_controller
         self.context = context
         self.axes = axes_controller.resolve_target()
@@ -55,9 +53,6 @@ class AxesSemanticInspectorPanel(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.inspector_stack)
-
-        self.ensure_inspector(axes_controller.component_id)
-        self.show_component(axes_controller.component_id)
 
     def ensure_inspector(self, component_id: str):
         """Create a semantic Inspector on first selection and then cache it."""

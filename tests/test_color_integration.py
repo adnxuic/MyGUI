@@ -2,6 +2,8 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QEvent
@@ -38,7 +40,7 @@ class ColorIntegrationTests(unittest.TestCase):
             width=4, height=3, dpi=100, style="default", canva_name="Colors"
         )
         self.canvas = self.window.figure_window.current_canva
-        self.canvas.add_axes()
+        create_regular_axes(self.canvas)
         sheet = self.window.table.current_subtable().get_table(0).table_model.sheet
         sheet.set_block(0, 0, [[0, 1], [1, 2], [2, 3], [3, 5]])
         self.x_ref = ColumnRef(self.canvas.project_id, sheet.id, sheet.columns[0].id)
@@ -596,7 +598,7 @@ class ColorIntegrationTests(unittest.TestCase):
         next_first_dialog = None
         try:
             first_dialog.accept()
-            self.canvas.add_axes()
+            create_regular_axes(self.canvas)
             second_axes_id = self.canvas.current_axes_component_id
             second_dialog = PyCurveDialog(
                 "Curve",

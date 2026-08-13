@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QStackedWidget, QVBoxLayout
 
-from mygui.database import TableChangeSet, TableRepository, validate_component_name
+from mygui.database import TableRepository, validate_component_name
 from mygui.resources import load_qss_resource
 from mygui.widgets.table.py_subtable import PySubTable
 
@@ -60,11 +60,6 @@ class PyTable(QFrame):
         if self._figure_window is None or not hasattr(self._figure_window, "prepare_dependency_cascade"):
             return None
         return self._figure_window.prepare_dependency_cascade(refs, reason)
-
-    def has_table(self, table_name: str) -> bool:
-        """Return whether this object has table."""
-
-        return self.repository.project_by_name(table_name, required=False) is not None
 
     def table_names(self) -> list[str]:
         """Return the available table names."""
@@ -149,23 +144,6 @@ class PyTable(QFrame):
             raise KeyError(f"Unknown project table id: {project_id}")
         self._current_project_id = project_id
         self.stack.setCurrentWidget(self._subtables[project_id])
-
-    def rename_project_table(self, project_id: str, new_name: str):
-        """Rename repository metadata by stable project ID."""
-
-        new_name = validate_component_name(new_name, "Project name")
-        project = self.repository.project(project_id)
-        existing = self.repository.project_by_name(new_name, required=False)
-        if existing is not None and existing.id != project.id:
-            raise ValueError(f"Project already exists: {new_name}")
-        with self.repository.mutate(
-            TableChangeSet(
-                project.id,
-                metadata_changed=True,
-                reason="rename-project",
-            )
-        ):
-            project.name = new_name
 
     def remove_project_table(self, project_id: str, *, publish: bool = True):
         """Remove project table."""

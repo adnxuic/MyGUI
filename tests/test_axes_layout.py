@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QLabel
@@ -399,7 +401,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         self.assertEqual(self.canvas._allocated_component_ids, before_ids)
         self.assertEqual(self.canvas.axes_layout_service._grids, before_grids)
 
-    def test_compatibility_add_axes_uses_current_figure_style_defaults(self):
+    def test_regular_grid_helper_uses_current_figure_style_defaults(self):
         figure = self.canvas.component_registry.get(
             self.canvas.root_component_id
         )
@@ -408,7 +410,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         self.assertTrue(defaults.x_major_grid)
         self.assertTrue(defaults.y_major_grid)
 
-        axes_id, = self.canvas.add_axes()
+        axes_id, = create_regular_axes(self.canvas)
         axes = self.canvas.component_registry.resolve_target(axes_id)
         self.assertTrue(any(line.get_visible() for line in axes.get_xgridlines()))
         self.assertTrue(any(line.get_visible() for line in axes.get_ygridlines()))

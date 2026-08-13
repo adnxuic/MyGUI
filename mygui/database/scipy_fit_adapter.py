@@ -15,7 +15,8 @@ from mygui.database.fit_result import (
     covariance_from_jacobian,
     fit_options_for_execution,
 )
-from mygui.database.scipy_fit_models import FitModelSpec, SCIPY_FIT_MODELS, get_model_spec
+from mygui.database.fit_catalog import FIT_MODEL_GROUPS
+from mygui.database.scipy_fit_models import FitModelSpec, get_model_spec
 
 
 LINEAR_METHOD = "LinearLeastSquares"
@@ -24,16 +25,7 @@ SCIPY_LOSSES = ("linear", "soft_l1", "huber", "cauchy", "arctan")
 SCIPY_NONLINEAR_METHODS = ("trf", "dogbox", "lm")
 
 
-def fit_type_groups() -> dict[str, list[str]]:
-    """Fit type groups using the selected model and options."""
-
-    groups: dict[str, list[str]] = {}
-    for spec in SCIPY_FIT_MODELS.values():
-        groups.setdefault(spec.group, []).append(spec.fit_type)
-    return groups
-
-
-FIT_TYPES = fit_type_groups()
+FIT_TYPES = FIT_MODEL_GROUPS
 
 
 def _as_float_array(values, field_name: str) -> np.ndarray:

@@ -5,6 +5,8 @@ from copy import deepcopy
 from io import BytesIO
 from unittest.mock import patch
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
@@ -32,6 +34,11 @@ from mygui.widgets.fig_control_window.figure_inspector import (
 )
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+
+
+class ProjectMetadataStub:
+    def apply_controller_name(self, _project_id, _new_name):
+        pass
 
 
 def image_payload(
@@ -63,7 +70,7 @@ class InAxesTests(unittest.TestCase):
             style="default",
             repository=self.repository,
             project_id=self.project.id,
-            project_name=self.project.name,
+            project_metadata=ProjectMetadataStub(),
             color_library=ColorLibrary(),
         )
         self.host = FigureInspectorHost()
@@ -72,15 +79,31 @@ class InAxesTests(unittest.TestCase):
                 self.canvas.root_component_id
             ),
             self.canvas.editor_context,
-            self.canvas.color_library,
         )
         self.canvas.set_figure_inspector(panel)
-        self.canvas.add_axes(1, 1)
+        create_regular_axes(self.canvas, 1, 1)
 
     def tearDown(self):
         self.canvas.dispose()
         self.host.dispose()
         self.app.processEvents()
+
+    def test_canvas_requires_authoritative_project_and_metadata_port(self):
+        with self.assertRaisesRegex(ValueError, "metadata"):
+            PyFigureCanvas(
+                style="default",
+                repository=self.repository,
+                project_id=self.project.id,
+                color_library=ColorLibrary(),
+            )
+        with self.assertRaises(KeyError):
+            PyFigureCanvas(
+                style="default",
+                repository=self.repository,
+                project_id="missing-project",
+                project_metadata=ProjectMetadataStub(),
+                color_library=ColorLibrary(),
+            )
 
     def zoom_spec(self, **overrides):
         defaults = self.canvas.component_creation_defaults().in_axes
@@ -256,7 +279,7 @@ class InAxesTests(unittest.TestCase):
             style="default",
             repository=self.repository,
             project_id=self.project.id,
-            project_name=self.project.name,
+            project_metadata=ProjectMetadataStub(),
             component_tree=before,
             color_library=ColorLibrary(),
         )
@@ -264,7 +287,6 @@ class InAxesTests(unittest.TestCase):
         panel = second_host.add_figure_inspector(
             restored.component_registry.get(restored.root_component_id),
             restored.editor_context,
-            restored.color_library,
         )
         restored.set_figure_inspector(panel)
         try:

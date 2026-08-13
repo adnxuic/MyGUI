@@ -20,6 +20,10 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
+from mygui.figuremodify.components import (
+    ComponentValidationError,
+    EditorKind,
+)
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 
@@ -141,65 +145,40 @@ class ComponentEditorBase(QWidget):
         return dict(self._editors)
 
     @staticmethod
-    def _editor_kind(spec: Any, value: Any, *, key: str = "") -> str:
-        raw_kind = _metadata(spec, "editor", "editor_type", "widget", default="")
-        kind = _enum_text(raw_kind).casefold().replace("-", "_")
-        aliases = {
-            "check": "bool",
-            "checkbox": "bool",
-            "check_box": "bool",
-            "boolean": "bool",
-            "spin": "int",
-            "spinbox": "int",
-            "integer": "int",
-            "double": "number",
-            "float": "number",
-            "double_spin": "number",
-            "double_spinbox": "number",
-            "combo": "enum",
-            "combobox": "enum",
-            "choice": "enum",
-            "line_edit": "text",
-            "string": "text",
-            "colour": "color",
-            "font_family": "font",
-            "point": "position",
-            "xy": "position",
-            "size": "position",
-            "range": "position",
-            "rotation": "number",
-            "line_style": "enum",
-            "font_weight": "enum",
-            "legend_position": "enum",
-            "marker": "enum",
-        }
-        kind = aliases.get(kind, kind)
-        if kind == "auto":
-            kind = ""
-        if kind:
+    def _editor_kind(spec: Any, _value: Any, *, key: str = "") -> EditorKind:
+        raw_kind = _metadata(
+            spec,
+            "editor",
+            "editor_type",
+            "widget",
+            default=EditorKind.AUTO,
+        )
+        try:
+            kind = raw_kind if isinstance(raw_kind, EditorKind) else EditorKind(raw_kind)
+        except (TypeError, ValueError) as exc:
+            raise ComponentValidationError(
+                f"Property {key!r} declares unknown editor {raw_kind!r}."
+            ) from exc
+        if kind is not EditorKind.AUTO:
             return kind
-        property_key = str(
-            key or _metadata(spec, "key", "name", default="")
-        ).casefold()
-        if "color" in property_key or "colour" in property_key:
-            return "color"
-        if "fontfamily" in property_key or property_key in {"font", "font_family"}:
-            return "font"
-        if property_key in {"position", "xy", "coords", "coordinates"}:
-            return "position"
-        value_type = _metadata(spec, "value_type", "type", "python_type")
-        if value_type is bool or isinstance(value, bool):
-            return "bool"
-        if value_type is int or (isinstance(value, int) and not isinstance(value, bool)):
-            return "int"
-        if value_type is float or isinstance(value, float):
-            return "number"
+
         choices = _metadata(spec, "choices", "options", "values")
         if choices:
-            return "enum"
-        if isinstance(value, (tuple, list)) and len(value) == 2:
-            return "position"
-        return "text"
+            return EditorKind.ENUM
+        value_type = _metadata(spec, "value_type", "type", "python_type")
+        inferred = {
+            bool: EditorKind.BOOL,
+            int: EditorKind.INT,
+            float: EditorKind.NUMBER,
+            str: EditorKind.TEXT,
+            dict: EditorKind.JSON,
+        }.get(value_type)
+        if inferred is None:
+            raise ComponentValidationError(
+                f"Property {key!r} cannot infer an editor from value_type "
+                f"{value_type!r}; declare EditorKind explicitly."
+            )
+        return inferred
 
     @staticmethod
     def _bounds(spec: Any, *, integer: bool) -> tuple[float, float]:
@@ -218,12 +197,12 @@ class ComponentEditorBase(QWidget):
     def _create_editor(self, key: str, spec: Any, value: Any) -> QWidget:
         kind = self._editor_kind(spec, value, key=key)
         allow_none = bool(_metadata(spec, "allow_none", default=False))
-        if kind == "bool":
+        if kind is EditorKind.BOOL:
             editor = QCheckBox(self)
             editor.setChecked(bool(value))
             editor.toggled.connect(lambda candidate, k=key: self.apply_property(k, candidate))
             return editor
-        if kind == "int":
+        if kind is EditorKind.INT:
             editor = QSpinBox(self)
             minimum, maximum = self._bounds(spec, integer=True)
             editor.setRange(int(minimum), int(maximum))
@@ -231,7 +210,7 @@ class ComponentEditorBase(QWidget):
             editor.setValue(int(value or 0))
             editor.valueChanged.connect(lambda candidate, k=key: self.apply_property(k, candidate))
             return editor
-        if kind == "number":
+        if kind in {EditorKind.NUMBER, EditorKind.ROTATION}:
             minimum, maximum = self._bounds(spec, integer=False)
             if allow_none:
                 fallback = _metadata(spec, "default", default=None)
@@ -259,15 +238,18 @@ class ComponentEditorBase(QWidget):
             editor.setValue(float(value or 0.0))
             editor.valueChanged.connect(lambda candidate, k=key: self.apply_property(k, candidate))
             return editor
-        if kind == "enum":
+        if kind in {
+            EditorKind.ENUM,
+            EditorKind.LINE_STYLE,
+            EditorKind.MARKER,
+            EditorKind.FONT_WEIGHT,
+            EditorKind.LEGEND_POSITION,
+        }:
             editor = QComboBox(self)
             choices = _metadata(
                 spec, "choices", "options", "values", default=()
             ) or ()
-            raw_editor = _enum_text(
-                _metadata(spec, "editor", "editor_type", "widget", default="")
-            ).casefold()
-            if not choices and raw_editor == "line_style":
+            if not choices and kind is EditorKind.LINE_STYLE:
                 choices = {
                     "Solid": "-",
                     "Dashed": "--",
@@ -275,7 +257,7 @@ class ComponentEditorBase(QWidget):
                     "Dotted": ":",
                     "None": "None",
                 }
-            elif not choices and raw_editor == "marker":
+            elif not choices and kind is EditorKind.MARKER:
                 choices = (
                     "None",
                     "o",
@@ -291,9 +273,9 @@ class ComponentEditorBase(QWidget):
                     "P",
                     "X",
                 )
-            elif not choices and raw_editor == "font_weight":
+            elif not choices and kind is EditorKind.FONT_WEIGHT:
                 choices = ("normal", "light", "medium", "semibold", "bold", "heavy")
-            elif not choices and raw_editor == "legend_position":
+            elif not choices and kind is EditorKind.LEGEND_POSITION:
                 choices = (
                     "best",
                     "upper right",
@@ -318,7 +300,7 @@ class ComponentEditorBase(QWidget):
                 lambda _index, combo=editor, k=key: self.apply_property(k, combo.currentData())
             )
             return editor
-        if kind == "color":
+        if kind is EditorKind.COLOR:
             if self.color_library is None:
                 raise ValueError(
                     f"Property '{key}' requires the application ColorLibrary to be injected."
@@ -335,7 +317,7 @@ class ComponentEditorBase(QWidget):
             )
             editor.colorChanged.connect(lambda candidate, k=key: self.apply_property(k, candidate))
             return editor
-        if kind == "font":
+        if kind is EditorKind.FONT:
             editor = QFontComboBox(self)
             if value:
                 editor.setCurrentFont(QFont(str(value)))
@@ -343,7 +325,7 @@ class ComponentEditorBase(QWidget):
                 lambda font, k=key: self.apply_property(k, font.family())
             )
             return editor
-        if kind == "position":
+        if kind in {EditorKind.POSITION, EditorKind.SIZE, EditorKind.RANGE}:
             fallback = _metadata(spec, "default", default=None)
             editor = NumericTupleEditor(
                 value,
@@ -360,7 +342,7 @@ class ComponentEditorBase(QWidget):
             self._tuple_editors[key] = editor
             self._position_inputs[key] = tuple(editor.inputs)
             return editor
-        if kind == "rectangle":
+        if kind is EditorKind.RECTANGLE:
             editor = NumericTupleEditor(
                 value,
                 length=4,
@@ -375,14 +357,14 @@ class ComponentEditorBase(QWidget):
             )
             self._tuple_editors[key] = editor
             return editor
-        if kind == "spine_position":
+        if kind is EditorKind.SPINE_POSITION:
             editor = SpinePositionEditor(value, parent=self)
             editor.valueChanged.connect(
                 lambda candidate, k=key: self.apply_property(k, candidate)
             )
             self._spine_position_editors[key] = editor
             return editor
-        if kind == "aspect":
+        if kind is EditorKind.ASPECT:
             return self._create_text_editor(
                 key,
                 spec,
@@ -391,8 +373,7 @@ class ComponentEditorBase(QWidget):
                 formatter=lambda candidate: str(candidate),
             )
 
-        value_type = _metadata(spec, "value_type", "type", "python_type")
-        if value_type is dict:
+        if kind is EditorKind.JSON:
             return self._create_text_editor(
                 key,
                 spec,
@@ -412,14 +393,18 @@ class ComponentEditorBase(QWidget):
                     )
                 ),
             )
-        return self._create_text_editor(
-            key,
-            spec,
-            value,
-            parser=lambda candidate, nullable=allow_none: (
-                None if nullable and not candidate else candidate
-            ),
-            formatter=lambda candidate: "" if candidate is None else str(candidate),
+        if kind is EditorKind.TEXT:
+            return self._create_text_editor(
+                key,
+                spec,
+                value,
+                parser=lambda candidate, nullable=allow_none: (
+                    None if nullable and not candidate else candidate
+                ),
+                formatter=lambda candidate: "" if candidate is None else str(candidate),
+            )
+        raise ComponentValidationError(
+            f"Property {key!r} declares unsupported editor {kind.value!r}."
         )
 
     @staticmethod

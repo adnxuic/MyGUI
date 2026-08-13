@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.axes_helpers import create_regular_axes
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
@@ -44,7 +46,7 @@ class ProjectIoTests(unittest.TestCase):
             width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
         )
         canvas = self.window.figure_window.current_canva
-        canvas.add_axes()
+        create_regular_axes(canvas)
         sheet = self.window.table.current_subtable().get_table(0).table_model.sheet
         sheet.set_block(0, 0, [
             [1, "alpha", "2026-07-10", "true", 10],

@@ -124,8 +124,8 @@ class ChartControllerStyleTests(unittest.TestCase):
             {"x_ref": ref, "y_ref": {**ref, "column_id": "y"}},
         )
 
-        first = controller.delete()
-        second = controller.delete()
+        first = controller._delete_component()
+        second = controller._delete_component()
 
         self.assertTrue(first.ok)
         self.assertTrue(second.ok)

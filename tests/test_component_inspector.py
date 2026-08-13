@@ -20,6 +20,8 @@ from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
+    ComponentDeletionService,
+    DeletionRequest,
     FitService,
     FunctionCurveService,
     InterpolationService,
@@ -247,9 +249,11 @@ class ComponentInspectorTests(unittest.TestCase):
         render = inspector.section("render")
         self.assertIn(render._listener, tex_config._TEX_STATE_LISTENERS)
 
-        change = registry.delete(controller.component_id)
+        outcome = ComponentDeletionService(registry).delete(
+            DeletionRequest((controller.component_id,))
+        )
 
-        self.assertTrue(change.ok)
+        self.assertTrue(outcome.committed)
         self.assertTrue(inspector._disposed)
         self.assertTrue(render._disposed)
         self.assertNotIn(render._listener, tex_config._TEX_STATE_LISTENERS)
@@ -553,8 +557,8 @@ class ComponentInspectorTests(unittest.TestCase):
                     and item.state.role is ComponentRole.TEXT
                 )
             ]
+            self.assertEqual(panel.component_ids(), ())
             expected_ids = {controller.component_id}
-            self.assertEqual(set(panel.component_ids()), expected_ids)
             expected_ids.update(item.component_id for item in semantic)
             for component_id in expected_ids:
                 self.assertTrue(panel.show_component(component_id))
