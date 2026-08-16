@@ -20,7 +20,7 @@ from mygui.figuremodify.components import (
     decode_in_axes_image,
 )
 from mygui.figuremodify.components.serialization import (
-    validate_v9_figure,
+    validate_v10_figure,
 )
 from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
@@ -454,11 +454,11 @@ class InAxesTests(unittest.TestCase):
         self.assertIn(rectangle, parent.patches)
         self.assertTrue(all(item in parent.patches for item in connectors))
 
-    def test_schema_v9_validation_is_strict_for_in_axes(self):
+    def test_schema_v10_validation_is_strict_for_in_axes(self):
         self.canvas.add_in_axes(self.zoom_spec())
         self.canvas.add_in_axes(self.image_spec())
         figure = self.canvas.component_snapshot()
-        validate_v9_figure(
+        validate_v10_figure(
             figure,
             {},
             self.project.id,
@@ -552,7 +552,7 @@ class InAxesTests(unittest.TestCase):
         for candidate, message in invalid:
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, message):
-                    validate_v9_figure(
+                    validate_v10_figure(
                         candidate,
                         {},
                         self.project.id,

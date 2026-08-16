@@ -23,7 +23,7 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
 )
-from mygui.figuremodify.components.serialization import validate_v9_figure
+from mygui.figuremodify.components.serialization import validate_v10_figure
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from main import MainWindow
@@ -170,7 +170,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         self.canvas.current_axes.legend()
         return ids
 
-    def test_canvas_registers_complete_component_tree_and_valid_v9_snapshot(self):
+    def test_canvas_registers_complete_component_tree_and_valid_v10_snapshot(self):
         ids = self._add_all_runtime_components()
         registry = self.canvas.component_registry
         registry.validate_tree()
@@ -210,7 +210,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(registry.resolve_target(component_id))
 
         snapshot = self.canvas.component_snapshot()
-        validate_v9_figure(
+        validate_v10_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -237,14 +237,17 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         widget = self.canvas.component_editor_manager.editor(object_id)
         appearance = widget.section("appearance")
 
-        style_combo = appearance.editor("linestyle")
-        style_combo.setCurrentIndex(style_combo.findData("--"))
+        style_input = appearance.editor("linestyle")
+        style_input.set_value({"kind": "preset", "value": "--"}, emit=True)
         appearance.editor("markersize").setValue(7.5)
         appearance.editor("label").setText("after")
         self.assertTrue(appearance.flush_text("label"))
 
         state = controller.read_state()
-        self.assertEqual(state.properties["linestyle"], "--")
+        self.assertEqual(
+            state.properties["linestyle"],
+            {"kind": "preset", "value": "--"},
+        )
         self.assertEqual(state.properties["markersize"], 7.5)
         self.assertEqual(state.properties["label"], "after")
 
@@ -816,8 +819,9 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             controller.set_property = original_set_property
             events.clear()
             style_combo = appearance.editor("linestyle")
-            style_combo.setCurrentIndex(
-                style_combo.findData("--")
+            style_combo.set_value(
+                {"kind": "preset", "value": "--"},
+                emit=True,
             )
             self.assertTrue(
                 any(level == "success" for _message, level in events)
@@ -919,7 +923,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                         ),
                         1,
                     )
-                validate_v9_figure(
+                validate_v10_figure(
                     restored.component_snapshot(),
                     self._available_refs(restored),
                     restored.project_id,
@@ -929,7 +933,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 loaded.close()
                 self.app.processEvents()
 
-    def test_stable_v9_ids_and_full_component_properties_roundtrip(self):
+    def test_stable_v10_ids_and_full_component_properties_roundtrip(self):
         self._add_all_runtime_components()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "native-components.mygui.json"
@@ -971,7 +975,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             component("spine", name="left")["properties"].update(
                 color="#304050",
                 linewidth=2.5,
-                linestyle="--",
+                linestyle={"kind": "preset", "value": "--"},
                 alpha=0.7,
             )
             component("major_tick", axis="x", level="major")[
@@ -981,7 +985,6 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 length=9.0,
                 width=2.0,
                 color="#405060",
-                pad=6.0,
             )
             component(
                 "major_tick_label", axis="x", level="major"
@@ -996,7 +999,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             ].update(
                 visible=True,
                 color="#607080",
-                linestyle=":",
+                linestyle={"kind": "preset", "value": ":"},
                 linewidth=1.7,
                 alpha=0.6,
             )
@@ -1018,7 +1021,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             }
             plot["properties"].update(
                 linewidth=4.25,
-                marker="s",
+                marker={"kind": "symbol", "value": "s"},
                 markerfacecolor="#90A0B0",
                 markeredgecolor="#A0B0C0",
                 markeredgewidth=1.75,
@@ -1029,7 +1032,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             scatter["properties"].update(
                 edgecolor="#B0C0D0",
                 size=73.0,
-                marker="^",
+                marker={"kind": "symbol", "value": "^"},
                 linewidth=2.25,
                 alpha=0.65,
                 zorder=8.0,
@@ -1041,15 +1044,15 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             )
             component("legend")["properties"].update(
                 visible=True,
-                location="upper left",
+                location={"kind": "preset", "value": "upper left"},
                 ncols=2,
-                fontsize=11.0,
                 facecolor="#D0E0F0",
                 edgecolor="#102030",
                 framealpha=0.75,
                 title="Native legend",
             )
-            validate_v9_figure(
+            component("legend")["properties"]["label_font"]["size"] = 11.0
+            validate_v10_figure(
                 figure,
                 self._available_refs(),
                 self.canvas.project_id,
@@ -1162,7 +1165,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                             "visible",
                             "location",
                             "ncols",
-                            "fontsize",
+                            "label_font",
                             "facecolor",
                             "edgecolor",
                             "framealpha",
@@ -1422,7 +1425,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             {item["id"] for item in figure.state.data["layouts"]},
             {first_layout_id, second_layout_id},
         )
-        validate_v9_figure(
+        validate_v10_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

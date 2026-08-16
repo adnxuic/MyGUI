@@ -512,6 +512,58 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertFalse(status.uses_style_default)
         self.assertEqual(status.palette, palette)
 
+    def test_legend_rebuild_commits_and_render_failure_restores_identity(self):
+        registry = register_figure_components(self.figure)
+        axes_controller = registry.find_one(kind=ComponentKind.AXES)
+        self.axes.plot([0, 1], [1, 2], label="series")
+        service = AxesCommandService(registry)
+        legend_controller, original = service.ensure_legend(
+            axes_controller.component_id
+        )
+
+        changed = service.apply_legend_properties(
+            legend_controller,
+            {
+                "location": {
+                    "kind": "preset",
+                    "value": "upper left",
+                },
+                "ncols": 2,
+            },
+        )
+
+        self.assertTrue(changed.ok)
+        rebuilt = self.axes.get_legend()
+        self.assertIsNot(rebuilt, original)
+        self.assertIs(
+            registry.locator.bound_target(legend_controller.component_id),
+            rebuilt,
+        )
+        before_state = legend_controller.state
+
+        with patch.object(
+            self.figure.canvas,
+            "draw",
+            side_effect=RuntimeError("synthetic legend render failure"),
+        ):
+            rejected = service.apply_legend_properties(
+                legend_controller,
+                {
+                    "location": {
+                        "kind": "preset",
+                        "value": "lower right",
+                    }
+                },
+            )
+
+        self.assertFalse(rejected.ok)
+        self.assertIs(self.axes.get_legend(), rebuilt)
+        self.assertIs(
+            registry.locator.bound_target(legend_controller.component_id),
+            rebuilt,
+        )
+        self.assertEqual(legend_controller.state, before_state)
+
     def test_table_refresh_skips_manual_fit_and_keeps_empty_plot_controller(self):
         pair = self.repository.line_pair(self.x_ref, self.y_ref)
         plot_line, = self.axes.plot(pair.x, pair.y)

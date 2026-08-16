@@ -1052,7 +1052,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v9_figure",
+                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v10_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))
@@ -1123,7 +1123,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
         self.assertIsNone(self.canvas.current_axes_component_id)
 
-    def test_axes_delete_round_trips_through_schema_v9(self):
+    def test_axes_delete_round_trips_through_schema_v10(self):
         axes = self._replace_with_two_by_two_axes()
         self.assertTrue(self.canvas.delete_axes(axes[1].component_id))
         surviving = sorted(

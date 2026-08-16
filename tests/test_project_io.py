@@ -13,10 +13,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
+from mygui import status_messages
 from mygui.database import ColumnRef, ColumnType, TableRepository, scipy_fit_adapter
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
+    project_snapshot,
     restore_project_snapshot,
     save_project_snapshot,
 )
@@ -67,7 +69,7 @@ class ProjectIoTests(unittest.TestCase):
             if component["role"] == role
         )
 
-    def test_v9_roundtrip_preserves_types_missing_rows_and_refs(self):
+    def test_v10_roundtrip_preserves_types_missing_rows_and_refs(self):
         canvas, sheet = self.build_project()
         sheet.columns[0].width = 144
         canvas.canva._set_device_pixel_ratio(2)
@@ -109,6 +111,124 @@ class ProjectIoTests(unittest.TestCase):
             self.assertEqual(loaded.figure_window.current_canva.document_dpi, 100)
         finally:
             loaded.close()
+            self.app.processEvents()
+
+    def test_open_project_has_one_final_message_and_stays_clean_after_ui_only_changes(self):
+        canvas, sheet = self.build_project()
+        sheet.set_block(2, 0, [[None]])
+        x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[4].id)
+        pair = self.window.repository.valid_pair(x_ref, y_ref)
+        canvas.add_scatter(
+            pair.x,
+            pair.y,
+            36.0,
+            "#1f77b4",
+            "o",
+            "mapped scatter",
+            x_ref,
+            y_ref,
+            color_ref=y_ref,
+            color_mapping={
+                "enabled": True,
+                "cmap": "viridis",
+                "norm": {
+                    "kind": "linear",
+                    "params": {"vmin": None, "vmax": None, "clip": False},
+                },
+                "bad": "#00000000",
+                "under": None,
+                "over": None,
+                "nonfinite": "drop",
+            },
+        )
+        scatter_id = canvas.component_registry.query(
+            role=ComponentRole.SCATTER
+        )[0].component_id
+        axes_controller = canvas.component_registry.get(
+            canvas.current_axes_component_id
+        )
+        self.assertTrue(axes_controller.set_property("ylim", (0.0, 0.4)).ok)
+        save_project_snapshot(self.path, self.window.figure_window)
+        canvas.message_presenter.discard_pending()
+        opened = MainWindow()
+        second_path = Path(self.directory.name) / "project-second.mygui.json"
+        events = []
+
+        def handler(message, level):
+            events.append((message, level))
+
+        status_messages.set_status_handler(handler)
+        try:
+            with mock.patch(
+                "mygui.widgets.title_bar.py_title_menu.QFileDialog.getOpenFileName",
+                return_value=(str(self.path), ""),
+            ):
+                opened.title_bar.menu_bar.open_project()
+            self.app.processEvents()
+            self.app.processEvents()
+
+            self.assertEqual(
+                events,
+                [(f"Project opened: {self.path.name}", "success")],
+            )
+            restored = opened.figure_window.current_canva
+            figure_window = opened.figure_window
+            self.assertFalse(figure_window.is_canvas_dirty(restored))
+            before = project_snapshot(figure_window, canvas=restored)
+            restored_scatter = restored.component_registry.query(
+                role=ComponentRole.SCATTER
+            )[0]
+            self.assertEqual(
+                restored_scatter.state.data["color_ref"],
+                y_ref.to_dict(),
+            )
+            self.assertEqual(
+                len(restored_scatter.resolve_target().get_offsets()),
+                1,
+            )
+            self.assertEqual(
+                tuple(
+                    restored.component_registry.get(
+                        restored.current_axes_component_id
+                    ).state.properties["ylim"]
+                ),
+                (0.0, 0.4),
+            )
+
+            title_id = restored.component_registry.query(
+                role=ComponentRole.TITLE
+            )[0].component_id
+            self.assertTrue(restored.select_component(title_id))
+            self.assertTrue(restored.select_component(scatter_id))
+            opened.component_tree_host.search_input.setText("Title")
+            self.app.processEvents()
+            opened.component_tree_host.search_input.clear()
+            opened.component_tree_host.tree.expandAll()
+            self.app.processEvents()
+
+            self.assertEqual(
+                project_snapshot(figure_window, canvas=restored),
+                before,
+            )
+            self.assertFalse(figure_window.is_canvas_dirty(restored))
+
+            save_project_snapshot(
+                second_path,
+                figure_window,
+                canvas=restored,
+            )
+            self.assertEqual(self.path.read_bytes(), second_path.read_bytes())
+            self.assertFalse(figure_window.is_canvas_dirty(restored))
+
+            opened.show()
+            self.app.processEvents()
+            with mock.patch.object(opened, "_project_close_choice") as choice:
+                self.assertTrue(opened.close())
+            choice.assert_not_called()
+        finally:
+            status_messages.clear_status_handler(handler)
+            opened.close_without_prompt()
             self.app.processEvents()
 
     def test_unbounded_low_dof_fit_roundtrips_with_json_null(self):
@@ -192,19 +312,20 @@ class ProjectIoTests(unittest.TestCase):
             loaded.close()
             self.app.processEvents()
 
-    def test_only_exact_integer_schema_v9_is_accepted(self):
+    def test_only_exact_integer_schema_v10_is_accepted(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         valid = json.loads(self.path.read_text(encoding="utf-8"))
-        for version in (3, 4, 5, 6, 7, 8, 9.0, "9", 10, None):
+        self.assertEqual(load_project_file(self.path)["schema_version"], 10)
+        for version in (3, 4, 5, 6, 7, 8, 9, 10.0, "10", 11, True, None):
             with self.subTest(version=version):
                 candidate = dict(valid)
                 candidate["schema_version"] = version
                 self.path.write_text(json.dumps(candidate), encoding="utf-8")
-                with self.assertRaisesRegex(ValueError, "only schema v9 is supported"):
+                with self.assertRaisesRegex(ValueError, "only schema v10 is supported"):
                     load_project_file(self.path)
 
-    def test_v9_wrapper_rejects_retired_figure_and_axes_shapes(self):
+    def test_v10_wrapper_rejects_retired_figure_and_axes_shapes(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         valid = json.loads(self.path.read_text(encoding="utf-8"))
@@ -226,7 +347,7 @@ class ProjectIoTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "subplot fields"):
             load_project_file(self.path)
 
-    def test_v9_rejects_unsafe_preprocessing_before_restore(self):
+    def test_v10_rejects_unsafe_preprocessing_before_restore(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -238,7 +359,7 @@ class ProjectIoTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "preprocess"):
             load_project_file(self.path)
 
-    def test_v9_rejects_non_identity_datetime_preprocessing_before_restore(self):
+    def test_v10_rejects_non_identity_datetime_preprocessing_before_restore(self):
         _canvas, sheet = self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         raw = json.loads(self.path.read_text(encoding="utf-8"))

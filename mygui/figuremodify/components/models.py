@@ -61,7 +61,7 @@ class ComponentRole(str, Enum):
 
 
 class FitEngine(StrEnum):
-    """Stable schema-v9 wire values for supported fitting engines."""
+    """Stable schema-v10 wire values for supported fitting engines."""
 
     PYTHON = "Python"
     MATLAB = "Matlab"
@@ -95,6 +95,25 @@ class EditorKind(StrEnum):
     FONT_WEIGHT = "font_weight"
     LEGEND_POSITION = "legend_position"
     MARKER = "marker"
+    SCALE_SPEC = "scale_spec"
+    LOCATOR_SPEC = "locator_spec"
+    FORMATTER_SPEC = "formatter_spec"
+    FONT_SPEC = "font_spec"
+    LINE_PATTERN = "line_pattern"
+    MARKER_SPEC = "marker_spec"
+    MARKEVERY = "markevery"
+    OPTIONAL_COLOR = "optional_color"
+    NAMED_NUMBER = "named_number"
+    TEXT_BOX = "text_box"
+    LEGEND_ANCHOR = "legend_anchor"
+    LAYOUT_SPEC = "layout_spec"
+    AXES_ANCHOR = "axes_anchor"
+    TRIPLET = "triplet"
+    NUMBER_SEQUENCE = "number_sequence"
+    STRING_LIST = "string_list"
+    CONNECTORS = "connectors"
+    SCATTER_COLOR_MAP = "scatter_color_map"
+    SCATTER_SIZE_MAP = "scatter_size_map"
     JSON = "json"
 
     @classmethod
@@ -109,7 +128,7 @@ class EditorKind(StrEnum):
 
 
 class RestorePhase(IntEnum):
-    """Ordered runtime materialization phases for schema-v9 components."""
+    """Ordered runtime materialization phases for schema-v10 components."""
 
     DYNAMIC = 10
     IN_AXES = 20
@@ -230,6 +249,16 @@ class XYData:
 
     x: Any
     y: Any
+
+
+@dataclass(frozen=True, slots=True)
+class ScatterData:
+    """Transient aligned Scatter arrays; never serialized directly."""
+
+    x: Any
+    y: Any
+    colors: Any = None
+    sizes: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,6 +478,13 @@ class PropertySpec:
     setter: Setter | None = None
     normalizer: Normalizer | None = None
     allow_none: bool = False
+    label: str | None = None
+    tooltip: str | None = None
+    minimum: float | int | None = None
+    maximum: float | int | None = None
+    step: float | int | None = None
+    decimals: int | None = None
+    advanced: bool = False
 
     def __post_init__(self) -> None:
         if not self.key or not isinstance(self.key, str):
@@ -467,6 +503,30 @@ class PropertySpec:
                 ) from exc
         if self.choices is not None:
             object.__setattr__(self, "choices", tuple(self.choices))
+        if self.label is not None and not str(self.label).strip():
+            raise ComponentValidationError(
+                f"Property {self.key!r} label must not be empty."
+            )
+        if self.tooltip is not None and not str(self.tooltip).strip():
+            raise ComponentValidationError(
+                f"Property {self.key!r} tooltip must not be empty."
+            )
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.minimum > self.maximum
+        ):
+            raise ComponentValidationError(
+                f"Property {self.key!r} minimum exceeds maximum."
+            )
+        if self.step is not None and self.step <= 0:
+            raise ComponentValidationError(
+                f"Property {self.key!r} step must be positive."
+            )
+        if self.decimals is not None and self.decimals < 0:
+            raise ComponentValidationError(
+                f"Property {self.key!r} decimals cannot be negative."
+            )
 
     def normalize(self, value: Any) -> Any:
         """Return the value normalized by this property specification."""
@@ -504,6 +564,22 @@ class PropertySpec:
         if self.choices is not None and normalized not in self.choices:
             raise ComponentValidationError(
                 f"Property {self.key!r} must be one of {self.choices!r}."
+            )
+        if (
+            self.minimum is not None
+            and isinstance(normalized, (int, float))
+            and normalized < self.minimum
+        ):
+            raise ComponentValidationError(
+                f"Property {self.key!r} must be at least {self.minimum}."
+            )
+        if (
+            self.maximum is not None
+            and isinstance(normalized, (int, float))
+            and normalized > self.maximum
+        ):
+            raise ComponentValidationError(
+                f"Property {self.key!r} must be at most {self.maximum}."
             )
         if self.validator is not None:
             try:

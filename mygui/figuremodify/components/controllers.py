@@ -57,8 +57,49 @@ from .models import (
     FitEngine,
     PropertySpec,
     RestorePhase,
+    ScatterData,
     UpdateImpact,
     XYData,
+)
+from .property_values import (
+    DEFAULT_FORMATTER,
+    DEFAULT_MAJOR_LOCATOR,
+    DEFAULT_MINOR_FORMATTER,
+    DEFAULT_MINOR_LOCATOR,
+    DEFAULT_NORM,
+    DEFAULT_SCALE,
+    apply_figure_layout,
+    apply_line_pattern,
+    apply_scale,
+    build_formatter,
+    build_locator,
+    build_norm,
+    default_scale_for_name,
+    formatter_from_axis,
+    locator_from_axis,
+    legend_anchor_value,
+    legend_location_value,
+    map_scatter_sizes,
+    marker_value,
+    markevery_value,
+    normalize_connector,
+    normalize_figure_layout,
+    normalize_font,
+    normalize_formatter,
+    normalize_line_pattern,
+    normalize_legend_anchor,
+    normalize_legend_location,
+    normalize_locator,
+    normalize_marker,
+    normalize_markevery,
+    normalize_norm,
+    normalize_scale,
+    normalize_scatter_color_map,
+    normalize_scatter_size_map,
+    normalize_text_box,
+    scale_from_axis,
+    text_box_kwargs,
+    validate_fixed_ticker_pair,
 )
 
 
@@ -68,6 +109,110 @@ def _positive(value: float) -> bool:
 
 def _nonnegative(value: float) -> bool:
     return value >= 0
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _url_sequence(value: Any) -> tuple[str | None, ...]:
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):
+        raise ComponentValidationError("URLs must be an array.")
+    return tuple(None if item is None else str(item) for item in value)
+
+
+def _line_pattern(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        value = {"kind": "preset", "value": value}
+    elif isinstance(value, tuple) and len(value) == 2:
+        value = {"kind": "custom", "offset": value[0], "dashes": list(value[1])}
+    return normalize_line_pattern(value)
+
+
+def _marker_spec(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        if isinstance(value, tuple) and len(value) == 3:
+            value = {
+                "kind": "regular_polygon",
+                "sides": value[0],
+                "style": value[1],
+                "angle": value[2],
+            }
+        else:
+            value = {"kind": "symbol", "value": value}
+    return normalize_marker(value)
+
+
+def _connectors(value: Any) -> tuple[dict[str, Any], ...]:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        raise ComponentValidationError("Zoom inset requires four connector specs.")
+    return tuple(normalize_connector(item) for item in value)
+
+
+def _optional_sketch(value: Any) -> tuple[float, float, float] | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__len__") or len(value) != 3:
+        raise ComponentValidationError("Sketch parameters require three values.")
+    result = tuple(float(item) for item in value)
+    if not all(math.isfinite(item) for item in result):
+        raise ComponentValidationError("Sketch parameters must be finite.")
+    if any(item <= 0 for item in result):
+        raise ComponentValidationError("Sketch parameters must be positive.")
+    return result
+
+
+def _set_sketch(artist: Any, value: Any) -> None:
+    if value is None:
+        artist.set_sketch_params(None)
+    else:
+        artist.set_sketch_params(*value)
+
+
+_ARTIST_EXPORT_PROPERTIES = (
+    PropertySpec("clip_on", bool, True, editor="check", advanced=True),
+    PropertySpec(
+        "gid",
+        str,
+        None,
+        editor="text",
+        allow_none=True,
+        normalizer=_optional_text,
+        advanced=True,
+    ),
+    PropertySpec("in_layout", bool, True, editor="check", advanced=True),
+    PropertySpec("rasterized", bool, False, editor="check", advanced=True),
+    PropertySpec(
+        "sketch_params",
+        tuple,
+        None,
+        editor="triplet",
+        allow_none=True,
+        normalizer=_optional_sketch,
+        setter=_set_sketch,
+        advanced=True,
+    ),
+    PropertySpec(
+        "snap",
+        bool,
+        None,
+        editor="combo",
+        choices=(None, True, False),
+        allow_none=True,
+        advanced=True,
+    ),
+    PropertySpec(
+        "url",
+        str,
+        None,
+        editor="text",
+        allow_none=True,
+        normalizer=_optional_text,
+        advanced=True,
+    ),
+)
 
 
 def _normalize_color(value: Any) -> str:
@@ -102,6 +247,40 @@ def _positive_pair(value: tuple[float, float]) -> bool:
     return value[0] > 0 and value[1] > 0
 
 
+def _anchor(value: Any) -> str | tuple[float, float]:
+    if isinstance(value, str):
+        candidate = value.upper()
+        if candidate not in {"C", "SW", "S", "SE", "E", "NE", "N", "NW", "W"}:
+            raise ComponentValidationError("Invalid Axes anchor.")
+        return candidate
+    candidate = _pair(value)
+    if not all(0 <= item <= 1 for item in candidate):
+        raise ComponentValidationError("Axes anchor coordinates must be between zero and one.")
+    return candidate
+
+
+def _legend_anchor(value: Any) -> tuple[float, ...] | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__len__") or len(value) not in {2, 4}:
+        raise ComponentValidationError("Legend anchor requires two or four values.")
+    result = tuple(float(item) for item in value)
+    if not all(math.isfinite(item) for item in result):
+        raise ComponentValidationError("Legend anchor must be finite.")
+    return result
+
+
+_DEFAULT_FONT_SPEC = {
+    "family": ["sans-serif"],
+    "size": 10.0,
+    "weight": "normal",
+    "style": "normal",
+    "stretch": "normal",
+    "variant": "normal",
+    "color": "#000000",
+}
+
+
 def _rectangle(value: Any) -> tuple[float, float, float, float]:
     if (
         isinstance(value, (str, bytes))
@@ -130,6 +309,19 @@ def _in_axes_range(value: Any) -> tuple[float, float]:
         raise ComponentValidationError("Inset limits must be finite.")
     if result[0] == result[1]:
         raise ComponentValidationError("Inset limits must not be degenerate.")
+    return result
+
+
+def _optional_extent(value: Any) -> tuple[float, float, float, float] | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__len__") or len(value) != 4:
+        raise ComponentValidationError("Image extent requires four values.")
+    result = tuple(float(item) for item in value)
+    if not all(math.isfinite(item) for item in result):
+        raise ComponentValidationError("Image extent must be finite.")
+    if result[0] == result[1] or result[2] == result[3]:
+        raise ComponentValidationError("Image extent must be non-degenerate.")
     return result
 
 
@@ -482,16 +674,34 @@ class FigureController(ContainerController):
         ),
         PropertySpec("frameon", bool, True, editor="check"),
         PropertySpec(
-            "constrained_layout",
-            bool,
-            False,
-            editor="check",
-            getter="get_constrained_layout",
-            setter=lambda figure, value: figure.set_layout_engine(
-                "constrained" if value else "none"
-            ),
+            "linewidth",
+            float,
+            0.0,
+            editor="double_spin",
+            validator=_nonnegative,
+            minimum=0.0,
         ),
-    )
+        PropertySpec(
+            "alpha",
+            float,
+            None,
+            editor="double_spin",
+            allow_none=True,
+            minimum=0.0,
+            maximum=1.0,
+        ),
+        PropertySpec(
+            "layout_engine",
+            dict,
+            {"kind": "none", "params": {}},
+            editor="layout_spec",
+            normalizer=normalize_figure_layout,
+            setter=apply_figure_layout,
+        ),
+        PropertySpec("label", str, "", editor="text", advanced=True),
+        PropertySpec("visible", bool, True, editor="check", advanced=True),
+        PropertySpec("zorder", float, 0.0, editor="double_spin", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = ContainerController.CAPABILITIES | frozenset(
         {"figure_style"}
     )
@@ -506,7 +716,7 @@ class FigureController(ContainerController):
         super().__init__(state, **kwargs)
 
     def _validate_data(self, state: ComponentState) -> None:
-        """Require the schema-v9 layout collection."""
+        """Require the schema-v10 layout collection."""
 
         _exact_data_fields(state, {"layouts"})
         layouts = state.data.get("layouts")
@@ -612,6 +822,27 @@ class FigureController(ContainerController):
     def _read_property(self, target: Figure, spec: PropertySpec) -> Any:
         if spec.key in self._metadata:
             return self._metadata[spec.key]
+        if spec.key == "layout_engine":
+            engine = target.get_layout_engine()
+            name = "none" if engine is None else type(engine).__name__.lower()
+            if "tight" in name:
+                kind = "tight"
+            elif "constrained" in name:
+                kind = "compressed" if bool(getattr(engine, "_compress", False)) else "constrained"
+            else:
+                kind = "none"
+            saved = self._state.properties.get("layout_engine")
+            if isinstance(saved, dict) and saved.get("kind") == kind:
+                return deepcopy(saved)
+            if kind == "tight":
+                return normalize_figure_layout(
+                    {"kind": kind, "params": {"pad": None, "w_pad": None, "h_pad": None, "rect": None}}
+                )
+            if kind in {"constrained", "compressed"}:
+                return normalize_figure_layout(
+                    {"kind": kind, "params": {"w_pad": None, "h_pad": None, "wspace": None, "hspace": None, "rect": None}}
+                )
+            return normalize_figure_layout({"kind": "none", "params": {}})
         return super()._read_property(target, spec)
 
     def _write_property(
@@ -659,20 +890,6 @@ class AxesController(ContainerController):
             normalizer=_pair,
         ),
         PropertySpec(
-            "xscale",
-            str,
-            "linear",
-            editor="combo",
-            choices=("linear", "log", "symlog", "logit"),
-        ),
-        PropertySpec(
-            "yscale",
-            str,
-            "linear",
-            editor="combo",
-            choices=("linear", "log", "symlog", "logit"),
-        ),
-        PropertySpec(
             "aspect",
             (str, float),
             "auto",
@@ -713,7 +930,60 @@ class AxesController(ContainerController):
             getter=lambda _axes: None,
             setter=lambda _axes, _value: None,
         ),
-    )
+        PropertySpec("xmargin", float, 0.05, editor="double_spin", minimum=-0.5, maximum=10.0),
+        PropertySpec("ymargin", float, 0.05, editor="double_spin", minimum=-0.5, maximum=10.0),
+        PropertySpec("adjustable", str, "box", editor="combo", choices=("box", "datalim")),
+        PropertySpec(
+            "anchor",
+            (str, tuple),
+            "C",
+            editor="axes_anchor",
+            normalizer=_anchor,
+        ),
+        PropertySpec(
+            "box_aspect",
+            float,
+            None,
+            editor="double_spin",
+            allow_none=True,
+            minimum=0.0,
+        ),
+        PropertySpec(
+            "axisbelow",
+            (bool, str),
+            "line",
+            editor="combo",
+            choices=(True, False, "line"),
+        ),
+        PropertySpec(
+            "frameon",
+            bool,
+            True,
+            editor="check",
+            getter="get_frame_on",
+            setter="set_frame_on",
+        ),
+        PropertySpec("zorder", float, 0.0, editor="double_spin"),
+        PropertySpec(
+            "rasterization_zorder",
+            float,
+            None,
+            editor="double_spin",
+            allow_none=True,
+            advanced=True,
+        ),
+        PropertySpec(
+            "alpha",
+            float,
+            None,
+            editor="double_spin",
+            allow_none=True,
+            minimum=0.0,
+            maximum=1.0,
+            advanced=True,
+        ),
+        PropertySpec("label", str, "", editor="text", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = ContainerController.CAPABILITIES | frozenset(
         {"axes_style", "range"}
     )
@@ -777,6 +1047,20 @@ class AxesController(ContainerController):
             return
         super()._write_property(target, spec, value)
 
+    def _restore_transaction_snapshot(self, snapshot) -> None:
+        super()._restore_transaction_snapshot(snapshot)
+        target_properties = snapshot[2]
+        specs = self.property_specs()
+        # Margins and box/aspect setters may invoke autoscale_view.  Restore
+        # ordered limits after those side effects, then restore autoscale flags.
+        for key in ("xlim", "ylim", "autoscalex_on", "autoscaley_on"):
+            if key in target_properties:
+                self._write_property(
+                    self.resolve_target(),
+                    specs[key],
+                    deepcopy(target_properties[key]),
+                )
+
     def prepare_remove(self) -> "AxesRemovalHandle":
         """Capture Matplotlib's pinned Axes containers without mutating them."""
 
@@ -816,25 +1100,90 @@ class AxisController(AxisComponentController):
         PropertySpec("visible", bool, True, editor="check"),
         PropertySpec(
             "scale",
-            str,
-            "linear",
-            editor="combo",
-            choices=("linear", "log", "symlog", "logit"),
+            dict,
+            deepcopy(DEFAULT_SCALE),
+            editor="scale_spec",
+            tooltip="Configure the axis scale and its validated parameters.",
+            normalizer=lambda value: (
+                default_scale_for_name(value)
+                if isinstance(value, str)
+                else normalize_scale(value)
+            ),
         ),
         PropertySpec(
-            "ticks_position",
-            str,
-            "default",
-            editor="combo",
+            "major_locator",
+            dict,
+            deepcopy(DEFAULT_MAJOR_LOCATOR),
+            editor="locator_spec",
+            tooltip="Configure how major tick locations are generated.",
+            normalizer=normalize_locator,
+        ),
+        PropertySpec(
+            "major_formatter",
+            dict,
+            deepcopy(DEFAULT_FORMATTER),
+            editor="formatter_spec",
+            tooltip="Configure how major tick labels are formatted.",
+            normalizer=normalize_formatter,
+        ),
+        PropertySpec(
+            "minor_locator",
+            dict,
+            deepcopy(DEFAULT_MINOR_LOCATOR),
+            editor="locator_spec",
+            tooltip="Configure how minor tick locations are generated.",
+            normalizer=normalize_locator,
+        ),
+        PropertySpec(
+            "minor_formatter",
+            dict,
+            deepcopy(DEFAULT_MINOR_FORMATTER),
+            editor="formatter_spec",
+            tooltip="Configure how minor tick labels are formatted.",
+            normalizer=normalize_formatter,
         ),
         PropertySpec(
             "label_position",
             str,
             "bottom",
             editor="combo",
+            choices=("bottom", "top", "left", "right"),
         ),
-        PropertySpec("inverted", bool, False, editor="check"),
-    )
+        PropertySpec(
+            "remove_overlapping_locs",
+            bool,
+            True,
+            editor="check",
+        ),
+        PropertySpec(
+            "offset_font",
+            dict,
+            {
+                "family": ["sans-serif"],
+                "size": 10.0,
+                "weight": "normal",
+                "style": "normal",
+                "stretch": "normal",
+                "variant": "normal",
+                "color": "#000000",
+            },
+            editor="font_spec",
+            tooltip="Configure the offset text font and color.",
+            normalizer=normalize_font,
+        ),
+        PropertySpec("offset_visible", bool, True, editor="check"),
+        PropertySpec("zorder", float, 1.5, editor="double_spin", advanced=True),
+        PropertySpec(
+            "alpha",
+            float,
+            None,
+            editor="double_spin",
+            allow_none=True,
+            minimum=0.0,
+            maximum=1.0,
+            advanced=True,
+        ),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = AxisComponentController.CAPABILITIES | frozenset(
         {"axis_scale"}
     )
@@ -842,52 +1191,77 @@ class AxisController(AxisComponentController):
     def _validate_candidate(self, state: ComponentState) -> None:
         super()._validate_candidate(state)
         axis_name = _axis_name(state)
-        tick_positions = (
-            {"top", "bottom", "both", "default", "none"}
-            if axis_name == "x"
-            else {"left", "right", "both", "default", "none"}
-        )
         label_positions = (
             {"top", "bottom"}
             if axis_name == "x"
             else {"left", "right"}
         )
-        if state.properties.get("ticks_position") not in tick_positions:
-            raise ComponentValidationError(
-                f"Invalid {axis_name}-axis tick position."
-            )
         if state.properties.get("label_position") not in label_positions:
             raise ComponentValidationError(
                 f"Invalid {axis_name}-axis label position."
             )
+        for level in ("major", "minor"):
+            validate_fixed_ticker_pair(
+                state.properties[f"{level}_locator"],
+                state.properties[f"{level}_formatter"],
+            )
+
+    def _capture_runtime_data(self, target: Axis) -> dict[str, Any]:
+        return {
+            "major_locator": target.get_major_locator(),
+            "major_formatter": target.get_major_formatter(),
+            "minor_locator": target.get_minor_locator(),
+            "minor_formatter": target.get_minor_formatter(),
+        }
+
+    def _restore_runtime_data(self, target: Axis, snapshot: Any) -> None:
+        if not isinstance(snapshot, dict):
+            return
+        target.set_major_locator(snapshot["major_locator"])
+        target.set_major_formatter(snapshot["major_formatter"])
+        target.set_minor_locator(snapshot["minor_locator"])
+        target.set_minor_formatter(snapshot["minor_formatter"])
+
+    def _restore_transaction_snapshot(self, snapshot) -> None:
+        super()._restore_transaction_snapshot(snapshot)
+        self._restore_runtime_data(self.resolve_target(), snapshot[1])
 
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
-        axes = target.axes
-        axis_name = _axis_name(self._state)
         if spec.key == "scale":
-            return target.get_scale()
-        if spec.key == "ticks_position":
-            position = target.get_ticks_position()
-            if position != "unknown":
-                return position
-            ticks = target.get_major_ticks()
-            first_visible = any(tick.tick1line.get_visible() for tick in ticks)
-            second_visible = any(tick.tick2line.get_visible() for tick in ticks)
-            if first_visible and second_visible:
-                return "both"
-            if first_visible:
-                return "bottom" if axis_name == "x" else "left"
-            if second_visible:
-                return "top" if axis_name == "x" else "right"
-            return "none"
+            return scale_from_axis(target, self._state.properties.get("scale"))
+        if spec.key in {"major_locator", "minor_locator"}:
+            minor = spec.key.startswith("minor")
+            locator = target.get_minor_locator() if minor else target.get_major_locator()
+            return locator_from_axis(
+                locator,
+                self._state.properties.get(spec.key),
+                minor=minor,
+            )
+        if spec.key in {"major_formatter", "minor_formatter"}:
+            minor = spec.key.startswith("minor")
+            formatter = target.get_minor_formatter() if minor else target.get_major_formatter()
+            return formatter_from_axis(
+                formatter,
+                self._state.properties.get(spec.key),
+                minor=minor,
+            )
         if spec.key == "label_position":
             return target.get_label_position()
-        if spec.key == "inverted":
-            return bool(
-                axes.xaxis_inverted()
-                if axis_name == "x"
-                else axes.yaxis_inverted()
+        if spec.key == "offset_font":
+            offset = target.get_offset_text()
+            return normalize_font(
+                {
+                    "family": list(offset.get_fontfamily()),
+                    "size": float(offset.get_fontsize()),
+                    "weight": offset.get_fontweight(),
+                    "style": offset.get_fontstyle(),
+                    "stretch": offset.get_fontproperties().get_stretch(),
+                    "variant": offset.get_fontproperties().get_variant(),
+                    "color": _read_color(offset.get_color()),
+                }
             )
+        if spec.key == "offset_visible":
+            return bool(target.get_offset_text().get_visible())
         return super()._read_property(target, spec)
 
     def _write_property(
@@ -896,23 +1270,30 @@ class AxisController(AxisComponentController):
         axes = target.axes
         axis_name = _axis_name(self._state)
         if spec.key == "scale":
-            (
-                axes.set_xscale(value)
-                if axis_name == "x"
-                else axes.set_yscale(value)
+            apply_scale(axes, axis_name, value)
+            # Matplotlib installs scale-specific default tickers as a side
+            # effect. The persistent Axis ticker specs remain authoritative,
+            # so always restore them after the scale change.
+            target.set_major_locator(
+                build_locator(self._state.properties["major_locator"])
+            )
+            target.set_major_formatter(
+                build_formatter(self._state.properties["major_formatter"])
+            )
+            target.set_minor_locator(
+                build_locator(self._state.properties["minor_locator"])
+            )
+            target.set_minor_formatter(
+                build_formatter(self._state.properties["minor_formatter"])
             )
             return
-        if spec.key == "ticks_position":
-            valid = (
-                {"top", "bottom", "both", "default", "none"}
-                if axis_name == "x"
-                else {"left", "right", "both", "default", "none"}
-            )
-            if value not in valid:
-                raise ComponentValidationError(
-                    f"Invalid {axis_name}-axis tick position {value!r}."
-                )
-            target.set_ticks_position(value)
+        if spec.key in {"major_locator", "minor_locator"}:
+            locator = build_locator(value)
+            (target.set_minor_locator if spec.key.startswith("minor") else target.set_major_locator)(locator)
+            return
+        if spec.key in {"major_formatter", "minor_formatter"}:
+            formatter = build_formatter(value)
+            (target.set_minor_formatter if spec.key.startswith("minor") else target.set_major_formatter)(formatter)
             return
         if spec.key == "label_position":
             valid = {"top", "bottom"} if axis_name == "x" else {"left", "right"}
@@ -922,14 +1303,18 @@ class AxisController(AxisComponentController):
                 )
             target.set_label_position(value)
             return
-        if spec.key == "inverted":
-            current = (
-                axes.xaxis_inverted()
-                if axis_name == "x"
-                else axes.yaxis_inverted()
-            )
-            if bool(value) != bool(current):
-                axes.invert_xaxis() if axis_name == "x" else axes.invert_yaxis()
+        if spec.key == "offset_font":
+            offset = target.get_offset_text()
+            offset.set_fontfamily(value["family"])
+            offset.set_fontsize(value["size"])
+            offset.set_fontweight(value["weight"])
+            offset.set_fontstyle(value["style"])
+            offset.set_fontstretch(value["stretch"])
+            offset.set_fontvariant(value["variant"])
+            offset.set_color(value["color"])
+            return
+        if spec.key == "offset_visible":
+            target.get_offset_text().set_visible(bool(value))
             return
         super()._write_property(target, spec, value)
 
@@ -938,12 +1323,55 @@ class XAxisController(AxisController):
     """Coordinate state changes for xaxis components."""
 
     ROLES = frozenset({ComponentRole.X_AXIS})
+    PROPERTY_SPECS = tuple(
+        PropertySpec(
+            "label_position",
+            str,
+            "bottom",
+            editor="combo",
+            choices=("bottom", "top"),
+        )
+        if spec.key == "label_position"
+        else spec
+        for spec in AxisController.PROPERTY_SPECS
+    )
 
 
 class YAxisController(AxisController):
     """Coordinate state changes for yaxis components."""
 
     ROLES = frozenset({ComponentRole.Y_AXIS})
+    PROPERTY_SPECS = tuple(
+        PropertySpec(
+            "label_position",
+            str,
+            "left",
+            editor="combo",
+            choices=("left", "right"),
+        )
+        if spec.key == "label_position"
+        else spec
+        for spec in AxisController.PROPERTY_SPECS
+    ) + (
+        PropertySpec(
+            "offset_position",
+            str,
+            "left",
+            editor="combo",
+            choices=("left", "right"),
+        ),
+    )
+
+    def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
+        if spec.key == "offset_position":
+            return str(getattr(target, "offset_text_position", "left"))
+        return super()._read_property(target, spec)
+
+    def _write_property(self, target: Axis, spec: PropertySpec, value: Any) -> None:
+        if spec.key == "offset_position":
+            target.set_offset_position(value)
+            return
+        super()._write_property(target, spec, value)
 
     @classmethod
     def default_properties(cls) -> dict[str, Any]:
@@ -979,10 +1407,10 @@ class SpineController(AxisComponentController):
         ),
         PropertySpec(
             "linestyle",
-            str,
-            "-",
-            editor="line_style",
-            normalizer=normalize_linestyle,
+            dict,
+            {"kind": "preset", "value": "-"},
+            editor="line_pattern",
+            normalizer=_line_pattern,
         ),
         PropertySpec(
             "position",
@@ -1013,10 +1441,22 @@ class SpineController(AxisComponentController):
             editor="double_spin",
             allow_none=True,
         ),
-    )
+        PropertySpec("capstyle", str, "projecting", editor="combo", choices=("butt", "projecting", "round")),
+        PropertySpec("joinstyle", str, "miter", editor="combo", choices=("miter", "round", "bevel")),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+        PropertySpec("zorder", float, 2.5, editor="double_spin", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = AxisComponentController.CAPABILITIES | frozenset(
         {"color", "line_style"}
     )
+
+    def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        self._line_pattern_value = _line_pattern(
+            state.properties.get(
+                "linestyle", {"kind": "preset", "value": "-"}
+            )
+        )
+        super().__init__(state, **kwargs)
 
     def _validate_candidate(self, state: ComponentState) -> None:
         name = state.selector.get("name")
@@ -1026,6 +1466,8 @@ class SpineController(AxisComponentController):
             )
 
     def _read_property(self, target: Spine, spec: PropertySpec) -> Any:
+        if spec.key == "linestyle":
+            return deepcopy(self._line_pattern_value)
         if spec.key != "color":
             return super()._read_property(target, spec)
         value = _read_color(target.get_edgecolor())
@@ -1045,6 +1487,15 @@ class SpineController(AxisComponentController):
                 return _normalize_color(saved)
         return mcolors.to_hex(actual_rgba, keep_alpha=False)
 
+    def _write_property(
+        self, target: Spine, spec: PropertySpec, value: Any
+    ) -> None:
+        if spec.key == "linestyle":
+            apply_line_pattern(target, value)
+            self._line_pattern_value = deepcopy(value)
+            return
+        super()._write_property(target, spec, value)
+
 
 class TickGroupController(AxisComponentController):
     """Coordinate state changes for tick group components."""
@@ -1054,7 +1505,8 @@ class TickGroupController(AxisComponentController):
         {ComponentRole.MAJOR_TICK, ComponentRole.MINOR_TICK}
     )
     PROPERTY_SPECS = (
-        PropertySpec("visible", bool, True, editor="check"),
+        PropertySpec("primary_visible", bool, True, editor="check"),
+        PropertySpec("secondary_visible", bool, False, editor="check"),
         PropertySpec(
             "direction",
             str,
@@ -1083,14 +1535,9 @@ class TickGroupController(AxisComponentController):
             editor="color",
             normalizer=_normalize_color,
         ),
-        PropertySpec(
-            "pad",
-            float,
-            3.5,
-            validator=_nonnegative,
-            editor="double_spin",
-        ),
-    )
+        PropertySpec("zorder", float, 2.01, editor="double_spin"),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = AxisComponentController.CAPABILITIES | frozenset(
         {"tick_style", "color"}
     )
@@ -1106,36 +1553,16 @@ class TickGroupController(AxisComponentController):
             else target.get_minor_ticks()
         )
 
-    def _selected_sides(self) -> tuple[str, ...]:
-        axis_name = _axis_name(self._state)
-        default = ("bottom",) if axis_name == "x" else ("left",)
-        sides = self._state.selector.get("sides", default)
-        if isinstance(sides, str):
-            sides = (sides,)
-        valid = {"bottom", "top"} if axis_name == "x" else {"left", "right"}
-        if not sides or not set(sides).issubset(valid):
-            raise ComponentValidationError("Invalid tick side selector.")
-        return tuple(sides)
-
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
         ticks = self._ticks(target)
         if not ticks:
             return deepcopy(self._state.properties.get(spec.key, spec.default))
         tick = ticks[0]
-        sides = self._selected_sides()
-        primary = (
-            "bottom" in sides or "left" in sides
-        )
-        line = tick.tick1line if primary else tick.tick2line
-        if spec.key == "visible":
-            return any(
-                (
-                    tick.tick1line.get_visible()
-                    if side in {"bottom", "left"}
-                    else tick.tick2line.get_visible()
-                )
-                for side in sides
-            )
+        line = tick.tick1line
+        if spec.key == "primary_visible":
+            return any(item.tick1line.get_visible() for item in ticks)
+        if spec.key == "secondary_visible":
+            return any(item.tick2line.get_visible() for item in ticks)
         if spec.key == "direction":
             return getattr(tick, "_tickdir", "out")
         if spec.key == "length":
@@ -1144,26 +1571,46 @@ class TickGroupController(AxisComponentController):
             return float(line.get_markeredgewidth())
         if spec.key == "color":
             return _read_color(line.get_color())
-        if spec.key == "pad":
-            return float(tick.get_pad())
+        if spec.key == "zorder":
+            return float(line.get_zorder())
+        if spec.key == "antialiased":
+            return bool(line.get_antialiased())
+        if spec.key in {item.key for item in _ARTIST_EXPORT_PROPERTIES}:
+            return super()._read_property(line, spec)
         return super()._read_property(target, spec)
 
     def _write_property(
         self, target: Axis, spec: PropertySpec, value: Any
     ) -> None:
         level = _level(self._state)
-        if spec.key == "visible":
+        if spec.key in {"primary_visible", "secondary_visible"}:
             axis_name = _axis_name(self._state)
-            sides = self._selected_sides()
             valid = ("bottom", "top") if axis_name == "x" else ("left", "right")
-            kwargs = {side: bool(value) if side in sides else False for side in valid}
-            target.set_tick_params(which=level, **kwargs)
+            side = valid[0] if spec.key == "primary_visible" else valid[1]
+            target.set_tick_params(which=level, **{side: bool(value)})
+            return
+        if spec.key in {"zorder", "antialiased"} or spec.key in {item.key for item in _ARTIST_EXPORT_PROPERTIES}:
+            setter = spec.setter
+            for tick in self._ticks(target):
+                for line in (tick.tick1line, tick.tick2line):
+                    if callable(setter):
+                        setter(line, value)
+                    else:
+                        name = setter if isinstance(setter, str) else f"set_{spec.key}"
+                        getattr(line, name)(value)
             return
         target.set_tick_params(which=level, **{spec.key: value})
 
     def _delete_target(self, target: Axis) -> None:
-        self._write_property(
-            target, self.property_specs()["visible"], False
+        self._write_property(target, self.property_specs()["primary_visible"], False)
+        self._write_property(target, self.property_specs()["secondary_visible"], False)
+
+    def _hide_for_delete(self) -> ComponentChange:
+        return self.apply_mutation(
+            ComponentMutation(
+                self.component_id,
+                properties={"primary_visible": False, "secondary_visible": False},
+            )
         )
 
 
@@ -1178,7 +1625,8 @@ class TickLabelGroupController(AxisComponentController):
         }
     )
     PROPERTY_SPECS = (
-        PropertySpec("visible", bool, True, editor="check"),
+        PropertySpec("primary_visible", bool, True, editor="check"),
+        PropertySpec("secondary_visible", bool, False, editor="check"),
         PropertySpec(
             "color",
             str,
@@ -1207,7 +1655,30 @@ class TickLabelGroupController(AxisComponentController):
             validator=_nonnegative,
             editor="double_spin",
         ),
-    )
+        PropertySpec(
+            "fontweight",
+            (str, int, float),
+            "normal",
+            editor="named_number",
+        ),
+        PropertySpec("fontstyle", str, "normal", editor="combo", choices=("normal", "italic", "oblique")),
+        PropertySpec("fontstretch", (str, int, float), "normal", editor="named_number", getter=lambda text: text.get_fontproperties().get_stretch()),
+        PropertySpec("fontvariant", str, "normal", editor="combo", choices=("normal", "small-caps")),
+        PropertySpec("alpha", float, None, editor="double_spin", allow_none=True, minimum=0.0, maximum=1.0),
+        PropertySpec("rotation_mode", str, "default", editor="combo", choices=("default", "anchor", "xtick", "ytick")),
+        PropertySpec("horizontalalignment", str, "center", editor="combo", choices=("left", "center", "right")),
+        PropertySpec("verticalalignment", str, "baseline", editor="combo", choices=("top", "center", "bottom", "baseline", "center_baseline")),
+        PropertySpec("multialignment", str, None, editor="combo", choices=(None, "left", "center", "right"), allow_none=True, getter=lambda text: getattr(text, "_multialignment", None)),
+        PropertySpec("wrap", bool, False, editor="check"),
+        PropertySpec("linespacing", float, 1.2, editor="double_spin", minimum=0.0, getter=lambda text: float(getattr(text, "_linespacing", 1.2))),
+        PropertySpec("math_fontfamily", str, "dejavusans", editor="text"),
+        PropertySpec("parse_math", bool, True, editor="check"),
+        PropertySpec("usetex", bool, False, editor="check"),
+        PropertySpec("bbox", dict, {"enabled": False}, editor="text_box", normalizer=normalize_text_box),
+        PropertySpec("zorder", float, 3.0, editor="double_spin"),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+        PropertySpec("transform_rotates_text", bool, False, editor="check", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = AxisComponentController.CAPABILITIES | frozenset(
         {"tick_label_style", "color", "font"}
     )
@@ -1223,40 +1694,17 @@ class TickLabelGroupController(AxisComponentController):
             else target.get_minor_ticks()
         )
 
-    def _selected_sides(self) -> tuple[str, ...]:
-        axis_name = _axis_name(self._state)
-        default = ("bottom",) if axis_name == "x" else ("left",)
-        sides = self._state.selector.get("sides", default)
-        if isinstance(sides, str):
-            sides = (sides,)
-        valid = {"bottom", "top"} if axis_name == "x" else {"left", "right"}
-        if not sides or not set(sides).issubset(valid):
-            raise ComponentValidationError("Invalid tick-label side selector.")
-        return tuple(sides)
-
     def _label(self, tick: Any) -> Text:
-        sides = self._selected_sides()
-        return (
-            tick.label1
-            if "bottom" in sides or "left" in sides
-            else tick.label2
-        )
+        return tick.label1
 
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
         ticks = self._ticks(target)
         if not ticks:
             return deepcopy(self._state.properties.get(spec.key, spec.default))
-        if spec.key == "visible":
-            sides = self._selected_sides()
-            return any(
-                (
-                    tick.label1.get_visible()
-                    if side in {"bottom", "left"}
-                    else tick.label2.get_visible()
-                )
-                for tick in ticks
-                for side in sides
-            )
+        if spec.key == "primary_visible":
+            return any(tick.label1.get_visible() for tick in ticks)
+        if spec.key == "secondary_visible":
+            return any(tick.label2.get_visible() for tick in ticks)
         label = self._label(ticks[0])
         if spec.key == "color":
             return _read_color(label.get_color())
@@ -1268,15 +1716,23 @@ class TickLabelGroupController(AxisComponentController):
             return list(label.get_fontfamily())
         if spec.key == "pad":
             return float(ticks[0].get_pad())
+        if spec.key == "bbox":
+            return deepcopy(self._state.properties.get("bbox", {"enabled": False}))
+        if spec.key in {item.key for item in _ARTIST_EXPORT_PROPERTIES} or spec.key in {
+            "fontweight", "fontstyle", "fontstretch", "fontvariant", "alpha",
+            "rotation_mode", "horizontalalignment", "verticalalignment",
+            "multialignment", "wrap", "linespacing", "math_fontfamily",
+            "parse_math", "usetex", "zorder", "antialiased", "transform_rotates_text",
+        }:
+            return super()._read_property(label, spec)
         return super()._read_property(target, spec)
 
     def _write_property(
         self, target: Axis, spec: PropertySpec, value: Any
     ) -> None:
         level = _level(self._state)
-        if spec.key == "visible":
+        if spec.key in {"primary_visible", "secondary_visible"}:
             axis_name = _axis_name(self._state)
-            sides = self._selected_sides()
             names = (
                 ("bottom", "labelbottom"),
                 ("top", "labeltop"),
@@ -1284,11 +1740,31 @@ class TickLabelGroupController(AxisComponentController):
                 ("left", "labelleft"),
                 ("right", "labelright"),
             )
-            kwargs = {
-                option: bool(value) if side in sides else False
-                for side, option in names
-            }
-            target.set_tick_params(which=level, **kwargs)
+            index = 0 if spec.key == "primary_visible" else 1
+            target.set_tick_params(which=level, **{names[index][1]: bool(value)})
+            return
+        if spec.key == "bbox":
+            for tick in self._ticks(target):
+                for label in (tick.label1, tick.label2):
+                    label.set_bbox(text_box_kwargs(value))
+            return
+        if spec.key in {item.key for item in _ARTIST_EXPORT_PROPERTIES} or spec.key in {
+            "fontweight", "fontstyle", "fontstretch", "fontvariant", "alpha",
+            "rotation_mode", "horizontalalignment", "verticalalignment",
+            "multialignment", "wrap", "linespacing", "math_fontfamily",
+            "parse_math", "usetex", "zorder", "antialiased", "transform_rotates_text",
+        }:
+            for tick in self._ticks(target):
+                for label in (tick.label1, tick.label2):
+                    if spec.key == "multialignment" and value is None:
+                        label._multialignment = None
+                        label.stale = True
+                        continue
+                    if callable(spec.setter):
+                        spec.setter(label, value)
+                    else:
+                        name = spec.setter if isinstance(spec.setter, str) else f"set_{spec.key}"
+                        getattr(label, name)(value)
             return
         option = {
             "color": "labelcolor",
@@ -1300,8 +1776,15 @@ class TickLabelGroupController(AxisComponentController):
         target.set_tick_params(which=level, **{option: value})
 
     def _delete_target(self, target: Axis) -> None:
-        self._write_property(
-            target, self.property_specs()["visible"], False
+        self._write_property(target, self.property_specs()["primary_visible"], False)
+        self._write_property(target, self.property_specs()["secondary_visible"], False)
+
+    def _hide_for_delete(self) -> ComponentChange:
+        return self.apply_mutation(
+            ComponentMutation(
+                self.component_id,
+                properties={"primary_visible": False, "secondary_visible": False},
+            )
         )
 
 
@@ -1321,10 +1804,10 @@ class GridController(AxisComponentController):
         ),
         PropertySpec(
             "linestyle",
-            str,
-            "-",
-            editor="line_style",
-            normalizer=normalize_linestyle,
+            dict,
+            {"kind": "preset", "value": "-"},
+            editor="line_pattern",
+            normalizer=_line_pattern,
         ),
         PropertySpec(
             "linewidth",
@@ -1341,10 +1824,31 @@ class GridController(AxisComponentController):
             editor="double_spin",
             allow_none=True,
         ),
-    )
+        PropertySpec(
+            "gapcolor",
+            str,
+            None,
+            editor="optional_color",
+            allow_none=True,
+            normalizer=lambda value: None if value is None else _normalize_color(value),
+        ),
+        PropertySpec("dash_capstyle", str, "butt", editor="combo", choices=("butt", "projecting", "round")),
+        PropertySpec("dash_joinstyle", str, "round", editor="combo", choices=("miter", "round", "bevel")),
+        PropertySpec("solid_capstyle", str, "projecting", editor="combo", choices=("butt", "projecting", "round")),
+        PropertySpec("solid_joinstyle", str, "round", editor="combo", choices=("miter", "round", "bevel")),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = AxisComponentController.CAPABILITIES | frozenset(
         {"grid_style", "color", "line_style"}
     )
+
+    def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        self._line_pattern_value = _line_pattern(
+            state.properties.get(
+                "linestyle", {"kind": "preset", "value": "-"}
+            )
+        )
+        super().__init__(state, **kwargs)
 
     def _validate_candidate(self, state: ComponentState) -> None:
         _axis_name(state)
@@ -1370,6 +1874,8 @@ class GridController(AxisComponentController):
         if spec.key == "alpha":
             alpha = line.get_alpha()
             return 1.0 if alpha is None else float(alpha)
+        if spec.key == "linestyle":
+            return deepcopy(self._line_pattern_value)
         return getattr(line, f"get_{spec.key}")()
 
     def _write_property(
@@ -1379,11 +1885,34 @@ class GridController(AxisComponentController):
         if spec.key == "visible":
             target.grid(bool(value), which=level)
             return
-        visible = bool(
-            self._read_property(target, self.property_specs()["visible"])
-        )
-        target.grid(True, which=level, **{spec.key: value})
-        target.grid(visible, which=level)
+        visible = bool(self._read_property(target, self.property_specs()["visible"]))
+        if spec.key == "linestyle":
+            pattern = normalize_line_pattern(value)
+            linestyle = (
+                pattern["value"]
+                if pattern["kind"] == "preset"
+                else (pattern["offset"], pattern["dashes"])
+            )
+            target.grid(
+                True,
+                which=level,
+                linestyle=linestyle,
+            )
+            for line in self._gridlines(target):
+                apply_line_pattern(line, pattern)
+            self._line_pattern_value = deepcopy(pattern)
+            target.grid(visible, which=level)
+            return
+        if spec.key in {item.key for item in _ARTIST_EXPORT_PROPERTIES}:
+            for line in self._gridlines(target):
+                if callable(spec.setter):
+                    spec.setter(line, value)
+                else:
+                    name = spec.setter if isinstance(spec.setter, str) else f"set_{spec.key}"
+                    getattr(line, name)(value)
+        else:
+            target.grid(True, which=level, **{spec.key: value})
+            target.grid(visible, which=level)
 
     def _delete_target(self, target: Axis) -> None:
         target.grid(False, which=_level(self._state))
@@ -1444,7 +1973,7 @@ class TextController(ComponentController[Text]):
             "fontweight",
             (str, int, float),
             "normal",
-            editor="font_weight",
+            editor="named_number",
         ),
         PropertySpec(
             "fontstyle",
@@ -1483,8 +2012,41 @@ class TextController(ComponentController[Text]):
             editor="double_spin",
             allow_none=True,
         ),
-    )
+        PropertySpec("zorder", float, 3.0, editor="double_spin"),
+        PropertySpec("bbox", dict, {"enabled": False}, editor="text_box", normalizer=normalize_text_box),
+        PropertySpec("wrap", bool, False, editor="check"),
+        PropertySpec("linespacing", float, 1.2, editor="double_spin", minimum=0.0, getter=lambda text: float(getattr(text, "_linespacing", 1.2))),
+        PropertySpec("multialignment", str, None, editor="combo", choices=(None, "left", "center", "right"), allow_none=True, getter=lambda text: getattr(text, "_multialignment", None)),
+        PropertySpec("rotation_mode", str, "default", editor="combo", choices=("default", "anchor")),
+        PropertySpec("fontstretch", (str, int, float), "normal", editor="named_number", getter=lambda text: text.get_fontproperties().get_stretch()),
+        PropertySpec("fontvariant", str, "normal", editor="combo", choices=("normal", "small-caps")),
+        PropertySpec("math_fontfamily", str, "dejavusans", editor="text"),
+        PropertySpec("parse_math", bool, True, editor="check"),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+        PropertySpec("transform_rotates_text", bool, False, editor="check", advanced=True),
+        PropertySpec(
+            "coordinate_system",
+            str,
+            "data",
+            editor="combo",
+            choices=("data", "axes", "figure"),
+        ),
+        PropertySpec("label", str, "", editor="text", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = frozenset({"text", "font", "color", "position"})
+
+    def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        self._coordinate_system = str(
+            state.properties.get(
+                "coordinate_system",
+                (
+                    "figure"
+                    if state.selector.get("scope") == "figure"
+                    else "data"
+                ),
+            )
+        )
+        super().__init__(state, **kwargs)
 
     def read_state(self, *, strict: bool = False) -> ComponentState:
         """Keep persisted TeX intent separate from the effective artist mode."""
@@ -1496,6 +2058,42 @@ class TextController(ComponentController[Text]):
         )
         return state.clone(properties=properties)
 
+    def _read_property(self, target: Text, spec: PropertySpec) -> Any:
+        if spec.key == "bbox":
+            return deepcopy(self._state.properties.get("bbox", {"enabled": False}))
+        if spec.key == "coordinate_system":
+            return self._coordinate_system
+        return super()._read_property(target, spec)
+
+    def _write_property(self, target: Text, spec: PropertySpec, value: Any) -> None:
+        if spec.key == "bbox":
+            target.set_bbox(text_box_kwargs(value))
+            return
+        if spec.key == "coordinate_system":
+            axes = target.axes
+            figure = target.figure
+            if figure is None:
+                raise ComponentValidationError("Text has no Figure transform.")
+            if value in {"data", "axes"} and axes is None:
+                raise ComponentValidationError(
+                    "Figure text supports only figure coordinates."
+                )
+            display = target.get_transform().transform(target.get_position())
+            transform = {
+                "data": axes.transData if axes is not None else None,
+                "axes": axes.transAxes if axes is not None else None,
+                "figure": figure.transFigure,
+            }[value]
+            target.set_transform(transform)
+            target.set_position(tuple(transform.inverted().transform(display)))
+            self._coordinate_system = str(value)
+            return
+        if spec.key == "multialignment" and value is None:
+            target._multialignment = None
+            target.stale = True
+            return
+        super()._write_property(target, spec, value)
+
 
 class TitleController(TextController):
     """Coordinate state changes for title components."""
@@ -1503,6 +2101,10 @@ class TitleController(TextController):
     ROLES = frozenset({ComponentRole.TITLE})
     RESTORE_PHASE = None
     DELETION_POLICY = DeletionPolicy.HIDE
+    PROPERTY_SPECS = tuple(
+        spec for spec in TextController.PROPERTY_SPECS
+        if spec.key != "coordinate_system"
+    )
 
     def _write_property(
         self, target: Text, spec: PropertySpec, value: Any
@@ -1518,9 +2120,39 @@ class AxisLabelController(TextController):
     ROLES = frozenset({ComponentRole.X_LABEL, ComponentRole.Y_LABEL})
     RESTORE_PHASE = None
     DELETION_POLICY = DeletionPolicy.HIDE
+    PROPERTY_SPECS = tuple(
+        spec for spec in TextController.PROPERTY_SPECS
+        if spec.key != "coordinate_system"
+    )
 
     def _validate_candidate(self, state: ComponentState) -> None:
         _axis_name(state)
+
+    def _write_property(
+        self, target: Text, spec: PropertySpec, value: Any
+    ) -> None:
+        if spec.key == "position" and self._registry is not None:
+            parent_id = self._state.parent_id
+            parent = (
+                self._registry.get(parent_id).resolve_target()
+                if parent_id is not None and parent_id in self._registry
+                else None
+            )
+            if not isinstance(parent, Axis):
+                raise ComponentValidationError(
+                    "Axis label has no parent Axis target."
+                )
+            # Axis draw recomputes an automatic label coordinate from renderer
+            # extents.  Once a v10 position is restored or edited, retain the
+            # existing transform but explicitly disable that automatic pass so
+            # the persisted value remains stable across save/open/draw cycles.
+            parent.set_label_coords(
+                float(value[0]),
+                float(value[1]),
+                transform=target.get_transform(),
+            )
+            return
+        super()._write_property(target, spec, value)
 
 class LegendController(ComponentController[Legend]):
     """Coordinate state changes for legend components."""
@@ -1532,10 +2164,10 @@ class LegendController(ComponentController[Legend]):
         PropertySpec("visible", bool, True, editor="check"),
         PropertySpec(
             "location",
-            (str, int, tuple),
-            "best",
+            dict,
+            {"kind": "preset", "value": "best"},
             editor="legend_position",
-            normalizer=_legend_location,
+            normalizer=normalize_legend_location,
         ),
         PropertySpec(
             "ncols",
@@ -1543,13 +2175,6 @@ class LegendController(ComponentController[Legend]):
             1,
             validator=lambda value: value >= 1,
             editor="spin",
-        ),
-        PropertySpec(
-            "fontsize",
-            float,
-            10.0,
-            validator=_positive,
-            editor="double_spin",
         ),
         PropertySpec(
             "frameon",
@@ -1591,14 +2216,67 @@ class LegendController(ComponentController[Legend]):
             getter=lambda _legend: "axes",
             setter=lambda _legend, _value: None,
         ),
+        PropertySpec(
+            "bbox_to_anchor",
+            dict,
+            {"kind": "none"},
+            editor="legend_anchor",
+            normalizer=normalize_legend_anchor,
+        ),
+        PropertySpec("mode", str, None, editor="combo", choices=(None, "expand"), allow_none=True),
+        PropertySpec("alignment", str, "center", editor="combo", choices=("left", "center", "right")),
+        PropertySpec("reverse", bool, False, editor="check"),
+        PropertySpec("markerfirst", bool, True, editor="check"),
+        PropertySpec("draggable", bool, False, editor="check"),
+        PropertySpec("draggable_update", str, "loc", editor="combo", choices=("loc", "bbox")),
+        PropertySpec("label_font", dict, deepcopy(_DEFAULT_FONT_SPEC), editor="font_spec", normalizer=normalize_font),
+        PropertySpec("title_font", dict, deepcopy(_DEFAULT_FONT_SPEC), editor="font_spec", normalizer=normalize_font),
+        PropertySpec("numpoints", int, 1, editor="spin", minimum=1),
+        PropertySpec("scatterpoints", int, 1, editor="spin", minimum=1),
+        PropertySpec("scatteryoffsets", tuple, (0.375, 0.5, 0.3125), editor="number_sequence", normalizer=lambda value: tuple(float(item) for item in value)),
+        PropertySpec("markerscale", float, 1.0, editor="double_spin", minimum=0.0),
+        PropertySpec("borderpad", float, 0.4, editor="double_spin", minimum=0.0),
+        PropertySpec("labelspacing", float, 0.5, editor="double_spin", minimum=0.0),
+        PropertySpec("handlelength", float, 2.0, editor="double_spin", minimum=0.0),
+        PropertySpec("handleheight", float, 0.7, editor="double_spin", minimum=0.0),
+        PropertySpec("handletextpad", float, 0.8, editor="double_spin", minimum=0.0),
+        PropertySpec("borderaxespad", float, 0.5, editor="double_spin", minimum=0.0),
+        PropertySpec("columnspacing", float, 2.0, editor="double_spin", minimum=0.0),
+        PropertySpec("fancybox", bool, True, editor="check"),
+        PropertySpec("shadow", bool, False, editor="check"),
+        PropertySpec("frame_linewidth", float, 1.0, editor="double_spin", minimum=0.0),
+        PropertySpec("frame_linestyle", dict, {"kind": "preset", "value": "-"}, editor="line_pattern", normalizer=_line_pattern),
+        PropertySpec("frame_hatch", str, None, editor="text", allow_none=True, normalizer=_optional_text),
+        PropertySpec("zorder", float, 5.0, editor="double_spin"),
+        PropertySpec("alpha", float, None, editor="double_spin", allow_none=True, minimum=0.0, maximum=1.0, advanced=True),
+        PropertySpec("label", str, "", editor="text", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
+    REBUILD_KEYS = frozenset(
+        {
+            "location", "bbox_to_anchor", "ncols", "mode", "alignment",
+            "reverse", "markerfirst", "numpoints", "scatterpoints",
+            "scatteryoffsets", "markerscale", "borderpad", "labelspacing",
+            "handlelength", "handleheight", "handletextpad", "borderaxespad",
+            "columnspacing", "fancybox", "shadow", "frameon",
+        }
     )
     CAPABILITIES = frozenset({"legend", "font", "color"})
 
     def __init__(self, state: ComponentState, **kwargs: Any) -> None:
-        self._fontsize_value = float(
-            state.properties.get("fontsize", 10.0)
-        )
         self._entry_scope = str(state.properties.get("entry_scope", "axes"))
+        self._label_font_value = normalize_font(
+            state.properties.get("label_font", deepcopy(_DEFAULT_FONT_SPEC))
+        )
+        self._title_font_value = normalize_font(
+            state.properties.get("title_font", deepcopy(_DEFAULT_FONT_SPEC))
+        )
+        self._constructor_properties = {
+            key: spec.normalize(
+                deepcopy(state.properties.get(key, spec.default))
+            )
+            for key, spec in self.property_specs().items()
+            if key in self.REBUILD_KEYS
+        }
         super().__init__(state, **kwargs)
 
     def read_state(self, *, strict: bool = False) -> ComponentState:
@@ -1676,33 +2354,14 @@ class LegendController(ComponentController[Legend]):
     def _read_property(self, target: Legend, spec: PropertySpec) -> Any:
         if spec.key == "entry_scope":
             return self._entry_scope
+        if spec.key in self.REBUILD_KEYS and spec.key not in {
+            "location", "ncols", "frameon", "alignment", "bbox_to_anchor"
+        }:
+            return deepcopy(self._constructor_properties[spec.key])
         if spec.key == "location":
-            location = getattr(target, "_loc", "best")
-            if isinstance(location, int):
-                return next(
-                    (
-                        name
-                        for name, code in Legend.codes.items()
-                        if code == location and name != "right"
-                    ),
-                    "best",
-                )
-            return location
+            return deepcopy(self._constructor_properties[spec.key])
         if spec.key == "ncols":
             return int(getattr(target, "_ncols", 1))
-        if spec.key == "fontsize":
-            texts = target.get_texts()
-            return (
-                float(texts[0].get_fontsize())
-                if texts
-                else float(
-                    getattr(
-                        target,
-                        "_mygui_fontsize",
-                        self._fontsize_value,
-                    )
-                )
-            )
         if spec.key == "facecolor":
             return self._frame_color(target, "facecolor")
         if spec.key == "edgecolor":
@@ -1711,6 +2370,36 @@ class LegendController(ComponentController[Legend]):
             return target.get_frame().get_alpha()
         if spec.key == "title":
             return target.get_title().get_text()
+        if spec.key == "bbox_to_anchor":
+            return deepcopy(self._constructor_properties[spec.key])
+        if spec.key == "alignment":
+            return str(target.get_alignment())
+        if spec.key in {"label_font", "title_font"}:
+            text = target.get_title() if spec.key == "title_font" else (target.get_texts()[0] if target.get_texts() else None)
+            if text is None:
+                return deepcopy(
+                    self._title_font_value
+                    if spec.key == "title_font"
+                    else self._label_font_value
+                )
+            return normalize_font({
+                "family": list(text.get_fontfamily()), "size": float(text.get_fontsize()),
+                "weight": text.get_fontweight(), "style": text.get_fontstyle(),
+                "stretch": text.get_fontproperties().get_stretch(),
+                "variant": text.get_fontproperties().get_variant(),
+                "color": _read_color(text.get_color()),
+            })
+        frame = target.get_frame()
+        if spec.key == "frame_linewidth":
+            return float(frame.get_linewidth())
+        if spec.key == "frame_linestyle":
+            return deepcopy(self._state.properties[spec.key])
+        if spec.key == "frame_hatch":
+            return frame.get_hatch()
+        if spec.key == "draggable":
+            return target.get_draggable()
+        if spec.key == "draggable_update":
+            return str(self._state.properties[spec.key])
         return super()._read_property(target, spec)
 
     def _frame_color(self, target: Legend, key: str) -> str:
@@ -1743,17 +2432,24 @@ class LegendController(ComponentController[Legend]):
         if spec.key == "entry_scope":
             self._entry_scope = str(value)
             return
+        if spec.key in self.REBUILD_KEYS:
+            self._constructor_properties[spec.key] = deepcopy(value)
+            if spec.key == "alignment":
+                target.set_alignment(value)
+            elif spec.key == "bbox_to_anchor":
+                target.set_bbox_to_anchor(legend_anchor_value(value))
+            elif spec.key == "frameon":
+                target.set_frame_on(value)
+            elif spec.key == "location":
+                target.set_loc(legend_location_value(value))
+            elif spec.key == "ncols":
+                target.set_ncols(value)
+            return
         if spec.key == "location":
             target.set_loc(value)
             return
         if spec.key == "ncols":
             target.set_ncols(value)
-            return
-        if spec.key == "fontsize":
-            self._fontsize_value = float(value)
-            target._mygui_fontsize = float(value)
-            for text in target.get_texts():
-                text.set_fontsize(value)
             return
         if spec.key == "facecolor":
             target.get_frame().set_facecolor(value)
@@ -1766,6 +2462,36 @@ class LegendController(ComponentController[Legend]):
             return
         if spec.key == "title":
             target.set_title(value)
+            return
+        if spec.key in {"label_font", "title_font"}:
+            if spec.key == "title_font":
+                self._title_font_value = normalize_font(value)
+            else:
+                self._label_font_value = normalize_font(value)
+            texts = [target.get_title()] if spec.key == "title_font" else target.get_texts()
+            for text in texts:
+                text.set_fontfamily(value["family"])
+                text.set_fontsize(value["size"])
+                text.set_fontweight(value["weight"])
+                text.set_fontstyle(value["style"])
+                text.set_fontstretch(value["stretch"])
+                text.set_fontvariant(value["variant"])
+                text.set_color(value["color"])
+            return
+        if spec.key == "draggable":
+            target.set_draggable(bool(value), update=self._state.properties.get("draggable_update", "loc"))
+            return
+        if spec.key == "draggable_update":
+            target.set_draggable(bool(self._state.properties.get("draggable", False)), update=value)
+            return
+        if spec.key == "frame_linewidth":
+            target.get_frame().set_linewidth(value)
+            return
+        if spec.key == "frame_linestyle":
+            apply_line_pattern(target.get_frame(), value)
+            return
+        if spec.key == "frame_hatch":
+            target.get_frame().set_hatch(value)
             return
         super()._write_property(target, spec, value)
 
@@ -1832,13 +2558,18 @@ class InAxesController(ComponentController[Any]):
                 enabled and bool(getattr(runtime, "region_visible", True))
             )
         defaults = tuple(getattr(runtime, "connector_defaults", ()))
+        specs = tuple(getattr(runtime, "connector_specs", ()))
         for index, connector in enumerate(
             tuple(getattr(runtime, "connectors", ()))
         ):
             default_visible = defaults[index] if index < len(defaults) else True
             connector.set_visible(
                 enabled
-                and bool(getattr(runtime, "connectors_visible", True))
+                and (
+                    bool(specs[index].get("visible", True))
+                    if index < len(specs)
+                    else True
+                )
                 and bool(default_visible)
             )
 
@@ -1887,21 +2618,30 @@ class InAxesController(ComponentController[Any]):
             return bool(axes.xaxis.get_visible() and axes.yaxis.get_visible())
         if key == "region_visible":
             return bool(getattr(runtime, "region_visible", True))
-        if key == "connectors_visible":
-            return bool(getattr(runtime, "connectors_visible", True))
-        if key.startswith("indicator_"):
+        if key in {"region_facecolor", "region_fill", "region_hatch", "region_zorder", "region_color", "region_linestyle", "region_linewidth", "region_alpha"}:
             rectangle = getattr(runtime, "indicator_rectangle", None)
             if rectangle is None:
                 return self._state.properties[key]
-            if key == "indicator_color":
+            if key == "region_color":
                 return _read_color(rectangle.get_edgecolor())
-            if key == "indicator_linestyle":
-                return str(rectangle.get_linestyle())
-            if key == "indicator_linewidth":
+            if key == "region_facecolor":
+                return _read_color(rectangle.get_facecolor())
+            if key == "region_linestyle":
+                return deepcopy(
+                    getattr(
+                        runtime,
+                        "region_line_pattern",
+                        self._state.properties[key],
+                    )
+                )
+            if key == "region_linewidth":
                 return float(rectangle.get_linewidth())
-            if key == "indicator_alpha":
+            if key == "region_alpha":
                 value = rectangle.get_alpha()
                 return 1.0 if value is None else float(value)
+            return getattr(rectangle, f"get_{key.removeprefix('region_')}")()
+        if key == "connectors":
+            return deepcopy(tuple(getattr(runtime, "connector_specs", self._state.properties[key])))
         if key == "opacity":
             image = getattr(runtime, "image_artist", None)
             if image is None:
@@ -1913,8 +2653,37 @@ class InAxesController(ComponentController[Any]):
         if key == "interpolation":
             image = getattr(runtime, "image_artist", None)
             if image is None:
-                return str(self._state.properties.get(key, "bilinear"))
+                return str(self._state.properties.get(key, "antialiased"))
             return str(image.get_interpolation())
+        image_getters = {
+            "origin": "origin",
+            "extent": "get_extent",
+            "resample": "get_resample",
+            "filternorm": "get_filternorm",
+            "filterrad": "get_filterrad",
+            "interpolation_stage": "get_interpolation_stage",
+            "image_visible": "get_visible",
+            "image_zorder": "get_zorder",
+            "image_clip_on": "get_clip_on",
+            "image_rasterized": "get_rasterized",
+            "image_in_layout": "get_in_layout",
+            "image_snap": "get_snap",
+            "image_gid": "get_gid",
+            "image_label": "get_label",
+            "image_sketch_params": "get_sketch_params",
+            "image_url": "get_url",
+        }
+        if key in image_getters:
+            image = getattr(runtime, "image_artist", None)
+            if image is None:
+                return deepcopy(self._state.properties.get(key, spec.default))
+            accessor = getattr(image, image_getters[key])
+            result = accessor() if callable(accessor) else accessor
+            if key == "extent":
+                return tuple(float(item) for item in result)
+            if key in {"filterrad", "image_zorder"}:
+                return float(result)
+            return result
         return super()._read_property(runtime, spec)
 
     def _write_property(
@@ -1963,27 +2732,34 @@ class InAxesController(ComponentController[Any]):
             runtime.region_visible = bool(value)
             self._sync_indicator_visibility(runtime)
             return
-        if key == "connectors_visible":
-            runtime.connectors_visible = bool(value)
-            self._sync_indicator_visibility(runtime)
+        if key in {"region_facecolor", "region_fill", "region_hatch", "region_zorder", "region_color", "region_linestyle", "region_linewidth", "region_alpha"}:
+            rectangle = getattr(runtime, "indicator_rectangle", None)
+            if rectangle is not None:
+                if key == "region_linestyle":
+                    apply_line_pattern(rectangle, value)
+                    runtime.region_line_pattern = deepcopy(value)
+                    return
+                setter_name = {
+                    "region_color": "set_edgecolor",
+                    "region_facecolor": "set_facecolor",
+                    "region_linewidth": "set_linewidth",
+                    "region_alpha": "set_alpha",
+                    "region_fill": "set_fill",
+                    "region_hatch": "set_hatch",
+                    "region_zorder": "set_zorder",
+                }[key]
+                getattr(rectangle, setter_name)(value)
             return
-        if key.startswith("indicator_"):
-            artists = tuple(
-                artist
-                for artist in (
-                    getattr(runtime, "indicator_rectangle", None),
-                    *tuple(getattr(runtime, "connectors", ())),
-                )
-                if artist is not None
-            )
-            setter_name = {
-                "indicator_color": "set_edgecolor",
-                "indicator_linestyle": "set_linestyle",
-                "indicator_linewidth": "set_linewidth",
-                "indicator_alpha": "set_alpha",
-            }[key]
-            for artist in artists:
-                getattr(artist, setter_name)(value)
+        if key == "connectors":
+            runtime.connector_specs = deepcopy(tuple(value))
+            for connector, connector_spec in zip(runtime.connectors, value):
+                connector.set_edgecolor(connector_spec["color"])
+                pattern = connector_spec["line_pattern"]
+                connector.set_linestyle(pattern["value"] if pattern["kind"] == "preset" else (pattern["offset"], pattern["dashes"]))
+                connector.set_linewidth(connector_spec["linewidth"])
+                connector.set_alpha(connector_spec["alpha"])
+                connector.set_zorder(connector_spec["zorder"])
+            self._sync_indicator_visibility(runtime)
             return
         if key == "opacity":
             image = getattr(runtime, "image_artist", None)
@@ -1998,6 +2774,37 @@ class InAxesController(ComponentController[Any]):
             image = getattr(runtime, "image_artist", None)
             if image is not None:
                 image.set_interpolation(value)
+            return
+        image_setters = {
+            "origin": "origin",
+            "extent": "set_extent",
+            "resample": "set_resample",
+            "filternorm": "set_filternorm",
+            "filterrad": "set_filterrad",
+            "interpolation_stage": "set_interpolation_stage",
+            "image_visible": "set_visible",
+            "image_zorder": "set_zorder",
+            "image_clip_on": "set_clip_on",
+            "image_rasterized": "set_rasterized",
+            "image_in_layout": "set_in_layout",
+            "image_snap": "set_snap",
+            "image_gid": "set_gid",
+            "image_label": "set_label",
+            "image_sketch_params": "set_sketch_params",
+            "image_url": "set_url",
+        }
+        if key in image_setters:
+            image = getattr(runtime, "image_artist", None)
+            if image is not None:
+                if key == "image_sketch_params":
+                    _set_sketch(image, value)
+                    return
+                name = image_setters[key]
+                if name == "origin":
+                    image.origin = value
+                    image.stale = True
+                else:
+                    getattr(image, name)(value)
             return
         super()._write_property(runtime, spec, value)
 
@@ -2050,34 +2857,54 @@ class ZoomInAxesController(InAxesController):
         ),
         PropertySpec("ticks_visible", bool, True, editor="check"),
         PropertySpec("region_visible", bool, True, editor="check"),
-        PropertySpec("connectors_visible", bool, True, editor="check"),
         PropertySpec(
-            "indicator_color",
+            "region_color",
             str,
             "#808080",
             editor="color",
             normalizer=_normalize_color,
         ),
         PropertySpec(
-            "indicator_linestyle",
-            str,
-            "-",
-            editor="line_style",
-            normalizer=normalize_linestyle,
+            "region_linestyle",
+            dict,
+            {"kind": "preset", "value": "-"},
+            editor="line_pattern",
+            normalizer=_line_pattern,
         ),
         PropertySpec(
-            "indicator_linewidth",
+            "region_linewidth",
             float,
             1.0,
             validator=_nonnegative,
             editor="double_spin",
         ),
         PropertySpec(
-            "indicator_alpha",
+            "region_alpha",
             float,
             0.5,
             validator=lambda value: 0 <= value <= 1,
             editor="double_spin",
+        ),
+        PropertySpec("region_facecolor", str, "#00000000", editor="color", normalizer=_normalize_color),
+        PropertySpec("region_fill", bool, False, editor="check"),
+        PropertySpec("region_hatch", str, None, editor="text", allow_none=True, normalizer=_optional_text),
+        PropertySpec("region_zorder", float, 4.99, editor="double_spin"),
+        PropertySpec(
+            "connectors",
+            tuple,
+            tuple(
+                {
+                    "visible": True,
+                    "color": "#808080",
+                    "line_pattern": {"kind": "preset", "value": "-"},
+                    "linewidth": 1.0,
+                    "alpha": 0.5,
+                    "zorder": 4.99,
+                }
+                for _index in range(4)
+            ),
+            editor="connectors",
+            normalizer=_connectors,
         ),
     )
 
@@ -2109,10 +2936,39 @@ class ImageInAxesController(InAxesController):
         PropertySpec(
             "interpolation",
             str,
-            "bilinear",
+            "antialiased",
             editor="combo",
-            choices=("nearest", "bilinear", "bicubic"),
+            choices=(
+                "none", "antialiased", "nearest", "bilinear", "bicubic",
+                "spline16", "spline36", "hanning", "hamming", "hermite",
+                "kaiser", "quadric", "catrom", "gaussian", "bessel",
+                "mitchell", "sinc", "lanczos", "blackman",
+            ),
         ),
+        PropertySpec("origin", str, "upper", editor="combo", choices=("upper", "lower")),
+        PropertySpec("extent", tuple, None, editor="rectangle", allow_none=True, normalizer=_optional_extent),
+        PropertySpec("resample", bool, True, editor="check"),
+        PropertySpec("filternorm", bool, True, editor="check", advanced=True),
+        PropertySpec("filterrad", float, 4.0, editor="double_spin", minimum=0.0, advanced=True),
+        PropertySpec("interpolation_stage", str, "data", editor="combo", choices=("data", "rgba"), advanced=True),
+        PropertySpec("image_visible", bool, True, editor="check"),
+        PropertySpec("image_zorder", float, 0.0, editor="double_spin"),
+        PropertySpec("image_clip_on", bool, True, editor="check", advanced=True),
+        PropertySpec("image_rasterized", bool, False, editor="check", advanced=True),
+        PropertySpec("image_in_layout", bool, True, editor="check", advanced=True),
+        PropertySpec("image_snap", bool, None, editor="combo", choices=(None, True, False), allow_none=True, advanced=True),
+        PropertySpec("image_gid", str, None, editor="text", allow_none=True, normalizer=_optional_text, advanced=True),
+        PropertySpec("image_label", str, "", editor="text", advanced=True),
+        PropertySpec(
+            "image_sketch_params",
+            tuple,
+            None,
+            editor="triplet",
+            allow_none=True,
+            normalizer=_optional_sketch,
+            advanced=True,
+        ),
+        PropertySpec("image_url", str, None, editor="text", allow_none=True, normalizer=_optional_text, advanced=True),
     )
 
     def _validate_data(self, state: ComponentState) -> None:
@@ -2128,14 +2984,27 @@ class ImageInAxesController(InAxesController):
                 array,
                 alpha=state.properties["opacity"],
                 interpolation=state.properties["interpolation"],
+                origin=state.properties["origin"],
+                extent=state.properties["extent"],
+                resample=state.properties["resample"],
+                filternorm=state.properties["filternorm"],
+                filterrad=state.properties["filterrad"],
+                interpolation_stage=state.properties["interpolation_stage"],
                 aspect=(
                     "equal"
                     if state.properties["fit_mode"] == "contain"
                     else "auto"
                 ),
-                origin="upper",
                 label="_nolegend_",
             )
+            candidate.set_visible(state.properties["image_visible"])
+            candidate.set_zorder(state.properties["image_zorder"])
+            candidate.set_clip_on(state.properties["image_clip_on"])
+            candidate.set_rasterized(state.properties["image_rasterized"])
+            candidate.set_in_layout(state.properties["image_in_layout"])
+            candidate.set_snap(state.properties["image_snap"])
+            candidate.set_gid(state.properties["image_gid"])
+            candidate.set_url(state.properties["image_url"])
             if previous is not None:
                 previous.remove()
             runtime.image_artist = candidate
@@ -2194,10 +3063,10 @@ class LineController(ComponentController[Line2D]):
         ),
         PropertySpec(
             "linestyle",
-            str,
-            "-",
-            editor="line_style",
-            normalizer=normalize_linestyle,
+            dict,
+            {"kind": "preset", "value": "-"},
+            editor="line_pattern",
+            normalizer=_line_pattern,
             impact=UpdateImpact.LEGEND | UpdateImpact.REDRAW,
         ),
         PropertySpec(
@@ -2210,10 +3079,10 @@ class LineController(ComponentController[Line2D]):
         ),
         PropertySpec(
             "marker",
-            str,
-            "None",
-            editor="marker",
-            normalizer=_marker,
+            dict,
+            {"kind": "symbol", "value": "None"},
+            editor="marker_spec",
+            normalizer=_marker_spec,
             impact=UpdateImpact.LEGEND | UpdateImpact.REDRAW,
         ),
         PropertySpec(
@@ -2260,7 +3129,31 @@ class LineController(ComponentController[Line2D]):
         ),
         PropertySpec("visible", bool, True, editor="check"),
         PropertySpec("zorder", float, 2.0, editor="double_spin"),
-    )
+        PropertySpec("drawstyle", str, "default", editor="combo", choices=("default", "steps", "steps-pre", "steps-mid", "steps-post")),
+        PropertySpec("fillstyle", str, "full", editor="combo", choices=("full", "left", "right", "bottom", "top", "none")),
+        PropertySpec(
+            "markerfacecoloralt",
+            str,
+            "none",
+            editor="optional_color",
+            normalizer=lambda value: str(value) if str(value).lower() == "none" else _normalize_color(value),
+            impact=UpdateImpact.LEGEND | UpdateImpact.REDRAW,
+        ),
+        PropertySpec("markevery", dict, {"kind": "all"}, editor="markevery", normalizer=normalize_markevery),
+        PropertySpec(
+            "gapcolor",
+            str,
+            None,
+            editor="optional_color",
+            allow_none=True,
+            normalizer=lambda value: None if value is None else _normalize_color(value),
+        ),
+        PropertySpec("dash_capstyle", str, "butt", editor="combo", choices=("butt", "projecting", "round")),
+        PropertySpec("dash_joinstyle", str, "round", editor="combo", choices=("miter", "round", "bevel")),
+        PropertySpec("solid_capstyle", str, "projecting", editor="combo", choices=("butt", "projecting", "round")),
+        PropertySpec("solid_joinstyle", str, "round", editor="combo", choices=("miter", "round", "bevel")),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = frozenset(
         {"line", "data", "label", "color", "line_style", "marker"}
     )
@@ -2284,7 +3177,42 @@ class LineController(ComponentController[Line2D]):
             data = deepcopy(state.data)
             data["preprocess"] = DataPreprocessSpec().to_dict()
             state = state.clone(data=data)
+        self._line_pattern_value = _line_pattern(
+            state.properties.get("linestyle", {"kind": "preset", "value": "-"})
+        )
+        self._marker_spec_value = _marker_spec(
+            state.properties.get("marker", {"kind": "symbol", "value": "None"})
+        )
+        self._markevery_spec_value = normalize_markevery(
+            state.properties.get("markevery", {"kind": "all"})
+        )
         super().__init__(state, **kwargs)
+
+    def _read_property(self, target: Line2D, spec: PropertySpec) -> Any:
+        if spec.key in {"linestyle", "marker", "markevery"}:
+            return deepcopy(
+                {
+                    "linestyle": self._line_pattern_value,
+                    "marker": self._marker_spec_value,
+                    "markevery": self._markevery_spec_value,
+                }[spec.key]
+            )
+        return super()._read_property(target, spec)
+
+    def _write_property(self, target: Line2D, spec: PropertySpec, value: Any) -> None:
+        if spec.key == "linestyle":
+            apply_line_pattern(target, value)
+            self._line_pattern_value = _line_pattern(value)
+            return
+        if spec.key == "marker":
+            target.set_marker(marker_value(value))
+            self._marker_spec_value = _marker_spec(value)
+            return
+        if spec.key == "markevery":
+            target.set_markevery(markevery_value(value))
+            self._markevery_spec_value = normalize_markevery(value)
+            return
+        super()._write_property(target, spec, value)
 
     def _validate_data(self, state: ComponentState) -> None:
         role = state.role
@@ -2564,7 +3492,7 @@ class LineController(ComponentController[Line2D]):
         self,
         data: dict[str, Any],
         *,
-        drawable: XYData,
+        drawable: XYData | ScatterData,
     ) -> ComponentChange:
         """Apply role data."""
 
@@ -2710,10 +3638,10 @@ class ScatterController(CollectionController):
         ),
         PropertySpec(
             "marker",
-            str,
-            "o",
-            editor="marker",
-            normalizer=_marker,
+            dict,
+            {"kind": "symbol", "value": "o"},
+            editor="marker_spec",
+            normalizer=_marker_spec,
             impact=UpdateImpact.LEGEND | UpdateImpact.REDRAW,
         ),
         PropertySpec(
@@ -2734,7 +3662,56 @@ class ScatterController(CollectionController):
         ),
         PropertySpec("visible", bool, True, editor="check"),
         PropertySpec("zorder", float, 1.0, editor="double_spin"),
-    )
+        PropertySpec(
+            "linestyle",
+            dict,
+            {"kind": "preset", "value": "None"},
+            editor="line_pattern",
+            normalizer=_line_pattern,
+        ),
+        PropertySpec("hatch", str, None, editor="text", allow_none=True, normalizer=_optional_text),
+        PropertySpec(
+            "capstyle", str, None, editor="combo", allow_none=True,
+            choices=(None, "butt", "projecting", "round"),
+        ),
+        PropertySpec(
+            "joinstyle", str, None, editor="combo", allow_none=True,
+            choices=(None, "miter", "round", "bevel"),
+        ),
+        PropertySpec("antialiased", bool, True, editor="check", advanced=True),
+        PropertySpec(
+            "urls",
+            tuple,
+            (),
+            editor="string_list",
+            getter="get_urls",
+            setter="set_urls",
+            normalizer=_url_sequence,
+            advanced=True,
+        ),
+        PropertySpec(
+            "color_mapping",
+            dict,
+            {
+                "enabled": False,
+                "cmap": "viridis",
+                "norm": deepcopy(DEFAULT_NORM),
+                "bad": "#00000000",
+                "under": None,
+                "over": None,
+                "nonfinite": "drop",
+            },
+            editor="scatter_color_map",
+            normalizer=normalize_scatter_color_map,
+        ),
+        PropertySpec(
+            "size_mapping",
+            dict,
+            {"enabled": False, "input": None, "output": [12.0, 120.0], "clamp": True},
+            editor="scatter_size_map",
+            normalizer=normalize_scatter_size_map,
+        ),
+    ) + _ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = CollectionController.CAPABILITIES | frozenset(
         {
             "scatter",
@@ -2753,7 +3730,12 @@ class ScatterController(CollectionController):
             data = deepcopy(state.data)
             data["preprocess"] = DataPreprocessSpec().to_dict()
             state = state.clone(data=data)
-        self._marker_value = str(state.properties.get("marker", "o"))
+        if state.data:
+            data = deepcopy(state.data)
+            data.setdefault("color_ref", None)
+            data.setdefault("size_ref", None)
+            state = state.clone(data=data)
+        self._marker_value = deepcopy(state.properties.get("marker", {"kind": "symbol", "value": "o"}))
         super().__init__(state, **kwargs)
 
     def _validate_data(self, state: ComponentState) -> None:
@@ -2762,10 +3744,20 @@ class ScatterController(CollectionController):
         # their two stable column references.
         if not state.data:
             return
-        _exact_data_fields(state, {"x_ref", "y_ref", "preprocess"})
+        _exact_data_fields(
+            state,
+            {"x_ref", "y_ref", "color_ref", "size_ref", "preprocess"},
+        )
         _column_reference(state.data["x_ref"], "x_ref")
         _column_reference(state.data["y_ref"], "y_ref")
+        for key in ("color_ref", "size_ref"):
+            if state.data[key] is not None:
+                _column_reference(state.data[key], key)
         DataPreprocessSpec.from_dict(state.data["preprocess"])
+        if state.properties["color_mapping"]["enabled"] and state.data["color_ref"] is None:
+            raise ComponentValidationError("Scatter color mapping requires color_ref.")
+        if state.properties["size_mapping"]["enabled"] and state.data["size_ref"] is None:
+            raise ComponentValidationError("Scatter size mapping requires size_ref.")
 
     def _first_color(
         self, values: np.ndarray, fallback: str
@@ -2799,10 +3791,14 @@ class ScatterController(CollectionController):
             sizes = target.get_sizes()
             return float(sizes[0]) if len(sizes) else 36.0
         if spec.key == "marker":
-            return self._marker_value
+            return deepcopy(self._marker_value)
         if spec.key == "linewidth":
             widths = target.get_linewidths()
             return float(widths[0]) if len(widths) else 0.0
+        if spec.key == "linestyle":
+            return deepcopy(self._state.properties.get(spec.key, spec.default))
+        if spec.key in {"color_mapping", "size_mapping"}:
+            return deepcopy(self._state.properties.get(spec.key, spec.default))
         return super()._read_property(target, spec)
 
     @staticmethod
@@ -2841,13 +3837,26 @@ class ScatterController(CollectionController):
             target.set_sizes([value])
             return
         if spec.key == "marker":
-            marker = MarkerStyle(value)
+            marker = MarkerStyle(marker_value(value))
             path = marker.get_path().transformed(marker.get_transform())
             target.set_paths([path])
-            self._marker_value = value
+            self._marker_value = deepcopy(value)
             return
         if spec.key == "linewidth":
             target.set_linewidths([value])
+            return
+        if spec.key == "linestyle":
+            pattern = normalize_line_pattern(value)
+            linestyle = pattern["value"] if pattern["kind"] == "preset" else (pattern["offset"], pattern["dashes"])
+            target.set_linestyle(linestyle)
+            return
+        if spec.key == "capstyle" and value is None:
+            target._capstyle = None
+            return
+        if spec.key == "joinstyle" and value is None:
+            target._joinstyle = None
+            return
+        if spec.key in {"color_mapping", "size_mapping"}:
             return
         super()._write_property(target, spec, value)
 
@@ -2889,20 +3898,37 @@ class ScatterController(CollectionController):
         state: ComponentState,
     ) -> None:
         del target, state
-        if not isinstance(runtime_data, XYData):
+        if not isinstance(runtime_data, (XYData, ScatterData)):
             raise ComponentValidationError(
                 "Scatter runtime data must be XYData."
             )
         self._validate_xy_values(runtime_data.x, runtime_data.y)
+        length = len(np.asarray(runtime_data.x))
+        if isinstance(runtime_data, ScatterData):
+            for name, values in (("colors", runtime_data.colors), ("sizes", runtime_data.sizes)):
+                if values is not None and len(np.asarray(values)) != length:
+                    raise ComponentValidationError(
+                        f"Scatter {name} must match X/Y length."
+                    )
 
     def _capture_runtime_data(
         self,
         target: PathCollection,
-    ) -> XYData:
+    ) -> dict[str, Any]:
         offsets = np.asarray(target.get_offsets()).copy()
-        if offsets.size:
-            return XYData(offsets[:, 0], offsets[:, 1])
-        return XYData(np.asarray([]), np.asarray([]))
+        return {
+            "offsets": offsets,
+            "array": (
+                None
+                if target.get_array() is None
+                else np.ma.asarray(target.get_array()).copy()
+            ),
+            "sizes": np.asarray(target.get_sizes()).copy(),
+            "facecolors": np.asarray(target.get_facecolors()).copy(),
+            "edgecolors": np.asarray(target.get_edgecolors()).copy(),
+            "cmap": target.get_cmap(),
+            "norm": target.norm,
+        }
 
     def _apply_runtime_data(
         self,
@@ -2918,13 +3944,41 @@ class ScatterController(CollectionController):
             if len(x_values)
             else np.empty((0, 2))
         )
+        if isinstance(runtime_data, ScatterData):
+            color_spec = state.properties["color_mapping"]
+            if color_spec["enabled"] and runtime_data.colors is not None:
+                cmap = __import__("matplotlib").colormaps[color_spec["cmap"]].copy()
+                cmap.set_bad(color_spec["bad"])
+                if color_spec["under"] is not None:
+                    cmap.set_under(color_spec["under"])
+                if color_spec["over"] is not None:
+                    cmap.set_over(color_spec["over"])
+                target.set_cmap(cmap)
+                target.set_norm(build_norm(color_spec["norm"]))
+                target.set_array(np.asarray(runtime_data.colors, dtype=float))
+            else:
+                target.set_array(None)
+                target.set_facecolor(state.properties["color"])
+            if state.properties["size_mapping"]["enabled"] and runtime_data.sizes is not None:
+                target.set_sizes(map_scatter_sizes(runtime_data.sizes, state.properties["size_mapping"]))
+            else:
+                target.set_sizes([state.properties["size"]])
 
     def _restore_runtime_data(
         self,
         target: PathCollection,
         runtime_data: Any,
     ) -> None:
-        if not isinstance(runtime_data, XYData):
+        if isinstance(runtime_data, dict):
+            target.set_offsets(runtime_data["offsets"])
+            target.set_cmap(runtime_data["cmap"])
+            target.set_norm(runtime_data["norm"])
+            target.set_array(runtime_data["array"])
+            target.set_sizes(runtime_data["sizes"])
+            target.set_facecolors(runtime_data["facecolors"])
+            target.set_edgecolors(runtime_data["edgecolors"])
+            return
+        if not isinstance(runtime_data, (XYData, ScatterData)):
             return
         x_values = np.asarray(runtime_data.x)
         y_values = np.asarray(runtime_data.y)
@@ -2933,6 +3987,13 @@ class ScatterController(CollectionController):
             if len(x_values)
             else np.empty((0, 2))
         )
+        if isinstance(runtime_data, ScatterData):
+            target.set_array(None if runtime_data.colors is None else np.asarray(runtime_data.colors))
+            target.set_sizes(np.asarray(runtime_data.sizes) if runtime_data.sizes is not None else [])
+
+    def _restore_transaction_snapshot(self, snapshot) -> None:
+        super()._restore_transaction_snapshot(snapshot)
+        self._restore_runtime_data(self.resolve_target(), snapshot[1])
 
     def _runtime_data_impacts(
         self,
@@ -2945,6 +4006,18 @@ class ScatterController(CollectionController):
             | UpdateImpact.AUTOSCALE
             | UpdateImpact.REDRAW
         )
+
+    def _request_updates(
+        self, impacts: UpdateImpact, target: Any | None = None
+    ) -> None:
+        collection = target if target is not None else self.resolve_target()
+        axes = getattr(collection, "axes", None)
+        if UpdateImpact.RELIM in impacts and isinstance(axes, Axes):
+            axes.relim()
+            if len(collection.get_offsets()):
+                axes.update_datalim(collection.get_datalim(axes.transData))
+            impacts &= ~UpdateImpact.RELIM
+        super()._request_updates(impacts, collection)
 
     def _runtime_data_is_empty(
         self,
@@ -2959,7 +4032,7 @@ class ScatterController(CollectionController):
         self,
         data: dict[str, Any],
         *,
-        drawable: XYData,
+        drawable: XYData | ScatterData,
     ) -> ComponentChange:
         """Apply role data."""
 
@@ -3109,6 +4182,11 @@ def validate_controller_contracts() -> dict[
                 raise ComponentValidationError(
                     f"Property {controller_type.__name__}.{spec.key} does not "
                     "declare a valid EditorKind."
+                )
+            if spec.editor is EditorKind.ENUM and not spec.choices:
+                raise ComponentValidationError(
+                    f"Property {controller_type.__name__}.{spec.key} declares "
+                    "an enum editor without choices."
                 )
         phase = controller_type.RESTORE_PHASE
         if phase is not None:

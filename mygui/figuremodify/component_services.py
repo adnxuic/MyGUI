@@ -53,11 +53,17 @@ from mygui.figuremodify.components import (
     FitEngine,
     FunctionCurveController,
     InterpolationController,
+    LegendController,
     MessageLevel,
     ObserverFailure,
     ScatterController,
+    ScatterData,
     TextController,
     XYData,
+)
+from mygui.figuremodify.components.property_values import (
+    legend_anchor_value,
+    legend_location_value,
 )
 from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
@@ -513,7 +519,7 @@ def _layout_replacements_for_deletion(
     registry: ComponentRegistry,
     removed_ids: Iterable[str],
 ) -> tuple[ComponentState, ...]:
-    """Repair persisted v9 layout/share/legend state for Axes survivors."""
+    """Repair persisted v10 layout/share/legend state for Axes survivors."""
 
     removed = set(str(component_id) for component_id in removed_ids)
     surviving_axes = tuple(
@@ -759,6 +765,130 @@ class AxesCommandService:
                 },
             )
         )
+
+    def apply_legend_properties(
+        self,
+        component,
+        properties: dict[str, Any],
+    ) -> ComponentChange:
+        """Apply Legend properties, rebuilding constructor-only layout safely."""
+
+        controller = _controller(self.registry, component, LegendController)
+        try:
+            controller, old = self.ensure_legend(controller.state.parent_id)
+            patch = dict(properties)
+
+            def verify_render() -> None:
+                old.figure.canvas.draw()
+
+            rebuild = bool(set(patch) & controller.REBUILD_KEYS)
+            if not rebuild:
+                batch = self.registry.apply_transaction(
+                    (ComponentMutation(controller.component_id, properties=patch),),
+                    verifier=verify_render,
+                )
+                if not batch.changes:
+                    return _rejected(
+                        controller,
+                        batch.message or "Legend render failed.",
+                    )
+                change = batch.changes[0]
+                if not batch.committed:
+                    return replace(
+                        change,
+                        message=(
+                            "Legend render failed; keeping the last valid legend."
+                        ),
+                    )
+                return change
+            state = controller.read_state(strict=True)
+            merged = deepcopy(state.properties)
+            merged.update(patch)
+            candidate = state.clone(properties=merged)
+            controller._validate_replacement(candidate)
+            axes = old.axes
+            handles, labels = axes.get_legend_handles_labels()
+            peer = getattr(axes, "_mygui_merged_legend_peer", None)
+            if isinstance(peer, Axes) and peer in axes.figure.axes:
+                peer_handles, peer_labels = peer.get_legend_handles_labels()
+                handles = [*handles, *peer_handles]
+                labels = [*labels, *peer_labels]
+            kwargs = {
+                "loc": legend_location_value(merged["location"]),
+                "bbox_to_anchor": legend_anchor_value(
+                    merged["bbox_to_anchor"]
+                ),
+                "ncols": merged["ncols"],
+                "mode": merged["mode"],
+                "alignment": merged["alignment"],
+                "reverse": merged["reverse"],
+                "markerfirst": merged["markerfirst"],
+                "numpoints": merged["numpoints"],
+                "scatterpoints": merged["scatterpoints"],
+                "scatteryoffsets": merged["scatteryoffsets"],
+                "markerscale": merged["markerscale"],
+                "borderpad": merged["borderpad"],
+                "labelspacing": merged["labelspacing"],
+                "handlelength": merged["handlelength"],
+                "handleheight": merged["handleheight"],
+                "handletextpad": merged["handletextpad"],
+                "borderaxespad": merged["borderaxespad"],
+                "columnspacing": merged["columnspacing"],
+                "fancybox": merged["fancybox"],
+                "shadow": merged["shadow"],
+                "frameon": merged["frameon"],
+            }
+            new = axes.legend(handles, labels, **kwargs)
+            old_visible = old.get_visible()
+            runtime_snapshot = (
+                deepcopy(controller._constructor_properties),
+                controller._entry_scope,
+            )
+            try:
+                old.set_visible(False)
+                self.registry.locator.bind(controller.component_id, new)
+                specs = controller.property_specs()
+                for key, value in merged.items():
+                    if key in patch or key in controller.REBUILD_KEYS:
+                        continue
+                    controller._write_property(new, specs[key], deepcopy(value))
+                batch = self.registry.apply_transaction(
+                    (
+                        ComponentMutation(
+                            controller.component_id,
+                            properties=patch,
+                        ),
+                    ),
+                    verifier=verify_render,
+                )
+                if not batch.committed:
+                    raise ComponentValidationError(
+                        batch.message or "Legend render failed."
+                    )
+                change = batch.changes[0]
+            except Exception:
+                (
+                    controller._constructor_properties,
+                    controller._entry_scope,
+                ) = runtime_snapshot
+                try:
+                    new.remove()
+                finally:
+                    if old.axes is None:
+                        axes.add_artist(old)
+                    axes.legend_ = old
+                    old.set_visible(old_visible)
+                    self.registry.locator.bind(controller.component_id, old)
+                raise
+            if old is not new:
+                try:
+                    old.remove()
+                except ValueError:
+                    pass
+            axes.legend_ = new
+            return change
+        except Exception as exc:
+            return _rejected(controller, str(exc))
 
     def cycle_state(self, axes_id: str) -> ColorCycleState:
         """Return the axes color-cycle state, creating it when absent."""
@@ -1034,6 +1164,55 @@ class ChartDataService:
             preserve_gaps=isinstance(controller, DataPlotController),
         )
 
+    def _scatter_data(
+        self,
+        controller: ScatterController,
+        pair: PreprocessedPair,
+        data: dict[str, Any],
+        properties: dict[str, Any] | None = None,
+    ) -> ScatterData:
+        """Resolve optional color/size refs against the exact X/Y row mask."""
+
+        props = properties or controller.state.properties
+        base_mask = np.asarray(pair.valid_mask, dtype=bool)
+        x_values = np.asarray(pair.x)
+        y_values = np.asarray(pair.y)
+        keep = np.ones(len(x_values), dtype=bool)
+        colors = None
+        sizes = None
+
+        def mapped_values(key: str) -> np.ndarray:
+            raw_ref = data.get(key)
+            if raw_ref is None:
+                raise ValueError(f"Scatter mapping requires {key}.")
+            ref = _column_ref(raw_ref)
+            if not self.repository.has_ref(ref):
+                raise ValueError("Scatter mapping data source was removed.")
+            raw = np.asarray(self.repository.series(ref))
+            if len(raw) < len(base_mask):
+                raise ValueError("Scatter mapping column is not row-aligned.")
+            try:
+                numeric = raw[: len(base_mask)].astype(float)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Scatter mapping columns must be numeric.") from exc
+            return numeric[base_mask]
+
+        color_spec = props["color_mapping"]
+        if color_spec["enabled"]:
+            colors = mapped_values("color_ref")
+            if color_spec["nonfinite"] == "drop":
+                keep &= np.isfinite(colors)
+        size_spec = props["size_mapping"]
+        if size_spec["enabled"]:
+            sizes = mapped_values("size_ref")
+            keep &= np.isfinite(sizes)
+        return ScatterData(
+            x_values[keep],
+            y_values[keep],
+            None if colors is None else colors[keep],
+            None if sizes is None else sizes[keep],
+        )
+
     def set_refs(
         self,
         component,
@@ -1068,9 +1247,14 @@ class ChartDataService:
             y_ref=y_ref.to_dict(),
             preprocess=spec.to_dict(),
         )
+        drawable = (
+            self._scatter_data(controller, pair, data)
+            if isinstance(controller, ScatterController)
+            else XYData(pair.x, pair.y)
+        )
         change = controller.apply_role_data(
             data,
-            drawable=XYData(pair.x, pair.y),
+            drawable=drawable,
         )
         notices = []
         if pair.excluded_count:
@@ -1085,6 +1269,48 @@ class ChartDataService:
                 _warning("Chart has no valid data yet; its editor and style were kept.")
             )
         return _notices(change, *notices)
+
+    def configure_scatter_mapping(
+        self,
+        component,
+        *,
+        color_ref: ColumnRef | dict[str, Any] | None,
+        size_ref: ColumnRef | dict[str, Any] | None,
+        color_mapping: dict[str, Any],
+        size_mapping: dict[str, Any],
+    ) -> ComponentChange:
+        """Atomically change Scatter mapping refs, specs, and drawable arrays."""
+
+        controller = _controller(self.registry, component, ScatterController)
+        data = deepcopy(controller.state.data)
+        data["color_ref"] = None if color_ref is None else _column_ref(color_ref).to_dict()
+        data["size_ref"] = None if size_ref is None else _column_ref(size_ref).to_dict()
+        properties = deepcopy(controller.state.properties)
+        specs = controller.property_specs()
+        properties["color_mapping"] = specs["color_mapping"].normalize(color_mapping)
+        properties["size_mapping"] = specs["size_mapping"].normalize(size_mapping)
+        try:
+            x_ref, y_ref = self.refs_for(controller)
+            pair = self._pair(
+                controller,
+                x_ref,
+                y_ref,
+                self.preprocess_for(controller),
+            )
+            drawable = self._scatter_data(controller, pair, data, properties)
+        except Exception as exc:
+            return _rejected(controller, str(exc))
+        return controller.apply_mutation(
+            ComponentMutation(
+                controller.component_id,
+                properties={
+                    "color_mapping": properties["color_mapping"],
+                    "size_mapping": properties["size_mapping"],
+                },
+                data=data,
+                runtime_data=drawable,
+            )
+        )
 
     def refresh(self, component) -> ComponentChange:
         """Refresh the component from its current data references."""
@@ -1115,6 +1341,11 @@ class ChartDataService:
             ):
                 try:
                     refs = set(self.refs_for(controller))
+                    if isinstance(controller, ScatterController):
+                        for key in ("color_ref", "size_ref"):
+                            raw = controller.state.data.get(key)
+                            if raw is not None:
+                                refs.add(_column_ref(raw))
                 except Exception as exc:
                     self._observer_failures.append(
                         ObserverFailure(
@@ -1932,7 +2163,7 @@ class ComponentDependencyService:
     @staticmethod
     def _refs(state: ComponentState) -> set[ColumnRef]:
         refs: set[ColumnRef] = set()
-        for key in ("x_ref", "y_ref"):
+        for key in ("x_ref", "y_ref", "color_ref", "size_ref"):
             try:
                 refs.add(_column_ref(state.data[key]))
             except (KeyError, ValueError, TypeError):

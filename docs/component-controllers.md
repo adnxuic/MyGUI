@@ -34,7 +34,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v9.
+  serialized into `ComponentState` or schema v10.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -106,17 +106,23 @@ Matplotlib receives one Axes-change notification only after commit.
 
 | Controller family | Roles | Persistent properties |
 | --- | --- | --- |
-| `FigureController` | Figure | `name`, `style`, `size_inches`, `dpi`, `facecolor`, `edgecolor`, `frameon`, `constrained_layout` |
-| `AxesController` | Axes | `xlim`, `ylim`, `xscale`, `yscale`, `aspect`, `facecolor`, `visible`, `autoscalex_on`, `autoscaley_on`, `color_cycle` |
-| `XAxisController`, `YAxisController` | X/Y Axis | `visible`, `scale`, `ticks_position`, `label_position`, `inverted` |
-| `SpineController` | Spine | `visible`, `color`, `linewidth`, `linestyle`, `position`, `bounds`, `alpha` |
-| `TickGroupController` | Major/Minor Tick | `visible`, `direction`, `length`, `width`, `color`, `pad` |
-| `TickLabelGroupController` | Major/Minor Tick Label | `visible`, `color`, `fontsize`, `rotation`, `fontfamily`, `pad` |
-| `GridController` | Grid | `visible`, `color`, `linestyle`, `linewidth`, `alpha` |
-| `TextController` | Title, Axis Label, Text | `text`, `visible`, `position`, `color`, `fontsize`, `fontfamily`, `fontweight`, `fontstyle`, `rotation`, alignment, `usetex`, `alpha` |
-| `LegendController` | Legend | `visible`, `location`, `ncols`, `fontsize`, `frameon`, `facecolor`, `edgecolor`, `framealpha`, `title`, `entry_scope` |
-| `LineController` | Line and all curve roles | `label`, `color`, `linestyle`, `linewidth`, marker properties, `alpha`, `visible`, `zorder` |
-| `ScatterController` | Scatter | `label`, `color`, `edgecolor`, `size`, `marker`, `linewidth`, `alpha`, `visible`, `zorder` |
+| `FigureController` | Figure | identity/style, size/DPI, frame/edge/face appearance, alpha/linewidth, and tagged `layout` |
+| `AxesController` | Axes | ordered limits, margins, aspect/box geometry, autoscale, anchor/adjustable, frame/layering/layout, and `color_cycle` |
+| `XAxisController`, `YAxisController` | X/Y Axis | tagged `scale`, major/minor locator and formatter, label/offset-text configuration, and overlap handling |
+| `SpineController` | Spine | visibility, position/bounds, line pattern/cap/join, antialiasing, layering, clipping/raster/export fields |
+| `TickGroupController` | Major/Minor Tick | primary/secondary-side visibility, direction/geometry/color, antialiasing, layering, clipping/raster fields; no label `pad` |
+| `TickLabelGroupController` | Major/Minor Tick Label | primary/secondary-side visibility, the sole `pad`, full safe typography/text-box configuration, layering and render/export fields |
+| `GridController` | Grid | visibility, line pattern/gap/cap/join, antialiasing and clipping/raster fields; effective ordering comes from Axes `axisbelow` |
+| `TextController` | Title, Axis Label, Text | text/visibility/position plus full safe typography, text box, rotation/alignment, render, layering and export configuration |
+| `LegendController` | Legend | tagged location/anchor, layout/spacing, entry/title fonts, frame styling, draggable policy, layering and export configuration |
+| `LineController` | Line and all curve roles | label/color, tagged line pattern/marker/markevery, draw/fill style, cap/join/gap, antialiasing, layering and safe export fields |
+| `ScatterController` | Scatter | uniform face/edge styling, marker/line/hatch, tagged color/size mapping and norm, non-finite policy, layering and safe export fields |
+
+The exact schema-v10 key matrix and tagged-value formats are maintained in
+[`matplotlib-component-properties-v10.md`](matplotlib-component-properties-v10.md).
+Axes do not persist scales, Axis does not persist inversion or side visibility,
+and Tick groups do not persist label padding; those single-owner boundaries are
+part of the project format.
 
 `FunctionCurveController`, `DataPlotController`, `FitCurveController`, and `InterpolationController` specialize `LineController` with role-specific data. `controller_type_for(state)` and `create_controller(state, ...)` dispatch from the controlled kind/role pair.
 
@@ -230,7 +236,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend strict schema-v9 serialization and direct save/open round-trip coverage when the component is persistent. Any new persisted field requires a dedicated schema-v10 migration task.
+9. Extend strict schema-v10 serialization and direct save/open round-trip coverage when the component is persistent. Any future persisted-field change requires a new schema version task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

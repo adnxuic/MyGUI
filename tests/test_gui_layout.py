@@ -8,8 +8,16 @@ from tests.axes_helpers import create_regular_axes
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QObject, QSettings, Qt
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QDialog
 
+from mygui.figuremodify.components import ComponentRole
+from mygui.widgets.fig_control_window.component_editors import (
+    AxisFormatterEditor,
+    AxisLocatorEditor,
+    AxisScaleEditor,
+    FontSpecEditor,
+)
 from mygui.widgets.fig_control_window.figure_inspector import (
     AxesInspectorPanel,
     FigureInspectorPanel,
@@ -126,6 +134,117 @@ class GuiLayoutTests(unittest.TestCase):
             self.assertTrue(all(area.widgetResizable() for area in window.fig_control_window.scroll_areas))
         finally:
             self._close(window)
+
+    def test_component_switch_resets_shared_inspector_scroll_to_top_left(self):
+        window = MainWindow()
+        self._show(window, 960, 600)
+        try:
+            window.figure_window.add_figure(
+                width=4,
+                height=3,
+                dpi=100,
+                style="default",
+                canva_name="ScrollReset",
+            )
+            canvas = window.figure_window.current_canva
+            create_regular_axes(canvas)
+            panel = canvas.figure_inspector
+            title_id = canvas.component_registry.query(
+                role=ComponentRole.TITLE
+            )[0].component_id
+            x_axis_id = canvas.component_registry.query(
+                role=ComponentRole.X_AXIS
+            )[0].component_id
+            self.assertTrue(canvas.select_component(title_id))
+            self.app.processEvents()
+
+            area = window.fig_control_window.figure_inspector_scroll_area
+            horizontal = area.horizontalScrollBar()
+            vertical = area.verticalScrollBar()
+            horizontal.setRange(0, 100)
+            vertical.setRange(0, 100)
+            horizontal.setValue(61)
+            vertical.setValue(73)
+            shown = QSignalSpy(panel.componentShown)
+
+            self.assertTrue(canvas.select_component(x_axis_id))
+            self.app.processEvents()
+            self.app.processEvents()
+            self.assertEqual(shown.count(), 1)
+            self.assertEqual(shown.at(0)[0], x_axis_id)
+            self.assertEqual(horizontal.value(), horizontal.minimum())
+            self.assertEqual(vertical.value(), vertical.minimum())
+
+            horizontal.setRange(0, 100)
+            vertical.setRange(0, 100)
+            horizontal.setValue(31)
+            vertical.setValue(47)
+            self.assertTrue(canvas.select_component(x_axis_id))
+            self.app.processEvents()
+            self.assertEqual(shown.count(), 1)
+            self.assertEqual(horizontal.value(), 31)
+            self.assertEqual(vertical.value(), 47)
+        finally:
+            window.close_without_prompt()
+            self.app.processEvents()
+
+    def test_production_axis_inspector_uses_readable_structured_editors(self):
+        window = MainWindow()
+        self._show(window, 960, 600)
+        try:
+            window.figure_window.add_figure(
+                width=4,
+                height=3,
+                dpi=100,
+                style="default",
+                canva_name="AxisEditors",
+            )
+            canvas = window.figure_window.current_canva
+            create_regular_axes(canvas)
+            x_axis = canvas.component_registry.query(
+                role=ComponentRole.X_AXIS
+            )[0]
+            self.assertTrue(canvas.select_component(x_axis.component_id))
+            self.app.processEvents()
+
+            inspector = canvas.component_editor_manager.editor(
+                x_axis.component_id
+            )
+            section = inspector.section("properties")
+            scale = section.editor("scale")
+            major_locator = section.editor("major_locator")
+            major_formatter = section.editor("major_formatter")
+            offset_font = section.editor("offset_font")
+            self.assertIsInstance(scale, AxisScaleEditor)
+            self.assertIsInstance(major_locator, AxisLocatorEditor)
+            self.assertIsInstance(major_formatter, AxisFormatterEditor)
+            self.assertIsInstance(offset_font, FontSpecEditor)
+            self.assertEqual(
+                [
+                    scale.summary.text(),
+                    major_locator.summary.text(),
+                    major_formatter.summary.text(),
+                ],
+                ["Linear", "Auto", "Scalar"],
+            )
+
+            scale.set_value(
+                {
+                    "kind": "log",
+                    "params": {
+                        "base": 10.0,
+                        "subs": None,
+                        "nonpositive": "clip",
+                    },
+                },
+                emit=True,
+            )
+            self.app.processEvents()
+            self.assertEqual(x_axis.resolve_target().axes.get_xscale(), "log")
+            self.assertEqual(scale.summary.text(), "Log")
+        finally:
+            window.close_without_prompt()
+            self.app.processEvents()
 
     def test_activity_rails_fill_cells_and_preserve_icon_colors(self):
         window = MainWindow()

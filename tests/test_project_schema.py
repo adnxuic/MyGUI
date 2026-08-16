@@ -21,7 +21,7 @@ from mygui.project_io import (
 from main import MainWindow
 
 
-class ProjectSchemaV9Tests(unittest.TestCase):
+class ProjectSchemaV10Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -204,7 +204,7 @@ class ProjectSchemaV9Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "expected exactly"):
                     validate_project_snapshot(candidate)
 
-    def test_invalid_v9_file_is_rejected_before_application_state_changes(self):
+    def test_invalid_v10_file_is_rejected_before_application_state_changes(self):
         snapshot = self.snapshot()
         self.component(snapshot, "data_plot")["parent_id"] = "missing"
 

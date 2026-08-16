@@ -1,10 +1,21 @@
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
@@ -27,24 +38,49 @@ from mygui.figuremodify.components import (
     ComponentState,
     DataPlotController,
     FunctionCurveController,
+    PropertySpec,
     ScatterController,
     register_figure_components,
+)
+from mygui.widgets.fig_control_window.component_editors.common import (
+    FocusAwareDoubleSpinBox,
+    FocusAwareSpinBox,
 )
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 from mygui.widgets.fig_control_window.component_editors import (
+    AxesAnchorEditor,
+    AxisFormatterEditor,
+    AxisLocatorEditor,
+    AxisScaleEditor,
     ComponentEditorBase,
     ComponentEditorManager,
     DebouncedTextBinding,
     EditorContext,
     EditorRegistry,
+    FigureLayoutEditor,
+    FontSpecEditor,
+    InlineValueEditor,
+    LegendAnchorEditor,
+    LinePatternEditor,
     LineStyleEditor,
+    MarkEveryEditor,
+    MarkerSpecEditor,
+    NamedNumberEditor,
     NullableDoubleEditor,
+    NumberSequenceEditor,
     NumericTupleEditor,
+    OptionalColorEditor,
     RangeEditor,
+    ScatterColorMapEditor,
+    ScatterSizeMapEditor,
     ScatterStyleEditor,
     SpinePositionEditor,
+    StringListEditor,
+    StructuredValueEditor,
+    TextBoxEditor,
+    ZoomConnectorsEditor,
     MessagePresenter,
     register_production_profiles,
 )
@@ -259,6 +295,141 @@ class ComponentEditorTests(unittest.TestCase):
         finally:
             editor.close()
 
+    def test_property_labels_fall_back_and_drive_accessibility_and_messages(self):
+        controller = _FakeController()
+        controller.property_specs = {
+            "visible": {
+                "editor": "bool",
+                "label": None,
+                "tooltip": "Show this artist.",
+            },
+            "linewidth": {
+                "editor": "number",
+                "label": "Line width",
+            },
+            "style": {"editor": "enum", "choices": ("-",), "label": "  "},
+            "label": PropertySpec(
+                "label",
+                str,
+                "before",
+                editor="text",
+                label=None,
+            ),
+        }
+        presenter = MessagePresenter()
+        editor = ComponentEditorBase(
+            controller,
+            context=SimpleNamespace(messages=presenter),
+        )
+        events = []
+
+        def handler(message, level):
+            events.append((message, level))
+
+        status_messages.set_status_handler(handler)
+        try:
+            visible = editor.editor("visible")
+            linewidth = editor.editor("linewidth")
+            style = editor.editor("style")
+            label_input = editor.editor("label")
+            self.assertEqual(editor.form_layout.labelForField(visible).text(), "Visible")
+            self.assertEqual(
+                editor.form_layout.labelForField(linewidth).text(),
+                "Line width",
+            )
+            self.assertEqual(editor.form_layout.labelForField(style).text(), "Style")
+            self.assertEqual(editor.form_layout.labelForField(label_input).text(), "Label")
+            self.assertEqual(visible.accessibleName(), "Visible")
+            self.assertEqual(visible.accessibleDescription(), "Show this artist.")
+            self.assertEqual(visible.toolTip(), "Show this artist.")
+
+            linewidth.setValue(3.5)
+            label_input.setText("after")
+            self.assertTrue(editor._text_bindings["label"].flush())
+            self.assertIn(("Line width updated.", "success"), events)
+            self.assertIn(("Label updated.", "success"), events)
+            self.assertNotIn(("None updated.", "success"), events)
+        finally:
+            status_messages.clear_status_handler(handler)
+            presenter.close()
+            editor.close()
+
+    def test_focus_aware_spinboxes_ignore_wheel_until_focused(self):
+        for spin_type in (FocusAwareSpinBox, FocusAwareDoubleSpinBox):
+            with self.subTest(spin_type=spin_type.__name__):
+                container = QWidget()
+                layout = QVBoxLayout(container)
+                focus_sink = QLineEdit(container)
+                spin = spin_type(container)
+                layout.addWidget(focus_sink)
+                layout.addWidget(spin)
+                try:
+                    spin.setRange(-100, 100)
+                    spin.setValue(5)
+                    container.show()
+                    focus_sink.setFocus(Qt.MouseFocusReason)
+                    self.app.processEvents()
+                    self.assertFalse(spin.hasFocus())
+                    unfocused = QWheelEvent(
+                        QPointF(4, 4),
+                        QPointF(4, 4),
+                        QPoint(0, 0),
+                        QPoint(0, 120),
+                        Qt.NoButton,
+                        Qt.NoModifier,
+                        Qt.ScrollUpdate,
+                        False,
+                    )
+                    QApplication.sendEvent(spin, unfocused)
+                    self.assertEqual(spin.value(), 5)
+                    self.assertFalse(unfocused.isAccepted())
+
+                    spin.setFocus(Qt.MouseFocusReason)
+                    self.app.processEvents()
+                    self.assertTrue(spin.hasFocus())
+                    focused = QWheelEvent(
+                        QPointF(4, 4),
+                        QPointF(4, 4),
+                        QPoint(0, 0),
+                        QPoint(0, 120),
+                        Qt.NoButton,
+                        Qt.NoModifier,
+                        Qt.ScrollUpdate,
+                        False,
+                    )
+                    QApplication.sendEvent(spin, focused)
+                    self.assertGreater(spin.value(), 5)
+                finally:
+                    container.close()
+
+    def test_composite_numeric_editors_use_focus_aware_spinboxes(self):
+        nullable = NullableDoubleEditor(1.0)
+        numeric_tuple = NumericTupleEditor((1.0, 2.0), length=2)
+        value_range = RangeEditor(1.0, 2.0)
+        try:
+            self.assertIsInstance(
+                nullable.value_input,
+                FocusAwareDoubleSpinBox,
+            )
+            self.assertTrue(
+                all(
+                    isinstance(item, FocusAwareDoubleSpinBox)
+                    for item in numeric_tuple.inputs
+                )
+            )
+            self.assertIsInstance(
+                value_range.minimum_input,
+                FocusAwareDoubleSpinBox,
+            )
+            self.assertIsInstance(
+                value_range.maximum_input,
+                FocusAwareDoubleSpinBox,
+            )
+        finally:
+            nullable.close()
+            numeric_tuple.close()
+            value_range.close()
+
     def test_component_editor_reports_applied_but_not_noop(self):
         controller = _FakeController()
         editor = ComponentEditorBase(controller, color_library=ColorLibrary())
@@ -403,13 +574,13 @@ class ComponentEditorTests(unittest.TestCase):
             self.assertFalse(definition.expression_change())
             self.assertEqual(definition.expression_input.text(), "x")
 
-            style_combo = appearance.editor("linestyle")
-            dashed_index = style_combo.findData("--")
-            style_combo.setCurrentIndex(dashed_index)
+            style_input = appearance.editor("linestyle")
+            self.assertIsInstance(style_input, LinePatternEditor)
+            style_input.set_value({"kind": "preset", "value": "--"}, emit=True)
             self.assertEqual(line.get_linestyle(), "--")
             self.assertEqual(
                 controller.state.properties["linestyle"],
-                "--",
+                {"kind": "preset", "value": "--"},
             )
         finally:
             editor.close()
@@ -461,16 +632,16 @@ class ComponentEditorTests(unittest.TestCase):
             plot_appearance = plot_editor.section("appearance")
             scatter_appearance = scatter_editor.section("appearance")
             plot_style = plot_appearance.editor("linestyle")
-            plot_style.setCurrentIndex(
-                plot_style.findData(":")
-            )
+            plot_style.set_value({"kind": "preset", "value": ":"}, emit=True)
             plot_appearance.editor("markersize").setValue(7.5)
-            scatter_appearance.editor("marker").setCurrentText("s")
+            scatter_marker = scatter_appearance.editor("marker")
+            self.assertIsInstance(scatter_marker, MarkerSpecEditor)
+            scatter_marker.set_value({"kind": "symbol", "value": "s"}, emit=True)
             scatter_appearance.editor("size").setValue(42.0)
 
             self.assertEqual(
                 plot_controller.state.properties["linestyle"],
-                ":",
+                {"kind": "preset", "value": ":"},
             )
             self.assertEqual(
                 plot_controller.state.properties["markersize"],
@@ -478,7 +649,7 @@ class ComponentEditorTests(unittest.TestCase):
             )
             self.assertEqual(
                 scatter_controller.state.properties["marker"],
-                "s",
+                {"kind": "symbol", "value": "s"},
             )
             self.assertEqual(
                 scatter_controller.state.properties["size"],
@@ -509,6 +680,194 @@ class ComponentEditorTests(unittest.TestCase):
         finally:
             for editor in editors:
                 editor.close()
+
+    def test_axis_compound_properties_use_structured_summary_editors(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        axis_controller = next(
+            controller
+            for controller in registry
+            if controller.state.role is ComponentRole.X_AXIS
+        )
+        editor = ComponentEditorBase(
+            axis_controller,
+            color_library=ColorLibrary(),
+        )
+        try:
+            scale = editor.editor("scale")
+            major_locator = editor.editor("major_locator")
+            major_formatter = editor.editor("major_formatter")
+            minor_locator = editor.editor("minor_locator")
+            minor_formatter = editor.editor("minor_formatter")
+            offset_font = editor.editor("offset_font")
+
+            self.assertIsInstance(scale, AxisScaleEditor)
+            self.assertIsInstance(major_locator, AxisLocatorEditor)
+            self.assertIsInstance(major_formatter, AxisFormatterEditor)
+            self.assertIsInstance(minor_locator, AxisLocatorEditor)
+            self.assertIsInstance(minor_formatter, AxisFormatterEditor)
+            self.assertIsInstance(offset_font, FontSpecEditor)
+            self.assertEqual(scale.summary.text(), "Linear")
+            self.assertEqual(major_locator.summary.text(), "Auto")
+            self.assertEqual(major_formatter.summary.text(), "Scalar")
+            self.assertEqual(minor_locator.summary.text(), "None")
+            self.assertEqual(minor_formatter.summary.text(), "None")
+            self.assertIn("sans-serif", offset_font.summary.text())
+            self.assertTrue(
+                all(
+                    "{" not in compound.summary.text()
+                    for compound in (
+                        scale,
+                        major_locator,
+                        major_formatter,
+                        minor_locator,
+                        minor_formatter,
+                        offset_font,
+                    )
+                )
+            )
+
+            scale.set_value(
+                {
+                    "kind": "log",
+                    "params": {
+                        "base": 10.0,
+                        "subs": None,
+                        "nonpositive": "clip",
+                    },
+                },
+                emit=True,
+            )
+            self.assertEqual(axis_controller.state.properties["scale"]["kind"], "log")
+            self.assertEqual(scale.summary.text(), "Log")
+
+            offset_font.set_value(
+                {
+                    **offset_font.value(),
+                    "family": ["serif"],
+                    "size": 12.0,
+                },
+                emit=True,
+            )
+            self.assertEqual(
+                axis_controller.state.properties["offset_font"]["family"],
+                ["serif"],
+            )
+            self.assertEqual(offset_font.summary.text(), "serif · 12 pt · normal")
+        finally:
+            editor.close()
+
+    def test_axis_structured_dialog_selects_current_variant_and_validates(self):
+        locator = AxisLocatorEditor(
+            {"kind": "null", "params": {}},
+        )
+        formatter = AxisFormatterEditor(
+            {
+                "kind": "percent",
+                "params": {
+                    "xmax": 100.0,
+                    "decimals": 1,
+                    "symbol": "%",
+                    "is_latex": False,
+                },
+            },
+        )
+        try:
+            locator_dialog = locator._dialog()
+            formatter_dialog = formatter._dialog()
+            try:
+                self.assertEqual(locator_dialog.kind_input.currentData(), "null")
+                self.assertIs(
+                    locator_dialog.form_stack.currentWidget(),
+                    locator_dialog._forms["null"],
+                )
+                self.assertEqual(
+                    formatter_dialog.kind_input.currentData(),
+                    "percent",
+                )
+                self.assertIs(
+                    formatter_dialog.form_stack.currentWidget(),
+                    formatter_dialog._forms["percent"],
+                )
+                formatter_dialog._validate_and_accept()
+                self.assertEqual(formatter_dialog.value(), formatter.value())
+            finally:
+                locator_dialog.close()
+                formatter_dialog.close()
+        finally:
+            locator.close()
+            formatter.close()
+
+    def test_axis_structured_dialog_defaults_cover_every_supported_kind(self):
+        editors = (
+            AxisScaleEditor({"kind": "linear", "params": {}}),
+            AxisLocatorEditor({"kind": "auto", "params": {}}),
+            AxisFormatterEditor(
+                {
+                    "kind": "scalar",
+                    "params": {
+                        "use_offset": True,
+                        "use_math_text": False,
+                        "use_locale": False,
+                        "scientific": True,
+                        "powerlimits": [-5, 6],
+                    },
+                }
+            ),
+        )
+        try:
+            for editor in editors:
+                probe = editor._dialog()
+                kinds = [
+                    probe.kind_input.itemData(index)
+                    for index in range(probe.kind_input.count())
+                ]
+                probe.close()
+                for kind in kinds:
+                    with self.subTest(editor=type(editor).__name__, kind=kind):
+                        dialog = editor._dialog()
+                        try:
+                            dialog.kind_input.setCurrentIndex(
+                                dialog.kind_input.findData(kind)
+                            )
+                            dialog._validate_and_accept()
+                            self.assertFalse(dialog.error_label.isVisible())
+                            self.assertEqual(dialog.value()["kind"], kind)
+                        finally:
+                            dialog.close()
+        finally:
+            for editor in editors:
+                editor.close()
+
+    def test_rejected_structured_value_restores_summary_and_value(self):
+        controller = _FakeController()
+        controller.state["properties"] = {
+            "scale": {"kind": "linear", "params": {}},
+        }
+        controller.property_specs = {
+            "scale": {"editor": "scale_spec"},
+        }
+        controller.set_property = lambda _key, _value: False
+        editor = ComponentEditorBase(controller)
+        try:
+            scale = editor.editor("scale")
+            scale.set_value(
+                {
+                    "kind": "log",
+                    "params": {
+                        "base": 10.0,
+                        "subs": None,
+                        "nonpositive": "clip",
+                    },
+                },
+                emit=True,
+            )
+            self.assertEqual(scale.value(), {"kind": "linear", "params": {}})
+            self.assertEqual(scale.summary.text(), "Linear")
+        finally:
+            editor.close()
 
     def test_first_party_structured_and_nullable_editors_apply_typed_values(self):
         figure = Figure()
@@ -755,6 +1114,512 @@ class ComponentEditorTests(unittest.TestCase):
         finally:
             editor.close()
             context.editor_manager.close()
+
+
+class ComponentSpecEditorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _figure_registry(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        axes.plot([0.0, 1.0], [1.0, 2.0], label="line")
+        axes.scatter([0.0, 1.0], [2.0, 3.0], label="scatter")
+        axes.set_title("title")
+        axes.legend()
+        return figure, register_figure_components(figure)
+
+    @staticmethod
+    def _controller(registry, kind, role=None, **selector):
+        return next(
+            controller
+            for controller in registry
+            if controller.state.kind is kind
+            and (role is None or controller.state.role is role)
+            and all(
+                controller.state.selector.get(key) == value
+                for key, value in selector.items()
+            )
+        )
+
+    def test_generated_controls_never_display_raw_json(self):
+        _figure, registry = self._figure_registry()
+        library = ColorLibrary()
+        editors = [
+            ComponentEditorBase(controller, color_library=library)
+            for controller in registry
+        ]
+        try:
+            for editor in editors:
+                for key, widget in editor.editors().items():
+                    if isinstance(widget, QLineEdit):
+                        with self.subTest(component=editor.controller.state.id, key=key):
+                            self.assertFalse(
+                                widget.text().startswith(("{", "[")),
+                                f"{key} still renders a raw JSON document",
+                            )
+        finally:
+            for editor in editors:
+                editor.close()
+
+    def test_every_compound_property_uses_its_dedicated_control(self):
+        _figure, registry = self._figure_registry()
+        library = ColorLibrary()
+        expected = {
+            (ComponentKind.FIGURE, "layout_engine"): FigureLayoutEditor,
+            (ComponentKind.AXES, "anchor"): AxesAnchorEditor,
+            (ComponentKind.SPINE, "linestyle"): LinePatternEditor,
+            (ComponentKind.GRID, "linestyle"): LinePatternEditor,
+            (ComponentKind.GRID, "gapcolor"): OptionalColorEditor,
+            (ComponentKind.TICK_LABEL_GROUP, "fontweight"): NamedNumberEditor,
+            (ComponentKind.TICK_LABEL_GROUP, "bbox"): TextBoxEditor,
+            (ComponentKind.TEXT, "bbox"): TextBoxEditor,
+            (ComponentKind.TEXT, "fontstretch"): NamedNumberEditor,
+            (ComponentKind.LEGEND, "bbox_to_anchor"): LegendAnchorEditor,
+            (ComponentKind.LEGEND, "label_font"): FontSpecEditor,
+            (ComponentKind.LEGEND, "scatteryoffsets"): NumberSequenceEditor,
+            (ComponentKind.LEGEND, "frame_linestyle"): LinePatternEditor,
+            (ComponentKind.LINE, "marker"): MarkerSpecEditor,
+            (ComponentKind.LINE, "markevery"): MarkEveryEditor,
+            (ComponentKind.LINE, "markerfacecoloralt"): OptionalColorEditor,
+            (ComponentKind.LINE, "sketch_params"): NumericTupleEditor,
+            (ComponentKind.SCATTER, "marker"): MarkerSpecEditor,
+            (ComponentKind.SCATTER, "urls"): StringListEditor,
+            (ComponentKind.SCATTER, "color_mapping"): ScatterColorMapEditor,
+            (ComponentKind.SCATTER, "size_mapping"): ScatterSizeMapEditor,
+        }
+        editors = []
+        try:
+            for (kind, key), editor_type in expected.items():
+                controller = self._controller(registry, kind)
+                editor = ComponentEditorBase(controller, color_library=library)
+                editors.append(editor)
+                with self.subTest(kind=kind, key=key):
+                    self.assertIsInstance(editor.editor(key), editor_type)
+        finally:
+            for editor in editors:
+                editor.close()
+
+    def test_line_pattern_editor_round_trips_presets_and_custom_dashes(self):
+        editor = LinePatternEditor({"kind": "preset", "value": "--"})
+        emitted = []
+        editor.valueChanged.connect(emitted.append)
+        try:
+            self.assertEqual(editor.value(), {"kind": "preset", "value": "--"})
+            self.assertFalse(editor.dashes_input.isVisibleTo(editor))
+
+            editor.set_value(
+                {"kind": "custom", "offset": 1.0, "dashes": [4.0, 2.0]}
+            )
+            self.assertEqual(
+                editor.value(),
+                {"kind": "custom", "offset": 1.0, "dashes": [4.0, 2.0]},
+            )
+            self.assertEqual(editor.dashes_input.text(), "4, 2")
+            self.assertEqual(emitted, [])
+
+            editor.kind_input.setCurrentIndex(editor.kind_input.findData("-"))
+            self.assertEqual(emitted, [{"kind": "preset", "value": "-"}])
+        finally:
+            editor.close()
+
+    def test_line_pattern_editor_prefills_custom_dashes_once(self):
+        editor = LinePatternEditor({"kind": "preset", "value": "-"})
+        emitted = []
+        editor.valueChanged.connect(emitted.append)
+        try:
+            editor.kind_input.setCurrentIndex(editor.kind_input.count() - 1)
+            self.assertEqual(
+                emitted,
+                [{"kind": "custom", "offset": 0.0, "dashes": [6.0, 2.0]}],
+            )
+            self.assertTrue(editor.dashes_input.isVisibleTo(editor))
+        finally:
+            editor.close()
+
+    def test_marker_spec_editor_round_trips_symbol_and_polygon(self):
+        editor = MarkerSpecEditor({"kind": "symbol", "value": "o"})
+        emitted = []
+        editor.valueChanged.connect(emitted.append)
+        try:
+            self.assertEqual(editor.value(), {"kind": "symbol", "value": "o"})
+            polygon = {
+                "kind": "regular_polygon",
+                "sides": 5,
+                "style": 1,
+                "angle": 30.0,
+            }
+            editor.set_value(polygon)
+            self.assertEqual(editor.value(), polygon)
+            self.assertTrue(editor.sides_input.isVisibleTo(editor))
+            self.assertEqual(emitted, [])
+
+            editor.set_value({"kind": "symbol", "value": 4}, emit=True)
+            self.assertEqual(emitted, [{"kind": "symbol", "value": 4}])
+            self.assertFalse(editor.sides_input.isVisibleTo(editor))
+        finally:
+            editor.close()
+
+    def test_optional_color_editor_uses_the_declared_unset_value(self):
+        _figure, registry = self._figure_registry()
+        line = self._controller(registry, ComponentKind.LINE)
+        editor = ComponentEditorBase(line, color_library=ColorLibrary())
+        try:
+            gapcolor = editor.editor("gapcolor")
+            alternate = editor.editor("markerfacecoloralt")
+            self.assertIsNone(gapcolor.value())
+            self.assertEqual(alternate.value(), "none")
+
+            gapcolor.set_value("#ff0000", emit=True)
+            self.assertEqual(
+                str(line.read_state().properties["gapcolor"]).casefold(),
+                "#ff0000",
+            )
+            gapcolor.set_value(None, emit=True)
+            self.assertIsNone(line.read_state().properties["gapcolor"])
+
+            alternate.set_value("#00ff00", emit=True)
+            self.assertEqual(
+                str(line.read_state().properties["markerfacecoloralt"]).casefold(),
+                "#00ff00",
+            )
+            alternate.set_value("none", emit=True)
+            self.assertEqual(
+                line.read_state().properties["markerfacecoloralt"],
+                "none",
+            )
+        finally:
+            editor.close()
+
+    def test_named_number_editor_accepts_keywords_and_numbers(self):
+        editor = NamedNumberEditor("normal", names=("light", "normal", "bold"))
+        try:
+            self.assertEqual(editor.value(), "normal")
+            editor.value_input.setCurrentText("bold")
+            self.assertEqual(editor.value(), "bold")
+            editor.value_input.setCurrentText("650")
+            self.assertEqual(editor.value(), 650)
+            editor.set_value(300)
+            self.assertEqual(editor.value(), 300)
+        finally:
+            editor.close()
+
+    def test_sequence_editors_emit_tuples_from_readable_text(self):
+        numbers = NumberSequenceEditor((0.375, 0.5, 0.3125))
+        strings = StringListEditor(("https://a", "https://b"))
+        try:
+            self.assertEqual(numbers.value_input.text(), "0.375, 0.5, 0.3125")
+            numbers.value_input.setText("0.25 0.5")
+            self.assertEqual(numbers.value(), (0.25, 0.5))
+
+            self.assertEqual(
+                strings.value_input.toPlainText(),
+                "https://a\nhttps://b",
+            )
+            strings.set_plain_text("https://c\n\nhttps://d")
+            self.assertEqual(strings.value(), ("https://c", "https://d"))
+        finally:
+            numbers.close()
+            strings.close()
+
+    def test_axes_and_legend_anchor_editors_switch_variants(self):
+        anchor = AxesAnchorEditor("C")
+        legend_anchor = LegendAnchorEditor({"kind": "none"})
+        try:
+            self.assertEqual(anchor.value(), "C")
+            anchor.set_value((0.25, 0.75))
+            self.assertEqual(anchor.value(), (0.25, 0.75))
+            self.assertTrue(anchor.x_input.isVisibleTo(anchor))
+
+            self.assertEqual(legend_anchor.value(), {"kind": "none"})
+            legend_anchor.set_value({"kind": "point", "x": 0.5, "y": 0.25})
+            self.assertEqual(
+                legend_anchor.value(),
+                {"kind": "point", "x": 0.5, "y": 0.25},
+            )
+            self.assertFalse(
+                legend_anchor.field_inputs["width"].isVisibleTo(legend_anchor)
+            )
+            legend_anchor.set_value(
+                {
+                    "kind": "bounds",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 1.0,
+                    "height": 0.5,
+                }
+            )
+            self.assertTrue(
+                legend_anchor.field_inputs["height"].isVisibleTo(legend_anchor)
+            )
+        finally:
+            anchor.close()
+            legend_anchor.close()
+
+    def test_markevery_dialog_writes_every_supported_variant(self):
+        editor = MarkEveryEditor({"kind": "all"})
+        try:
+            self.assertEqual(editor.summary.text(), "Every point")
+            probe = editor._dialog()
+            kinds = [
+                probe.kind_input.itemData(index)
+                for index in range(probe.kind_input.count())
+            ]
+            probe.close()
+            for kind in kinds:
+                with self.subTest(kind=kind):
+                    dialog = editor._dialog()
+                    try:
+                        dialog.kind_input.setCurrentIndex(
+                            dialog.kind_input.findData(kind)
+                        )
+                        dialog._validate_and_accept()
+                        self.assertFalse(dialog.error_label.isVisible())
+                        self.assertEqual(dialog.value()["kind"], kind)
+                        self.assertNotIn("params", dialog.value())
+                    finally:
+                        dialog.close()
+        finally:
+            editor.close()
+
+    def test_figure_layout_dialog_writes_every_supported_variant(self):
+        editor = FigureLayoutEditor({"kind": "none", "params": {}})
+        try:
+            self.assertEqual(editor.summary.text(), "None")
+            probe = editor._dialog()
+            kinds = [
+                probe.kind_input.itemData(index)
+                for index in range(probe.kind_input.count())
+            ]
+            probe.close()
+            for kind in kinds:
+                with self.subTest(kind=kind):
+                    dialog = editor._dialog()
+                    try:
+                        dialog.kind_input.setCurrentIndex(
+                            dialog.kind_input.findData(kind)
+                        )
+                        dialog._validate_and_accept()
+                        self.assertFalse(dialog.error_label.isVisible())
+                        self.assertEqual(dialog.value()["kind"], kind)
+                    finally:
+                        dialog.close()
+        finally:
+            editor.close()
+
+    def test_text_box_dialog_writes_a_complete_or_disabled_record(self):
+        editor = TextBoxEditor({"enabled": False}, color_library=ColorLibrary())
+        try:
+            self.assertEqual(editor.summary.text(), "No box")
+            dialog = editor._dialog()
+            try:
+                dialog.enabled_input.setChecked(True)
+                dialog.boxstyle_input.setCurrentText("square")
+                dialog.pad_input.setValue(0.5)
+                dialog._validate_and_accept()
+                self.assertFalse(dialog.error_label.isVisible())
+                value = dialog.value()
+            finally:
+                dialog.close()
+            self.assertEqual(
+                set(value),
+                {
+                    "enabled",
+                    "boxstyle",
+                    "facecolor",
+                    "edgecolor",
+                    "linewidth",
+                    "line_pattern",
+                    "alpha",
+                    "fill",
+                    "hatch",
+                    "pad",
+                },
+            )
+            editor.set_value(value)
+            self.assertEqual(editor.summary.text().split(" \u00b7 ")[0], "Square")
+
+            disabled = editor._dialog()
+            try:
+                disabled.enabled_input.setChecked(False)
+                disabled._validate_and_accept()
+                self.assertEqual(disabled.value(), {"enabled": False})
+            finally:
+                disabled.close()
+        finally:
+            editor.close()
+
+    def test_scatter_mapping_dialogs_write_complete_records(self):
+        library = ColorLibrary()
+        color_map = ScatterColorMapEditor(
+            {
+                "enabled": False,
+                "cmap": "viridis",
+                "norm": {
+                    "kind": "linear",
+                    "params": {"vmin": None, "vmax": None, "clip": False},
+                },
+                "bad": "#00000000",
+                "under": None,
+                "over": None,
+                "nonfinite": "drop",
+            },
+            color_library=library,
+        )
+        size_map = ScatterSizeMapEditor(
+            {
+                "enabled": False,
+                "input": None,
+                "output": [12.0, 120.0],
+                "clamp": True,
+            }
+        )
+        try:
+            self.assertEqual(color_map.summary.text(), "Uniform color")
+            self.assertEqual(size_map.summary.text(), "Uniform size")
+
+            color_dialog = color_map._dialog()
+            try:
+                color_dialog.enabled_input.setChecked(True)
+                color_dialog.cmap_input.setCurrentText("plasma")
+                color_dialog.norm_input.set_value(
+                    {
+                        "kind": "log",
+                        "params": {"vmin": 1.0, "vmax": 10.0, "clip": False},
+                    }
+                )
+                color_dialog._validate_and_accept()
+                self.assertFalse(color_dialog.error_label.isVisible())
+                color_value = color_dialog.value()
+            finally:
+                color_dialog.close()
+            self.assertTrue(color_value["enabled"])
+            self.assertEqual(color_value["cmap"], "plasma")
+            self.assertEqual(color_value["norm"]["kind"], "log")
+            color_map.set_value(color_value)
+            self.assertEqual(color_map.summary.text(), "plasma \u00b7 Log")
+
+            size_dialog = size_map._dialog()
+            try:
+                size_dialog.enabled_input.setChecked(True)
+                size_dialog.output_range_input.set_value((6.0, 60.0))
+                size_dialog._validate_and_accept()
+                self.assertFalse(size_dialog.error_label.isVisible())
+                size_value = size_dialog.value()
+            finally:
+                size_dialog.close()
+            self.assertEqual(size_value["output"], [6.0, 60.0])
+            size_map.set_value(size_value)
+            self.assertEqual(size_map.summary.text(), "6\u201360 pt\u00b2")
+        finally:
+            color_map.close()
+            size_map.close()
+
+    def test_zoom_connector_dialog_writes_four_complete_records(self):
+        connectors = tuple(
+            {
+                "visible": True,
+                "color": "#808080",
+                "line_pattern": {"kind": "preset", "value": "-"},
+                "linewidth": 1.0,
+                "alpha": 0.5,
+                "zorder": 4.99,
+            }
+            for _index in range(4)
+        )
+        editor = ZoomConnectorsEditor(connectors, color_library=ColorLibrary())
+        try:
+            self.assertEqual(editor.summary.text(), "4 of 4 connectors visible")
+            dialog = editor._dialog()
+            try:
+                self.assertEqual(len(dialog.pages), 4)
+                dialog.pages[0].visible_input.setChecked(False)
+                dialog.pages[1].line_pattern_input.set_value(
+                    {"kind": "preset", "value": ":"}
+                )
+                dialog._validate_and_accept()
+                self.assertFalse(dialog.error_label.isVisible())
+                value = dialog.value()
+            finally:
+                dialog.close()
+            self.assertEqual(len(value), 4)
+            self.assertFalse(value[0]["visible"])
+            self.assertEqual(
+                value[1]["line_pattern"],
+                {"kind": "preset", "value": ":"},
+            )
+            editor.set_value(value)
+            self.assertEqual(editor.summary.text(), "3 of 4 connectors visible")
+        finally:
+            editor.close()
+
+    def test_cancelled_structured_dialog_leaves_the_value_unchanged(self):
+        editor = TextBoxEditor({"enabled": False}, color_library=ColorLibrary())
+        emitted = []
+        editor.valueChanged.connect(emitted.append)
+        try:
+            dialog = editor._dialog()
+            dialog.enabled_input.setChecked(True)
+            with patch.object(
+                dialog,
+                "exec",
+                return_value=QDialog.DialogCode.Rejected,
+            ), patch.object(editor, "_dialog", return_value=dialog):
+                editor._open_dialog()
+            self.assertEqual(editor.value(), {"enabled": False})
+            self.assertEqual(editor.summary.text(), "No box")
+            self.assertEqual(emitted, [])
+        finally:
+            editor.close()
+
+    def test_rejected_compound_value_restores_control_and_state(self):
+        controller = _FakeController()
+        controller.state["properties"] = {
+            "linestyle": {"kind": "preset", "value": "-"},
+            "markevery": {"kind": "all"},
+        }
+        controller.property_specs = {
+            "linestyle": {"editor": "line_pattern"},
+            "markevery": {"editor": "markevery"},
+        }
+        controller.set_property = lambda _key, _value: False
+        editor = ComponentEditorBase(controller)
+        try:
+            pattern = editor.editor("linestyle")
+            marks = editor.editor("markevery")
+            pattern.set_value({"kind": "preset", "value": ":"}, emit=True)
+            marks.set_value({"kind": "stride", "start": None, "step": 3}, emit=True)
+            self.assertEqual(pattern.value(), {"kind": "preset", "value": "-"})
+            self.assertEqual(marks.value(), {"kind": "all"})
+            self.assertEqual(marks.summary.text(), "Every point")
+        finally:
+            editor.close()
+
+    def test_sync_from_controller_does_not_reapply_compound_values(self):
+        _figure, registry = self._figure_registry()
+        line = self._controller(registry, ComponentKind.LINE)
+        editor = ComponentEditorBase(line, color_library=ColorLibrary())
+        applied = []
+        editor.propertyChanged.connect(
+            lambda key, value: applied.append((key, value))
+        )
+        try:
+            editor.sync_from_controller()
+            self.assertEqual(applied, [])
+            for key in ("linestyle", "marker", "markevery", "gapcolor"):
+                widget = editor.editor(key)
+                self.assertIsInstance(
+                    widget,
+                    (InlineValueEditor, StructuredValueEditor),
+                )
+                self.assertEqual(
+                    widget.value(),
+                    line.read_state().properties[key],
+                )
+        finally:
+            editor.close()
 
 
 if __name__ == "__main__":

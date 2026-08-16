@@ -2,8 +2,8 @@
 
 ## Project and component state
 
-- Project files intentionally accept only exact integer schema v9. Historical
-  v4-v8 files require an external conversion step before they can be opened.
+- Project files intentionally accept only exact integer schema v10. Historical
+  v4-v9 files require an external conversion step before they can be opened.
 - Component property edits, component/Axes deletion, chart color changes, and
   whole-Axes palette application are not connected to the application Undo
   stack.
@@ -16,11 +16,13 @@
 - Multi-series Plot, Scatter, and Interpolation creation uses one shared X with
   multiple Y columns. Arbitrary X/Y pair batches and batch Fit creation are not
   available.
-- Matplotlib does not include scatter collections in `Axes.relim()`, so a
-  scatter-only data refresh can retain the previous automatic view limits.
 - Style-derived color cycles persist and advance colors only. Additional
   `axes.prop_cycle` keys such as line style, marker, or width are not advanced
   by `ColorCycleState`.
+- Variable-length numeric and text sequences, such as custom dash lengths,
+  tick locations, legend scatter offsets, and Scatter URLs, are typed as
+  comma-separated or line-separated text. There is no per-item row editor, and
+  the Inspector has no visual dash, marker, or box-style preview.
 
 ## Table and import boundaries
 

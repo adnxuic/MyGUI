@@ -62,7 +62,7 @@ def state(
 
 
 class ComponentModelTests(unittest.TestCase):
-    def test_locator_requires_v9_selectors_and_explicit_artist_bindings(self):
+    def test_locator_requires_v10_selectors_and_explicit_artist_bindings(self):
         figure = Figure()
         axes = figure.subplots()
         line, = axes.plot([0.0, 1.0], [0.0, 1.0])
@@ -219,7 +219,10 @@ class ComponentControllerContractTests(unittest.TestCase):
         change = self.line_controller.set_property("linestyle", "Dashed")
         self.assertEqual(change.status, ChangeStatus.APPLIED)
         self.assertEqual(self.line.get_linestyle(), "--")
-        self.assertEqual(change.after.properties["linestyle"], "--")
+        self.assertEqual(
+            change.after.properties["linestyle"],
+            {"kind": "preset", "value": "--"},
+        )
         self.assertIn("linewidth", change.after.properties)
 
         snapshot = self.line_controller.snapshot()
@@ -333,7 +336,8 @@ class ComponentControllerContractTests(unittest.TestCase):
         self.assertTrue(marker_change.ok)
         self.assertTrue(size_change.ok)
         self.assertEqual(
-            self.scatter_controller.snapshot().properties["marker"], "^"
+            self.scatter_controller.snapshot().properties["marker"],
+            {"kind": "symbol", "value": "^"},
         )
         self.assertEqual(float(self.scatter.get_sizes()[0]), 64.0)
 
@@ -494,7 +498,9 @@ class SemanticControllerTests(unittest.TestCase):
         legend = self._one(LegendController)
         line = self.registry.get("figure/axes/0/line/0")
         self.assertTrue(legend.set_property("location", "upper left").ok)
-        self.assertTrue(legend.set_property("fontsize", 13).ok)
+        label_font = deepcopy(legend.state.properties["label_font"])
+        label_font["size"] = 13.0
+        self.assertTrue(legend.set_property("label_font", label_font).ok)
         self.assertTrue(legend.set_property("visible", False).ok)
 
         self.assertTrue(line.set_property("label", "new").ok)
@@ -503,7 +509,8 @@ class SemanticControllerTests(unittest.TestCase):
         self.assertFalse(rebuilt.get_visible())
         self.assertEqual(rebuilt.get_texts()[0].get_fontsize(), 13)
         self.assertEqual(
-            legend.snapshot().properties["location"], "upper left"
+            legend.snapshot().properties["location"],
+            {"kind": "preset", "value": "upper left"},
         )
 
     def test_legend_frame_color_and_alpha_remain_separate(self):
@@ -518,7 +525,7 @@ class SemanticControllerTests(unittest.TestCase):
         self.assertEqual(snapshot.properties["facecolor"], "#123456")
         self.assertEqual(snapshot.properties["framealpha"], 0.5)
 
-    def test_empty_legend_keeps_persisted_fontsize(self):
+    def test_empty_legend_keeps_persisted_label_font(self):
         figure = Figure()
         axes = figure.subplots()
         axes.legend([], [])
@@ -532,10 +539,15 @@ class SemanticControllerTests(unittest.TestCase):
             for controller in registry.query(kind=ComponentKind.LEGEND)
         )
 
-        change = legend.set_property("fontsize", 17.0)
+        label_font = deepcopy(legend.state.properties["label_font"])
+        label_font["size"] = 17.0
+        change = legend.set_property("label_font", label_font)
 
         self.assertTrue(change.ok)
-        self.assertEqual(legend.snapshot().properties["fontsize"], 17.0)
+        self.assertEqual(
+            legend.snapshot().properties["label_font"]["size"],
+            17.0,
+        )
 
     def test_fixed_semantic_delete_hides_without_removing_tree_node(self):
         title = self.registry.get("figure/axes/0/title")
@@ -585,7 +597,10 @@ class SemanticControllerTests(unittest.TestCase):
         change = legend.apply_state(candidate)
 
         self.assertEqual(change.status, ChangeStatus.APPLIED)
-        self.assertEqual(legend.state.properties["location"], [0.25, 0.75])
+        self.assertEqual(
+            legend.state.properties["location"],
+            {"kind": "point", "x": 0.25, "y": 0.75},
+        )
         self.assertEqual(legend.state.properties["ncols"], 2)
         self.assertEqual(legend.state.properties["facecolor"], "#ff0000")
         self.assertEqual(
@@ -606,7 +621,7 @@ class SemanticControllerTests(unittest.TestCase):
         self.assertEqual(visible.status, ChangeStatus.REJECTED)
         self.assertEqual(legend.state, previous)
 
-    def test_factory_builds_required_v9_hierarchy_and_deterministic_paths(self):
+    def test_factory_builds_required_v10_hierarchy_and_deterministic_paths(self):
         self.registry.validate_tree()
         x_axis = self.registry.get("figure/axes/0/axis/x")
         major_tick = self.registry.get(

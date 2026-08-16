@@ -10,7 +10,7 @@ from mygui.figuremodify.component_services import (
     DeletionRequest,
 )
 from mygui.figuremodify.components import ComponentKind, DeletionPolicy
-from mygui.figuremodify.components.serialization import normalize_v9_figure
+from mygui.figuremodify.components.serialization import normalize_v10_figure
 from mygui.widgets.component_tree.model import ComponentTreeModel
 from mygui.widgets.component_tree.presentation import TreePresentationResolver
 
@@ -204,7 +204,7 @@ class DeletionCoordinator:
                 canvas.component_registry,
                 canvas.editor_registry,
             )
-            normalize_v9_figure(canvas.validate_component_snapshot())
+            normalize_v10_figure(canvas.validate_component_snapshot())
             candidate_axes_map = self._candidate_axes_map()
 
         try:

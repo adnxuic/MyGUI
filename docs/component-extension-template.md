@@ -2,7 +2,7 @@
 
 Use this checklist when adding a Figure component. It preserves the single
 mutable state path, lazy Inspector lifecycle, current Figure style, and
-schema-v9 project behavior.
+schema-v10 project behavior.
 
 ## Domain declaration
 
@@ -13,7 +13,9 @@ schema-v9 project behavior.
    selector/data validation, and Locator strategy. Fixed semantic components
    hide; genuinely removable artists implement reversible removal.
    Declare every property editor with `EditorKind`; use `AUTO` only when the
-   value type or choices uniquely determine the control.
+   value type or choices uniquely determine the control. A composite value must
+   declare its dedicated inline or dialog editor kind; `JSON` is reserved for
+   tests and never renders a production property.
 3. Put cross-component, repository, or render-sensitive work in a domain
    Service. Inspector code submits to the Controller or Service and never
    mutates Matplotlib directly.
@@ -83,10 +85,10 @@ preview, and sort behavior. No tree or container source edit is required.
   panel/project removal disposes every callback exactly once.
 - Empty data remains a valid registered and persisted component where the
   domain permits it.
-- Every dynamic Controller key has a parameterized schema-v9 save/open test;
+- Every dynamic Controller key has a parameterized schema-v10 save/open test;
   materializer failure leaves no project tab, artist, Controller, Locator,
   Inspector, listener, selection, or color consumption behind.
-- Deletion, data refresh semantics, stable-ID save/open, and schema-v9
+- Deletion, data refresh semantics, stable-ID save/open, and schema-v10
   round-trip are covered without persisting Profiles, typed tree keys,
   Section expansion, QWidget state, or callbacks.
 - Single and batch deletion cover exact right-click targeting, full cohorts

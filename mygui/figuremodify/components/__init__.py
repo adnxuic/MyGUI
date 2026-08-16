@@ -65,6 +65,7 @@ from .models import (
     MessageLevel,
     PropertySpec,
     RestorePhase,
+    ScatterData,
     UpdateImpact,
     XYData,
 )
@@ -120,6 +121,7 @@ __all__ = [
     "RestorePhase",
     "RemovalHandle",
     "ScatterController",
+    "ScatterData",
     "SpineController",
     "TextController",
     "TickGroupController",

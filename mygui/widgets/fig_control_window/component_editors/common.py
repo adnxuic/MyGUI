@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from PySide6.QtCore import QObject, QSignalBlocker, QTimer, Signal
+from PySide6.QtCore import QObject, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -34,10 +35,57 @@ LINE_STYLE_OPTIONS = (
     ("Dotted", ":"),
 )
 
+
+class FocusAwareSpinBox(QSpinBox):
+    """Change value by wheel only after the editor has explicit focus."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def wheelEvent(self, event) -> None:
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
+
+
+class FocusAwareDoubleSpinBox(QDoubleSpinBox):
+    """Change value by wheel only after the editor has explicit focus."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def wheelEvent(self, event) -> None:
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
+
+
 def normalize_line_style(style: Any) -> str:
     """Use the domain codec for Matplotlib line-style normalization."""
 
     return normalize_linestyle(style)
+
+
+def format_number_sequence(values: Any) -> str:
+    """Return a compact comma-separated text for a numeric sequence."""
+
+    if values is None:
+        return ""
+    return ", ".join(f"{item:g}" if isinstance(item, float) else str(item) for item in values)
+
+
+def parse_number_sequence(text: str, *, integer: bool = False) -> list[Any]:
+    """Parse comma, space, or bracket separated numbers entered by the user."""
+
+    stripped = str(text).strip().strip("[]()")
+    if not stripped:
+        return []
+    tokens = stripped.replace(",", " ").split()
+    return [int(token) if integer else float(token) for token in tokens]
 
 
 def modification_succeeded(result: Any) -> bool:
@@ -232,7 +280,7 @@ class LineStyleEditor(QWidget):
         size_layout = QHBoxLayout(self.size_row)
         size_layout.setContentsMargins(0, 0, 0, 0)
         size_layout.addWidget(QLabel(size_label, self.size_row))
-        self.size_input = QDoubleSpinBox(self.size_row)
+        self.size_input = FocusAwareDoubleSpinBox(self.size_row)
         self.size_input.setRange(0.0, 1_000_000.0)
         self.size_input.setDecimals(3)
         self.size_input.setSingleStep(0.5)
@@ -298,8 +346,8 @@ class RangeEditor(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.minimum_input = QDoubleSpinBox(self)
-        self.maximum_input = QDoubleSpinBox(self)
+        self.minimum_input = FocusAwareDoubleSpinBox(self)
+        self.maximum_input = FocusAwareDoubleSpinBox(self)
         for spin in (self.minimum_input, self.maximum_input):
             spin.setRange(float(bounds[0]), float(bounds[1]))
             spin.setSingleStep(float(step))
@@ -349,7 +397,7 @@ class NullableDoubleEditor(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.use_value_input = QCheckBox("Set", self)
-        self.value_input = QDoubleSpinBox(self)
+        self.value_input = FocusAwareDoubleSpinBox(self)
         self.value_input.setRange(float(bounds[0]), float(bounds[1]))
         self.value_input.setDecimals(int(decimals))
         self.value_input.setSingleStep(float(step))
@@ -430,7 +478,7 @@ class NumericTupleEditor(QWidget):
             layout.addWidget(self.use_value_input)
         self.inputs: list[QDoubleSpinBox] = []
         for _index in range(self.length):
-            editor = QDoubleSpinBox(self)
+            editor = FocusAwareDoubleSpinBox(self)
             editor.setRange(float(bounds[0]), float(bounds[1]))
             editor.setDecimals(int(decimals))
             editor.setSingleStep(float(step))
@@ -508,7 +556,7 @@ class SpinePositionEditor(QWidget):
         self.kind_input = QComboBox(self)
         for label, item in self.POSITION_TYPES:
             self.kind_input.addItem(label, item)
-        self.value_input = QDoubleSpinBox(self)
+        self.value_input = FocusAwareDoubleSpinBox(self)
         self.value_input.setRange(-1e300, 1e300)
         self.value_input.setDecimals(6)
         self.value_input.setSingleStep(0.1)
@@ -584,7 +632,7 @@ class ScatterStyleEditor(QWidget):
         layout.addWidget(self.marker_input)
 
         layout.addWidget(QLabel("Size:", self))
-        self.size_input = QDoubleSpinBox(self)
+        self.size_input = FocusAwareDoubleSpinBox(self)
         self.size_input.setRange(0.0, 1_000_000.0)
         self.size_input.setDecimals(3)
         self.size_input.setValue(float(size))

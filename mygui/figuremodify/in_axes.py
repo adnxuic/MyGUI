@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -29,6 +30,12 @@ from mygui.figuremodify.components import (
     decode_in_axes_image,
 )
 from mygui.figuremodify.components.controllers import IN_AXES_IMAGE_MIMES
+from mygui.figuremodify.components.property_values import (
+    apply_line_pattern,
+    marker_value,
+    markevery_value,
+    normalize_line_pattern,
+)
 from mygui.resource_limits import load_resource_limits
 
 
@@ -68,11 +75,25 @@ class ZoomInAxesCreateSpec:
             "ylim": self.ylim,
             "ticks_visible": self.ticks_visible,
             "region_visible": self.region_visible,
-            "connectors_visible": self.connectors_visible,
-            "indicator_color": self.indicator_color,
-            "indicator_linestyle": self.indicator_linestyle,
-            "indicator_linewidth": self.indicator_linewidth,
-            "indicator_alpha": self.indicator_alpha,
+            "region_color": self.indicator_color,
+            "region_linestyle": self.indicator_linestyle,
+            "region_linewidth": self.indicator_linewidth,
+            "region_alpha": self.indicator_alpha,
+            "region_facecolor": "#00000000",
+            "region_fill": False,
+            "region_hatch": None,
+            "region_zorder": self.zorder - 0.01,
+            "connectors": tuple(
+                {
+                    "visible": self.connectors_visible,
+                    "color": self.indicator_color,
+                    "line_pattern": {"kind": "preset", "value": self.indicator_linestyle},
+                    "linewidth": self.indicator_linewidth,
+                    "alpha": self.indicator_alpha,
+                    "zorder": self.zorder - 0.01,
+                }
+                for _index in range(4)
+            ),
         }
 
 
@@ -89,7 +110,21 @@ class ImageInAxesCreateSpec:
     linewidth: float
     opacity: float = 1.0
     fit_mode: str = "contain"
-    interpolation: str = "bilinear"
+    interpolation: str = "antialiased"
+    origin: str = "upper"
+    extent: tuple[float, float, float, float] | None = None
+    resample: bool = True
+    filternorm: bool = True
+    filterrad: float = 4.0
+    interpolation_stage: str = "data"
+    image_visible: bool = True
+    image_zorder: float = 0.0
+    image_clip_on: bool = True
+    image_rasterized: bool = False
+    image_in_layout: bool = True
+    image_snap: bool | None = None
+    image_gid: str | None = None
+    image_url: str | None = None
     visible: bool = True
     zorder: float = 5.0
     frameon: bool = False
@@ -108,6 +143,20 @@ class ImageInAxesCreateSpec:
             "opacity": self.opacity,
             "fit_mode": self.fit_mode,
             "interpolation": self.interpolation,
+            "origin": self.origin,
+            "extent": self.extent,
+            "resample": self.resample,
+            "filternorm": self.filternorm,
+            "filterrad": self.filterrad,
+            "interpolation_stage": self.interpolation_stage,
+            "image_visible": self.image_visible,
+            "image_zorder": self.image_zorder,
+            "image_clip_on": self.image_clip_on,
+            "image_rasterized": self.image_rasterized,
+            "image_in_layout": self.image_in_layout,
+            "image_snap": self.image_snap,
+            "image_gid": self.image_gid,
+            "image_url": self.image_url,
         }
 
     def data(self) -> dict[str, str]:
@@ -152,6 +201,10 @@ class InAxesRuntime:
     connector_defaults: tuple[bool, ...] = ()
     region_visible: bool = True
     connectors_visible: bool = True
+    connector_specs: tuple[dict[str, Any], ...] = ()
+    region_line_pattern: dict[str, Any] = field(
+        default_factory=lambda: {"kind": "preset", "value": "-"}
+    )
     fit_mode: str = "contain"
 
 
@@ -245,12 +298,24 @@ class InAxesService:
     ) -> None:
         """Attach the standard region rectangle and connectors to the parent."""
 
+        raw_region_pattern = properties["region_linestyle"]
+        if isinstance(raw_region_pattern, str):
+            raw_region_pattern = {
+                "kind": "preset",
+                "value": raw_region_pattern,
+            }
+        region_pattern = normalize_line_pattern(raw_region_pattern)
+        region_linestyle = (
+            region_pattern["value"]
+            if region_pattern["kind"] == "preset"
+            else (region_pattern["offset"], region_pattern["dashes"])
+        )
         rectangle, connectors = runtime.parent_axes.indicate_inset_zoom(
             runtime.axes,
-            edgecolor=properties["indicator_color"],
-            linestyle=properties["indicator_linestyle"],
-            linewidth=properties["indicator_linewidth"],
-            alpha=properties["indicator_alpha"],
+            edgecolor=properties["region_color"],
+            linestyle=region_linestyle,
+            linewidth=properties["region_linewidth"],
+            alpha=properties["region_alpha"],
         )
         runtime.indicator_rectangle = rectangle
         runtime.connectors = tuple(connectors)
@@ -258,7 +323,18 @@ class InAxesService:
             bool(connector.get_visible()) for connector in connectors
         )
         runtime.region_visible = bool(properties["region_visible"])
-        runtime.connectors_visible = bool(properties["connectors_visible"])
+        runtime.region_line_pattern = deepcopy(region_pattern)
+        runtime.connector_specs = tuple(deepcopy(properties["connectors"]))
+        rectangle.set_facecolor(properties["region_facecolor"])
+        rectangle.set_fill(properties["region_fill"])
+        rectangle.set_hatch(properties["region_hatch"])
+        rectangle.set_zorder(properties["region_zorder"])
+        for connector, spec in zip(connectors, runtime.connector_specs):
+            connector.set_edgecolor(spec["color"])
+            apply_line_pattern(connector, spec["line_pattern"])
+            connector.set_linewidth(spec["linewidth"])
+            connector.set_alpha(spec["alpha"])
+            connector.set_zorder(spec["zorder"])
         ZoomInAxesController._sync_indicator_positions(runtime)
         ZoomInAxesController._sync_indicator_visibility(runtime)
 
@@ -318,14 +394,16 @@ class InAxesService:
     def _line_candidate(axes: Axes, controller: LineController):
         source = controller.resolve_target()
         properties = controller.read_state().properties
+        pattern = properties["linestyle"]
+        linestyle = pattern["value"] if pattern["kind"] == "preset" else (pattern["offset"], pattern["dashes"])
         line, = axes.plot(
             np.asarray(source.get_xdata(orig=False)),
             np.asarray(source.get_ydata(orig=False)),
             label="_nolegend_",
             color=properties["color"],
-            linestyle=properties["linestyle"],
+            linestyle=linestyle,
             linewidth=properties["linewidth"],
-            marker=properties["marker"],
+            marker=marker_value(properties["marker"]),
             markersize=properties["markersize"],
             markerfacecolor=properties["markerfacecolor"],
             markeredgecolor=properties["markeredgecolor"],
@@ -333,6 +411,18 @@ class InAxesService:
             alpha=properties["alpha"],
             visible=True,
             zorder=properties["zorder"],
+            drawstyle=properties["drawstyle"],
+            fillstyle=properties["fillstyle"],
+            markerfacecoloralt=properties["markerfacecoloralt"],
+            gapcolor=properties["gapcolor"],
+            dash_capstyle=properties["dash_capstyle"],
+            dash_joinstyle=properties["dash_joinstyle"],
+            solid_capstyle=properties["solid_capstyle"],
+            solid_joinstyle=properties["solid_joinstyle"],
+            antialiased=properties["antialiased"],
+            markevery=markevery_value(properties["markevery"]),
+            rasterized=properties["rasterized"],
+            clip_on=properties["clip_on"],
         )
         return line
 
@@ -344,19 +434,36 @@ class InAxesService:
         x = offsets[:, 0] if offsets.size else np.asarray([])
         y = offsets[:, 1] if offsets.size else np.asarray([])
         properties = state.properties
-        return axes.scatter(
+        pattern = properties["linestyle"]
+        linestyle = pattern["value"] if pattern["kind"] == "preset" else (pattern["offset"], pattern["dashes"])
+        collection = axes.scatter(
             x,
             y,
             s=properties["size"],
             c=properties["color"],
             edgecolors=properties["edgecolor"],
-            marker=properties["marker"],
+            marker=marker_value(properties["marker"]),
             linewidths=properties["linewidth"],
             alpha=properties["alpha"],
             visible=True,
             zorder=properties["zorder"],
             label="_nolegend_",
+            linestyle=linestyle,
+            hatch=properties["hatch"],
+            antialiased=properties["antialiased"],
+            rasterized=properties["rasterized"],
         )
+        if properties["capstyle"] is not None:
+            collection.set_capstyle(properties["capstyle"])
+        if properties["joinstyle"] is not None:
+            collection.set_joinstyle(properties["joinstyle"])
+        if properties["color_mapping"]["enabled"] and source.get_array() is not None:
+            collection.set_array(np.asarray(source.get_array()).copy())
+            collection.set_cmap(source.get_cmap())
+            collection.set_norm(source.norm)
+        if properties["size_mapping"]["enabled"]:
+            collection.set_sizes(np.asarray(source.get_sizes()).copy())
+        return collection
 
     def refresh_zoom(self, component_or_id) -> int:
         """Atomically rebuild one zoom mirror from its parent chart Components."""

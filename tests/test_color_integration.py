@@ -318,7 +318,10 @@ class ColorIntegrationTests(unittest.TestCase):
 
         default_dialog = PyPlotDialog("Plot", self.window.figure_window)
         self.assertEqual(default_dialog.style_input.currentText(), "Solid")
-        self.assertEqual(default_dialog.style_input.currentData(), default_style)
+        self.assertEqual(
+            default_dialog.style_input.currentData(),
+            default_style["value"],
+        )
         default_dialog.accept()
 
         dashed_dialog = PyPlotDialog("Plot", self.window.figure_window)
@@ -338,11 +341,11 @@ class ColorIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             controllers[1].state.properties["linestyle"],
-            "--",
+            {"kind": "preset", "value": "--"},
         )
         self.assertEqual(
             controllers[0].resolve_target().get_linestyle(),
-            default_style,
+            default_style["value"],
         )
         self.assertEqual(
             controllers[1].resolve_target().get_linestyle(),
@@ -362,7 +365,7 @@ class ColorIntegrationTests(unittest.TestCase):
             snapshot_by_id[controllers[1].component_id]["properties"][
                 "linestyle"
             ],
-            "--",
+            {"kind": "preset", "value": "--"},
         )
 
         default_dialog.deleteLater()

@@ -27,6 +27,12 @@ Callers access role-specific controls explicitly with
 `inspector.editor("color")`. Inspector attributes are not forwarded from
 Sections.
 
+Property presentation uses one shared display-name resolver. A non-blank
+`PropertySpec.label` (or legacy `title`) takes precedence; missing, `None`, or
+blank metadata falls back to the property key with underscores converted to
+words. The same resolved name is used by form labels, the editor's accessible
+name and description, tooltips, and Message Bar results.
+
 ## Layout containers
 
 Inspector navigation uses responsibility-named containers rather than
@@ -51,6 +57,18 @@ add, show, remove, and toolbox lookup methods. `show_component(component_id)`
 is both the lazy ensure and public navigation path. Query-only `inspector()`
 never creates a widget. Layout stacks and toolbox dictionaries are private
 implementation details; the Components tree never reads them.
+
+After a different component is displayed successfully, the shared Figure
+Inspector scroll area returns to its top-left minimum on the next Qt layout
+turn. A failed selection leaves the current Inspector, component selection,
+and both scroll positions unchanged. Scroll positions remain UI-only and are
+not persisted per component.
+
+Inspector and creation-input integer and floating-point editors respond to the
+mouse wheel only while they have focus. An unfocused numeric editor ignores
+the event so the containing Inspector can scroll; clicking or keyboard-focusing
+the editor restores normal step-based wheel editing. Nullable, range, tuple,
+Legend, Scatter, and Inset numeric controls use the same behavior.
 
 ## Line profiles
 
@@ -103,6 +121,29 @@ or a named user-selected palette through `AxesCommandService`.
 Every Inspector binds Controller properties; the UI does not directly mutate
 Matplotlib artists.
 
+Every composite property has a dedicated control; no Inspector row exposes a
+tagged value as editable JSON text.
+
+Frequently used composite values are edited inline. A line pattern is a preset
+list plus optional dash offset and on/off lengths, a marker is a named or
+numbered Matplotlib symbol plus optional regular-polygon fields, an optional
+color is a `Set` checkbox with `ColorChoiceWidget`, font weight and stretch
+accept a keyword or a number, and anchors switch between compass codes,
+points, and bounds.
+
+Record-shaped values use a summary editor. The Inspector row shows a compact
+readable value such as `Linear`, `Automatic`, `Scalar`, `sans-serif · 10 pt`,
+`Every point`, `No box`, `Uniform color`, or `3 of 4 connectors visible`, while
+`Configure…` opens a type-specific parameter form for the layout engine, tick
+locator/formatter, scale, font, text box, marked points, Scatter color/size
+mapping, and Zoom connectors.
+
+Both control families validate through the same closed schema-v10 value
+normalizer and submit one complete value to one Controller/Service
+transaction. A cancelled dialog changes nothing, and a rejected change
+restores the prior summary, control state, and Controller value together with
+one Message Bar result.
+
 Closing or directly removing an Inspector, ToolBox, Stack, Axes Panel,
 Figure Panel, Host, or Manager recursively disposes each Section exactly once.
 Repository, TeX, MATLAB, and asynchronous fitting callbacks are detached or
@@ -119,7 +160,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v9.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v10.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -129,7 +170,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v9
+state, artists, Locator bindings, a complete tree projection, and schema-v10
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -173,4 +214,4 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v9. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope` is business state; profile and widget state remain UI-only.
+The project format uses schema v10. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope` is business state; profile and widget state remain UI-only.

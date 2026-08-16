@@ -9,6 +9,7 @@ from tests.axes_helpers import create_regular_axes
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QLabel
+from matplotlib import ticker
 
 from mygui.database import ColumnRef
 from mygui.figuremodify.axes_layout import (
@@ -17,9 +18,13 @@ from mygui.figuremodify.axes_layout import (
     AxesViewSpec,
     ShareMode,
 )
-from mygui.figuremodify.components import ComponentKind, ComponentRole
+from mygui.figuremodify.components import (
+    ComponentKind,
+    ComponentMutation,
+    ComponentRole,
+)
 from mygui.figuremodify.components.serialization import (
-    validate_v9_figure,
+    validate_v10_figure,
 )
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
 from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
@@ -28,6 +33,9 @@ from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
 )
 from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import (
     PyLayoutDialog,
+)
+from mygui.widgets.fig_control_window.component_editors.sections import (
+    AxesLimitsSection,
 )
 from main import MainWindow
 
@@ -97,7 +105,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             self.assertFalse(state.properties["autoscalex_on"])
 
         snapshot = self.canvas.component_snapshot()
-        validate_v9_figure(
+        validate_v10_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -161,7 +169,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             recursive=False,
         )
         self.assertEqual(legend_controller.state.properties["entry_scope"], "axes")
-        validate_v9_figure(
+        validate_v10_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,
@@ -414,6 +422,76 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         axes = self.canvas.component_registry.resolve_target(axes_id)
         self.assertTrue(any(line.get_visible() for line in axes.get_xgridlines()))
         self.assertTrue(any(line.get_visible() for line in axes.get_ygridlines()))
+
+    def test_limit_inversion_proxy_reverses_only_authoritative_limits(self):
+        axes_id, = create_regular_axes(self.canvas)
+        controller = self.canvas.component_registry.get(axes_id)
+        section = AxesLimitsSection(
+            controller,
+            context=self.canvas.editor_context,
+        )
+        try:
+            before = tuple(controller.state.properties["xlim"])
+            section.x_inverted.setChecked(True)
+            after = tuple(controller.state.properties["xlim"])
+            self.assertEqual(after, tuple(reversed(before)))
+            self.assertEqual(
+                tuple(controller.resolve_target().get_xlim()),
+                after,
+            )
+            self.assertNotIn("x_inverted", controller.state.properties)
+        finally:
+            section.dispose()
+            section.deleteLater()
+
+    def test_scale_change_reapplies_authoritative_fixed_tickers(self):
+        axes_id, = create_regular_axes(self.canvas)
+        axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        locator = {
+            "kind": "fixed",
+            "params": {"locations": [1.0, 10.0], "nbins": None},
+        }
+        formatter = {
+            "kind": "fixed",
+            "params": {"labels": ["one", "ten"]},
+        }
+        configured = self.canvas.component_registry.apply_transaction(
+            (
+                ComponentMutation(
+                    axis.component_id,
+                    properties={
+                        "major_locator": locator,
+                        "major_formatter": formatter,
+                    },
+                ),
+            )
+        )
+        self.assertTrue(configured.ok)
+
+        scaled = self.canvas.axes_layout_service.apply_linked_axis(
+            axes_id,
+            "x",
+            scale={
+                "kind": "asinh",
+                "params": {
+                    "linear_width": 1.0,
+                    "base": 10.0,
+                    "subs": [2.0, 5.0],
+                },
+            },
+        )
+
+        self.assertTrue(scaled.ok)
+        target = axis.resolve_target()
+        self.assertEqual(target.get_scale(), "asinh")
+        self.assertIsInstance(target.get_major_locator(), ticker.FixedLocator)
+        self.assertIsInstance(target.get_major_formatter(), ticker.FixedFormatter)
+        self.assertEqual(axis.state.properties["major_locator"], locator)
+        self.assertEqual(axis.state.properties["major_formatter"], formatter)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Validate, save, and load strict schema-v9 MyGUI project snapshots."""
+"""Validate, save, and load strict schema-v10 MyGUI project snapshots."""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from typing import Any
 
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.components.serialization import (
-    normalize_v9_figure,
-    validate_v9_figure,
+    normalize_v10_figure,
+    validate_v10_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 9
+PROJECT_SCHEMA_VERSION = 10
 LOGGER = logging.getLogger(__name__)
 
 
@@ -164,7 +164,7 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
         "Project name",
     )
     refs = _validate_table(root.get("table"), project_id, project_name)
-    validate_v9_figure(root.get("figure"), refs, project_id, project_name)
+    validate_v10_figure(root.get("figure"), refs, project_id, project_name)
 
 
 def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
@@ -177,7 +177,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v9_figure(canvas.component_snapshot())
+    figure = normalize_v10_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -265,6 +265,14 @@ def restore_project_snapshot(filename: str | Path, table=None, figure_window=Non
 
     previous_table_project_id = getattr(table, "current_project_id", None)
     previous_canvas = getattr(figure_window, "current_canva", None)
+    canvas = None
+
+    def discard_restore_messages() -> None:
+        presenter = getattr(canvas, "message_presenter", None)
+        discard = getattr(presenter, "discard_pending", None)
+        if callable(discard):
+            discard()
+
     try:
         if table is None:
             raise ValueError("Project restore requires the Table widget.")
@@ -279,8 +287,10 @@ def restore_project_snapshot(filename: str | Path, table=None, figure_window=Non
             if callable(mark_clean) and canvas is not None:
                 mark_clean(canvas)
         repository.publish_project_added(project_id)
+        discard_restore_messages()
         return snapshot
     except Exception:
+        discard_restore_messages()
         cleanup_errors = []
         if figure_window is not None:
             try:

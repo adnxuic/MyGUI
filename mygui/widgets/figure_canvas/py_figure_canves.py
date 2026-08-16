@@ -63,9 +63,10 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v9_figure,
-    validate_v9_figure,
+    normalize_v10_figure,
+    validate_v10_figure,
 )
+from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
 from mygui.figuremodify.in_axes import (
@@ -450,7 +451,7 @@ class PyFigureCanvas(QWidget):
     def _component_paths_from_tree(
         component_tree: dict[str, Any] | None,
     ) -> dict[str, str]:
-        """Map fixed semantic paths to IDs from a validated v9 tree."""
+        """Map fixed semantic paths to IDs from a validated v10 tree."""
 
         if not isinstance(component_tree, dict):
             return {}
@@ -592,8 +593,6 @@ class PyFigureCanvas(QWidget):
             properties={
                 "xlim": [float(value) for value in axe.get_xlim()],
                 "ylim": [float(value) for value in axe.get_ylim()],
-                "xscale": axe.get_xscale(),
-                "yscale": axe.get_yscale(),
                 "autoscalex_on": bool(axe.get_autoscalex_on()),
                 "autoscaley_on": bool(axe.get_autoscaley_on()),
                 "color_cycle": None,
@@ -679,6 +678,7 @@ class PyFigureCanvas(QWidget):
                 "fontsize": float(text_artist.get_fontsize()),
                 "usetex": bool(text_artist.get_usetex()),
                 "visible": bool(text_artist.get_visible()),
+                "coordinate_system": "figure" if scope == "figure" else "data",
             },
         )
         controller = TextController(state, target=text_artist)
@@ -1133,6 +1133,7 @@ class PyFigureCanvas(QWidget):
         color_selection: ColorSelection,
         *,
         preserve_gaps: bool,
+        consume_palette: bool = True,
     ) -> tuple[
         tuple[_PreparedChartSeries, ...],
         dict[str, Any] | None,
@@ -1159,10 +1160,20 @@ class PyFigureCanvas(QWidget):
             except Exception as exc:
                 raise ValueError(f"{label}: {exc}") from exc
             resolved.append((y_ref, label, pair))
-        colors, final_cycle, commit_cycle, transitions = self._batch_color_plan(
-            color_selection,
-            len(resolved),
-        )
+        if consume_palette:
+            colors, final_cycle, commit_cycle, transitions = (
+                self._batch_color_plan(
+                    color_selection,
+                    len(resolved),
+                )
+            )
+        else:
+            if not isinstance(color_selection, ColorSelection):
+                raise TypeError("Batch chart color must be a ColorSelection.")
+            colors = tuple(color_selection.color for _item in resolved)
+            final_cycle = None
+            commit_cycle = False
+            transitions = ()
         prepared = tuple(
             _PreparedChartSeries(
                 x_ref=x_ref,
@@ -1233,6 +1244,10 @@ class PyFigureCanvas(QWidget):
         size,
         marker,
         preprocess: DataPreprocessSpec,
+        color_ref: ColumnRef | None = None,
+        size_ref: ColumnRef | None = None,
+        color_mapping: dict[str, Any] | None = None,
+        size_mapping: dict[str, Any] | None = None,
         object_id: str | None = None,
         color_order: int | None = None,
     ):
@@ -1250,25 +1265,49 @@ class PyFigureCanvas(QWidget):
             lambda scatter=scatter: self._remove_created_artist(scatter)
         )
         component_order = self._claim_color_order(color_order)
+        properties = {
+            "color": series.color,
+            "edgecolor": series.color,
+            "size": float(size),
+            "marker": marker,
+            "label": series.label,
+        }
+        if color_mapping is not None:
+            properties["color_mapping"] = deepcopy(color_mapping)
+        if size_mapping is not None:
+            properties["size_mapping"] = deepcopy(size_mapping)
         controller = self._register_chart_controller(
             ScatterController,
             object_id,
             ComponentRole.SCATTER,
             scatter,
             component_order,
-            {
-                "color": series.color,
-                "edgecolor": series.color,
-                "size": float(size),
-                "marker": marker,
-                "label": series.label,
-            },
+            properties,
             {
                 "x_ref": series.x_ref.to_dict(),
                 "y_ref": series.y_ref.to_dict(),
+                "color_ref": (
+                    None if color_ref is None else color_ref.to_dict()
+                ),
+                "size_ref": (
+                    None if size_ref is None else size_ref.to_dict()
+                ),
                 "preprocess": preprocess.to_dict(),
             },
         )
+        if color_mapping is not None or size_mapping is not None:
+            state = controller.state
+            change = self.chart_data_service.configure_scatter_mapping(
+                controller,
+                color_ref=color_ref,
+                size_ref=size_ref,
+                color_mapping=state.properties["color_mapping"],
+                size_mapping=state.properties["size_mapping"],
+            )
+            if not change.ok:
+                raise ValueError(
+                    change.message or "Could not configure Scatter mapping."
+                )
         self._prepare_created_component(controller, transaction)
         return scatter, controller
 
@@ -1663,6 +1702,11 @@ class PyFigureCanvas(QWidget):
         object_id: str | None = None,
         color_order: int | None = None,
         preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        *,
+        color_ref: ColumnRef | None = None,
+        size_ref: ColumnRef | None = None,
+        color_mapping: dict[str, Any] | None = None,
+        size_mapping: dict[str, Any] | None = None,
     ):
         """Add scatter."""
 
@@ -1694,6 +1738,10 @@ class PyFigureCanvas(QWidget):
                 size=size,
                 marker=marker,
                 preprocess=preprocess,
+                color_ref=color_ref,
+                size_ref=size_ref,
+                color_mapping=color_mapping,
+                size_mapping=size_mapping,
                 object_id=object_id,
                 color_order=color_order,
             )
@@ -1709,16 +1757,35 @@ class PyFigureCanvas(QWidget):
         marker,
         preprocess: DataPreprocessSpec | dict[str, Any] | None,
         color_selection: ColorSelection,
+        color_ref: ColumnRef | None = None,
+        size_ref: ColumnRef | None = None,
+        color_mapping: dict[str, Any] | None = None,
+        size_mapping: dict[str, Any] | None = None,
     ) -> ChartBatchCreationResult:
         """Atomically create one Scatter component for every selected Y."""
 
         spec = DataPreprocessSpec.from_dict(preprocess)
+        color_spec = (
+            ScatterController.property_specs()["color_mapping"].normalize(
+                color_mapping
+                if color_mapping is not None
+                else ScatterController.default_properties()["color_mapping"]
+            )
+        )
+        size_spec = (
+            ScatterController.property_specs()["size_mapping"].normalize(
+                size_mapping
+                if size_mapping is not None
+                else ScatterController.default_properties()["size_mapping"]
+            )
+        )
         prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
             spec,
             color_selection,
             preserve_gaps=False,
+            consume_palette=not color_spec["enabled"],
         )
         return self._commit_chart_batch(
             prepared,
@@ -1728,6 +1795,10 @@ class PyFigureCanvas(QWidget):
                 size=size,
                 marker=marker,
                 preprocess=spec,
+                color_ref=color_ref,
+                size_ref=size_ref,
+                color_mapping=color_spec,
+                size_mapping=size_spec,
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
@@ -2174,7 +2245,10 @@ class PyFigureCanvas(QWidget):
                 lambda target=runtime: self.in_axes_service.destroy_runtime(target)
             )
             controller = controller_type(state, target=runtime)
-            initial = controller.apply_state(state)
+            # Controller construction fills every schema-v10 default. Apply
+            # that complete state so creation inputs may stay focused on the
+            # values a user can reasonably choose up front.
+            initial = controller.apply_state(controller.state)
             if not initial.ok:
                 raise ValueError(initial.message)
             if isinstance(controller, ZoomInAxesController):
@@ -2298,16 +2372,20 @@ class PyFigureCanvas(QWidget):
             facecolor=properties["facecolor"],
             edgecolor=properties["edgecolor"],
             linewidth=properties["linewidth"],
-            indicator_color=properties["indicator_color"],
-            indicator_linestyle=properties["indicator_linestyle"],
-            indicator_linewidth=properties["indicator_linewidth"],
-            indicator_alpha=properties["indicator_alpha"],
+            indicator_color=properties["region_color"],
+            indicator_linestyle=(
+                properties["region_linestyle"].get("value", "-")
+                if isinstance(properties["region_linestyle"], dict)
+                else properties["region_linestyle"]
+            ),
+            indicator_linewidth=properties["region_linewidth"],
+            indicator_alpha=properties["region_alpha"],
             visible=properties["visible"],
             zorder=properties["zorder"],
             frameon=properties["frameon"],
             ticks_visible=properties["ticks_visible"],
             region_visible=properties["region_visible"],
-            connectors_visible=properties["connectors_visible"],
+            connectors_visible=any(item["visible"] for item in properties["connectors"]),
         )
         self.add_in_axes(spec, object_id=state.id)
 
@@ -2327,6 +2405,20 @@ class PyFigureCanvas(QWidget):
             opacity=properties["opacity"],
             fit_mode=properties["fit_mode"],
             interpolation=properties["interpolation"],
+            origin=properties["origin"],
+            extent=properties["extent"],
+            resample=properties["resample"],
+            filternorm=properties["filternorm"],
+            filterrad=properties["filterrad"],
+            interpolation_stage=properties["interpolation_stage"],
+            image_visible=properties["image_visible"],
+            image_zorder=properties["image_zorder"],
+            image_clip_on=properties["image_clip_on"],
+            image_rasterized=properties["image_rasterized"],
+            image_in_layout=properties["image_in_layout"],
+            image_snap=properties["image_snap"],
+            image_gid=properties["image_gid"],
+            image_url=properties["image_url"],
             visible=properties["visible"],
             zorder=properties["zorder"],
             frameon=properties["frameon"],
@@ -2334,11 +2426,13 @@ class PyFigureCanvas(QWidget):
         self.add_in_axes(spec, object_id=state.id)
 
     def _materialize_function_curve(self, state, _transaction) -> None:
+        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
+        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
         self.add_curve(
             state.data["expression"],
             state.data["x_start"],
             state.data["x_stop"],
-            state.properties.get("linestyle", "-"),
+            style,
             state.properties.get("color", "black"),
             state.properties.get("label", ""),
             object_id=state.id,
@@ -2346,10 +2440,12 @@ class PyFigureCanvas(QWidget):
         )
 
     def _materialize_line(self, state, _transaction) -> None:
+        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
+        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
         self.add_component_line(
             state.data.get("x", []),
             state.data.get("y", []),
-            state.properties.get("linestyle", "-"),
+            style,
             state.properties.get("color", "black"),
             state.properties.get("label", ""),
             object_id=state.id,
@@ -2374,10 +2470,12 @@ class PyFigureCanvas(QWidget):
             state,
             preserve_gaps=True,
         )
+        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
+        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
         self.add_plot(
             pair.x,
             pair.y,
-            state.properties.get("linestyle", "-"),
+            style,
             state.properties.get("markersize", 2.0),
             state.properties.get("color", "black"),
             state.properties.get("label", ""),
@@ -2398,13 +2496,25 @@ class PyFigureCanvas(QWidget):
             pair.y,
             state.properties.get("size", 20.0),
             state.properties.get("color", "black"),
-            state.properties.get("marker", "o"),
+            marker_value(state.properties.get("marker", {"kind": "symbol", "value": "o"})),
             state.properties.get("label", ""),
             x_ref,
             y_ref,
             object_id=state.id,
             color_order=state.order,
             preprocess=preprocess,
+            color_ref=(
+                None
+                if state.data.get("color_ref") is None
+                else ColumnRef.from_dict(state.data["color_ref"])
+            ),
+            size_ref=(
+                None
+                if state.data.get("size_ref") is None
+                else ColumnRef.from_dict(state.data["size_ref"])
+            ),
+            color_mapping=state.properties["color_mapping"],
+            size_mapping=state.properties["size_mapping"],
         )
 
     def _materialize_interpolation(self, state, _transaction) -> None:
@@ -2436,6 +2546,8 @@ class PyFigureCanvas(QWidget):
             state,
             preserve_gaps=False,
         )
+        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
+        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
         self.add_fit_curve(
             pair.x,
             pair.y,
@@ -2450,7 +2562,7 @@ class PyFigureCanvas(QWidget):
             expression=state.data.get("expression", ""),
             x_start=state.data.get("x_start"),
             x_stop=state.data.get("x_stop"),
-            style=state.properties.get("linestyle", "solid"),
+            style=style,
             object_id=state.id,
             color_order=state.order,
             preprocess=preprocess,
@@ -2477,7 +2589,7 @@ class PyFigureCanvas(QWidget):
             self.add_text(**kwargs)
 
     def _restore_component_state(self, state: ComponentState):
-        """Materialize one dynamic v9 component within registration scope."""
+        """Materialize one dynamic v10 component within registration scope."""
 
         if state.id in self.component_registry:
             return self.component_registry.get(state.id)
@@ -2564,7 +2676,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated v9 component tree directly."""
+        """Materialize and apply a validated v10 component tree directly."""
 
         self._restoring_component_tree_now = True
         try:
@@ -2575,6 +2687,10 @@ class PyFigureCanvas(QWidget):
                 self._restore_component_tree_impl(component_tree)
         finally:
             self._restoring_component_tree_now = False
+            # Component changes during materialization belong to the single
+            # project-open action.  Do not let their deferred fallback message
+            # overwrite the final Project opened/error result.
+            self.message_presenter.discard_pending()
         target = (
             self.current_axes_component_id
             if self.current_axes_component_id in self.component_registry
@@ -2592,7 +2708,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v9_figure(source)
+        source = normalize_v10_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -2624,7 +2740,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all v9 states after their Matplotlib targets exist."""
+        """Apply all v10 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return
@@ -2735,7 +2851,14 @@ class PyFigureCanvas(QWidget):
                     self.axes_commands.ensure_legend(
                         legend_state.parent_id
                     )
-        apply_states(legend_states)
+            result = self.axes_commands.apply_legend_properties(
+                controller,
+                legend_state.properties,
+            )
+            if not result.ok:
+                raise ValueError(
+                    f"Could not restore component {legend_state.id}: {result.message}"
+                )
         self.axes_layout_service.restore_runtime_relationships(refresh=True)
         self.component_registry.validate_tree()
         if tex_fallback:
@@ -2765,7 +2888,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical v9 component tree used by persistence."""
+        """Return the canonical v10 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -2785,10 +2908,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v9_figure(snapshot)
+        return normalize_v10_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v9 Figure tree."""
+        """Validate and return the current complete schema-v10 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -2797,7 +2920,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v9_figure(
+        validate_v10_figure(
             snapshot,
             available_refs,
             self.project_id,

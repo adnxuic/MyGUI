@@ -8,14 +8,55 @@ from PySide6.QtWidgets import QWidget
 from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
+    CONTROLLER_TYPES,
     ROLES_BY_KIND,
 )
+from mygui.figuremodify.components.exposure_contract import (
+    validate_matplotlib_exposure_contracts,
+)
+from mygui.figuremodify.components.models import EditorKind
 
 from .base import ComponentEditorBase
 from .inspector import ComponentInspector, EditorProfile
 
 
 EditorKey = tuple[ComponentKind, ComponentRole]
+
+
+EDITABLE_DATA_KEYS: dict[EditorKey, frozenset[str]] = {
+    (ComponentKind.LINE, ComponentRole.LINE): frozenset({"x", "y"}),
+    (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE): frozenset(
+        {"expression", "x_start", "x_stop", "samples"}
+    ),
+    (ComponentKind.LINE, ComponentRole.DATA_PLOT): frozenset(
+        {"x_ref", "y_ref", "preprocess"}
+    ),
+    (ComponentKind.LINE, ComponentRole.FIT_CURVE): frozenset(
+        {
+            "x_ref", "y_ref", "preprocess", "engine", "fit_type",
+            "fit_options", "fit_result", "expression", "x_start", "x_stop",
+        }
+    ),
+    (ComponentKind.LINE, ComponentRole.INTERPOLATION): frozenset(
+        {
+            "x_ref", "y_ref", "preprocess", "method", "k", "samples",
+            "lam", "lam_auto",
+        }
+    ),
+    (ComponentKind.SCATTER, ComponentRole.SCATTER): frozenset(
+        {"x_ref", "y_ref", "color_ref", "size_ref", "preprocess"}
+    ),
+    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE): frozenset(
+        {"filename", "mime_type", "payload_base64"}
+    ),
+}
+
+
+PROXY_KEYS: dict[EditorKey, frozenset[str]] = {
+    (ComponentKind.AXES, ComponentRole.AXES): frozenset(
+        {"x_inverted", "y_inverted"}
+    ),
+}
 
 
 class EditorRegistry:
@@ -164,7 +205,7 @@ class EditorRegistry:
         return self._profiles.get((kind, role))
 
     def validate_production_profiles(self) -> None:
-        """Fail fast unless every schema-v9 kind/role has one profile."""
+        """Fail fast unless every schema-v10 kind/role has one exact profile."""
 
         expected = {
             (kind, role)
@@ -198,6 +239,85 @@ class EditorRegistry:
                     )
                 )
             raise ValueError("Invalid production Editor profiles: " + "; ".join(details))
+        for key in sorted(
+            expected,
+            key=lambda item: (item[0].value, item[1].value),
+        ):
+            controller_type = CONTROLLER_TYPES[key]
+            specs = tuple(controller_type.PROPERTY_SPECS)
+            persistent = {spec.key for spec in specs if spec.persistent}
+            profile = self._profiles[key]
+            exposed: list[str] = []
+            hidden: list[str] = []
+            data_keys: list[str] = []
+            proxy_keys: list[str] = []
+            for section in profile.sections:
+                exposed.extend(section.property_keys)
+                hidden.extend(section.intentionally_hidden)
+                data_keys.extend(section.data_keys)
+                proxy_keys.extend(section.proxy_keys)
+            declared = exposed + hidden
+            duplicates = sorted(
+                name for name in set(declared) if declared.count(name) != 1
+            )
+            unknown = sorted(set(declared) - persistent)
+            omitted = sorted(persistent - set(declared))
+            if duplicates or unknown or omitted:
+                details = []
+                if duplicates:
+                    details.append(f"duplicate properties {duplicates!r}")
+                if unknown:
+                    details.append(f"unknown properties {unknown!r}")
+                if omitted:
+                    details.append(f"unexposed properties {omitted!r}")
+                raise ValueError(
+                    "Invalid property exposure for "
+                    f"{key[0].value}/{key[1].value}: "
+                    + ", ".join(details)
+                )
+            for category, values in (
+                ("data", data_keys),
+                ("proxy", proxy_keys),
+            ):
+                duplicate_values = sorted(
+                    name for name in set(values) if values.count(name) != 1
+                )
+                if duplicate_values:
+                    raise ValueError(
+                        f"Invalid {category} exposure for "
+                        f"{key[0].value}/{key[1].value}: duplicate "
+                        f"keys {duplicate_values!r}."
+                    )
+            expected_data = EDITABLE_DATA_KEYS.get(key, frozenset())
+            actual_data = set(data_keys)
+            if actual_data != expected_data:
+                raise ValueError(
+                    "Invalid data exposure for "
+                    f"{key[0].value}/{key[1].value}: expected "
+                    f"{sorted(expected_data)!r}, got {sorted(actual_data)!r}."
+                )
+            expected_proxies = PROXY_KEYS.get(key, frozenset())
+            actual_proxies = set(proxy_keys)
+            if actual_proxies != expected_proxies:
+                raise ValueError(
+                    "Invalid proxy exposure for "
+                    f"{key[0].value}/{key[1].value}: expected "
+                    f"{sorted(expected_proxies)!r}, got "
+                    f"{sorted(actual_proxies)!r}."
+                )
+            overlap = sorted(set(proxy_keys) & persistent)
+            if overlap:
+                raise ValueError(
+                    "Proxy keys must not create persistent state for "
+                    f"{key[0].value}/{key[1].value}: {overlap!r}."
+                )
+            for spec in specs:
+                if spec.editor is EditorKind.ENUM and not spec.choices:
+                    raise ValueError(
+                        f"Enum property {key[0].value}/{key[1].value}/"
+                        f"{spec.key} has no choices."
+                    )
+        validate_matplotlib_exposure_contracts()
 
     def resolve(self, component):
         """Resolve an explicitly registered generic/tooling editor."""

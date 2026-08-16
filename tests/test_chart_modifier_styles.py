@@ -83,7 +83,10 @@ class ChartControllerStyleTests(unittest.TestCase):
         self.assertTrue(size.ok)
         self.assertEqual(line.get_linestyle(), "--")
         self.assertEqual(line.get_markersize(), 7.5)
-        self.assertEqual(controller.state.properties["linestyle"], "--")
+        self.assertEqual(
+            controller.state.properties["linestyle"],
+            {"kind": "preset", "value": "--"},
+        )
         self.assertEqual(controller.state.properties["markersize"], 7.5)
 
     def test_scatter_marker_and_size_update_artist_and_state(self):
@@ -108,7 +111,10 @@ class ChartControllerStyleTests(unittest.TestCase):
 
         self.assertTrue(marker.ok)
         self.assertTrue(size.ok)
-        self.assertEqual(controller.state.properties["marker"], "s")
+        self.assertEqual(
+            controller.state.properties["marker"],
+            {"kind": "symbol", "value": "s"},
+        )
         self.assertEqual(controller.state.properties["size"], 42.0)
         np.testing.assert_allclose(scatter.get_sizes(), [42.0])
 

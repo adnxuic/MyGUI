@@ -1,4 +1,4 @@
-"""Normalize and validate the strict schema-v9 Figure component tree."""
+"""Normalize and validate the strict schema-v10 Figure component tree."""
 
 from __future__ import annotations
 
@@ -34,7 +34,9 @@ _COLOR_PROPERTIES = frozenset(
         "edgecolor",
         "markerfacecolor",
         "markeredgecolor",
-        "indicator_color",
+        "gapcolor",
+        "region_color",
+        "region_facecolor",
     }
 )
 
@@ -81,8 +83,8 @@ def _canonical_json_value(value: Any, path: str) -> Any:
     return deepcopy(value)
 
 
-def normalize_v9_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Return a JSON-friendly copy of one schema-v9 Figure tree."""
+def normalize_v10_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Return a JSON-friendly copy of one schema-v10 Figure tree."""
 
     figure = deepcopy(_expect_dict(figure_snapshot, "figure"))
     components = _expect_list(figure.get("components"), "figure.components")
@@ -197,6 +199,23 @@ def _validate_controller_contract(state: ComponentState, path: str) -> None:
             raise ComponentValidationError(
                 "property keys are invalid: " + ", ".join(details)
             )
+        for key, spec in controller_type.property_specs().items():
+            if not spec.persistent:
+                continue
+            expected_types = (
+                spec.value_type
+                if isinstance(spec.value_type, tuple)
+                else (spec.value_type,)
+            )
+            value = state.properties[key]
+            if (
+                dict in expected_types
+                and value is not None
+                and not isinstance(value, dict)
+            ):
+                raise ComponentValidationError(
+                    f"property {key!r} must use its tagged JSON object form"
+                )
         controller_type(state)
         if state.role is ComponentRole.IN_AXES_IMAGE:
             decode_in_axes_image(state.data)
@@ -344,6 +363,17 @@ def _validate_data_references(
         available_refs,
         x_axis=False,
     )
+    if state.role is ComponentRole.SCATTER:
+        for key in ("color_ref", "size_ref"):
+            raw = state.data.get(key)
+            if raw is not None:
+                _validate_reference(
+                    raw,
+                    f"{path}.data.{key}",
+                    project_id,
+                    available_refs,
+                    x_axis=False,
+                )
     try:
         preprocess = DataPreprocessSpec.from_dict(state.data.get("preprocess"))
         if available_refs[x_ref] is ColumnType.DATETIME:
@@ -493,9 +523,9 @@ def _validate_layouts(
         dimension: str,
     ) -> None:
         properties = (
-            ("xlim", "xscale", "autoscalex_on")
+            ("xlim", "autoscalex_on")
             if dimension == "x"
-            else ("ylim", "yscale", "autoscaley_on")
+            else ("ylim", "autoscaley_on")
         )
         for group_id, members in groups.items():
             if len(members) < 2:
@@ -505,13 +535,11 @@ def _validate_layouts(
             if len({item.data["subplot"]["layout_id"] for item in members}) != 1:
                 raise ValueError("Shared Axes groups cannot cross Figure layouts.")
             expected = tuple(members[0].properties[key] for key in properties)
-            expected_inverted = axis_state(members[0], dimension).properties[
-                "inverted"
-            ]
+            expected_scale = axis_state(members[0], dimension).properties["scale"]
             for member in members[1:]:
                 actual = tuple(member.properties[key] for key in properties)
-                inverted = axis_state(member, dimension).properties["inverted"]
-                if actual != expected or inverted != expected_inverted:
+                scale = axis_state(member, dimension).properties["scale"]
+                if actual != expected or scale != expected_scale:
                     raise ValueError(
                         f"Shared {dimension.upper()} Axes state is inconsistent."
                     )
@@ -520,18 +548,18 @@ def _validate_layouts(
     validate_share_groups(share_y, "y")
 
 
-def validate_v9_figure(
+def validate_v10_figure(
     figure_snapshot: Any,
     available_refs: dict[ColumnRef, ColumnType],
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate one exact schema-v9 Figure before runtime publication."""
+    """Validate one exact schema-v10 Figure before runtime publication."""
 
     figure = _expect_dict(figure_snapshot, "figure")
     if set(figure) != {"root_component_id", "components"}:
         raise ValueError(
-            "Schema v9 figure must contain only root_component_id and components."
+            "Schema v10 figure must contain only root_component_id and components."
         )
     root_id = figure.get("root_component_id")
     if not isinstance(root_id, str) or not root_id.strip():
@@ -557,7 +585,7 @@ def validate_v9_figure(
         or roots[0].kind is not ComponentKind.FIGURE
     ):
         raise ValueError(
-            "Schema v9 requires one Figure root matching root_component_id."
+            "Schema v10 requires one Figure root matching root_component_id."
         )
     root = roots[0]
     children: dict[str, list[ComponentState]] = {}

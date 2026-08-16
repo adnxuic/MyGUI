@@ -190,7 +190,10 @@ class BatchChartCreationTests(unittest.TestCase):
             )
             self.assertEqual(
                 [controller.state.properties["linestyle"] for controller in controllers],
-                ["--", "--"],
+            [
+                {"kind": "preset", "value": "--"},
+                {"kind": "preset", "value": "--"},
+            ],
             )
             self.assertEqual(
                 [controller.state.properties["linewidth"] for controller in controllers],
@@ -252,6 +255,92 @@ class BatchChartCreationTests(unittest.TestCase):
                 self.canvas.current_axes_component_id
             ).active_palette
         )
+
+    def test_scatter_mapping_creation_uses_aligned_mask_without_palette_commit(self):
+        color_mapping = {
+            "enabled": True,
+            "cmap": "viridis",
+            "norm": {
+                "kind": "linear",
+                "params": {"vmin": None, "vmax": None, "clip": False},
+            },
+            "bad": "#00000000",
+            "under": None,
+            "over": None,
+            "nonfinite": "drop",
+        }
+        size_mapping = {
+            "enabled": True,
+            "input": None,
+            "output": [10.0, 90.0],
+            "clamp": True,
+        }
+        before_cycle = self.canvas.axes_commands.cycle_state(
+            self.canvas.current_axes_component_id
+        ).to_dict()
+
+        result = self.canvas.add_scatters(
+            self.x_ref,
+            (self.y1_ref,),
+            size=42.0,
+            marker="o",
+            preprocess=self._identity_preprocess(),
+            color_selection=self._palette_selection(),
+            color_ref=self.y2_ref,
+            size_ref=self.y1_ref,
+            color_mapping=color_mapping,
+            size_mapping=size_mapping,
+        )
+
+        controller = self.canvas.component_registry.get(
+            result.component_ids[0]
+        )
+        artist = result.artists[0]
+        self.assertEqual(len(artist.get_offsets()), 3)
+        np.testing.assert_allclose(artist.get_array(), [20.0, 21.0, 23.0])
+        self.assertEqual(len(artist.get_sizes()), 3)
+        self.assertEqual(controller.state.data["color_ref"], self.y2_ref.to_dict())
+        self.assertEqual(controller.state.data["size_ref"], self.y1_ref.to_dict())
+        self.assertEqual(
+            self.canvas.axes_commands.cycle_state(
+                self.canvas.current_axes_component_id
+            ).to_dict(),
+            before_cycle,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "scatter-mapping.mygui.json"
+            save_project_snapshot(path, self.window.figure_window)
+            loaded = MainWindow()
+            try:
+                restore_project_snapshot(path, loaded.table, loaded.figure_window)
+                restored = loaded.figure_window.current_canva
+                restored_controller = restored.component_registry.get(
+                    controller.component_id
+                )
+                self.assertEqual(
+                    restored_controller.state.data["color_ref"],
+                    self.y2_ref.to_dict(),
+                )
+                self.assertEqual(
+                    restored_controller.state.data["size_ref"],
+                    self.y1_ref.to_dict(),
+                )
+                self.assertEqual(
+                    restored_controller.state.properties["color_mapping"],
+                    controller.state.properties["color_mapping"],
+                )
+                np.testing.assert_allclose(
+                    restored_controller.resolve_target().get_array(),
+                    [20.0, 21.0, 23.0],
+                )
+                self.assertEqual(
+                    len(restored_controller.resolve_target().get_sizes()),
+                    3,
+                )
+            finally:
+                loaded.close()
+                self.app.processEvents()
 
     def test_interpolation_batch_uses_shared_options(self):
         method = list(interpolate_dict)[2]
@@ -567,7 +656,7 @@ class BatchChartCreationTests(unittest.TestCase):
             path = Path(directory) / "batch.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             snapshot = load_project_file(path)
-            self.assertEqual(snapshot["schema_version"], 9)
+            self.assertEqual(snapshot["schema_version"], 10)
             def keys(value):
                 if isinstance(value, dict):
                     for key, child in value.items():

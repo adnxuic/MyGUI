@@ -22,6 +22,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     InterpolationOptionsInput,
     LineAppearanceInput,
     MultiSeriesDataReferenceInput,
+    ScatterMappingInput,
     ScatterStyleEditor,
 )
 from mygui.resources import load_qss_resource
@@ -408,10 +409,23 @@ class PyScatterDialog(QDialog):
         self.style_input = self.scatter_style_editor.marker_input
         self.layout.addWidget(self.scatter_style_editor)
 
+        canvas = self.figure_window.current_canva
+        self.scatter_mapping_input = ScatterMappingInput(
+            self.figure_window.repository,
+            canvas.project_id if canvas is not None else None,
+            parent=self,
+        )
+        self.layout.addWidget(self.scatter_mapping_input)
+
         # Color selection and preview
         self.color_input = _new_color_input(figure_window)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
+        self.scatter_mapping_input.mappingChanged.connect(
+            lambda: self.color_input.setEnabled(
+                not self.scatter_mapping_input.color_enabled.isChecked()
+            )
+        )
 
         # OK and Cancel buttons
         self.ok_button = QPushButton("确定")
@@ -454,6 +468,10 @@ class PyScatterDialog(QDialog):
                 marker=self.scatter_style_editor.marker(),
                 preprocess=self.data_reference_input.preprocess_values(),
                 color_selection=self.color_input.selection(),
+                color_ref=self.scatter_mapping_input.color_ref(),
+                size_ref=self.scatter_mapping_input.size_ref(),
+                color_mapping=self.scatter_mapping_input.color_mapping(),
+                size_mapping=self.scatter_mapping_input.size_mapping(),
             )
         except Exception as exc:
             status_messages.show_error(str(exc))
@@ -461,18 +479,21 @@ class PyScatterDialog(QDialog):
 
         _show_batch_creation_result("Scatter", result)
         self.data_reference_input.dispose()
+        self.scatter_mapping_input.dispose()
         super().accept()
 
     def reject(self):
         """Reject the dialog without applying its pending inputs."""
 
         self.data_reference_input.dispose()
+        self.scatter_mapping_input.dispose()
         super().reject()
 
     def closeEvent(self, event):
         """Dispose the batch selector when the dialog window closes."""
 
         self.data_reference_input.dispose()
+        self.scatter_mapping_input.dispose()
         super().closeEvent(event)
 
 

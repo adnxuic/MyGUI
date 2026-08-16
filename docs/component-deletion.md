@@ -34,7 +34,7 @@ Preparation validates the deletion policy and exact `DeletionHandler`, rejects
 leaf handlers with registered children, computes the complete closure and
 survivor effects, prepares the fallback Inspector, and reversibly detaches Axes
 Panels. The Registry stages artist removal, survivor state, Locator unbinding,
-the complete Components-tree projection, and a schema-v9 snapshot. Only a
+the complete Components-tree projection, and a schema-v10 snapshot. Only a
 fully valid candidate publishes cleanup, one Registry event batch, one redraw,
 the prepared selection, and one Message Bar result.
 

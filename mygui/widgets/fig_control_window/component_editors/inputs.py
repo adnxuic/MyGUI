@@ -7,7 +7,6 @@ from PySide6.QtGui import QImage, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -15,11 +14,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
+import matplotlib
 
 from mygui.database import (
     ColumnRef,
@@ -46,8 +45,13 @@ from mygui.figuremodify.in_axes import (
     ZoomInAxesCreateSpec,
     embedded_image_data,
 )
+from mygui.figuremodify.components.property_values import DEFAULT_NORM
 
-from .common import LineStyleEditor
+from .common import (
+    FocusAwareDoubleSpinBox,
+    FocusAwareSpinBox,
+    LineStyleEditor,
+)
 
 
 class DataReferenceInput(QFrame):
@@ -268,6 +272,185 @@ class DataReferenceInput(QFrame):
 
     def _emit_refs_changed(self, *_args) -> None:
         self.refsChanged.emit(self.get_x_ref(), self.get_y_ref())
+
+
+class ScatterMappingInput(QFrame):
+    """Controller-free optional color and points-squared mapping input."""
+
+    mappingChanged = Signal()
+
+    def __init__(
+        self,
+        repository: TableRepository,
+        project_id: str | None,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.repository = repository
+        self.project_id = project_id
+        self._disposed = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        color_row = QHBoxLayout()
+        self.color_enabled = QCheckBox("Map color", self)
+        self.color_ref_input = QComboBox(self)
+        self.cmap_input = QComboBox(self)
+        self.cmap_input.addItems(sorted(matplotlib.colormaps))
+        self.cmap_input.setCurrentText("viridis")
+        self.color_nonfinite_input = QComboBox(self)
+        self.color_nonfinite_input.addItem("Drop non-finite", "drop")
+        self.color_nonfinite_input.addItem("Use bad color", "bad")
+        color_row.addWidget(self.color_enabled)
+        color_row.addWidget(self.color_ref_input, 1)
+        color_row.addWidget(QLabel("Map:", self))
+        color_row.addWidget(self.cmap_input)
+        color_row.addWidget(self.color_nonfinite_input)
+        layout.addLayout(color_row)
+
+        size_row = QHBoxLayout()
+        self.size_enabled = QCheckBox("Map size", self)
+        self.size_ref_input = QComboBox(self)
+        self.size_min_input = FocusAwareDoubleSpinBox(self)
+        self.size_max_input = FocusAwareDoubleSpinBox(self)
+        for widget, value in (
+            (self.size_min_input, 12.0),
+            (self.size_max_input, 120.0),
+        ):
+            widget.setRange(0.0, 1_000_000.0)
+            widget.setDecimals(2)
+            widget.setValue(value)
+            widget.setSuffix(" pt²")
+        size_row.addWidget(self.size_enabled)
+        size_row.addWidget(self.size_ref_input, 1)
+        size_row.addWidget(QLabel("Output:", self))
+        size_row.addWidget(self.size_min_input)
+        size_row.addWidget(self.size_max_input)
+        layout.addLayout(size_row)
+
+        self.repository.transaction_committed.connect(
+            self._repository_changed
+        )
+        for widget in (self.color_enabled, self.size_enabled):
+            widget.toggled.connect(self._sync_enabled)
+            widget.toggled.connect(self.mappingChanged)
+        self.update_data()
+        self._sync_enabled()
+
+    @staticmethod
+    def _ref(combo: QComboBox) -> ColumnRef | None:
+        value = combo.currentData(Qt.UserRole)
+        return value if isinstance(value, ColumnRef) else None
+
+    def update_data(self) -> None:
+        """Refresh numeric references while retaining stable selections."""
+
+        current = (
+            self.color_ref(),
+            self.size_ref(),
+        )
+        refs = (
+            []
+            if self.project_id is None
+            else list(
+                self.repository.iter_column_refs(
+                    self.project_id,
+                    {ColumnType.NUMBER},
+                )
+            )
+        )
+        for combo, selected in zip(
+            (self.color_ref_input, self.size_ref_input),
+            current,
+        ):
+            blocker = QSignalBlocker(combo)
+            combo.clear()
+            combo.addItem("Select a numeric column", None)
+            target = 0
+            for ref in refs:
+                combo.addItem(self.repository.ref_label(ref), ref)
+                if ref == selected:
+                    target = combo.count() - 1
+            combo.setCurrentIndex(target)
+            del blocker
+
+    def _repository_changed(self, changes: TableChangeSet) -> None:
+        if (
+            not self._disposed
+            and changes.project_id == self.project_id
+            and (changes.structure_changed or changes.metadata_changed)
+        ):
+            self.update_data()
+
+    def _sync_enabled(self, *_args) -> None:
+        color = self.color_enabled.isChecked()
+        size = self.size_enabled.isChecked()
+        for widget in (
+            self.color_ref_input,
+            self.cmap_input,
+            self.color_nonfinite_input,
+        ):
+            widget.setEnabled(color)
+        for widget in (
+            self.size_ref_input,
+            self.size_min_input,
+            self.size_max_input,
+        ):
+            widget.setEnabled(size)
+
+    def color_ref(self) -> ColumnRef | None:
+        """Return the selected color column only when mapping is enabled."""
+
+        return self._ref(self.color_ref_input) if self.color_enabled.isChecked() else None
+
+    def size_ref(self) -> ColumnRef | None:
+        """Return the selected size column only when mapping is enabled."""
+
+        return self._ref(self.size_ref_input) if self.size_enabled.isChecked() else None
+
+    def color_mapping(self) -> dict[str, object]:
+        """Return the complete safe colormap specification."""
+
+        if self.color_enabled.isChecked() and self.color_ref() is None:
+            raise ValueError("Select a numeric column for Scatter color mapping.")
+        return {
+            "enabled": self.color_enabled.isChecked(),
+            "cmap": self.cmap_input.currentText(),
+            "norm": dict(DEFAULT_NORM),
+            "bad": "#00000000",
+            "under": None,
+            "over": None,
+            "nonfinite": self.color_nonfinite_input.currentData(),
+        }
+
+    def size_mapping(self) -> dict[str, object]:
+        """Return the complete points-squared mapping specification."""
+
+        if self.size_enabled.isChecked() and self.size_ref() is None:
+            raise ValueError("Select a numeric column for Scatter size mapping.")
+        minimum = self.size_min_input.value()
+        maximum = self.size_max_input.value()
+        if minimum > maximum:
+            raise ValueError("Scatter size output minimum exceeds maximum.")
+        return {
+            "enabled": self.size_enabled.isChecked(),
+            "input": None,
+            "output": [minimum, maximum],
+            "clamp": True,
+        }
+
+    def dispose(self) -> None:
+        """Detach repository callbacks idempotently."""
+
+        if self._disposed:
+            return
+        self._disposed = True
+        try:
+            self.repository.transaction_committed.disconnect(
+                self._repository_changed
+            )
+        except (RuntimeError, TypeError):
+            pass
 
 
 class _CheckableColumnComboBox(QComboBox):
@@ -745,7 +928,7 @@ class InAxesInput(QFrame):
             (0.60, 0.60, 0.35, 0.35),
         ):
             bounds_row.addWidget(QLabel(f"{label}:", self))
-            editor = QDoubleSpinBox(self)
+            editor = FocusAwareDoubleSpinBox(self)
             editor.setRange(-10.0, 10.0)
             editor.setDecimals(4)
             editor.setSingleStep(0.01)
@@ -759,7 +942,7 @@ class InAxesInput(QFrame):
         self.visible_input.setChecked(True)
         self.frame_input = QCheckBox("Frame", self)
         self.frame_input.setChecked(True)
-        self.zorder_input = QDoubleSpinBox(self)
+        self.zorder_input = FocusAwareDoubleSpinBox(self)
         self.zorder_input.setRange(-1e6, 1e6)
         self.zorder_input.setValue(5.0)
         common_row.addWidget(self.visible_input)
@@ -781,7 +964,7 @@ class InAxesInput(QFrame):
             auto_record_recent=False,
             parent=self,
         )
-        self.linewidth_input = QDoubleSpinBox(self)
+        self.linewidth_input = FocusAwareDoubleSpinBox(self)
         self.linewidth_input.setRange(0.0, 1e6)
         self.linewidth_input.setDecimals(3)
         self.linewidth_input.setValue(float(defaults.linewidth))
@@ -808,7 +991,7 @@ class InAxesInput(QFrame):
         row.addWidget(QLabel(label, parent))
         inputs = []
         for value in values:
-            editor = QDoubleSpinBox(parent)
+            editor = FocusAwareDoubleSpinBox(parent)
             editor.setRange(-1e300, 1e300)
             editor.setDecimals(6)
             editor.setSingleStep(0.1)
@@ -853,7 +1036,7 @@ class InAxesInput(QFrame):
             defaults.indicator_linewidth,
             parent=self.zoom_page,
         )
-        self.indicator_alpha_input = QDoubleSpinBox(self.zoom_page)
+        self.indicator_alpha_input = FocusAwareDoubleSpinBox(self.zoom_page)
         self.indicator_alpha_input.setRange(0.0, 1.0)
         self.indicator_alpha_input.setSingleStep(0.05)
         self.indicator_alpha_input.setValue(0.5)
@@ -879,7 +1062,7 @@ class InAxesInput(QFrame):
         self.image_preview.setMinimumHeight(120)
         layout.addWidget(self.image_preview)
         display_row = QHBoxLayout()
-        self.opacity_input = QDoubleSpinBox(self.image_page)
+        self.opacity_input = FocusAwareDoubleSpinBox(self.image_page)
         self.opacity_input.setRange(0.0, 1.0)
         self.opacity_input.setSingleStep(0.05)
         self.opacity_input.setValue(1.0)
@@ -1001,7 +1184,7 @@ class InterpolationOptionsInput(QFrame):
 
         samples_row = QHBoxLayout()
         samples_row.addWidget(QLabel("Samples:", self))
-        self.samples_input = QSpinBox(self)
+        self.samples_input = FocusAwareSpinBox(self)
         self.samples_input.setRange(
             MIN_INTERPOLATION_SAMPLES,
             MAX_INTERPOLATION_SAMPLES,
@@ -1013,7 +1196,7 @@ class InterpolationOptionsInput(QFrame):
         k_layout = QHBoxLayout(self.k_widget)
         k_layout.setContentsMargins(0, 0, 0, 0)
         k_layout.addWidget(QLabel("Order k:", self.k_widget))
-        self.k_input = QSpinBox(self.k_widget)
+        self.k_input = FocusAwareSpinBox(self.k_widget)
         self.k_input.setRange(1, 5)
         k_layout.addWidget(self.k_input)
         layout.addWidget(self.k_widget)
@@ -1028,7 +1211,7 @@ class InterpolationOptionsInput(QFrame):
         lambda_layout.addWidget(self.lambda_auto_input)
         lambda_row = QHBoxLayout()
         lambda_row.addWidget(QLabel("Lambda:", self.lambda_widget))
-        self.lambda_value_input = QDoubleSpinBox(self.lambda_widget)
+        self.lambda_value_input = FocusAwareDoubleSpinBox(self.lambda_widget)
         self.lambda_value_input.setRange(0.0, 1e12)
         self.lambda_value_input.setDecimals(6)
         self.lambda_value_input.setSingleStep(0.1)

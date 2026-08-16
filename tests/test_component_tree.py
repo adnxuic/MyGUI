@@ -10,6 +10,7 @@ from tests.axes_helpers import create_regular_axes
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QModelIndex, Qt
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from mygui.figuremodify.components import (
@@ -414,6 +415,7 @@ class ComponentTreeTests(unittest.TestCase):
         self.assertTrue(self.canvas.select_component(title))
         host = self.window.component_tree_host
         original_show = self.canvas.figure_inspector.show_component
+        shown = QSignalSpy(self.canvas.figure_inspector.componentShown)
 
         def fail_target(component_id):
             if component_id == "selection-failure-target":
@@ -432,6 +434,8 @@ class ComponentTreeTests(unittest.TestCase):
         self.assertEqual(
             self.canvas.figure_inspector.current_component_id(), title
         )
+        self.app.processEvents()
+        self.assertEqual(shown.count(), 0)
 
     def test_every_first_party_component_opens_its_exact_inspector(self):
         registry = self.canvas.component_registry
@@ -549,7 +553,7 @@ class ComponentTreeTests(unittest.TestCase):
         )
         self.assertTrue(host.tree.isExpanded(restored_group))
 
-    def test_selection_search_and_expansion_do_not_mutate_schema_v9(self):
+    def test_selection_search_and_expansion_do_not_mutate_schema_v10(self):
         before = self.canvas.component_snapshot()
         host = self.window.component_tree_host
         title = self.canvas.component_registry.query(

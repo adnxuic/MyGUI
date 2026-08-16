@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable
 
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
@@ -9,22 +10,23 @@ from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
-    QSpinBox,
     QToolBox,
     QVBoxLayout,
     QWidget,
 )
 
 from mygui import status_messages, tex_config
-from mygui.database import ColumnRef
+from mygui.database import ColumnRef, ColumnType, TableChangeSet
 from mygui.figuremodify.components import ComponentKind, ComponentMutation
+from mygui.figuremodify.components.property_values import (
+    normalize_legend_location,
+)
 from mygui.figuremodify.in_axes import embedded_image_data
 from mygui.figuremodify.style_base.color_models import PaletteSource
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
@@ -32,7 +34,11 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
 )
 
 from .base import ComponentEditorBase
-from .common import DebouncedTextBinding
+from .common import (
+    DebouncedTextBinding,
+    FocusAwareDoubleSpinBox,
+    FocusAwareSpinBox,
+)
 from .inputs import DataReferenceInput
 from .inspector import EditorSection
 from .lifecycle import CallbackLifecycle
@@ -147,6 +153,325 @@ class DataReferenceSection(QWidget, EditorSection):
         """Disconnect callbacks and release resources owned by this object."""
 
         self.data_choice_widget.dispose()
+
+
+class RawXYDataSection(QWidget, EditorSection):
+    """Atomically edit the finite raw X/Y arrays owned by a generic Line."""
+
+    DATA_KEYS = ("x", "y")
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.x_input = QPlainTextEdit(self)
+        self.y_input = QPlainTextEdit(self)
+        self.x_input.setPlaceholderText("X JSON array, for example [0, 1, 2]")
+        self.y_input.setPlaceholderText("Y JSON array, for example [1, 4, 9]")
+        self.apply_button = QPushButton("Apply X/Y data", self)
+        layout.addWidget(QLabel("X values", self))
+        layout.addWidget(self.x_input)
+        layout.addWidget(QLabel("Y values", self))
+        layout.addWidget(self.y_input)
+        layout.addWidget(self.apply_button)
+        self.apply_button.clicked.connect(self.apply_data)
+        self.sync_from_controller()
+
+    @staticmethod
+    def _parse(text: str, axis: str) -> list[float]:
+        value = json.loads(text or "[]")
+        if not isinstance(value, list):
+            raise ValueError(f"{axis} data must be a JSON array.")
+        return value
+
+    def apply_data(self) -> bool:
+        """Submit both arrays as one Controller mutation."""
+
+        try:
+            x_values = self._parse(self.x_input.toPlainText(), "X")
+            y_values = self._parse(self.y_input.toPlainText(), "Y")
+            result = self.controller.set_xy_data(
+                x_values,
+                y_values,
+                persist=True,
+            )
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            self.sync_from_controller()
+            return False
+        if not self.context.messages.present(
+            result,
+            success="Line X/Y data updated.",
+        ):
+            self.sync_from_controller()
+            return False
+        return True
+
+    def sync_from_controller(self) -> None:
+        """Refresh both inputs from the authoritative Controller state."""
+
+        data = self.controller.read_state().data
+        blockers = [QSignalBlocker(self.x_input), QSignalBlocker(self.y_input)]
+        try:
+            self.x_input.setPlainText(json.dumps(data.get("x", [])))
+            self.y_input.setPlainText(json.dumps(data.get("y", [])))
+        finally:
+            del blockers
+
+    def dispose(self) -> None:
+        """Disconnect the local action idempotently."""
+
+        try:
+            self.apply_button.clicked.disconnect(self.apply_data)
+        except (RuntimeError, TypeError):
+            pass
+
+
+class AxesLimitsSection(QWidget, EditorSection):
+    """Edit ordered Axes limits and expose inversion as non-persistent proxies."""
+
+    PROPERTY_KEYS = ("xlim", "ylim", "autoscalex_on", "autoscaley_on")
+    PROXY_KEYS = ("x_inverted", "y_inverted")
+
+    def __init__(self, controller, *, context, parent=None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        def apply(properties):
+            key, value = next(iter(properties.items()))
+            dimension = "x" if key.startswith("x") else "y"
+            kwargs = (
+                {"limits": value}
+                if key in {"xlim", "ylim"}
+                else {"autoscale": value}
+            )
+            return context.axes_layout.apply_linked_axis(
+                controller.component_id,
+                dimension,
+                **kwargs,
+            )
+
+        self.properties = PropertySection(
+            controller,
+            context=context,
+            property_keys=self.PROPERTY_KEYS,
+            apply_properties=apply,
+            parent=self,
+        )
+        layout.addWidget(self.properties)
+        proxy_row = QHBoxLayout()
+        self.x_inverted = QCheckBox("Invert X", self)
+        self.y_inverted = QCheckBox("Invert Y", self)
+        proxy_row.addWidget(self.x_inverted)
+        proxy_row.addWidget(self.y_inverted)
+        layout.addLayout(proxy_row)
+        self.x_inverted.toggled.connect(
+            lambda checked: self._apply_inversion("x", checked)
+        )
+        self.y_inverted.toggled.connect(
+            lambda checked: self._apply_inversion("y", checked)
+        )
+        self.sync_from_controller()
+
+    def _apply_inversion(self, dimension: str, inverted: bool) -> bool:
+        key = f"{dimension}lim"
+        limits = tuple(self.controller.read_state().properties[key])
+        if (limits[0] > limits[1]) == bool(inverted):
+            return True
+        result = self.context.axes_layout.apply_linked_axis(
+            self.controller.component_id,
+            dimension,
+            limits=tuple(reversed(limits)),
+        )
+        if not self.context.messages.present(
+            result,
+            success=f"{dimension.upper()} axis inversion updated.",
+        ):
+            self.sync_from_controller()
+            return False
+        self.properties.sync_from_controller()
+        return True
+
+    def editor(self, key: str):
+        """Return a persistent editor or inversion proxy."""
+
+        if key in self.PROXY_KEYS:
+            return getattr(self, key)
+        return self.properties.editor(key)
+
+    def editors(self):
+        """Return all persistent and proxy controls."""
+
+        return {
+            **self.properties.editors(),
+            "x_inverted": self.x_inverted,
+            "y_inverted": self.y_inverted,
+        }
+
+    def sync_from_controller(self) -> None:
+        """Synchronize limits and derived inversion without recursion."""
+
+        self.properties.sync_from_controller()
+        state = self.controller.read_state().properties
+        blockers = (
+            QSignalBlocker(self.x_inverted),
+            QSignalBlocker(self.y_inverted),
+        )
+        self.x_inverted.setChecked(state["xlim"][0] > state["xlim"][1])
+        self.y_inverted.setChecked(state["ylim"][0] > state["ylim"][1])
+        del blockers
+
+    def dispose(self) -> None:
+        """Disconnect proxy controls and dispose the nested property section."""
+
+        try:
+            self.x_inverted.toggled.disconnect()
+            self.y_inverted.toggled.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        self.properties.dispose()
+
+
+class ScatterMappingSection(QWidget, EditorSection):
+    """Edit optional Scatter color/size references through ChartDataService."""
+
+    DATA_KEYS = ("color_ref", "size_ref")
+    PROPERTY_KEYS = ("color_mapping", "size_mapping")
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        self.repository = context.repository
+        self._disposed = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        color_row = QHBoxLayout()
+        size_row = QHBoxLayout()
+        self.color_input = QComboBox(self)
+        self.size_input = QComboBox(self)
+        color_row.addWidget(QLabel("Color data:", self))
+        color_row.addWidget(self.color_input)
+        size_row.addWidget(QLabel("Size data:", self))
+        size_row.addWidget(self.size_input)
+        layout.addLayout(color_row)
+        layout.addLayout(size_row)
+        self._mapping_properties = PropertySection(
+            controller,
+            context=context,
+            property_keys=self.PROPERTY_KEYS,
+            apply_properties=self._apply_property,
+            parent=self,
+        )
+        layout.addWidget(self._mapping_properties)
+        self.repository.transaction_committed.connect(self._repository_changed)
+        self.color_input.currentIndexChanged.connect(self._refs_changed)
+        self.size_input.currentIndexChanged.connect(self._refs_changed)
+        self.sync_from_controller()
+
+    def _project_id(self) -> str | None:
+        data = self.controller.read_state().data
+        value = data.get("x_ref")
+        return str(value.get("project_id")) if isinstance(value, dict) else None
+
+    @staticmethod
+    def _current_ref(combo: QComboBox) -> ColumnRef | None:
+        value = combo.currentData(Qt.UserRole)
+        return value if isinstance(value, ColumnRef) else None
+
+    def _populate(self, combo: QComboBox, current: ColumnRef | None) -> None:
+        blocker = QSignalBlocker(combo)
+        combo.clear()
+        combo.addItem("None", None)
+        project_id = self._project_id()
+        if project_id is not None and project_id in self.repository.projects:
+            for ref in self.repository.iter_column_refs(
+                project_id,
+                {ColumnType.NUMBER},
+            ):
+                combo.addItem(self.repository.ref_label(ref), ref)
+        target = 0
+        if current is not None:
+            for index in range(1, combo.count()):
+                if combo.itemData(index, Qt.UserRole) == current:
+                    target = index
+                    break
+        combo.setCurrentIndex(target)
+        del blocker
+
+    def _apply(self, *, property_patch=None) -> object:
+        properties = self.controller.read_state().properties
+        color_mapping = properties["color_mapping"]
+        size_mapping = properties["size_mapping"]
+        for key, value in (property_patch or {}).items():
+            if key == "color_mapping":
+                color_mapping = value
+            elif key == "size_mapping":
+                size_mapping = value
+        return self.context.chart_data.configure_scatter_mapping(
+            self.controller,
+            color_ref=self._current_ref(self.color_input),
+            size_ref=self._current_ref(self.size_input),
+            color_mapping=color_mapping,
+            size_mapping=size_mapping,
+        )
+
+    def _apply_property(self, properties):
+        return self._apply(property_patch=properties)
+
+    def _refs_changed(self, *_args) -> bool:
+        if self._disposed:
+            return False
+        result = self._apply()
+        if not self.context.messages.present(
+            result,
+            success="Scatter mapping updated.",
+        ):
+            self.sync_from_controller()
+            return False
+        return True
+
+    def _repository_changed(self, changes: TableChangeSet) -> None:
+        if self._disposed or changes.project_id != self._project_id():
+            return
+        if changes.structure_changed or changes.metadata_changed:
+            self.sync_from_controller()
+
+    @staticmethod
+    def _ref(value) -> ColumnRef | None:
+        return ColumnRef.from_dict(value) if isinstance(value, dict) else None
+
+    def sync_from_controller(self) -> None:
+        """Refresh refs and mapping specs from Controller state."""
+
+        data = self.controller.read_state().data
+        self._populate(self.color_input, self._ref(data.get("color_ref")))
+        self._populate(self.size_input, self._ref(data.get("size_ref")))
+        self._mapping_properties.sync_from_controller()
+
+    def dispose(self) -> None:
+        """Detach repository and local Qt callbacks idempotently."""
+
+        if self._disposed:
+            return
+        self._disposed = True
+        try:
+            self.repository.transaction_committed.disconnect(
+                self._repository_changed
+            )
+        except (RuntimeError, TypeError):
+            pass
+        for combo in (self.color_input, self.size_input):
+            try:
+                combo.currentIndexChanged.disconnect(self._refs_changed)
+            except (RuntimeError, TypeError):
+                pass
+        self._mapping_properties.dispose()
 
 
 class PropertySection(ComponentEditorBase, EditorSection):
@@ -349,15 +674,35 @@ class LineAppearanceSection(QWidget, EditorSection):
         "color",
         "linestyle",
         "linewidth",
+        "drawstyle",
+        "gapcolor",
     )
     MARKER_KEYS = (
         "marker",
         "markersize",
         "markerfacecolor",
+        "markerfacecoloralt",
         "markeredgecolor",
         "markeredgewidth",
+        "fillstyle",
+        "markevery",
     )
-    ADVANCED_KEYS = ("alpha", "zorder")
+    ADVANCED_KEYS = (
+        "alpha",
+        "zorder",
+        "dash_capstyle",
+        "dash_joinstyle",
+        "solid_capstyle",
+        "solid_joinstyle",
+        "antialiased",
+        "clip_on",
+        "gid",
+        "in_layout",
+        "rasterized",
+        "sketch_params",
+        "snap",
+        "url",
+    )
     PROPERTY_KEYS = BASIC_KEYS + MARKER_KEYS + ADVANCED_KEYS
 
     def __init__(self, controller, *, context, parent=None):
@@ -443,8 +788,24 @@ class ScatterAppearanceSection(QWidget, EditorSection):
         "marker",
         "size",
         "linewidth",
+        "linestyle",
+        "hatch",
+        "capstyle",
+        "joinstyle",
     )
-    ADVANCED_KEYS = ("alpha", "zorder")
+    ADVANCED_KEYS = (
+        "alpha",
+        "zorder",
+        "antialiased",
+        "clip_on",
+        "gid",
+        "in_layout",
+        "rasterized",
+        "sketch_params",
+        "snap",
+        "url",
+        "urls",
+    )
     PROPERTY_KEYS = BASIC_KEYS + ADVANCED_KEYS
 
     def __init__(self, controller, *, context, parent=None):
@@ -581,6 +942,10 @@ class TextTypographySection(PropertySection):
         "fontsize",
         "fontweight",
         "fontstyle",
+        "fontstretch",
+        "fontvariant",
+        "math_fontfamily",
+        "parse_math",
         "color",
         "alpha",
     )
@@ -622,8 +987,13 @@ class TextTransformSection(PropertySection):
 
     KEYS = (
         "rotation",
+        "rotation_mode",
         "horizontalalignment",
         "verticalalignment",
+        "multialignment",
+        "wrap",
+        "linespacing",
+        "transform_rotates_text",
     )
 
     def __init__(self, controller, *, context, apply_properties, parent=None):
@@ -639,7 +1009,7 @@ class TextTransformSection(PropertySection):
 class TextPositionSection(PropertySection):
     """Edit the text position properties of a component."""
 
-    KEYS = ("position", "visible")
+    KEYS = ("position", "visible", "zorder", "coordinate_system")
 
     def __init__(self, controller, *, context, apply_properties, parent=None):
         super().__init__(
@@ -791,8 +1161,8 @@ class LegendLocationSection(QWidget, EditorSection):
         self.entry_scope_input.addItem("Primary + right Y", "twin_pair")
 
         row = QHBoxLayout()
-        self.legend_x_pos = QDoubleSpinBox(self)
-        self.legend_y_pos = QDoubleSpinBox(self)
+        self.legend_x_pos = FocusAwareDoubleSpinBox(self)
+        self.legend_y_pos = FocusAwareDoubleSpinBox(self)
         for editor in (self.legend_x_pos, self.legend_y_pos):
             editor.setRange(-1e6, 1e6)
             editor.setDecimals(6)
@@ -803,7 +1173,7 @@ class LegendLocationSection(QWidget, EditorSection):
         row.addWidget(self.legend_y_pos)
 
         ncols_row = QHBoxLayout()
-        self.ncols_input = QSpinBox(self)
+        self.ncols_input = FocusAwareSpinBox(self)
         self.ncols_input.setRange(1, 1000)
         ncols_row.addWidget(QLabel("Columns:", self))
         ncols_row.addWidget(self.ncols_input)
@@ -856,7 +1226,10 @@ class LegendLocationSection(QWidget, EditorSection):
                 str(value),
             )
         else:
-            result = self.controller.set_property(key, value)
+            result = self.context.axes_commands.apply_legend_properties(
+                self.controller,
+                {key: value},
+            )
         if not self.context.messages.present(
             result,
             success="Legend layout updated.",
@@ -934,16 +1307,25 @@ class LegendLocationSection(QWidget, EditorSection):
                     )
                 )
             self.entry_scope_input.setEnabled(twin_available)
-            location = properties.get("location", "best")
-            if isinstance(location, (tuple, list)) and len(location) == 2:
+            location = normalize_legend_location(
+                properties.get(
+                    "location",
+                    {"kind": "preset", "value": "best"},
+                )
+            )
+            if location["kind"] == "point":
                 self.legend_position_combobox.setCurrentText(
                     "Custom coordinates"
                 )
-                self.legend_x_pos.setValue(float(location[0]))
-                self.legend_y_pos.setValue(float(location[1]))
+                self.legend_x_pos.setValue(float(location["x"]))
+                self.legend_y_pos.setValue(float(location["y"]))
                 custom = True
             else:
-                text = str(location)
+                text = (
+                    str(location["value"])
+                    if location["kind"] == "preset"
+                    else "best"
+                )
                 if text not in self.PRESETS:
                     text = "best"
                 self.legend_position_combobox.setCurrentText(text)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QStackedWidget, QVBoxLayout
 
 from mygui.figuremodify.components import (
@@ -368,6 +369,8 @@ class FigureElementInspectorPanel(QFrame):
 class FigureInspectorPanel(QFrame):
     """Own the Figure root, Figure elements, and Axes panels."""
 
+    componentShown = Signal(str)
+
     def __init__(
         self,
         root_controller,
@@ -378,6 +381,7 @@ class FigureInspectorPanel(QFrame):
         self.context = context
         self.root_component_id = root_controller.component_id
         self._axes_panels: dict[str, AxesInspectorPanel] = {}
+        self._shown_component_id = self.root_component_id
         self._disposed = False
 
         self._inspector_stack = QStackedWidget(self)
@@ -512,6 +516,7 @@ class FigureInspectorPanel(QFrame):
             return False
         if component_id == self.root_component_id:
             self._inspector_stack.setCurrentWidget(self.root_inspector)
+            self._component_shown(component_id)
             return True
         controller = registry.get(component_id)
         state = controller.state
@@ -530,6 +535,7 @@ class FigureInspectorPanel(QFrame):
                 self._inspector_stack.setCurrentWidget(
                     self._figure_elements_panel
                 )
+                self._component_shown(component_id)
                 return True
         axes_controller = registry.ancestor(
             component_id,
@@ -541,7 +547,17 @@ class FigureInspectorPanel(QFrame):
         if panel is None or not panel.show_component(component_id):
             return False
         self._inspector_stack.setCurrentWidget(panel)
+        self._component_shown(component_id)
         return True
+
+    def _component_shown(self, component_id: str) -> None:
+        """Publish one UI-only notification after a real component switch."""
+
+        component_id = str(component_id)
+        if component_id == self._shown_component_id:
+            return
+        self._shown_component_id = component_id
+        self.componentShown.emit(component_id)
 
     def ensure_component(self, component_id: str):
         """Prepare one Inspector without changing the currently visible panel."""
@@ -729,6 +745,8 @@ class FigureInspectorPanel(QFrame):
 class FigureInspectorHost(QFrame):
     """Project-scoped Figure Inspector host."""
 
+    componentShown = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.setObjectName("figure_inspector_host")
@@ -786,6 +804,7 @@ class FigureInspectorHost(QFrame):
         index = self._figure_stack.addWidget(panel)
         if index < 0:
             raise RuntimeError("Could not publish the Figure Inspector panel.")
+        panel.componentShown.connect(self.componentShown.emit)
         self._figure_stack.setCurrentWidget(panel)
         return panel
 

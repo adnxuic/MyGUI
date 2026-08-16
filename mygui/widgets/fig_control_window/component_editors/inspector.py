@@ -85,6 +85,47 @@ class SectionSpec:
     title: str
     factory: SectionFactory
     collapsed: bool = False
+    property_keys: tuple[str, ...] = ()
+    data_keys: tuple[str, ...] = ()
+    proxy_keys: tuple[str, ...] = ()
+    intentionally_hidden: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.key.strip() or not self.title.strip():
+            raise ValueError("Editor section key and title must not be empty.")
+        if not callable(self.factory):
+            raise TypeError("Editor section factory must be callable.")
+        for name in (
+            "property_keys",
+            "data_keys",
+            "proxy_keys",
+            "intentionally_hidden",
+        ):
+            values = tuple(str(value).strip() for value in getattr(self, name))
+            if any(not value for value in values):
+                raise ValueError(f"Section {name} entries must not be empty.")
+            if len(values) != len(set(values)):
+                raise ValueError(f"Section {name} entries must be unique.")
+            object.__setattr__(self, name, values)
+        declared = (
+            set(self.property_keys)
+            | set(self.data_keys)
+            | set(self.proxy_keys)
+            | set(self.intentionally_hidden)
+        )
+        total = sum(
+            len(values)
+            for values in (
+                self.property_keys,
+                self.data_keys,
+                self.proxy_keys,
+                self.intentionally_hidden,
+            )
+        )
+        if len(declared) != total:
+            raise ValueError(
+                "A section key cannot have more than one exposure role."
+            )
 
 
 @dataclass(frozen=True, slots=True)

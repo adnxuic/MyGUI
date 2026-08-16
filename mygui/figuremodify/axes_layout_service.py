@@ -80,7 +80,7 @@ class AxesLayoutService:
             secondary._mygui_merged_legend_owner = primary
 
     def restore_runtime_relationships(self, *, refresh: bool = False) -> None:
-        """Rebuild non-persisted artist links from authoritative v9 state."""
+        """Rebuild non-persisted artist links from authoritative v10 state."""
 
         self._clear_runtime_relationships()
         by_cell: dict[tuple[str, int, int], dict[str, AxesController]] = {}
@@ -223,7 +223,20 @@ class AxesLayoutService:
         state = root.state
         properties = dict(state.properties)
         if constrained_layout is not None:
-            properties["constrained_layout"] = bool(constrained_layout)
+            properties["layout_engine"] = (
+                {
+                    "kind": "constrained",
+                    "params": {
+                        "w_pad": None,
+                        "h_pad": None,
+                        "wspace": None,
+                        "hspace": None,
+                        "rect": None,
+                    },
+                }
+                if constrained_layout
+                else {"kind": "none", "params": {}}
+            )
         change = root.apply_state(
             state.clone(
                 properties=properties,
@@ -373,7 +386,10 @@ class AxesLayoutService:
                     mutations.append(
                         ComponentMutation(
                             tick_labels.component_id,
-                            properties={"visible": False},
+                            properties={
+                                "primary_visible": False,
+                                "secondary_visible": False,
+                            },
                         )
                     )
             if spec.outer_y_labels and item.column > 0:
@@ -400,7 +416,10 @@ class AxesLayoutService:
                     mutations.append(
                         ComponentMutation(
                             tick_labels.component_id,
-                            properties={"visible": False},
+                            properties={
+                                "primary_visible": False,
+                                "secondary_visible": False,
+                            },
                         )
                     )
         if mutations:
@@ -581,7 +600,7 @@ class AxesLayoutService:
         return component_ids
 
     def materialize(self, axes_states: Iterable[ComponentState]) -> tuple[str, ...]:
-        """Create persisted v9 Axes in selector order before applying state."""
+        """Create persisted v10 Axes in selector order before applying state."""
 
         ordered = sorted(
             tuple(axes_states),
@@ -696,7 +715,6 @@ class AxesLayoutService:
         if dimension not in {"x", "y"}:
             raise ValueError("Linked Axes dimension must be x or y.")
         axes_key = "xlim" if dimension == "x" else "ylim"
-        scale_key = "xscale" if dimension == "x" else "yscale"
         autoscale_key = (
             "autoscalex_on" if dimension == "x" else "autoscaley_on"
         )
@@ -708,28 +726,29 @@ class AxesLayoutService:
             patch: dict[str, Any] = {}
             if limits is not _UNSET:
                 patch[axes_key] = tuple(limits)
-            if scale is not _UNSET:
-                patch[scale_key] = str(scale)
             if autoscale is not _UNSET:
                 patch[autoscale_key] = bool(autoscale)
+            if inverted is not _UNSET and limits is _UNSET:
+                current = tuple(controller.state.properties[axes_key])
+                is_inverted = current[0] > current[1]
+                if bool(inverted) != is_inverted:
+                    patch[axes_key] = tuple(reversed(current))
             if patch:
                 mutations.append(
                     ComponentMutation(controller.component_id, properties=patch)
                 )
-            if scale is not _UNSET or inverted is not _UNSET:
+            if scale is not _UNSET:
                 axis = self.registry.find_one(
                     parent_id=controller.component_id,
                     kind=ComponentKind.AXIS,
                     role=axis_role,
                     recursive=False,
                 )
-                axis_patch: dict[str, Any] = {}
-                if scale is not _UNSET:
-                    axis_patch["scale"] = str(scale)
-                if inverted is not _UNSET:
-                    axis_patch["inverted"] = bool(inverted)
                 mutations.append(
-                    ComponentMutation(axis.component_id, properties=axis_patch)
+                    ComponentMutation(
+                        axis.component_id,
+                        properties={"scale": scale},
+                    )
                 )
         return self.registry.apply_transaction(mutations)
 

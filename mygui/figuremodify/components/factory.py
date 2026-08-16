@@ -40,11 +40,11 @@ def _random_id(_path: str) -> str:
     return str(uuid4())
 
 
-def _v9_layout_records(
+def _v10_layout_records(
     figure: Figure,
     figure_id: str,
 ) -> tuple[list[dict[str, Any]], dict[Axes, dict[str, Any]]]:
-    """Describe an existing regular Figure with schema-v9 layout records."""
+    """Describe an existing regular Figure with schema-v10 layout records."""
 
     groups: dict[int, list[tuple[int, Axes, Any, int, int]]] = {}
     standalone: list[tuple[int, Axes]] = []
@@ -355,7 +355,7 @@ def register_figure_components(
     result = registry or ComponentRegistry()
     make_id = id_factory or _random_id
     figure_id = root_id or make_id("figure")
-    layout_definitions, subplot_records = _v9_layout_records(figure, figure_id)
+    layout_definitions, subplot_records = _v10_layout_records(figure, figure_id)
     figure_state = ComponentState(
         id=figure_id,
         kind=ComponentKind.FIGURE,
@@ -383,7 +383,10 @@ def register_figure_components(
                 "object_id": text_id,
                 "scope": "figure",
             },
-            properties=TextController.default_properties(),
+            properties={
+                **TextController.default_properties(),
+                "coordinate_system": "figure",
+            },
         )
         controller = TextController(state)
         result.register(controller, target=text)

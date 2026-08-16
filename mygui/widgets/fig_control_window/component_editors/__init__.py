@@ -5,6 +5,31 @@ Editors therefore remain reusable across concrete component roles.
 """
 
 from .base import ComponentEditorBase
+from .inline_spec_editors import (
+    AxesAnchorEditor,
+    InlineValueEditor,
+    LegendAnchorEditor,
+    LinePatternEditor,
+    MarkerSpecEditor,
+    NamedNumberEditor,
+    NumberSequenceEditor,
+    OptionalColorEditor,
+    StringListEditor,
+)
+from .spec_editors import (
+    AxisFormatterEditor,
+    AxisLocatorEditor,
+    AxisScaleEditor,
+    FigureLayoutEditor,
+    FontSpecEditor,
+    MarkEveryEditor,
+    NormSpecEditor,
+    ScatterColorMapEditor,
+    ScatterSizeMapEditor,
+    StructuredValueEditor,
+    TextBoxEditor,
+    ZoomConnectorsEditor,
+)
 from .common import (
     DebouncedTextBinding,
     LineStyleEditor,
@@ -13,8 +38,10 @@ from .common import (
     RangeEditor,
     ScatterStyleEditor,
     SpinePositionEditor,
+    format_number_sequence,
     modification_succeeded,
     normalize_line_style,
+    parse_number_sequence,
 )
 from .registry import EditorKey, EditorRegistry
 from .inspector import (
@@ -31,6 +58,7 @@ from .inputs import (
     InterpolationOptionsInput,
     LineAppearanceInput,
     MultiSeriesDataReferenceInput,
+    ScatterMappingInput,
 )
 from .profiles import register_production_profiles
 from .sections import (
@@ -56,6 +84,27 @@ from .context import (
 
 __all__ = [
     "ComponentEditorBase",
+    "AxesAnchorEditor",
+    "AxisFormatterEditor",
+    "AxisLocatorEditor",
+    "AxisScaleEditor",
+    "FigureLayoutEditor",
+    "FontSpecEditor",
+    "InlineValueEditor",
+    "LegendAnchorEditor",
+    "LinePatternEditor",
+    "MarkEveryEditor",
+    "MarkerSpecEditor",
+    "NamedNumberEditor",
+    "NormSpecEditor",
+    "NumberSequenceEditor",
+    "OptionalColorEditor",
+    "ScatterColorMapEditor",
+    "ScatterSizeMapEditor",
+    "StringListEditor",
+    "StructuredValueEditor",
+    "TextBoxEditor",
+    "ZoomConnectorsEditor",
     "DebouncedTextBinding",
     "EditorRegistry",
     "EditorKey",
@@ -70,6 +119,7 @@ __all__ = [
     "InterpolationOptionsInput",
     "LineAppearanceInput",
     "MultiSeriesDataReferenceInput",
+    "ScatterMappingInput",
     "register_production_profiles",
     "AxesLayoutSection",
     "DataReferenceSection",
@@ -93,6 +143,8 @@ __all__ = [
     "RangeEditor",
     "ScatterStyleEditor",
     "SpinePositionEditor",
+    "format_number_sequence",
     "modification_succeeded",
     "normalize_line_style",
+    "parse_number_sequence",
 ]

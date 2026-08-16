@@ -36,6 +36,7 @@ from mygui.figuremodify.components import (
     FitCurveController,
     FunctionCurveController,
     InterpolationController,
+    LineController,
     register_figure_components,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
@@ -129,21 +130,12 @@ class ComponentInspectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            LineAppearanceSection.PROPERTY_KEYS,
-            (
-                "label",
-                "visible",
-                "color",
-                "linestyle",
-                "linewidth",
-                "marker",
-                "markersize",
-                "markerfacecolor",
-                "markeredgecolor",
-                "markeredgewidth",
-                "alpha",
-                "zorder",
-            ),
+            set(LineAppearanceSection.PROPERTY_KEYS),
+            {spec.key for spec in LineController.PROPERTY_SPECS},
+        )
+        self.assertEqual(
+            len(LineAppearanceSection.PROPERTY_KEYS),
+            len(LineController.PROPERTY_SPECS),
         )
         self.assertEqual(
             tuple(
@@ -375,7 +367,7 @@ class ComponentInspectorTests(unittest.TestCase):
             context.editor_manager.close()
 
     def test_text_and_legend_profiles_preserve_role_differences(self):
-        self.assertIs(
+        self.assertIsNot(
             SEMANTIC_TEXT_PROFILE.sections,
             TEXT_PROFILE.sections,
         )
@@ -386,11 +378,17 @@ class ComponentInspectorTests(unittest.TestCase):
         )
         self.assertEqual(
             tuple(section.key for section in TEXT_PROFILE.sections),
-            ("content", "typography", "transform", "position", "render"),
+            (
+                "content", "typography", "transform", "position",
+                "render", "advanced",
+            ),
         )
         self.assertEqual(
             tuple(section.key for section in LEGEND_PROFILE.sections),
-            ("content", "typography", "layout", "frame"),
+            (
+                "content", "typography", "layout", "layout_details",
+                "frame", "advanced",
+            ),
         )
 
     def test_data_and_interpolation_inputs_sync_without_recursive_signals(self):

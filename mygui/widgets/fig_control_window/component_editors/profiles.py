@@ -5,6 +5,7 @@ from __future__ import annotations
 from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
+    CONTROLLER_TYPES,
     ROLES_BY_KIND,
 )
 
@@ -22,13 +23,16 @@ from .inspector import (
 )
 from .sections import (
     AxesLayoutSection,
+    AxesLimitsSection,
     DataReferenceSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
     LineAppearanceSection,
     PaletteSection,
     PropertySection,
+    RawXYDataSection,
     ScatterAppearanceSection,
+    ScatterMappingSection,
     TextContentSection,
     TextPositionSection,
     TextRenderSection,
@@ -50,33 +54,9 @@ def _properties(*keys: str):
 
 
 def _axes_limits(controller, context, parent):
-    def apply(properties):
-        key, value = next(iter(properties.items()))
-        if key.startswith("x") or key == "autoscalex_on":
-            dimension = "x"
-        else:
-            dimension = "y"
-        kwargs = {}
-        if key in {"xlim", "ylim"}:
-            kwargs["limits"] = value
-        elif key in {"xscale", "yscale"}:
-            kwargs["scale"] = value
-        else:
-            kwargs["autoscale"] = value
-        return context.axes_layout.apply_linked_axis(
-            controller.component_id,
-            dimension,
-            **kwargs,
-        )
-
-    return PropertySection(
+    return AxesLimitsSection(
         controller,
         context=context,
-        property_keys=(
-            "xlim", "ylim", "xscale", "yscale",
-            "autoscalex_on", "autoscaley_on",
-        ),
-        apply_properties=apply,
         parent=parent,
     )
 
@@ -85,23 +65,38 @@ def _axes_layout(controller, context, parent):
     return AxesLayoutSection(controller, context=context, parent=parent)
 
 
-def _axis_properties(controller, context, parent):
+def _axis_properties_for(keys):
+    def factory(controller, context, parent):
+        return _axis_properties(controller, context, parent, keys=keys)
+
+    return factory
+
+
+def _axis_properties(controller, context, parent, *, keys=None):
     def apply(properties):
         key, value = next(iter(properties.items()))
-        if key not in {"scale", "inverted"}:
-            return controller.set_property(key, value)
+        if key != "scale":
+            from mygui.figuremodify.components import ComponentMutation
+
+            return context.registry.apply_transaction(
+                (
+                    ComponentMutation(
+                        controller.component_id,
+                        properties={key: value},
+                    ),
+                )
+            )
         dimension = str(controller.state.selector["axis"])
-        kwargs = {key: value}
         return context.axes_layout.apply_linked_axis(
             controller.state.parent_id,
             dimension,
-            **kwargs,
+            scale=value,
         )
 
     return PropertySection(
         controller,
         context=context,
-        property_keys=PROPERTY_PROFILE_KEYS[ComponentKind.AXIS],
+        property_keys=keys,
         apply_properties=apply,
         parent=parent,
     )
@@ -117,6 +112,22 @@ def _line_appearance(controller, context, parent):
 
 def _scatter_appearance(controller, context, parent):
     return ScatterAppearanceSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
+
+
+def _scatter_mapping(controller, context, parent):
+    return ScatterMappingSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
+
+
+def _raw_xy_data(controller, context, parent):
+    return RawXYDataSection(
         controller,
         context=context,
         parent=parent,
@@ -271,6 +282,30 @@ def _text_render(controller, context, parent):
     )
 
 
+TEXT_ADVANCED_KEYS = (
+    "bbox",
+    "antialiased",
+    "label",
+    "clip_on",
+    "gid",
+    "in_layout",
+    "rasterized",
+    "sketch_params",
+    "snap",
+    "url",
+)
+
+
+def _text_advanced(controller, context, parent):
+    return PropertySection(
+        controller,
+        context=context,
+        property_keys=TEXT_ADVANCED_KEYS,
+        apply_properties=_text_apply(controller, context),
+        parent=parent,
+    )
+
+
 def _image_in_axes_source(controller, context, parent):
     return ImageInAxesSourceSection(
         controller,
@@ -281,20 +316,9 @@ def _image_in_axes_source(controller, context, parent):
 
 def _ensure_legend_apply(controller, context):
     def apply(properties):
-        try:
-            controller.resolve_target()
-        except Exception:
-            context.axes_commands.ensure_legend(
-                controller.state.parent_id
-            )
-        if len(properties) == 1:
-            key, value = next(iter(properties.items()))
-            return controller.set_property(key, value)
-        state = controller.read_state()
-        updated = dict(state.properties)
-        updated.update(properties)
-        return controller.apply_state(
-            state.clone(properties=updated)
+        return context.axes_commands.apply_legend_properties(
+            controller,
+            properties,
         )
 
     return apply
@@ -311,10 +335,10 @@ def _legend_title(controller, context, parent):
 
 
 def _legend_typography(controller, context, parent):
-    return TextTypographySection(
+    return PropertySection(
         controller,
         context=context,
-        property_keys=("fontsize",),
+        property_keys=("label_font", "title_font"),
         apply_properties=_ensure_legend_apply(controller, context),
         parent=parent,
     )
@@ -337,7 +361,68 @@ def _legend_frame(controller, context, parent):
             "facecolor",
             "edgecolor",
             "framealpha",
+            "fancybox",
+            "shadow",
+            "frame_linewidth",
+            "frame_linestyle",
+            "frame_hatch",
         ),
+        apply_properties=_ensure_legend_apply(controller, context),
+        parent=parent,
+    )
+
+
+LEGEND_DETAIL_KEYS = (
+    "bbox_to_anchor",
+    "mode",
+    "alignment",
+    "reverse",
+    "markerfirst",
+    "draggable",
+    "draggable_update",
+    "numpoints",
+    "scatterpoints",
+    "scatteryoffsets",
+    "markerscale",
+    "borderpad",
+    "labelspacing",
+    "handlelength",
+    "handleheight",
+    "handletextpad",
+    "borderaxespad",
+    "columnspacing",
+)
+
+
+def _legend_details(controller, context, parent):
+    return PropertySection(
+        controller,
+        context=context,
+        property_keys=LEGEND_DETAIL_KEYS,
+        apply_properties=_ensure_legend_apply(controller, context),
+        parent=parent,
+    )
+
+
+LEGEND_ADVANCED_KEYS = (
+    "zorder",
+    "alpha",
+    "label",
+    "clip_on",
+    "gid",
+    "in_layout",
+    "rasterized",
+    "sketch_params",
+    "snap",
+    "url",
+)
+
+
+def _legend_advanced(controller, context, parent):
+    return PropertySection(
+        controller,
+        context=context,
+        property_keys=LEGEND_ADVANCED_KEYS,
         apply_properties=_ensure_legend_apply(controller, context),
         parent=parent,
     )
@@ -424,9 +509,16 @@ LINE_PROFILES = {
         "Line",
         (
             SectionSpec(
+                "data",
+                "Raw X/Y data",
+                _raw_xy_data,
+                data_keys=RawXYDataSection.DATA_KEYS,
+            ),
+            SectionSpec(
                 "appearance",
                 "Appearance",
                 _line_appearance,
+                property_keys=LineAppearanceSection.PROPERTY_KEYS,
             ),
         ),
         placement=EditorPlacement.CHART,
@@ -443,11 +535,13 @@ LINE_PROFILES = {
                 "definition",
                 "Definition and range",
                 _curve_definition,
+                data_keys=("expression", "x_start", "x_stop", "samples"),
             ),
             SectionSpec(
                 "appearance",
                 "Appearance",
                 _line_appearance,
+                property_keys=LineAppearanceSection.PROPERTY_KEYS,
             ),
         ),
         placement=EditorPlacement.CHART,
@@ -464,11 +558,13 @@ LINE_PROFILES = {
                 "data",
                 "Data source",
                 _chart_data_references,
+                data_keys=("x_ref", "y_ref", "preprocess"),
             ),
             SectionSpec(
                 "appearance",
                 "Appearance",
                 _line_appearance,
+                property_keys=LineAppearanceSection.PROPERTY_KEYS,
             ),
         ),
         placement=EditorPlacement.CHART,
@@ -485,14 +581,31 @@ LINE_PROFILES = {
                 "data",
                 "Data source",
                 _fit_data_references,
+                data_keys=("x_ref", "y_ref", "preprocess"),
             ),
-            SectionSpec("actions", "Fit operations", _fit_actions),
-            SectionSpec("result", "Fit result", _fit_result),
-            SectionSpec("range", "Display range", _fit_range),
+            SectionSpec(
+                "actions",
+                "Fit operations",
+                _fit_actions,
+                data_keys=("engine", "fit_type", "fit_options"),
+            ),
+            SectionSpec(
+                "result",
+                "Fit result",
+                _fit_result,
+                data_keys=("fit_result", "expression"),
+            ),
+            SectionSpec(
+                "range",
+                "Display range",
+                _fit_range,
+                data_keys=("x_start", "x_stop"),
+            ),
             SectionSpec(
                 "appearance",
                 "Appearance",
                 _line_appearance,
+                property_keys=LineAppearanceSection.PROPERTY_KEYS,
             ),
         ),
         placement=EditorPlacement.CHART,
@@ -509,16 +622,19 @@ LINE_PROFILES = {
                 "data",
                 "Data source",
                 _interpolation_data_references,
+                data_keys=("x_ref", "y_ref", "preprocess"),
             ),
             SectionSpec(
                 "interpolation",
                 "Interpolation parameters",
                 _interpolation_options,
+                data_keys=("method", "k", "samples", "lam", "lam_auto"),
             ),
             SectionSpec(
                 "appearance",
                 "Appearance",
                 _line_appearance,
+                property_keys=LineAppearanceSection.PROPERTY_KEYS,
             ),
         ),
         placement=EditorPlacement.CHART,
@@ -538,11 +654,20 @@ SCATTER_PROFILE = EditorProfile(
             "data",
             "Data source",
             _chart_data_references,
+            data_keys=("x_ref", "y_ref", "preprocess"),
+        ),
+        SectionSpec(
+            "mapping",
+            "Color and size mapping",
+            _scatter_mapping,
+            property_keys=ScatterMappingSection.PROPERTY_KEYS,
+            data_keys=ScatterMappingSection.DATA_KEYS,
         ),
         SectionSpec(
             "appearance",
             "Appearance",
             _scatter_appearance,
+            property_keys=ScatterAppearanceSection.PROPERTY_KEYS,
         ),
     ),
     placement=EditorPlacement.CHART,
@@ -553,21 +678,48 @@ SCATTER_PROFILE = EditorProfile(
 )
 
 
-TEXT_PROFILE = EditorProfile(
-    "text",
-    "Text",
-    (
-        SectionSpec("content", "Content", _text_content),
-        SectionSpec("typography", "Typography", _text_typography),
+def _text_sections(*, free: bool) -> tuple[SectionSpec, ...]:
+    position_keys = tuple(
+        key
+        for key in TextPositionSection.KEYS
+        if free or key != "coordinate_system"
+    )
+    return (
+        SectionSpec(
+            "content", "Content", _text_content,
+            property_keys=("text",),
+        ),
+        SectionSpec(
+            "typography", "Typography", _text_typography,
+            property_keys=TextTypographySection.DEFAULT_KEYS,
+        ),
         SectionSpec(
             "transform",
             "Rotation and alignment",
             _text_transform,
             collapsed=True,
+            property_keys=TextTransformSection.KEYS,
         ),
-        SectionSpec("position", "Position and visibility", _text_position),
-        SectionSpec("render", "Rendering", _text_render),
-    ),
+        SectionSpec(
+            "position", "Position and visibility", _text_position,
+            property_keys=position_keys,
+        ),
+        SectionSpec(
+            "render", "Rendering", _text_render,
+            property_keys=("usetex",),
+        ),
+        SectionSpec(
+            "advanced", "Advanced", _text_advanced,
+            collapsed=True,
+            property_keys=TEXT_ADVANCED_KEYS,
+        ),
+    )
+
+
+TEXT_PROFILE = EditorProfile(
+    "text",
+    "Text",
+    _text_sections(free=True),
     placement=EditorPlacement.ELEMENT,
     tree=TreePresentationSpec(
         "Text",
@@ -588,6 +740,7 @@ IN_AXES_ZOOM_PROFILE = EditorProfile(
             "layout",
             "Layout",
             _properties("bounds", "visible", "zorder"),
+            property_keys=("bounds", "visible", "zorder"),
         ),
         SectionSpec(
             "frame",
@@ -598,22 +751,33 @@ IN_AXES_ZOOM_PROFILE = EditorProfile(
                 "edgecolor",
                 "linewidth",
             ),
+            property_keys=("facecolor", "frameon", "edgecolor", "linewidth"),
         ),
         SectionSpec(
             "range",
             "Zoom range",
             _properties("xlim", "ylim", "ticks_visible"),
+            property_keys=("xlim", "ylim", "ticks_visible"),
         ),
         SectionSpec(
             "indicator",
             "Indicator",
             _properties(
                 "region_visible",
-                "connectors_visible",
-                "indicator_color",
-                "indicator_linestyle",
-                "indicator_linewidth",
-                "indicator_alpha",
+                "region_color",
+                "region_linestyle",
+                "region_linewidth",
+                "region_alpha",
+                "region_facecolor",
+                "region_fill",
+                "region_hatch",
+                "region_zorder",
+                "connectors",
+            ),
+            property_keys=(
+                "region_visible", "region_color", "region_linestyle",
+                "region_linewidth", "region_alpha", "region_facecolor",
+                "region_fill", "region_hatch", "region_zorder", "connectors",
             ),
         ),
     ),
@@ -640,6 +804,7 @@ IN_AXES_IMAGE_PROFILE = EditorProfile(
             "layout",
             "Layout",
             _properties("bounds", "visible", "zorder"),
+            property_keys=("bounds", "visible", "zorder"),
         ),
         SectionSpec(
             "frame",
@@ -650,12 +815,31 @@ IN_AXES_IMAGE_PROFILE = EditorProfile(
                 "edgecolor",
                 "linewidth",
             ),
+            property_keys=("facecolor", "frameon", "edgecolor", "linewidth"),
         ),
-        SectionSpec("source", "Image", _image_in_axes_source),
+        SectionSpec(
+            "source", "Image", _image_in_axes_source,
+            data_keys=("filename", "mime_type", "payload_base64"),
+        ),
         SectionSpec(
             "display",
             "Display",
-            _properties("opacity", "fit_mode", "interpolation"),
+            _properties(
+                "opacity", "fit_mode", "interpolation", "origin", "extent",
+                "resample", "filternorm", "filterrad", "interpolation_stage",
+                "image_visible", "image_zorder", "image_clip_on",
+                "image_rasterized", "image_in_layout", "image_snap",
+                "image_gid", "image_label", "image_sketch_params",
+                "image_url",
+            ),
+            property_keys=(
+                "opacity", "fit_mode", "interpolation", "origin", "extent",
+                "resample", "filternorm", "filterrad", "interpolation_stage",
+                "image_visible", "image_zorder", "image_clip_on",
+                "image_rasterized", "image_in_layout", "image_snap",
+                "image_gid", "image_label", "image_sketch_params",
+                "image_url",
+            ),
         ),
     ),
     placement=EditorPlacement.ELEMENT,
@@ -673,7 +857,7 @@ IN_AXES_IMAGE_PROFILE = EditorProfile(
 SEMANTIC_TEXT_PROFILE = EditorProfile(
     "semantic_text",
     "Text",
-    TEXT_PROFILE.sections,
+    _text_sections(free=False),
     placement=EditorPlacement.SEMANTIC,
     tree=TreePresentationSpec(
         _semantic_text_label,
@@ -692,10 +876,36 @@ LEGEND_PROFILE = EditorProfile(
     "legend",
     "Legend",
     (
-        SectionSpec("content", "Title", _legend_title),
-        SectionSpec("typography", "Typography", _legend_typography),
-        SectionSpec("layout", "Layout", _legend_location),
-        SectionSpec("frame", "Frame", _legend_frame),
+        SectionSpec(
+            "content", "Title", _legend_title,
+            property_keys=("title",),
+        ),
+        SectionSpec(
+            "typography", "Typography", _legend_typography,
+            property_keys=("label_font", "title_font"),
+        ),
+        SectionSpec(
+            "layout", "Layout", _legend_location,
+            property_keys=("visible", "location", "ncols", "entry_scope"),
+        ),
+        SectionSpec(
+            "layout_details", "Layout details", _legend_details,
+            collapsed=True,
+            property_keys=LEGEND_DETAIL_KEYS,
+        ),
+        SectionSpec(
+            "frame", "Frame", _legend_frame,
+            property_keys=(
+                "frameon", "facecolor", "edgecolor", "framealpha",
+                "fancybox", "shadow", "frame_linewidth",
+                "frame_linestyle", "frame_hatch",
+            ),
+        ),
+        SectionSpec(
+            "advanced", "Advanced", _legend_advanced,
+            collapsed=True,
+            property_keys=LEGEND_ADVANCED_KEYS,
+        ),
     ),
     placement=EditorPlacement.SEMANTIC,
     tree=TreePresentationSpec(
@@ -715,12 +925,19 @@ AXES_PROFILE = EditorProfile(
     "axes",
     "Axes",
     (
-        SectionSpec("layout", "Layout relationship", _axes_layout),
-        SectionSpec("palette", "Palette", _palette),
+        SectionSpec(
+            "layout", "Layout relationship", _axes_layout,
+        ),
+        SectionSpec(
+            "palette", "Palette", _palette,
+            property_keys=("color_cycle",),
+        ),
         SectionSpec(
             "limits",
-            "Limits and scale",
+            "Limits and autoscale",
             _axes_limits,
+            property_keys=AxesLimitsSection.PROPERTY_KEYS,
+            proxy_keys=AxesLimitsSection.PROXY_KEYS,
         ),
         SectionSpec(
             "appearance",
@@ -729,6 +946,32 @@ AXES_PROFILE = EditorProfile(
                 "aspect",
                 "facecolor",
                 "visible",
+                "xmargin",
+                "ymargin",
+                "adjustable",
+                "anchor",
+                "box_aspect",
+                "axisbelow",
+                "frameon",
+                "zorder",
+            ),
+            property_keys=(
+                "aspect", "facecolor", "visible", "xmargin", "ymargin",
+                "adjustable", "anchor", "box_aspect", "axisbelow",
+                "frameon", "zorder",
+            ),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _properties(
+                "rasterization_zorder", "alpha", "label", "clip_on", "gid",
+                "in_layout", "rasterized", "sketch_params", "snap", "url",
+            ),
+            collapsed=True,
+            property_keys=(
+                "rasterization_zorder", "alpha", "label", "clip_on", "gid",
+                "in_layout", "rasterized", "sketch_params", "snap", "url",
             ),
         ),
     ),
@@ -744,60 +987,33 @@ AXES_PROFILE = EditorProfile(
 )
 
 
-PROPERTY_PROFILE_KEYS = {
-    ComponentKind.FIGURE: (
-        "name",
-        "style",
-        "size_inches",
-        "dpi",
-        "facecolor",
-        "edgecolor",
-        "frameon",
-        "constrained_layout",
-    ),
-    ComponentKind.AXIS: (
-        "visible",
-        "scale",
-        "ticks_position",
-        "label_position",
-        "inverted",
-    ),
-    ComponentKind.SPINE: (
-        "visible",
-        "color",
-        "linewidth",
-        "linestyle",
-        "position",
-        "bounds",
-        "alpha",
-    ),
-    ComponentKind.TICK_GROUP: (
-        "visible",
-        "direction",
-        "length",
-        "width",
-        "color",
-        "pad",
-    ),
-    ComponentKind.TICK_LABEL_GROUP: (
-        "visible",
-        "color",
-        "fontsize",
-        "rotation",
-        "fontfamily",
-        "pad",
-    ),
-    ComponentKind.GRID: (
-        "visible",
-        "color",
-        "linestyle",
-        "linewidth",
-        "alpha",
-    ),
-}
+PROPERTY_PROFILE_KINDS = frozenset(
+    {
+        ComponentKind.FIGURE,
+        ComponentKind.AXIS,
+        ComponentKind.SPINE,
+        ComponentKind.TICK_GROUP,
+        ComponentKind.TICK_LABEL_GROUP,
+        ComponentKind.GRID,
+    }
+)
 
 
-def _property_profile(kind: ComponentKind) -> EditorProfile:
+def _controller_property_keys(
+    kind: ComponentKind,
+    role: ComponentRole,
+    *,
+    advanced: bool,
+) -> tuple[str, ...]:
+    controller_type = CONTROLLER_TYPES[(kind, role)]
+    return tuple(
+        spec.key
+        for spec in controller_type.PROPERTY_SPECS
+        if spec.persistent and bool(spec.advanced) is advanced
+    )
+
+
+def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile:
     title = kind.value.replace("_", " ").title()
     presentations = {
         ComponentKind.FIGURE: TreePresentationSpec(
@@ -836,21 +1052,40 @@ def _property_profile(kind: ComponentKind) -> EditorProfile:
         if kind is ComponentKind.FIGURE
         else EditorPlacement.SEMANTIC
     )
-    factory = (
-        _axis_properties
+    core_keys = _controller_property_keys(kind, role, advanced=False)
+    advanced_keys = _controller_property_keys(kind, role, advanced=True)
+    core_factory = (
+        _axis_properties_for(core_keys)
         if kind is ComponentKind.AXIS
-        else _properties(*PROPERTY_PROFILE_KEYS[kind])
+        else _properties(*core_keys)
     )
-    return EditorProfile(
-        f"{kind.value}:properties",
-        title,
-        (
+    advanced_factory = (
+        _axis_properties_for(advanced_keys)
+        if kind is ComponentKind.AXIS
+        else _properties(*advanced_keys)
+    )
+    sections = [
+        SectionSpec(
+            "properties",
+            "Properties",
+            core_factory,
+            property_keys=core_keys,
+        )
+    ]
+    if advanced_keys:
+        sections.append(
             SectionSpec(
-                "properties",
-                "Properties",
-                factory,
-            ),
-        ),
+                "advanced",
+                "Advanced",
+                advanced_factory,
+                collapsed=True,
+                property_keys=advanced_keys,
+            )
+        )
+    return EditorProfile(
+        f"{kind.value}:{role.value}:properties",
+        title,
+        tuple(sections),
         placement=placement,
         tree=(
             presentations[kind]
@@ -870,8 +1105,9 @@ def _property_profile(kind: ComponentKind) -> EditorProfile:
 
 
 PROPERTY_PROFILES = {
-    kind: _property_profile(kind)
-    for kind in PROPERTY_PROFILE_KEYS
+    (kind, role): _property_profile(kind, role)
+    for kind in PROPERTY_PROFILE_KINDS
+    for role in ROLES_BY_KIND[kind]
 }
 
 
@@ -924,7 +1160,6 @@ def register_production_profiles(editor_registry) -> None:
         IN_AXES_IMAGE_PROFILE,
         role=ComponentRole.IN_AXES_IMAGE,
     )
-    for kind, profile in PROPERTY_PROFILES.items():
-        for role in ROLES_BY_KIND[kind]:
-            editor_registry.register_profile(kind, profile, role=role)
+    for (kind, role), profile in PROPERTY_PROFILES.items():
+        editor_registry.register_profile(kind, profile, role=role)
     editor_registry.validate_production_profiles()

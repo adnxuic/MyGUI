@@ -234,7 +234,7 @@ class AxesLayoutSpec:
         return str(self.layout_id or uuid4())
 
     def layout_definition(self, layout_id: str | None = None) -> dict[str, Any]:
-        """Return the schema-v9 Figure-level geometry record."""
+        """Return the schema-v10 Figure-level geometry record."""
 
         return {
             "id": str(layout_id or self.resolved_layout_id()),
@@ -307,7 +307,7 @@ def subplot_record(
     share_x_group: str | None = None,
     share_y_group: str | None = None,
 ) -> dict[str, Any]:
-    """Build one canonical schema-v9 Axes layout record."""
+    """Build one canonical schema-v10 Axes layout record."""
 
     return {
         "layout_id": str(layout_id),
