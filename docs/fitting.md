@@ -23,6 +23,8 @@ This document describes the fitting feature and its user-facing parameters.
 
 The fit options dialog is non-modal. If the dialog is closed before a background fit returns, the result is ignored.
 
+The Fit creation dialog collects X Data, Y Data, the X/Y preprocessing expressions, and the initial Color. The new curve starts with the label `fitting` and shows no result until an engine runs. The Fit Curve Inspector sections are summarized in [Chart Component Parameters](chart-component-parameters.md).
+
 ## Data Parameters
 
 | Parameter | Required | Description |
@@ -121,6 +123,8 @@ SciPy does not call MATLAB code.
 ## MATLAB Engine
 
 MATLAB fitting depends on local MATLAB Runtime or MATLAB plus generated MATLAB Compiler Python packages.
+
+The right activity rail opens the MATLAB panel. Its `Connect Matlab` button runs the connection check in the background and then shows the connected description on success or one red error on failure; the State Bar indicator reflects the enabled state.
 
 The `Matlab` button is enabled only after the global MATLAB connection check succeeds.
 

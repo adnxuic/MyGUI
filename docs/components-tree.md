@@ -5,6 +5,13 @@ It shares the left Explorer area with the project Table. Select
 `Components` on the activity rail to open it; select `Table` to switch pages,
 or click the active page button again to collapse the Explorer.
 
+## Using the tree
+
+- Click a Component node to select it and open its exact Inspector; the active Axes follows the Registry ancestry of the selection.
+- Type in the search box to filter by label, kind, or role. Clearing the search restores the previous expansion state. A search that hides the selected Component keeps the Canvas and Inspector selection and clears only the tree highlight.
+- Right-click a removable Component to Delete it or choose Batch Delete Same Type...; Figure and fixed semantic Components have no delete action.
+- After deletion, selection falls back to the next surviving same-cohort Component, the previous survivor, the parent, the nearest surviving ancestor, or the Figure root.
+
 ## Tree projection
 
 `ComponentTreeModel` projects the active Canvas `ComponentRegistry`.

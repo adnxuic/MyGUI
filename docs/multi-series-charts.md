@@ -1,4 +1,4 @@
-# Multi-series chart creation
+# Multi-Series Chart Creation
 
 Plot, Scatter, and Interpolation creation dialogs can create several editable
 chart components in one operation. Select one shared X column and check one or
@@ -11,7 +11,8 @@ Component ID, Controller, Components-tree entry, and Inspector.
 - **Y Data**: a compact multi-select dropdown containing Number columns from
   the current project. Check one or more entries; selected columns are
   processed in their displayed Sheet/column order. Create is disabled while
-  none are checked.
+  none are checked. Inside the open dropdown, Space, Enter, or Return toggles
+  the highlighted column without closing the list.
 - **X fx**: one safe preprocessing expression copied to every created
   component as its X expression.
 - **Y fx**: one safe preprocessing expression evaluated separately for every
@@ -29,7 +30,11 @@ structure and metadata updates retain still-valid selections by stable
 - **Plot**: line style, line width, and marker size are shared by all new Plot
   components. Missing or invalid row pairs remain gaps.
 - **Scatter**: marker and size are shared by all new Scatter components.
-  Missing or invalid row pairs are filtered independently per Y column.
+  Missing or invalid row pairs are filtered independently per Y column. An
+  optional color column with a colormap and normalization mapping, and an
+  optional size column with an input/output size range mapping, can be
+  enabled per batch; while the color mapping is checked, the batch color
+  picker is disabled.
 - **Interpolation**: method, Samples, spline order, and smoothing-lambda
   options are shared. Each selected source pair is validated and interpolated
   independently before any component is published.
@@ -58,3 +63,6 @@ shows one red result naming the failing Y series.
 Each component persists through the existing schema-v10 component tree with
 its own `x_ref`, `y_ref`, and `preprocess` data. Dropdown checks and other
 creation-dialog state are not written to project files.
+
+Every Inspector control of the created components is documented in
+[Chart Component Parameters](chart-component-parameters.md).

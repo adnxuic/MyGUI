@@ -1,4 +1,4 @@
-# MyGUI Project Files
+# Project Files
 
 MyGUI project files use strict JSON schema version 10. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. The loader accepts only the exact integer version `10`; schema v4-v9 and unknown versions are intentionally unsupported and are not migrated in-process.
 
@@ -35,7 +35,7 @@ Window geometry, splitter sizes, table visibility, command selection, and option
 - `row_count`: logical row count.
 - `columns`: ordered typed columns.
 
-Each column stores `id`, `name`, `type`, `width`, and `values`. Missing cells are JSON `null`; number, text, Boolean, and ISO 8601 date/time values retain their types. See `table-driven-chart-refresh.md` for the table and reference model.
+Each column stores `id`, `name`, `type`, `width`, and `values`. Missing cells are JSON `null`; number, text, Boolean, and ISO 8601 date/time values retain their types. See [Table Data](table-data.md) for the table and reference model.
 
 ## Component record
 
@@ -110,7 +110,7 @@ Tick, Tick Label, Grid, and Legend targets may be recreated by Matplotlib. Their
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See `matplotlib-component-properties-v10.md` for the complete property matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v10)](component-properties-v10.md) for the complete property matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -197,7 +197,7 @@ Project writes use a temporary file followed by atomic replacement. If the opera
 The file byte count, decoded JSON depth/value count, and Figure component count
 are checked before project state is materialized. Embedded images have encoded
 byte, dimension, and decoded-pixel budgets. Defaults and supported environment
-overrides are listed in `resource-and-process-limits.md`.
+overrides are listed in [Resource and Process Limits](resource-limits.md).
 
 `project_snapshot(figure_window, canvas=...)` and
 `save_project_snapshot(path, figure_window, canvas=...)` accept an explicit
@@ -211,3 +211,9 @@ Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
 schema-v10 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
+
+## Figure and data export
+
+- 导出当前图片... (File menu) saves the current Figure canvas as a PNG, PDF, or SVG image. The canvas toolbar Save button opens the same image save dialog.
+- 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
+- PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

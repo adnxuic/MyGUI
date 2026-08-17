@@ -44,3 +44,8 @@ The operation updates widgets, artists, the Axes color-cycle state, and project 
 ## Keyboard and accessibility
 
 Color and palette views use standard Qt arrow-key navigation, Enter/double-click activation, focus outlines, tooltips, and accessible names. The picker is a bounded, resizable dialog with scrollable model/delegate views; chart inspectors do not pre-create color actions.
+
+## Matplotlib reference
+
+- [Named colors](https://matplotlib.org/3.9.0/users/explain/colors/colors.html): the Matplotlib color names accepted by the picker.
+- [Colormaps](https://matplotlib.org/3.9.0/users/explain/colors/colormaps.html): the built-in colormaps used by Scatter mappings and palettes.

@@ -55,12 +55,24 @@ E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe main.py
 
 See [docs/smoke-test.md](docs/smoke-test.md) for the manual smoke-test checklist.
 
+## Documentation
+
+The usage documentation site is built with MkDocs Material from the Markdown files in `docs/` and published to GitHub Pages at <https://adnxuic.github.io/MyGUI/>.
+
+Preview and build it locally with the project interpreter after installing the maintenance dependencies:
+
+```powershell
+pip install -r requirements-dev.txt
+python -m mkdocs serve          # local preview with live reload
+python -m mkdocs build --strict # build site/, fails on broken links or warnings
+```
+
 ## Runtime architecture
 
 - Table data: each main window owns a pandas-backed `TableRepository`; charts use stable UUID column references.
 - Expression evaluation: curve and fitting expressions use the restricted safe-expression evaluator.
-- Project files: only strict schema v9 files are accepted; one file contains a typed table document and its Figure component tree.
-- Untrusted input: projects, images, Text/Excel imports, expressions, and external-process I/O have centralized budgets documented in [docs/resource-and-process-limits.md](docs/resource-and-process-limits.md).
+- Project files: only strict schema v10 files are accepted; one file contains a typed table document and its Figure component tree.
+- Untrusted input: projects, images, Text/Excel imports, expressions, and external-process I/O have centralized budgets documented in [docs/resource-limits.md](docs/resource-limits.md).
 - Optional integrations: MATLAB and TeX depend on local installations and should not be treated as required for baseline GUI maintenance.
 
 ## Maintenance Notes

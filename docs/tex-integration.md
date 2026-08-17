@@ -1,4 +1,4 @@
-# TeX rendering integration
+# TeX Rendering Integration
 
 MyGUI uses Matplotlib's `text.usetex` support for individual Figure `Text`
 components. TeX is an optional local integration: the base GUI and ordinary
@@ -36,8 +36,12 @@ and redraw are one logical operation.
 Availability checks and render probes run in bounded subprocesses. Failures,
 timeouts, missing executables, and invalid preambles are reported without
 blocking normal GUI startup. Diagnostic logs use the application user-log
-directory described in `resource-and-process-limits.md`.
+directory described in `resource-limits.md`.
 
 Image export performs a real Matplotlib redraw and can still reject Text whose
 content uses commands or Unicode characters unsupported by the active local
 TeX installation.
+
+## Matplotlib reference
+
+- [Text rendering with LaTeX](https://matplotlib.org/3.9.0/users/explain/text/usetex.html): the text.usetex mechanism behind this integration.

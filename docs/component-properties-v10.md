@@ -1,4 +1,4 @@
-# Matplotlib 3.9 component properties (schema v10)
+# Component Properties (schema v10)
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
@@ -203,3 +203,7 @@ v4-v9, booleans/floats/strings that resemble `10`, and unknown versions are
 rejected; this release intentionally provides no in-process v9 migration.
 Inspector profiles, section expansion, tree session keys, QWidget state, and
 callbacks are never serialized.
+
+## Matplotlib reference
+
+- [Artist API](https://matplotlib.org/3.9.0/api/artist_api.html): the public setter surface the exposure contract classifies.

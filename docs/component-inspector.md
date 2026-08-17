@@ -1,6 +1,13 @@
-# Unified Component Inspector
+# Component Inspector Architecture
 
 `ComponentInspector` is the production editing shell for Matplotlib components. It composes an ordered `EditorProfile` from reusable `EditorSection` widgets and sends every mutation to the existing Controller or domain service. `ComponentState` and `ComponentRegistry` remain the only runtime state model; section expansion, widgets, and profiles are UI-only and are not saved in project files.
+
+## Using the Inspector
+
+- Selecting a Component in the Components tree opens exactly one Inspector bound to that Component's Controller.
+- Each profile orders its reusable sections: shared sections such as Data source and Appearance, plus role-specific sections such as Definition and range, Color and size mapping, Fit operations, and Interpolation parameters. The per-parameter meanings are in [Chart Component Parameters](chart-component-parameters.md) and [Axes and Figure Component Parameters](axes-component-parameters.md).
+- Edits apply immediately through the Controller or domain service; a rejected edit restores the previous value and reports one Message Bar result.
+- Dynamic Inspectors are created on first selection and cached by Component; the Figure root Inspector is prepared during Figure setup.
 
 ## Core types
 
@@ -72,36 +79,18 @@ Legend, Scatter, and Inset numeric controls use the same behavior.
 
 ## Line profiles
 
-Function Curve, Data Plot, Fit Curve, Interpolation, and Generic Line use the same `LineAppearanceSection`.
-
-| Group | Parameters |
-| --- | --- |
-| Basic | `label`, `visible`, `color`, `linestyle`, `linewidth` |
-| Marker | `marker`, `markersize`, `markerfacecolor`, `markeredgecolor`, `markeredgewidth` |
-| Advanced | `alpha`, `zorder` |
-
-The field order is identical for every Line role. Appearance properties call the Line Controller. Role-specific sections use their domain services:
+Function Curve, Data Plot, Fit Curve, Interpolation, and Generic Line use the same `LineAppearanceSection`; its complete Basic, Marker, and Advanced parameter list is documented in [Chart Component Parameters](chart-component-parameters.md). The field order is identical for every Line role. Appearance properties call the Line Controller. Role-specific sections use their domain services:
 
 - Function Curve: definition and display range through `FunctionCurveService`.
 - Data Plot: `DataReferenceSection` through `ChartDataService`; source changes redraw automatically.
 - Fit Curve: data source, fit operations, fit result, and display range through `FitService`; source changes keep manual refitting semantics.
 - Interpolation: data source and `InterpolationOptionsInput` through `InterpolationService`; source or option changes recompute automatically.
 
-Scatter uses `ScatterAppearanceSection` with `label`, `visible`, `color`, `edgecolor`, `marker`, `size`, `linewidth`, `alpha`, and `zorder`.
+Scatter uses `ScatterAppearanceSection` and the color/size mapping section; their parameters are documented in [Chart Component Parameters](chart-component-parameters.md).
 
 ## Text and Legend profiles
 
-Title, X Label, Y Label, and free Text share the following ordered sections:
-
-| Section | Parameters |
-| --- | --- |
-| Content | `text` |
-| Typography | `color`, `fontsize`, `fontfamily`, `fontweight`, `fontstyle`, `alpha` |
-| Rotation and alignment | `rotation`, horizontal alignment, vertical alignment |
-| Position and visibility | `position`, `visible` |
-| Rendering | per-text `usetex` |
-
-All render-sensitive Text properties use `TextRenderService`. `apply_many()` accepts multiple `(controller, property_patch)` pairs, applies them in one Registry transaction, performs one render verification per Figure, and rolls back every target if validation or rendering fails. Free Text may be deleted; semantic Title and Axis Label Controllers are hidden with `visible` and are not removed.
+Title, X Label, Y Label, and free Text share the ordered Content, Typography, Rotation and alignment, Position and visibility, and Rendering sections documented in [Text Element](text-element.md). All render-sensitive Text properties use `TextRenderService`. `apply_many()` accepts multiple `(controller, property_patch)` pairs, applies them in one Registry transaction, performs one render verification per Figure, and rolls back every target if validation or rendering fails. Free Text may be deleted; semantic Title and Axis Label Controllers are hidden with `visible` and are not removed.
 
 Legend remains a `LegendController`. It reuses the content editor for `title` and the typography editor for `fontsize`, then adds `location`, `ncols`, `visible`, `frameon`, `facecolor`, `edgecolor`, `framealpha`, and twin `entry_scope`. Preset and two-coordinate custom locations are supported. Editing an absent Legend first asks `AxesCommandService` to create its runtime artist.
 

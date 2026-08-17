@@ -1,4 +1,4 @@
-# Excel Drag-and-Drop Import
+# Excel Import
 
 Drag one Excel workbook onto the MyGUI main window to open the existing import preview. The drag workflow and **File → Open Excel** use the same importer, transaction handling, type inference, and validation. Non-Excel files are routed to the content-based text data importer.
 

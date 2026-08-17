@@ -1,4 +1,4 @@
-# Table Data System v4
+# Table Data
 
 MyGUI stores each project table in a `ProjectTableDocument`. A `TableRepository` owned by the main window is the only runtime data source for the Table UI, chart dialogs, plot modifiers, project IO, and Excel import.
 
@@ -39,12 +39,21 @@ Each project owns a 50-command undo stack. Cell edits, clear, paste, row sorting
 
 TSV copy/paste accepts LF, CRLF, and CR line endings. Paste validates all locked column types before changing the document and automatically adds required rows or columns.
 
+## Table UI actions
+
+The Table toolbar provides Undo, Redo, Rename Sheet, Delete Sheet, Add Row, Delete Row, Move Row Up, Move Row Down, Add Column, and Delete Column for the active Sheet.
+
+- The column-header right-click menu offers Rename Column, Change Type, Add Column Right, Delete Column, Move Left, Move Right, Sort Rows Ascending, and Sort Rows Descending.
+- The row-header right-click menu offers Insert Row Above, Delete Row, Move Up, and Move Down.
+- Cell editing, selection copying and pasting, and the clearing key are listed in [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md).
+
 Deleting a referenced column, or converting it to a non-chart type, displays the dependent Plot, Scatter, Interpolation, and Fit objects. Confirmation removes the column and dependents as one command; Undo restores all of them with the same UUIDs.
 
 ## Sheet management
 
 - Right-click a Sheet tab to choose **Rename Sheet** or **Delete Sheet**.
 - Double-click a Sheet tab to rename it.
+- Click the + tab to create a new Sheet with an automatically unique default name.
 - The Table toolbar also provides **Rename Sheet** and **−Sheet** actions for the active Sheet.
 - Sheet names must be non-empty and case-insensitively unique within the project.
 - A project must retain at least one Sheet.

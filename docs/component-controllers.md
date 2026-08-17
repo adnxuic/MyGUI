@@ -119,7 +119,7 @@ Matplotlib receives one Axes-change notification only after commit.
 | `ScatterController` | Scatter | uniform face/edge styling, marker/line/hatch, tagged color/size mapping and norm, non-finite policy, layering and safe export fields |
 
 The exact schema-v10 key matrix and tagged-value formats are maintained in
-[`matplotlib-component-properties-v10.md`](matplotlib-component-properties-v10.md).
+[`component-properties-v10.md`](component-properties-v10.md).
 Axes do not persist scales, Axis does not persist inversion or side visibility,
 and Tick groups do not persist label padding; those single-owner boundaries are
 part of the project format.

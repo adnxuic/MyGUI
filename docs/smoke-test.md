@@ -131,6 +131,14 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
     aborts exit without closing a project, while an earlier successful save
     remains clean.
 
+## Keyboard Shortcuts
+
+1. In the table, select several cells, press Ctrl+C, move the selection, and press Ctrl+V. Confirm the pasted TSV block lands as one undo command, then press Delete and confirm the cleared cells become missing values.
+2. Focus a project canvas and press p; drag with the left button to pan and the right button to zoom. Press o and drag a rectangle to zoom. Press h to reset the view, and press s to open the image save dialog.
+3. Open the Plot creation dialog, open the Y dropdown, move the highlight with the arrow keys, and press Space. Confirm the highlighted column toggles without closing the dropdown, and the Create button count follows.
+
+See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the complete lists.
+
 ## In-Axes Elements
 
 1. With no project and then with a project but no selected Axes, click

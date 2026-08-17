@@ -1,4 +1,4 @@
-# Matplotlib Style Creation Defaults
+# Style Creation Defaults
 
 New chart and free-Text components derive their initial appearance from the
 current Figure `style`. The defaults are resolved when the creation dialog is
@@ -22,6 +22,30 @@ and inset-indicator artists
 inside a short `matplotlib.style.context`. Reading the resulting artists
 preserves Matplotlib-specific behavior such as Classic scatter size. The
 context is closed before Qt displays the dialog.
+
+## Available styles
+
+The Style gallery offers these Matplotlib styles:
+
+`default`, `classic`, `seaborn-v0_8`, `ggplot`, `grayscale`,
+`dark_background`, `tableau-colorblind10`, `Solarize_Light2`,
+`_classic_test_patch`, `_mpl-gallery`, `_mpl-gallery-nogrid`, `bmh`, `fast`,
+`fivethirtyeight`, `seaborn-v0_8-bright`, `seaborn-v0_8-colorblind`,
+`seaborn-v0_8-dark`, `seaborn-v0_8-dark-palette`, `seaborn-v0_8-darkgrid`,
+`seaborn-v0_8-deep`, `seaborn-v0_8-muted`, `seaborn-v0_8-notebook`,
+`seaborn-v0_8-paper`, `seaborn-v0_8-pastel`, `seaborn-v0_8-poster`,
+`seaborn-v0_8-talk`, `seaborn-v0_8-ticks`, `seaborn-v0_8-white`,
+`seaborn-v0_8-whitegrid`.
+
+## Project creation
+
+Selecting a style in the gallery opens the Style dialog, which creates a new project (Figure tab, table project with a Sheet1 sheet, and its own Figure Inspector):
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| Width / Height | The Figure size in inches. | 6.4 by 4.8 |
+| DPI | The document resolution used for exports. | 100 |
+| Figure name | The project name; non-empty and unique among open projects. | The style name |
 
 ## Chart color sequence
 
@@ -52,3 +76,9 @@ palette. A Figure style change alone does not recolor existing components.
 These values use the existing schema-v10 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
+
+## Matplotlib reference
+
+- [Style sheets reference](https://matplotlib.org/3.9.0/gallery/style_sheets/style_sheets_reference.html): the available styles.
+- [Customizing Matplotlib](https://matplotlib.org/3.9.0/users/explain/customizing.html): the rcParams each style sets.
+- [Color cycles](https://matplotlib.org/3.9.0/users/explain/artists/color_cycle.html): the axes.prop_cycle defaults behind chart colors.
