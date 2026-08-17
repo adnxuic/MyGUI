@@ -27,4 +27,4 @@ python -m mkdocs build --strict # build site/; fails on broken links or warnings
 
 ## Publishing
 
-`.github/workflows/docs.yml` builds the site with `--strict` on every pull request and, on pushes to `master`, deploys it to GitHub Pages through `actions/deploy-pages`. Repository Settings → Pages must use the GitHub Actions source.
+`.github/workflows/docs.yml` builds the site with `--strict` on every pull request and, on pushes to `master` or a manual `workflow_dispatch` run, deploys it to GitHub Pages through `actions/deploy-pages`. Repository Settings → Pages must use the GitHub Actions source.
