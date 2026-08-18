@@ -12,7 +12,7 @@ throughout the application.
 
 | Parameter | Range | Description |
 | --- | --- | --- |
-| HEX | Matplotlib color name, `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA` | The selected color. Saved values are normalized to uppercase `#RRGGBB` or `#RRGGBBAA`. |
+| HEX | Matplotlib color name, `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA` | The selected color. Saved values are normalized to uppercase `#RRGGBB` or `#RRGGBBAA`. See the [color formats explainer](https://matplotlib.org/3.9.0/users/explain/colors/colors.html). |
 | R, G, B | `0`–`255` | Red, green, and blue channels. |
 | Opacity | `0`–`100%` | Alpha channel; transparent colors are shown over a checkerboard. |
 | Recent colors | Up to `20` | Colors recorded after a successful creation or application, newest first and without duplicates. |

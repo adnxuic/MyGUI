@@ -30,13 +30,13 @@ The Text action on the Element command bar adds a free Text component. A Text ca
 
 | Parameter | Control | Meaning | Default |
 | --- | --- | --- | --- |
-| Font family (fontfamily) | Font dropdown | The font used to render the text. | sans-serif |
+| Font family (fontfamily) | Font dropdown | The font used to render the text. See the [fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | sans-serif |
 | Font size (fontsize) | Spin box | Font size in points. | 10.0 |
 | Font weight (fontweight) | Named/number editor | Stroke thickness: normal, bold, or a numeric weight. | normal |
 | Font style (fontstyle) | Dropdown | normal, italic, or oblique. | normal |
 | Font stretch (fontstretch) | Named/number editor | Horizontal condensation or expansion of the glyphs. | normal |
 | Font variant (fontvariant) | Dropdown | normal or small-caps. | normal |
-| Math font family (math_fontfamily) | Text | Font used for math expressions when math parsing is enabled. | dejavusans |
+| Math font family (math_fontfamily) | Text | Font used for math expressions when math parsing is enabled. See the [mathtext explainer](https://matplotlib.org/3.9.0/users/explain/text/mathtext.html). | dejavusans |
 | Parse math (parse_math) | Checkbox | Renders $...$ math with Matplotlib's mathtext engine. | On |
 | Color (color) | Color picker | The text color. | #000000 (style default at creation) |
 | Alpha (alpha) | Spin box | Opacity from 0 to 1, or None to inherit. | None |
@@ -46,7 +46,7 @@ The Text action on the Element command bar adds a free Text component. A Text ca
 | Parameter | Meaning | Default |
 | --- | --- | --- |
 | Rotation (rotation) | Text angle in degrees, or the words horizontal and vertical. | 0.0 |
-| Rotation mode (rotation_mode) | How rotation anchors the text: default or anchor. | default |
+| Rotation mode (rotation_mode) | How rotation anchors the text: default or anchor. See [Text.set_rotation_mode](https://matplotlib.org/3.9.0/api/text_api.html#matplotlib.text.Text.set_rotation_mode). | default |
 | Horizontal alignment (horizontalalignment) | left, center, or right relative to the anchor position. | left |
 | Vertical alignment (verticalalignment) | top, center, bottom, baseline, or center_baseline. | baseline |
 | Multi-line alignment (multialignment) | Alignment of the lines inside a multi-line text block: None, left, center, or right. | None |
@@ -73,15 +73,15 @@ The Text action on the Element command bar adds a free Text component. A Text ca
 
 | Parameter | Meaning | Default |
 | --- | --- | --- |
-| Text box (bbox) | Draws a box behind the text when enabled: boxstyle (round, square, circle, and others), facecolor, edgecolor, linewidth, line pattern, alpha, fill, hatch, and pad. | Disabled |
+| Text box (bbox) | Draws a box behind the text when enabled: boxstyle (round, square, circle, and others), facecolor, edgecolor, linewidth, line pattern, alpha, fill, hatch, and pad. See [FancyBboxPatch](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.patches.FancyBboxPatch.html) for boxstyle values. | Disabled |
 | Antialiased (antialiased) | Renders smooth glyph edges. | On |
 | Label (label) | The artist label used for lookups; not a visible legend entry. | Empty |
 | Clip on (clip_on) | Clips the text to the Axes boundaries. | On |
 | GID (gid) | SVG group id for exports. | None |
 | In layout (in_layout) | Includes the text in tight-layout calculations. | On |
 | Rasterized (rasterized) | Renders the text as a bitmap in vector exports. | Off |
-| Sketch params (sketch_params) | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. | None |
-| Snap (snap) | Aligns the text to the pixel grid: auto (None), on, or off. | None |
+| Sketch params (sketch_params) | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. See [Artist sketch params](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_sketch_params). | None |
+| Snap (snap) | Aligns the text to the pixel grid: auto (None), on, or off. See [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap). | None |
 | URL (url) | Hyperlink attached to the text in SVG exports. | None |
 
 See [Chart Component Parameters](chart-component-parameters.md) for the shared export parameters and the generic Line/Scatter appearance sections.
@@ -91,3 +91,6 @@ See [Chart Component Parameters](chart-component-parameters.md) for the shared e
 - [Text](https://matplotlib.org/3.9.0/api/text_api.html#matplotlib.text.Text): the Text parameters.
 - [Text introduction](https://matplotlib.org/3.9.0/users/explain/text/text_intro.html): positioning and alignment.
 - [Mathtext](https://matplotlib.org/3.9.0/users/explain/text/mathtext.html): math rendering behind Parse math and Math font family.
+- [Fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html): the font family choices.
+- [FancyBboxPatch](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.patches.FancyBboxPatch.html): the text-box boxstyle values.
+- [Text.set_rotation_mode](https://matplotlib.org/3.9.0/api/text_api.html#matplotlib.text.Text.set_rotation_mode): the default/anchor rotation modes.

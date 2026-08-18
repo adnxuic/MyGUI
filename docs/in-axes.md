@@ -47,7 +47,7 @@ Select an inset in the Components tree to edit it. The Inspector exposes the com
 | Region alpha (region_alpha) | The zoom rectangle opacity from 0 to 1. | 0.5 |
 | Region face color (region_facecolor) | The zoom rectangle fill color. | Transparent |
 | Region fill (region_fill) | Fills the zoom rectangle with the face color. | Off |
-| Region hatch (region_hatch) | The zoom rectangle fill pattern, or none. | None |
+| Region hatch (region_hatch) | The zoom rectangle fill pattern, or none. See the [hatch style reference](https://matplotlib.org/3.9.0/gallery/shapes_and_collections/hatch_style_reference.html). | None |
 | Region z-order (region_zorder) | Stacking order of the zoom rectangle. | 4.99 |
 | Connectors (connectors) | The four connection lines between the parent rectangle and the inset corners. Each connector stores visible, color, line pattern, linewidth, alpha, and zorder. | Four visible gray connectors |
 
@@ -58,22 +58,22 @@ Select an inset in the Components tree to edit it. The Inspector exposes the com
 | Filename / MIME / payload (filename, mime_type, payload_base64) | The embedded image source. The Image section validates and replaces the embedded bytes in place. | The created payload |
 | Opacity (opacity) | The image opacity from 0 to 1. | 1.0 |
 | Fit mode (fit_mode) | contain preserves the image aspect ratio; stretch fills the child Axes. | contain |
-| Interpolation (interpolation) | The resampling used when displaying the image: antialiased, nearest, bilinear, bicubic, spline16, spline36, hanning, hamming, hermite, kaiser, quadric, catrom, gaussian, bessel, mitchell, sinc, lanczos, blackman, or none. | antialiased |
-| Origin (origin) | Which image corner sits at the lower-left of the Axes: upper or lower. | upper |
+| Interpolation (interpolation) | The resampling used when displaying the image: antialiased, nearest, bilinear, bicubic, spline16, spline36, hanning, hamming, hermite, kaiser, quadric, catrom, gaussian, bessel, mitchell, sinc, lanczos, blackman, or none. See the [interpolation comparison](https://matplotlib.org/3.9.0/gallery/images_contours_and_fields/interpolation_methods.html). | antialiased |
+| Origin (origin) | Which image corner sits at the lower-left of the Axes: upper or lower. See [Axes.imshow](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.imshow.html). | upper |
 | Extent (extent) | The data-coordinate rectangle [left, right, bottom, top] the image is drawn into; None uses the Axes view limits. | None |
 | Resample (resample) | Applies the interpolation when the image is resized by the Axes. | On |
 | Filter norm (filternorm) | Normalizes the interpolation kernel so it integrates to one. | On |
 | Filter radius (filterrad) | The interpolation kernel radius in pixels. | 4.0 |
-| Interpolation stage (interpolation_stage) | The processing stage where interpolation runs: data (before color mapping) or rgba (after). | data |
+| Interpolation stage (interpolation_stage) | The processing stage where interpolation runs: data (before color mapping) or rgba (after). See [Axes.imshow](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.imshow.html). | data |
 | Image visible (image_visible) | Shows or hides the image artist. | On |
 | Image z-order (image_zorder) | Stacking order of the image artist. | 0.0 |
 | Image clip on (image_clip_on) | Clips the image to the child-Axes boundaries. | On |
 | Image rasterized (image_rasterized) | Renders the image as a bitmap in vector exports. | Off |
 | Image in layout (image_in_layout) | Includes the image in tight-layout calculations. | On |
-| Image snap (image_snap) | Pixel-grid alignment for the image: auto (None), on, or off. | None |
+| Image snap (image_snap) | Pixel-grid alignment for the image: auto (None), on, or off. See [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap). | None |
 | Image GID (image_gid) | SVG group id for exports. | None |
 | Image label (image_label) | The artist label used for lookups. | Empty |
-| Image sketch params (image_sketch_params) | (scale, length, randomness) hand-drawn effect, or None to disable. | None |
+| Image sketch params (image_sketch_params) | (scale, length, randomness) hand-drawn effect, or None to disable. See [Artist sketch params](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_sketch_params). | None |
 | Image URL (image_url) | Hyperlink attached to the image in SVG exports. | None |
 
 ## Persistence and deletion
@@ -88,3 +88,4 @@ Both roles are removable. A single or same-role batch deletion uses the normal C
 - [Axes.imshow](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.imshow.html): the Image inset display parameters.
 - [Interpolation comparison](https://matplotlib.org/3.9.0/gallery/images_contours_and_fields/interpolation_methods.html): the supported image interpolation values.
 - [Rectangle](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.patches.Rectangle.html) and [ConnectionPatch](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.patches.ConnectionPatch.html): the zoom region rectangle and its connectors.
+- [Hatch style reference](https://matplotlib.org/3.9.0/gallery/shapes_and_collections/hatch_style_reference.html): the zoom region fill pattern values.

@@ -12,8 +12,8 @@ Every component's Advanced group ends with the same export parameters:
 | GID (gid) | SVG group id used in exports. | None |
 | In layout (in_layout) | Includes the artist in tight-layout calculations. | On |
 | Rasterized (rasterized) | Renders the artist as a bitmap in vector exports. | Off |
-| Sketch params (sketch_params) | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. | None |
-| Snap (snap) | Pixel-grid alignment: auto (None), on, or off. | None |
+| Sketch params (sketch_params) | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. See [Artist sketch params](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_sketch_params). | None |
+| Snap (snap) | Pixel-grid alignment: auto (None), on, or off. See [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap). | None |
 | URL (url) | Hyperlink attached to the artist in SVG exports. | None |
 
 ## Figure
@@ -29,7 +29,7 @@ Every component's Advanced group ends with the same export parameters:
 | Frame on (frameon) | Checkbox | Draws the Figure background patch. | On |
 | Line width (linewidth) | Number | The Figure outline width. | 0.0 |
 | Alpha (alpha) | Number | The background opacity from 0 to 1, or None to inherit. | None |
-| Layout engine (layout_engine) | Structured dialog | The tagged Figure layout: none, tight (pad, w_pad, h_pad, rect), constrained, or compressed (w_pad, h_pad, wspace, hspace, rect). | none |
+| Layout engine (layout_engine) | Structured dialog | The tagged Figure layout: none, tight (pad, w_pad, h_pad, rect), constrained, or compressed (w_pad, h_pad, wspace, hspace, rect). See the [layout engine API](https://matplotlib.org/3.9.0/api/layout_engine_api.html). | none |
 | Label (label) | Text | The artist label used for lookups. | Empty |
 | Visible (visible) | Checkbox | Shows or hides the Figure. | On |
 | Z-order (zorder) | Number | Stacking order. | 0.0 |
@@ -57,7 +57,7 @@ Plus the shared export parameters above.
 | X margin (xmargin) | Number | The automatic X padding fraction added to each side of the data. | 0.05 |
 | Y margin (ymargin) | Number | The automatic Y padding fraction added to each side of the data. | 0.05 |
 | Adjustable (adjustable) | Dropdown | Which Axes dimension changes to satisfy the aspect: box or datalim. | box |
-| Anchor (anchor) | Anchor editor | How the Axes box is anchored when its size differs from the available space (C, SW, S, SE, E, NE, N, NW, W, and combinations). | C |
+| Anchor (anchor) | Anchor editor | How the Axes box is anchored when its size differs from the available space (C, SW, S, SE, E, NE, N, NW, W, and combinations). See [Axes.set_anchor](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_anchor.html). | C |
 | Box aspect (box_aspect) | Number | The fixed physical box aspect ratio, or None for automatic. | None |
 | Axis below (axisbelow) | Dropdown | Whether ticks and grid lines draw below or above the data: True (below), False (above), or line (grid below, ticks above). | line |
 | Frame on (frameon) | Checkbox | Draws the Axes frame (its four spines and background). | On |
@@ -87,9 +87,9 @@ The X Axis and Y Axis components expose the same controls; the Y Axis adds Offse
 | Parameter | Control | Meaning | Default |
 | --- | --- | --- | --- |
 | Visible (visible) | Checkbox | Shows or hides the axis, its ticks, and its tick labels. | On |
-| Scale (scale) | Structured dialog | The coordinate scale: linear, log (base, subs, nonpositive clip or mask), symlog (base, linthresh, linscale, subs), logit (nonpositive, one_half, use_overline), or asinh (linear_width, base, subs). | linear |
-| Major locator (major_locator) | Structured dialog | Where major ticks are placed: auto, auto_minor (n), max_n (nbins, steps, integer, symmetric, prune, min_n_ticks), multiple (base, offset), linear (numticks), fixed (locations, nbins), log (base, subs, numticks), symlog (transform, subs), asinh, logit (minor, nbins), or null. | auto |
-| Major formatter (major_formatter) | Structured dialog | How major tick labels are written: scalar (use_offset, use_math_text, use_locale, scientific, powerlimits), engineering, percent, str_method (format using only x and pos), fixed (labels), log, log_exponent, log_mathtext, log_sci, logit, or null. | scalar |
+| Scale (scale) | Structured dialog | The coordinate scale: linear, log (base, subs, nonpositive clip or mask), symlog (base, linthresh, linscale, subs), logit (nonpositive, one_half, use_overline), or asinh (linear_width, base, subs). See the [scales explainer](https://matplotlib.org/3.9.0/users/explain/axes/axes_scales.html). | linear |
+| Major locator (major_locator) | Structured dialog | Where major ticks are placed: auto, auto_minor (n), max_n (nbins, steps, integer, symmetric, prune, min_n_ticks), multiple (base, offset), linear (numticks), fixed (locations, nbins), log (base, subs, numticks), symlog (transform, subs), asinh, logit (minor, nbins), or null. See the [ticker API](https://matplotlib.org/3.9.0/api/ticker_api.html). | auto |
+| Major formatter (major_formatter) | Structured dialog | How major tick labels are written: scalar (use_offset, use_math_text, use_locale, scientific, powerlimits), engineering, percent, str_method (format using only x and pos), fixed (labels), log, log_exponent, log_mathtext, log_sci, logit, or null. See the [ticker API](https://matplotlib.org/3.9.0/api/ticker_api.html). | scalar |
 | Minor locator (minor_locator) | Structured dialog | Where minor ticks are placed; same kinds as the major locator. | null |
 | Minor formatter (minor_formatter) | Structured dialog | How minor tick labels are written; same kinds as the major formatter. | null |
 | Label position (label_position) | Dropdown | The side the tick labels occupy: bottom or top for X, left or right for Y. | bottom / left |
@@ -118,12 +118,12 @@ One Spine component exists per Axes side: Left, Right, Top, and Bottom Spine.
 | Visible (visible) | Checkbox | Shows or hides the spine. | On |
 | Color (color) | Color picker | The spine line color. | #000000 |
 | Line width (linewidth) | Number | The spine line width. | 0.8 |
-| Line style (linestyle) | Pattern editor | The spine line pattern (preset or custom). | solid |
-| Position (position) | Position editor | Where the spine sits: a pair such as outward 0.0, axes 1.0, or data <value>, or the fixed words center or zero. | outward 0.0 |
+| Line style (linestyle) | Pattern editor | The spine line pattern (preset or custom). See the [line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | solid |
+| Position (position) | Position editor | Where the spine sits: a pair such as outward 0.0, axes 1.0, or data <value>, or the fixed words center or zero. See [Spine.set_position](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.spines.Spine.html#matplotlib.spines.Spine.set_position). | outward 0.0 |
 | Bounds (bounds) | Range editor, optional | Restricts the spine to a (min, max) segment along the other axis; None draws the full side. | None |
 | Alpha (alpha) | Number | Opacity from 0 to 1, or None to inherit. | None |
-| Cap style (capstyle) | Dropdown | The line cap shape: butt, projecting, or round. | projecting |
-| Join style (joinstyle) | Dropdown | The line join shape: miter, round, or bevel. | miter |
+| Cap style (capstyle) | Dropdown | The line cap shape: butt, projecting, or round. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | projecting |
+| Join style (joinstyle) | Dropdown | The line join shape: miter, round, or bevel. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | miter |
 
 ### Advanced
 
@@ -171,23 +171,23 @@ One Tick Label Group component exists per axis level: X Major, X Minor, Y Major,
 | Color (color) | Color picker | The label text color. | #000000 |
 | Font size (fontsize) | Number | The label font size in points. | 10.0 |
 | Rotation (rotation) | Number | The label angle in degrees. | 0.0 |
-| Font family (fontfamily) | Font dropdown | The label font family. | sans-serif |
+| Font family (fontfamily) | Font dropdown | The label font family. See the [fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | sans-serif |
 | Pad (pad) | Number | The distance between the labels and the ticks, in points. | 3.5 |
 | Font weight (fontweight) | Named/number editor | The label stroke thickness. | normal |
 | Font style (fontstyle) | Dropdown | normal, italic, or oblique. | normal |
 | Font stretch (fontstretch) | Named/number editor | Horizontal glyph condensation or expansion. | normal |
 | Font variant (fontvariant) | Dropdown | normal or small-caps. | normal |
 | Alpha (alpha) | Number | Opacity from 0 to 1, or None to inherit. | None |
-| Rotation mode (rotation_mode) | Dropdown | How rotation anchors each label: default, anchor, xtick, or ytick. | default |
+| Rotation mode (rotation_mode) | Dropdown | How rotation anchors each label: default, anchor, xtick, or ytick. See [Text.set_rotation_mode](https://matplotlib.org/3.9.0/api/text_api.html#matplotlib.text.Text.set_rotation_mode). | default |
 | Horizontal alignment (horizontalalignment) | Dropdown | left, center, or right. | center |
 | Vertical alignment (verticalalignment) | Dropdown | top, center, bottom, baseline, or center_baseline. | baseline |
 | Multi-line alignment (multialignment) | Dropdown | Alignment inside multi-line labels: None, left, center, or right. | None |
 | Wrap (wrap) | Checkbox | Wraps long labels at the Axes width. | Off |
 | Line spacing (linespacing) | Number | Vertical spacing multiple between label lines. | 1.2 |
-| Math font family (math_fontfamily) | Text | Font for math expressions when math parsing is enabled. | dejavusans |
+| Math font family (math_fontfamily) | Text | Font for math expressions when math parsing is enabled. See the [mathtext explainer](https://matplotlib.org/3.9.0/users/explain/text/mathtext.html). | dejavusans |
 | Parse math (parse_math) | Checkbox | Renders $...$ math with Matplotlib's mathtext engine. | On |
 | Use TeX (usetex) | Checkbox | Requests TeX rendering; falls back to ordinary text when TeX is unavailable. See [TeX Rendering Integration](tex-integration.md). | Off |
-| Text box (bbox) | Structured editor | Draws a box behind each label when enabled (boxstyle, facecolor, edgecolor, linewidth, line pattern, alpha, fill, hatch, pad). | Disabled |
+| Text box (bbox) | Structured editor | Draws a box behind each label when enabled (boxstyle, facecolor, edgecolor, linewidth, line pattern, alpha, fill, hatch, pad). See [FancyBboxPatch](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.patches.FancyBboxPatch.html) for boxstyle values. | Disabled |
 | Z-order (zorder) | Number | Stacking order. | 3.0 |
 
 ### Advanced
@@ -213,10 +213,10 @@ One Grid component exists per axis level: X Major, X Minor, Y Major, and Y Minor
 | Line width (linewidth) | Number | The grid line width. | 0.8 |
 | Alpha (alpha) | Number | Opacity from 0 to 1, or None to inherit. | 1.0 |
 | Gap color (gapcolor) | Optional color | An alternating color shown inside dashed gaps. | None |
-| Dash cap style (dash_capstyle) | Dropdown | The dash cap shape: butt, projecting, or round. | butt |
-| Dash join style (dash_joinstyle) | Dropdown | The dash join shape: miter, round, or bevel. | round |
-| Solid cap style (solid_capstyle) | Dropdown | The solid cap shape: butt, projecting, or round. | projecting |
-| Solid join style (solid_joinstyle) | Dropdown | The solid join shape: miter, round, or bevel. | round |
+| Dash cap style (dash_capstyle) | Dropdown | The dash cap shape: butt, projecting, or round. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | butt |
+| Dash join style (dash_joinstyle) | Dropdown | The dash join shape: miter, round, or bevel. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | round |
+| Solid cap style (solid_capstyle) | Dropdown | The solid cap shape: butt, projecting, or round. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | projecting |
+| Solid join style (solid_joinstyle) | Dropdown | The solid join shape: miter, round, or bevel. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | round |
 
 ### Advanced
 
@@ -243,3 +243,10 @@ The generic Line component exposes Raw X/Y data instead of a table reference: th
 - [Layout engines](https://matplotlib.org/3.9.0/api/layout_engine_api.html): none, tight, constrained, and compressed.
 - [Axis ticks and labels](https://matplotlib.org/3.9.0/users/explain/axes/axes_ticks.html): the tick and tick label explainer.
 - [Axes.grid](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.grid.html): the grid line properties.
+- [Axes scales explainer](https://matplotlib.org/3.9.0/users/explain/axes/axes_scales.html) and [Axes.set_anchor](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_anchor.html): the scale kinds and anchor codes.
+- [Line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html) and [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html): the line pattern presets and segment shapes.
+- [Fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html) and [mathtext](https://matplotlib.org/3.9.0/users/explain/text/mathtext.html): the label typography and math font options.
+- [FancyBboxPatch](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.patches.FancyBboxPatch.html): the text-box boxstyle values.
+- [Spine.set_position](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.spines.Spine.html#matplotlib.spines.Spine.set_position): the spine position pair, center, and zero values.
+- [Text.set_rotation_mode](https://matplotlib.org/3.9.0/api/text_api.html#matplotlib.text.Text.set_rotation_mode): the tick label rotation anchoring modes.
+- [Artist sketch and snap properties](https://matplotlib.org/3.9.0/api/artist_api.html): the Sketch params and Snap settings.

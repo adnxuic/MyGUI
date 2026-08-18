@@ -45,23 +45,23 @@ Function Curve, Plot, Fit Curve, Interpolation, and the generic Line share one A
 | Label (label) | Text | The legend entry text. Empty labels do not create legend entries. | Empty |
 | Visible (visible) | Checkbox | Shows or hides the artist. | On |
 | Color (color) | Color picker | The line color, normalized to #RRGGBB. | #1f77b4 |
-| Line style (linestyle) | Preset / custom editor | The line pattern. Presets are solid, dashed, dashdot, dotted, and none. A custom pattern stores a dash offset and an even-length positive dash sequence. | solid |
+| Line style (linestyle) | Preset / custom editor | The line pattern. Presets are solid, dashed, dashdot, dotted, and none. A custom pattern stores a dash offset and an even-length positive dash sequence. See the [line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | solid |
 | Line width (linewidth) | Spin box | The line thickness; non-negative. | 1.5 |
-| Draw style (drawstyle) | Dropdown | How consecutive points are connected: default (straight segments), steps, steps-pre, steps-mid, or steps-post (staircase variants). | default |
+| Draw style (drawstyle) | Dropdown | How consecutive points are connected: default (straight segments), steps, steps-pre, steps-mid, or steps-post (staircase variants). See the [step demo](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/step_demo.html). | default |
 | Gap color (gapcolor) | Optional color | An alternating color shown inside dashed gaps. It has no visible effect on a solid line. | None |
 
 ### Marker
 
 | Parameter | Control | Meaning | Default |
 | --- | --- | --- | --- |
-| Marker (marker) | Marker editor | The marker shape: none, a symbol (o, s, ^, and others), or a regular polygon defined by side count, style, and angle. | none |
+| Marker (marker) | Marker editor | The marker shape: none, a symbol (o, s, ^, and others), or a regular polygon defined by side count, style, and angle. See the [marker reference](https://matplotlib.org/3.9.0/api/markers_api.html). | none |
 | Marker size (markersize) | Spin box | The marker size in points; non-negative. | 6.0 |
 | Marker face color (markerfacecolor) | Color picker | The marker fill color. | Follows Color |
-| Alternate face color (markerfacecoloralt) | Optional color | A second fill color used by the half-fill styles left, right, bottom, and top. | none |
+| Alternate face color (markerfacecoloralt) | Optional color | A second fill color used by the half-fill styles left, right, bottom, and top. See the [fill style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/marker_fillstyle_reference.html). | none |
 | Marker edge color (markeredgecolor) | Color picker | The marker outline color. | Follows Color |
 | Marker edge width (markeredgewidth) | Spin box | The marker outline width; non-negative. | 1.0 |
-| Fill style (fillstyle) | Dropdown | Which part of the marker is filled: full, left, right, bottom, top, or none. | full |
-| Mark every (markevery) | Structured editor | Which data points receive a marker: all, stride (start, step), slice (start, stop, step), indices (explicit list), or spacing (start, distance). | all |
+| Fill style (fillstyle) | Dropdown | Which part of the marker is filled: full, left, right, bottom, top, or none. See the [fill style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/marker_fillstyle_reference.html). | full |
+| Mark every (markevery) | Structured editor | Which data points receive a marker: all, stride (start, step), slice (start, stop, step), indices (explicit list), or spacing (start, distance). See the [markevery demo](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/markevery_demo.html). | all |
 
 ### Advanced
 
@@ -69,17 +69,17 @@ Function Curve, Plot, Fit Curve, Interpolation, and the generic Line share one A
 | --- | --- | --- | --- |
 | Alpha (alpha) | Spin box | Overall opacity from 0 to 1, or None to inherit. | None |
 | Z-order (zorder) | Spin box | Stacking order among artists; higher values draw on top. | 2.0 |
-| Dash cap style (dash_capstyle) | Dropdown | The cap shape of dash segments: butt, projecting, or round. | butt |
-| Dash join style (dash_joinstyle) | Dropdown | The join shape of dash segments: miter, round, or bevel. | round |
-| Solid cap style (solid_capstyle) | Dropdown | The cap shape of solid segments: butt, projecting, or round. | projecting |
-| Solid join style (solid_joinstyle) | Dropdown | The join shape of solid segments: miter, round, or bevel. | round |
+| Dash cap style (dash_capstyle) | Dropdown | The cap shape of dash segments: butt, projecting, or round. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | butt |
+| Dash join style (dash_joinstyle) | Dropdown | The join shape of dash segments: miter, round, or bevel. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | round |
+| Solid cap style (solid_capstyle) | Dropdown | The cap shape of solid segments: butt, projecting, or round. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | projecting |
+| Solid join style (solid_joinstyle) | Dropdown | The join shape of solid segments: miter, round, or bevel. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | round |
 | Antialiased (antialiased) | Checkbox | Renders smooth edges. | On |
 | Clip on (clip_on) | Checkbox | Clips the artist to the Axes boundaries. | On |
 | GID (gid) | Text | SVG group id used in exports. | None |
 | In layout (in_layout) | Checkbox | Includes the artist in tight-layout calculations. | On |
 | Rasterized (rasterized) | Checkbox | Renders the artist as a bitmap in vector exports. | Off |
-| Sketch params (sketch_params) | Triplet editor | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. | None |
-| Snap (snap) | Dropdown | Pixel-grid alignment: auto (None), on, or off. | None |
+| Sketch params (sketch_params) | Triplet editor | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. See [Artist sketch params](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_sketch_params). | None |
+| Snap (snap) | Dropdown | Pixel-grid alignment: auto (None), on, or off. See [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap). | None |
 | URL (url) | Text | Hyperlink attached to the artist in SVG exports. | None |
 
 ## Scatter Appearance section
@@ -90,13 +90,13 @@ Function Curve, Plot, Fit Curve, Interpolation, and the generic Line share one A
 | Visible (visible) | Checkbox | Shows or hides the artist. | On |
 | Color (color) | Color picker | The uniform marker face color. It is ignored while a color mapping is enabled. | #1f77b4 |
 | Edge color (edgecolor) | Color picker | The uniform marker outline color. | #1f77b4 |
-| Marker (marker) | Marker editor | The marker shape; default circle. | o |
+| Marker (marker) | Marker editor | The marker shape; default circle. See the [marker reference](https://matplotlib.org/3.9.0/api/markers_api.html). | o |
 | Size (size) | Spin box | The uniform marker size (Matplotlib point-squared scale); non-negative. It is ignored while a size mapping is enabled. | 36.0 |
 | Line width (linewidth) | Spin box | The marker outline width; non-negative. | 1.0 |
-| Line style (linestyle) | Preset / custom editor | The marker outline pattern. | none |
-| Hatch (hatch) | Text | The marker fill pattern (/, x, and others), or none. | None |
-| Cap style (capstyle) | Dropdown | The marker outline cap shape: auto (None), butt, projecting, or round. | None |
-| Join style (joinstyle) | Dropdown | The marker outline join shape: auto (None), miter, round, or bevel. | None |
+| Line style (linestyle) | Preset / custom editor | The marker outline pattern. See the [line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | none |
+| Hatch (hatch) | Text | The marker fill pattern (/, x, and others), or none. See the [hatch style reference](https://matplotlib.org/3.9.0/gallery/shapes_and_collections/hatch_style_reference.html). | None |
+| Cap style (capstyle) | Dropdown | The marker outline cap shape: auto (None), butt, projecting, or round. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | None |
+| Join style (joinstyle) | Dropdown | The marker outline join shape: auto (None), miter, round, or bevel. See the [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html). | None |
 
 ### Scatter advanced
 
@@ -109,8 +109,8 @@ Function Curve, Plot, Fit Curve, Interpolation, and the generic Line share one A
 | GID (gid) | Text | SVG group id used in exports. | None |
 | In layout (in_layout) | Checkbox | Includes the artist in tight-layout calculations. | On |
 | Rasterized (rasterized) | Checkbox | Renders the artist as a bitmap in vector exports. | Off |
-| Sketch params (sketch_params) | Triplet editor | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. | None |
-| Snap (snap) | Dropdown | Pixel-grid alignment: auto (None), on, or off. | None |
+| Sketch params (sketch_params) | Triplet editor | (scale, length, randomness) hand-drawn stroke effect; positive finite values, or None to disable. See [Artist sketch params](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_sketch_params). | None |
+| Snap (snap) | Dropdown | Pixel-grid alignment: auto (None), on, or off. See [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap). | None |
 | URL (url) | Text | Hyperlink attached to the whole collection in SVG exports. | None |
 | URLs (urls) | String list | Per-point hyperlinks in SVG exports; empty list means none. | Empty |
 
@@ -122,8 +122,8 @@ The mapping section maps a data column to per-point colors and sizes. When a map
 | --- | --- | --- | --- |
 | Color column (color_ref) | Column dropdown | The source column for per-point colors; a Number column. Required while the color mapping is enabled. | None |
 | Enable color mapping (color_mapping.enabled) | Checkbox | Activates the per-point color mapping. | Off |
-| Colormap (color_mapping.cmap) | Dropdown | The registered Matplotlib colormap used to convert normalized values to colors. | viridis |
-| Norm (color_mapping.norm) | Structured dialog | The normalization applied to the column values. Kinds are linear, log, symlog, power, two_slope, centered, boundary, asinh, and none, each with its own parameters plus the common vmin, vmax, and clip bounds. | linear, vmin/vmax auto, clip off |
+| Colormap (color_mapping.cmap) | Dropdown | The registered Matplotlib colormap used to convert normalized values to colors. See the [colormaps](https://matplotlib.org/3.9.0/users/explain/colors/colormaps.html). | viridis |
+| Norm (color_mapping.norm) | Structured dialog | The normalization applied to the column values. Kinds are linear, log, symlog, power, two_slope, centered, boundary, asinh, and none, each with its own parameters plus the common vmin, vmax, and clip bounds. See the [colormap norms](https://matplotlib.org/3.9.0/users/explain/colors/colormapnorms.html). | linear, vmin/vmax auto, clip off |
 | Bad color (color_mapping.bad) | Color picker | The color used for non-finite input values when the nonfinite policy is bad. | Transparent |
 | Under color (color_mapping.under) | Optional color | The color for values below vmin when clip is on; None extends the colormap ends. | None |
 | Over color (color_mapping.over) | Optional color | The color for values above vmax when clip is on; None extends the colormap ends. | None |
@@ -173,7 +173,7 @@ Each Axes has one Legend component. The Legend appears only when entries exist t
 | Parameter | Control | Meaning | Default |
 | --- | --- | --- | --- |
 | Visible (visible) | Checkbox | Shows or hides the legend. | Off until entries exist |
-| Location (location) | Position editor | Where the legend sits: a preset name (best, upper right, upper left, lower left, lower right, right, center left, center right, lower center, upper center, center, and the outside placements outside right upper, outside right lower, outside left upper, outside left lower, outside upper right, outside upper left, outside lower right, outside lower left), a numeric location code 0 through 10, or an explicit (x, y) point in Axes coordinates. | best |
+| Location (location) | Position editor | Where the legend sits: a preset name (best, upper right, upper left, lower left, lower right, right, center left, center right, lower center, upper center, center, and the outside placements outside right upper, outside right lower, outside left upper, outside left lower, outside upper right, outside upper left, outside lower right, outside lower left), a numeric location code 0 through 10, or an explicit (x, y) point in Axes coordinates. See the [legend guide](https://matplotlib.org/3.9.0/users/explain/axes/legend_guide.html). | best |
 | Columns (ncols) | Spin box | The number of legend columns; at least 1. | 1 |
 | Entry scope (entry_scope) | Dropdown | axes lists only entries belonging to this Axes; twin_pair merges the primary and right-Y entries into the primary legend (used by the Primary + Right Y layout). | axes |
 
@@ -212,7 +212,7 @@ Each Axes has one Legend component. The Legend appears only when entries exist t
 | Shadow (shadow) | Checkbox | Draws a drop shadow behind the frame. | Off |
 | Frame line width (frame_linewidth) | Spin box | The frame outline width. | 1.0 |
 | Frame line style (frame_linestyle) | Pattern editor | The frame outline pattern. | solid |
-| Frame hatch (frame_hatch) | Text | The frame fill pattern, or none. | None |
+| Frame hatch (frame_hatch) | Text | The frame fill pattern, or none. See the [hatch style reference](https://matplotlib.org/3.9.0/gallery/shapes_and_collections/hatch_style_reference.html). | None |
 
 ### Legend advanced
 
@@ -234,4 +234,8 @@ The per-Axes Palette section shows the effective color source and its ordered co
 - [Legend](https://matplotlib.org/3.9.0/api/legend_api.html#matplotlib.legend.Legend): the Legend parameters.
 - [Marker reference](https://matplotlib.org/3.9.0/api/markers_api.html): marker symbols.
 - [Line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html) and [hatch reference](https://matplotlib.org/3.9.0/gallery/shapes_and_collections/hatch_style_reference.html).
-- [Colormaps](https://matplotlib.org/3.9.0/users/explain/colors/colormaps.html) and [normalizations](https://matplotlib.org/3.9.0/api/colors_api.html): the Scatter color mapping.
+- [Step demo](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/step_demo.html) and [cap/join style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/joinstyle.html): the Line Appearance drawstyle and dash segment shapes.
+- [Marker fill style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/marker_fillstyle_reference.html) and [markevery demo](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/markevery_demo.html): the Marker options.
+- [Colormaps](https://matplotlib.org/3.9.0/users/explain/colors/colormaps.html) and [colormap norms](https://matplotlib.org/3.9.0/users/explain/colors/colormapnorms.html): the Scatter color mapping.
+- [Legend guide](https://matplotlib.org/3.9.0/users/explain/axes/legend_guide.html): the Legend location presets, numeric codes, and outside placements.
+- [Artist sketch and snap properties](https://matplotlib.org/3.9.0/api/artist_api.html): the Sketch params and Snap settings.

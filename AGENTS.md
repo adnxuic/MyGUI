@@ -26,8 +26,18 @@ Scope: this file applies to the whole repository.
 - When a feature needs color selection, reuse `ColorChoiceWidget` with the injected application `ColorLibrary`; do not create a separate color menu or eager `QAction` collection. Use `ColorCycleState` only for ordered chart-color sequences, preview with `peek()`, and call `commit()` only after the related operation succeeds.
 - Place new code files according to the existing `mygui/` directory responsibilities: `mygui/widgets/` is for window and UI components, `mygui/figuremodify/` is for drawing style modification logic, and `mygui/database/` is for data processing and data-related helpers. Follow the nearest existing module location before creating a new file.
 - Keep handoff notes up to date under `codex_handoff/`. Handoff notes should record only current limitations, not next-step plans.
-- After completing a feature, write feature documentation under `docs/`. Keep it to a concise feature description and detailed parameter documentation; do not include limitations or unrelated commentary.
+- After completing a feature, write feature documentation under `docs/` following the Documentation Rules section. Keep it to a concise feature description and detailed parameter documentation; do not include limitations or unrelated commentary.
 - Keep this file correct. When a change alters an architecture boundary, a name, a module responsibility, a schema version, or a startup validation gate that is recorded here, update `AGENTS.md` in the same change. Correct the stale rule in place instead of appending a newer variant, and treat this file as authoritative when it disagrees with `docs/`.
+
+## Documentation Rules
+
+- User-facing documentation lives under `docs/` as MkDocs Markdown. `mkdocs.yml` is the only site configuration; a new page must be added to its `nav` in the same change, and no page may be left outside the nav.
+- After completing a feature, write its documentation under `docs/`: a concise feature description plus detailed parameter documentation. Keep current limitations only in `codex_handoff/`; do not put limitations, next-step plans, or unrelated commentary in `docs/`.
+- Parameter pages use the established table shape: one row per Inspector parameter with its control, meaning, and values or default, and the property key in parentheses so each row maps to one persisted or runtime value. When a Controller, `PropertySpec`, persisted key, or profile adds, renames, or removes a property, update the matching parameter page (`chart-component-parameters.md`, `axes-component-parameters.md`, `in-axes.md`, `text-element.md`, and related feature pages) in the same change; when the schema summary changes, update `component-properties-v10.md` as well.
+- Document current behavior, not plans. A UI or property change must refresh the affected parameter tables instead of leaving stale rows.
+- Matplotlib reference links in parameter pages must pin the project target version `https://matplotlib.org/3.9.0/...`; never use `stable` links. Inline links live in the Meaning/Description cell, and every row of an uncommon value family (cap/join styles, hatch, fill styles, sketch/snap, rotation mode, and similar) carries its own link. Each page's bottom `Matplotlib reference` list must include every referenced URL.
+- Site structure and link conventions are recorded in `docs/documentation-site.md`; update it in the same change when the nav, build, or link policy changes.
+- Verify documentation changes with the project environment: `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe -m mkdocs build --strict`. Fix every warning; `site/` is git-ignored build output and is never committed. Docs-only changes do not require the Python test suite.
 
 ## Component Architecture Rules
 

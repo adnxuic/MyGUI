@@ -8,7 +8,7 @@ The Curve action on the Chart command bar creates a function curve component. A 
 | --- | --- | --- | --- |
 | 函数表达式 | Text field | The expression of x to evaluate. It must be non-empty and valid; it is checked when Create is pressed. The legend label follows this text automatically while typing. | x |
 | x range | Two spin boxes (start, stop) | The finite endpoints of the evaluation range. The curve is evaluated on 1000 evenly spaced points between them. | 0 to 100 |
-| Line style | Preset / custom pattern editor | The line pattern: solid, dashed, dashdot, dotted, none, or a custom dash sequence. The initial value comes from the current Figure style. | Style default (solid) |
+| Line style | Preset / custom pattern editor | The line pattern: solid, dashed, dashdot, dotted, none, or a custom dash sequence. The initial value comes from the current Figure style. See the [line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | Style default (solid) |
 | Color | Color picker | The line color. The dialog previews the next palette color; the palette cursor advances only after creation succeeds. | Style or palette next color |
 | Legend label | Text field | The legend entry text. Empty labels do not appear in the legend. | Follows the expression text |
 
@@ -37,3 +37,7 @@ The shared Line Appearance section. Every parameter is documented in [Chart Comp
 ## Persistence
 
 A function curve stores expression, x_start, and x_stop in its component data and its visual properties in the schema-v10 component tree. See [Project Files](project-files.md).
+
+## Matplotlib reference
+
+- [Line style reference](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html): the line pattern presets and custom dash sequences.

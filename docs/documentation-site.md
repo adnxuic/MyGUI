@@ -16,6 +16,12 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 - `nav`: explicit page list grouped into Getting Started, Working with Data, Creating Charts, Editing Components, Projects and Appearance, Integrations and Configuration, Developer Reference, and Maintenance & QA.
 - `repo_url` / `edit_uri`: link to the GitHub repository and let visitors edit pages on the `master` branch.
 
+## External links
+
+- Parameter pages link only to Matplotlib 3.9.0 pages (`https://matplotlib.org/3.9.0/...`) because MyGUI targets that release; do not use `stable` links.
+- Inline links live in the Meaning/Description cell of a parameter row. Every row of an uncommon value family (cap/join, hatch, fill style, sketch/snap, rotation mode, and similar) carries its own link so each Inspector control resolves directly; plain single-row parameters link once.
+- Every page with inline parameter links keeps its bottom `Matplotlib reference` list complete, so each referenced URL also appears there.
+
 ## Preview and build
 
 With the maintenance dependencies installed (`pip install -r requirements-dev.txt`):
