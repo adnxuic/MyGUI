@@ -24,6 +24,7 @@ from .inspector import (
 from .sections import (
     AxesLayoutSection,
     AxesLimitsSection,
+    ColorbarSourceSection,
     DataReferenceSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
@@ -51,6 +52,30 @@ def _properties(*keys: str):
         )
 
     return factory
+
+
+def _colorbar_properties(*keys: str):
+    def factory(controller, context, parent):
+        return PropertySection(
+            controller,
+            context=context,
+            property_keys=keys,
+            apply_properties=lambda properties: context.colorbars.apply_properties(
+                controller,
+                properties,
+            ),
+            parent=parent,
+        )
+
+    return factory
+
+
+def _colorbar_source(controller, context, parent):
+    return ColorbarSourceSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
 
 
 def _axes_limits(controller, context, parent):
@@ -678,6 +703,76 @@ SCATTER_PROFILE = EditorProfile(
 )
 
 
+COLORBAR_PROFILE = EditorProfile(
+    "colorbar",
+    "Colorbar",
+    (
+        SectionSpec(
+            "source",
+            "Source",
+            _colorbar_source,
+            data_keys=("source_component_id",),
+        ),
+        SectionSpec(
+            "placement",
+            "Placement",
+            _colorbar_properties(
+                "location", "fraction", "shrink", "aspect", "pad"
+            ),
+            property_keys=("location", "fraction", "shrink", "aspect", "pad"),
+        ),
+        SectionSpec(
+            "scale_ticks",
+            "Scale & Ticks",
+            _colorbar_properties(
+                "locator", "formatter", "minor_ticks", "ticklocation"
+            ),
+            property_keys=("locator", "formatter", "minor_ticks", "ticklocation"),
+        ),
+        SectionSpec(
+            "label",
+            "Label",
+            _colorbar_properties("label", "label_font"),
+            property_keys=("label", "label_font"),
+        ),
+        SectionSpec(
+            "appearance",
+            "Appearance",
+            _colorbar_properties(
+                "visible",
+                "tick_font",
+                "outline_visible",
+                "outline_color",
+                "outline_linewidth",
+            ),
+            property_keys=(
+                "visible",
+                "tick_font",
+                "outline_visible",
+                "outline_color",
+                "outline_linewidth",
+            ),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _colorbar_properties("extend", "spacing", "drawedges"),
+            collapsed=True,
+            property_keys=("extend", "spacing", "drawedges"),
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Colorbar",
+        "Colorbars",
+        "colorbar",
+        preview=lambda state: str(state.data.get("source_component_id", ""))[:8],
+        sort_bucket=50,
+        delete_label="Colorbar",
+    ),
+)
+
+
 def _text_sections(*, free: bool) -> tuple[SectionSpec, ...]:
     position_keys = tuple(
         key
@@ -1124,6 +1219,11 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.SCATTER,
         SCATTER_PROFILE,
         role=ComponentRole.SCATTER,
+    )
+    editor_registry.register_profile(
+        ComponentKind.COLORBAR,
+        COLORBAR_PROFILE,
+        role=ComponentRole.COLORBAR,
     )
     editor_registry.register_profile(
         ComponentKind.TEXT,

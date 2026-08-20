@@ -199,7 +199,7 @@ DEFAULT_SCALE = {"kind": "linear", "params": {}}
 
 
 def default_scale_for_name(name: str) -> dict[str, Any]:
-    """Return the explicit v10 defaults for one supported scale name."""
+    """Return the explicit persisted defaults for one supported scale name."""
 
     defaults = {
         "linear": DEFAULT_SCALE,

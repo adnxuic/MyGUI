@@ -442,6 +442,7 @@ class EditorContext:
     interpolation: object
     fitting: object
     text_rendering: object
+    colorbars: object | None = None
     axes_layout: object | None = None
     in_axes: object | None = None
     dependency_service: object | None = None

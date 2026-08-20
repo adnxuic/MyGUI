@@ -1279,6 +1279,30 @@ class ComponentRegistry:
                 )
             semantic_keys.add(semantic_key)
 
+        colorbar_sources: set[str] = set()
+        for controller in self.query(kind=ComponentKind.COLORBAR):
+            state = controller.state
+            source_id = state.data.get("source_component_id")
+            source = self._controllers.get(source_id)
+            if (
+                source is None
+                or source.state.kind is not ComponentKind.SCATTER
+                or source.state.role is not ComponentRole.SCATTER
+            ):
+                raise ComponentValidationError(
+                    f"Colorbar component {state.id!r} requires a Scatter source."
+                )
+            if source.state.parent_id != state.parent_id:
+                raise ComponentValidationError(
+                    f"Colorbar component {state.id!r} and its source must "
+                    "belong to the same owner Axes."
+                )
+            if source_id in colorbar_sources:
+                raise ComponentValidationError(
+                    f"Scatter component {source_id!r} has more than one Colorbar."
+                )
+            colorbar_sources.add(source_id)
+
         axes_states = [
             controller.state
             for controller in self._controllers.values()
@@ -1320,6 +1344,12 @@ class ComponentRegistry:
             raise ComponentValidationError("Figure target is unavailable.")
 
         seen: set[int] = set()
+        colorbar_axes = {
+            id(target.ax)
+            for controller in self.query(kind=ComponentKind.COLORBAR)
+            if (target := self.resolve_target(controller.component_id)) is not None
+            and isinstance(getattr(target, "ax", None), Axes)
+        }
         for controller in self.query(kind=ComponentKind.AXES):
             target = controller.resolve_target()
             if not isinstance(target, Axes):
@@ -1327,6 +1357,11 @@ class ComponentRegistry:
                     f"Axes component {controller.component_id!r} has no Axes target."
                 )
             identity = id(target)
+            if identity in colorbar_axes:
+                raise ComponentValidationError(
+                    "A Colorbar-owned auxiliary Axes cannot be registered as "
+                    "an ordinary Axes component."
+                )
             if identity in seen:
                 raise ComponentValidationError(
                     "Two surviving Axes resolve to the same artist."
@@ -1353,6 +1388,7 @@ class ComponentRegistry:
             ComponentKind.AXIS,
             ComponentKind.SPINE,
             ComponentKind.LEGEND,
+            ComponentKind.COLORBAR,
         }:
             valid = parent_kind is ComponentKind.AXES
         elif kind is ComponentKind.TICK_GROUP:
@@ -1497,6 +1533,13 @@ class ComponentRegistry:
             if selector.get("object_id") != state.id:
                 raise ComponentValidationError(
                     f"Chart component {state.id!r} requires object_id "
+                    "equal to its component id."
+                )
+            return
+        if state.kind is ComponentKind.COLORBAR:
+            if selector.get("object_id") != state.id:
+                raise ComponentValidationError(
+                    f"Colorbar component {state.id!r} requires object_id "
                     "equal to its component id."
                 )
             return

@@ -9,6 +9,7 @@ from .controllers import (
     AxisController,
     AxisLabelController,
     CollectionController,
+    ColorbarController,
     ContainerController,
     DataPlotController,
     FigureController,
@@ -35,6 +36,10 @@ from .controllers import (
     decode_in_axes_image,
     normalize_linestyle,
     validate_controller_contracts,
+)
+from .matplotlib_removal import (
+    AxesSubtreeRemovalHandle,
+    ColorbarRemovalHandle,
 )
 from .errors import (
     ComponentDeletedError,
@@ -76,12 +81,15 @@ __all__ = [
     "LINESTYLE_ALIASES",
     "ROLES_BY_KIND",
     "AxesController",
+    "AxesSubtreeRemovalHandle",
     "AxisComponentController",
     "AxisController",
     "AxisLabelController",
     "ChangeStatus",
     "ComponentBatchChange",
     "CollectionController",
+    "ColorbarController",
+    "ColorbarRemovalHandle",
     "ComponentChange",
     "ComponentController",
     "ComponentDeletedError",

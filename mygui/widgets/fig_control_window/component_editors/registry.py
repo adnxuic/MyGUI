@@ -46,6 +46,9 @@ EDITABLE_DATA_KEYS: dict[EditorKey, frozenset[str]] = {
     (ComponentKind.SCATTER, ComponentRole.SCATTER): frozenset(
         {"x_ref", "y_ref", "color_ref", "size_ref", "preprocess"}
     ),
+    (ComponentKind.COLORBAR, ComponentRole.COLORBAR): frozenset(
+        {"source_component_id"}
+    ),
     (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE): frozenset(
         {"filename", "mime_type", "payload_base64"}
     ),
@@ -205,7 +208,7 @@ class EditorRegistry:
         return self._profiles.get((kind, role))
 
     def validate_production_profiles(self) -> None:
-        """Fail fast unless every schema-v10 kind/role has one exact profile."""
+        """Fail fast unless every schema-v11 kind/role has one exact profile."""
 
         expected = {
             (kind, role)

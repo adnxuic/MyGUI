@@ -19,6 +19,7 @@ from mygui.widgets.fig_control_window.component_editors import (
 from mygui.figuremodify.component_services import (
     AxesCommandService,
     ChartDataService,
+    ColorbarService,
     ColorConsumptionLedger,
     ComponentDeletionService,
     ComponentDependencySnapshot,
@@ -44,6 +45,7 @@ from mygui.figuremodify.components import (
     ComponentRegistry,
     ComponentRole,
     ComponentState,
+    ColorbarController,
     DataPlotController,
     FigureController,
     FitCurveController,
@@ -63,8 +65,8 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v10_figure,
-    validate_v10_figure,
+    normalize_v11_figure,
+    validate_v11_figure,
 )
 from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
@@ -212,6 +214,8 @@ class PyFigureCanvas(QWidget):
             self.repository,
             self.component_registry,
         )
+        self.colorbar_service = ColorbarService(self.component_registry)
+        self.chart_data_service.colorbar_service = self.colorbar_service
         self.interpolation_service = InterpolationService(
             self.repository,
             self.component_registry,
@@ -260,6 +264,7 @@ class PyFigureCanvas(QWidget):
             interpolation=self.interpolation_service,
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
+            colorbars=self.colorbar_service,
             in_axes=self.in_axes_service,
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
@@ -462,7 +467,7 @@ class PyFigureCanvas(QWidget):
     def _component_paths_from_tree(
         component_tree: dict[str, Any] | None,
     ) -> dict[str, str]:
-        """Map fixed semantic paths to IDs from a validated v10 tree."""
+        """Map fixed semantic paths to IDs from a validated component tree."""
 
         if not isinstance(component_tree, dict):
             return {}
@@ -2262,7 +2267,7 @@ class PyFigureCanvas(QWidget):
                 lambda target=runtime: self.in_axes_service.destroy_runtime(target)
             )
             controller = controller_type(state, target=runtime)
-            # Controller construction fills every schema-v10 default. Apply
+            # Controller construction fills every current-schema default. Apply
             # that complete state so creation inputs may stay focused on the
             # values a user can reasonably choose up front.
             initial = controller.apply_state(controller.state)
@@ -2293,6 +2298,89 @@ class PyFigureCanvas(QWidget):
             else:
                 status_messages.show_success("Image inset created.")
         return runtime.axes
+
+    def eligible_colorbar_sources(self) -> tuple[tuple[str, str], ...]:
+        """Return valid scalar-mapped sources under the selected owner Axes."""
+
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            return ()
+        return tuple(
+            (
+                source.source_controller.component_id,
+                self.colorbar_service.source_preview(source),
+            )
+            for source in self.colorbar_service.eligible_sources(axes_id)
+        )
+
+    def add_colorbar(
+        self,
+        source_component_id: str,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        component_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one first-class Colorbar Component atomically."""
+
+        owner_axes_id = self.current_axes_component_id
+        owner_axes = self.current_axes
+        if owner_axes_id is None or owner_axes is None:
+            raise ValueError("Select an Axes before creating a Colorbar.")
+        if source_component_id not in self.component_registry:
+            raise ValueError("The selected Colorbar source is unavailable.")
+        self.colorbar_service.validate_source(
+            owner_axes_id,
+            source_component_id,
+        )
+        component_id = object_id or new_id()
+        requested = dict(properties or {})
+        controller = None
+        runtime = None
+        with self.component_registry.registration_transaction() as transaction:
+            with matplotlib_style_context(self.component_style):
+                runtime, normalized = self.colorbar_service.create_runtime(
+                    owner_axes_id,
+                    source_component_id,
+                    requested,
+                )
+            transaction.on_rollback(
+                lambda target=runtime: self.colorbar_service.destroy_runtime(target)
+            )
+            state = ComponentState(
+                id=component_id,
+                kind=ComponentKind.COLORBAR,
+                role=ComponentRole.COLORBAR,
+                parent_id=owner_axes_id,
+                order=(
+                    self._next_child_order(owner_axes_id)
+                    if component_order is None
+                    else int(component_order)
+                ),
+                selector={"object_id": component_id},
+                properties=normalized,
+                data={"source_component_id": str(source_component_id)},
+            )
+            controller = ColorbarController(state, target=runtime)
+            actual = controller.sync_from_target(strict=True)
+            desired = deepcopy(actual.properties)
+            for key in requested:
+                desired[key] = deepcopy(normalized[key])
+            applied = controller.apply_state(actual.clone(properties=desired))
+            if not applied.ok:
+                raise ValueError(applied.message or "Could not initialize Colorbar.")
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=runtime)
+            self._prepare_created_component(controller, transaction)
+            self.component_registry.request_update(self.fig, UpdateImpact.REDRAW)
+            if self.fig.canvas is not None:
+                self.fig.canvas.draw()
+
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
+            status_messages.show_success("Colorbar created.")
+        return runtime
 
     def save(self, filename, dpi=None):
         """Save the current figure through the selected destination."""
@@ -2352,6 +2440,13 @@ class PyFigureCanvas(QWidget):
                 self._materialize_scatter,
                 expected_phases[
                     (ComponentKind.SCATTER, ComponentRole.SCATTER)
+                ],
+            ),
+            ComponentMaterializer(
+                (ComponentKind.COLORBAR, ComponentRole.COLORBAR),
+                self._materialize_colorbar,
+                expected_phases[
+                    (ComponentKind.COLORBAR, ComponentRole.COLORBAR)
                 ],
             ),
             ComponentMaterializer(
@@ -2534,6 +2629,23 @@ class PyFigureCanvas(QWidget):
             size_mapping=state.properties["size_mapping"],
         )
 
+    def _materialize_colorbar(self, state, _transaction) -> None:
+        if (
+            state.kind is not ComponentKind.COLORBAR
+            or state.role is not ComponentRole.COLORBAR
+        ):
+            raise ValueError("Colorbar materializer requires a Colorbar state.")
+        source_id = state.data.get("source_component_id")
+        if not isinstance(source_id, str) or source_id not in self.component_registry:
+            raise ValueError("Colorbar source component is unavailable.")
+        self.add_colorbar(
+            source_id,
+            state.properties,
+            object_id=state.id,
+            component_order=state.order,
+            announce=False,
+        )
+
     def _materialize_interpolation(self, state, _transaction) -> None:
         x_ref, y_ref, preprocess, pair = self._materializer_pair(
             state,
@@ -2606,7 +2718,7 @@ class PyFigureCanvas(QWidget):
             self.add_text(**kwargs)
 
     def _restore_component_state(self, state: ComponentState):
-        """Materialize one dynamic v10 component within registration scope."""
+        """Materialize one dynamic component within registration scope."""
 
         if state.id in self.component_registry:
             return self.component_registry.get(state.id)
@@ -2693,7 +2805,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated v10 component tree directly."""
+        """Materialize and apply a validated schema-v11 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -2725,7 +2837,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v10_figure(source)
+        source = normalize_v11_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -2757,7 +2869,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all v10 states after their Matplotlib targets exist."""
+        """Apply all schema-v11 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return
@@ -2906,7 +3018,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical v10 component tree used by persistence."""
+        """Return the canonical schema-v11 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -2926,10 +3038,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v10_figure(snapshot)
+        return normalize_v11_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v10 Figure tree."""
+        """Validate and return the current complete schema-v11 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -2938,7 +3050,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v10_figure(
+        validate_v11_figure(
             snapshot,
             available_refs,
             self.project_id,

@@ -312,17 +312,21 @@ class ProjectIoTests(unittest.TestCase):
             loaded.close()
             self.app.processEvents()
 
-    def test_only_exact_integer_schema_v10_is_accepted(self):
+    def test_only_exact_integer_current_or_migratable_schema_is_accepted(self):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         valid = json.loads(self.path.read_text(encoding="utf-8"))
-        self.assertEqual(load_project_file(self.path)["schema_version"], 10)
-        for version in (3, 4, 5, 6, 7, 8, 9, 10.0, "10", 11, True, None):
+        self.assertEqual(load_project_file(self.path)["schema_version"], 11)
+        migratable = deepcopy(valid)
+        migratable["schema_version"] = 10
+        self.path.write_text(json.dumps(migratable), encoding="utf-8")
+        self.assertEqual(load_project_file(self.path)["schema_version"], 11)
+        for version in (3, 4, 5, 6, 7, 8, 9, 10.0, "10", "11", True, None):
             with self.subTest(version=version):
                 candidate = dict(valid)
                 candidate["schema_version"] = version
                 self.path.write_text(json.dumps(candidate), encoding="utf-8")
-                with self.assertRaisesRegex(ValueError, "only schema v10 is supported"):
+                with self.assertRaisesRegex(ValueError, "schema version|only schema"):
                     load_project_file(self.path)
 
     def test_v10_wrapper_rejects_retired_figure_and_axes_shapes(self):

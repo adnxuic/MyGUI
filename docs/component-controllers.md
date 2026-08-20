@@ -34,7 +34,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v10.
+  serialized into `ComponentState` or schema v11.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -91,7 +91,7 @@ The first-party deletion policies are:
 
 | Policy | Components |
 | --- | --- |
-| `REMOVE` | Axes, every Line role, Scatter, free Text |
+| `REMOVE` | Axes, every Line role, Scatter, Colorbar, free Text |
 | `HIDE` | Axis, Spine, Tick, Tick Label, Grid, Title, axis labels, Legend |
 | `FORBID` | Figure and the default for a new Controller type |
 
@@ -99,6 +99,12 @@ Axes use a specialized Matplotlib 3.9 removal handle. Its reversible stage
 preserves `_localaxes`, `_axstack`, current Axes, mouse grabber, callbacks,
 and shared/twinned relationships without firing `_axes_change_event`.
 Matplotlib receives one Axes-change notification only after commit.
+
+Colorbar uses a separate reversible handle that preserves the same Colorbar
+and auxiliary-Axes identities, Figure Axes ordering, owner Axes layout and
+anchor, source ScalarMappable callback registry, and Locator binding. An Axes
+root composes these handles so Colorbar auxiliary Axes cannot outlive the owner
+subtree.
 
 `register_figure_components()` builds a complete Controller tree for an existing Figure. `create_semantic_children()` adds the fixed Axis, Spine, Tick, Tick Label, Grid, Title, Axis Label, and Legend records for an Axes. Callers can inject an `id_factory(path)` to produce deterministic project IDs.
 
@@ -117,9 +123,12 @@ Matplotlib receives one Axes-change notification only after commit.
 | `LegendController` | Legend | tagged location/anchor, layout/spacing, entry/title fonts, frame styling, draggable policy, layering and export configuration |
 | `LineController` | Line and all curve roles | label/color, tagged line pattern/marker/markevery, draw/fill style, cap/join/gap, antialiasing, layering and safe export fields |
 | `ScatterController` | Scatter | uniform face/edge styling, marker/line/hatch, tagged color/size mapping and norm, non-finite policy, layering and safe export fields |
+| `ColorbarController` | Colorbar | visibility/label, constructor-sensitive placement, extend/spacing/edges, tagged locator/formatter, minor ticks/tick side, fonts, and outline appearance |
 
-The exact schema-v10 key matrix and tagged-value formats are maintained in
-[`component-properties-v10.md`](component-properties-v10.md).
+The exact schema-v11 ownership matrix and tagged-value formats are maintained
+in [`component-properties-v11.md`](component-properties-v11.md). Colorbar
+controls and defaults are listed in
+[`colorbar-component.md`](colorbar-component.md).
 Axes do not persist scales, Axis does not persist inversion or side visibility,
 and Tick groups do not persist label padding; those single-owner boundaries are
 part of the project format.
@@ -148,6 +157,9 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 - `AxesCommandService`: semantic Axis/Spine/Label/Legend commands and ordered palette application;
 - `FunctionCurveService`: safe expression evaluation and atomic curve-data replacement;
 - `ChartDataService`: Plot/Scatter reference changes and automatic table refresh;
+- `ColorbarService`: source resolution, transactional creation/reconstruction,
+  source refresh, and lifecycle coordination without copying Scatter mapping
+  state;
 - `InterpolationService`: validated interpolation configuration and refresh;
 - `FitService`: persistent fit results, manual-refit generations, and display-range updates;
 - `TextRenderService`: synchronous render verification with rollback and glyph warnings;
@@ -236,7 +248,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend strict schema-v10 serialization and direct save/open round-trip coverage when the component is persistent. Any future persisted-field change requires a new schema version task.
+9. Extend strict schema-v11 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

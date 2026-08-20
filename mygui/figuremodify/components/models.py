@@ -29,6 +29,7 @@ class ComponentKind(str, Enum):
     LEGEND = "legend"
     LINE = "line"
     SCATTER = "scatter"
+    COLORBAR = "colorbar"
     IN_AXES = "in_axes"
 
 
@@ -56,12 +57,13 @@ class ComponentRole(str, Enum):
     FIT_CURVE = "fit_curve"
     INTERPOLATION = "interpolation"
     SCATTER = "scatter"
+    COLORBAR = "colorbar"
     IN_AXES_ZOOM = "in_axes_zoom"
     IN_AXES_IMAGE = "in_axes_image"
 
 
 class FitEngine(StrEnum):
-    """Stable schema-v10 wire values for supported fitting engines."""
+    """Stable project-schema wire values for supported fitting engines."""
 
     PYTHON = "Python"
     MATLAB = "Matlab"
@@ -128,10 +130,11 @@ class EditorKind(StrEnum):
 
 
 class RestorePhase(IntEnum):
-    """Ordered runtime materialization phases for schema-v10 components."""
+    """Ordered runtime materialization phases for persisted components."""
 
     DYNAMIC = 10
     IN_AXES = 20
+    COLORBAR = 30
 
 
 ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
@@ -170,6 +173,7 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
         }
     ),
     ComponentKind.SCATTER: frozenset({ComponentRole.SCATTER}),
+    ComponentKind.COLORBAR: frozenset({ComponentRole.COLORBAR}),
     ComponentKind.IN_AXES: frozenset(
         {
             ComponentRole.IN_AXES_ZOOM,

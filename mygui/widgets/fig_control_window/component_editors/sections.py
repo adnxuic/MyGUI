@@ -529,6 +529,58 @@ class PropertySection(ComponentEditorBase, EditorSection):
             binding.cancel()
 
 
+class ColorbarSourceSection(QWidget, EditorSection):
+    """Display the immutable stable source relationship of a Colorbar."""
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        self._disposed = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.summary_label = QLabel(self)
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        layout.addWidget(self.summary_label)
+        self._unsubscribe = context.registry.subscribe(self._component_event)
+        self.sync_from_controller()
+
+    def _component_event(self, event) -> None:
+        if self._disposed:
+            return
+        source_id = self.controller.state.data.get("source_component_id")
+        if event.component_id == source_id:
+            self.sync_from_controller()
+
+    def sync_from_controller(self) -> None:
+        """Refresh the source label without creating a second source state."""
+
+        source_id = str(
+            self.controller.state.data.get("source_component_id", "")
+        )
+        if not source_id or source_id not in self.context.registry:
+            self.summary_label.setText("Source unavailable")
+            return
+        source = self.context.registry.get(source_id).state
+        label = str(source.properties.get("label", "")).strip()
+        preview = label or f"Scatter {source_id[:8]}"
+        self.summary_label.setText(
+            f"{preview}\nStable component id: {source_id}\n"
+            "The source owns the colormap, norm, limits, and scalar data."
+        )
+
+    def dispose(self) -> None:
+        """Detach the Registry subscription idempotently."""
+
+        if self._disposed:
+            return
+        self._disposed = True
+        self._unsubscribe()
+
+
 class AxesLayoutSection(QWidget, EditorSection):
     """Show immutable Axes relationships and open safe geometry editing."""
 

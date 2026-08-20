@@ -6,16 +6,18 @@ restart.
 
 ## Schema authority
 
-MyGUI accepts only exact integer schema version 10. Component business state is
-the schema-v10 tree; profile selection, Section expansion, QWidget state,
-callbacks, typed tree projection keys, and other UI-only data are excluded.
+MyGUI saves and validates exact integer schema version 11. Component business
+state is the schema-v11 tree; profile selection, Section expansion, QWidget
+state, callbacks, typed tree projection keys, and other UI-only data are
+excluded. Strictly valid schema-v10 files migrate in memory to v11 before any
+Table or Figure state is published; v4-v9 remain unsupported.
 Closed composite contracts reject unknown keys, non-finite values, invalid
 kind/parameter combinations, callables, Matplotlib objects, and runtime state.
 
-Any new persisted field, renamed key, kind/role, selector, or wire-shape change
-requires a dedicated schema-v11 task. That task defines migration input/output,
-validation, failure rollback, stable-ID rules, empty-component behavior, and
-save/open round trips before production code changes.
+Any later persisted field, renamed key, kind/role, selector, or wire-shape
+change requires a dedicated schema migration task. That task defines migration
+input/output, validation, failure rollback, stable-ID rules, empty-component
+behavior, and save/open round trips before production code changes.
 
 ## Registration and restore
 
@@ -39,6 +41,6 @@ batch events so the tree rebuilds and redraws once.
 ## Project documentation
 
 Persisted changes update `docs/project-files.md`, the relevant parameter page,
-and `docs/component-properties-v10.md` (or its successor) in the same change.
+and `docs/component-properties-v11.md` (or its successor) in the same change.
 Keep migration plans and future formats out of user documentation until they
 are current behavior.

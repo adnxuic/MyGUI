@@ -76,7 +76,7 @@ class MatplotlibExposureContractTests(unittest.TestCase):
             for kind, roles in ROLES_BY_KIND.items()
             for role in roles
         }
-        self.assertEqual(len(expected), 23)
+        self.assertEqual(len(expected), 24)
         self.assertTrue(
             all(registry.profile_for(kind, role) for kind, role in expected)
         )

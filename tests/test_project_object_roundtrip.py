@@ -58,7 +58,35 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         valid_pair = self.window.repository.valid_pair(x_ref, y_ref)
 
         canvas.add_plot(line_pair.x, line_pair.y, "-", 2, "black", "plot", x_ref, y_ref)
-        canvas.add_scatter(valid_pair.x, valid_pair.y, 20, "red", "o", "scatter", x_ref, y_ref)
+        canvas.add_scatter(
+            valid_pair.x,
+            valid_pair.y,
+            20,
+            "red",
+            "o",
+            "scatter",
+            x_ref,
+            y_ref,
+            object_id="roundtrip-scatter",
+            color_ref=y_ref,
+            color_mapping={
+                "enabled": True,
+                "cmap": "viridis",
+                "norm": {
+                    "kind": "linear",
+                    "params": {"vmin": None, "vmax": None, "clip": False},
+                },
+                "bad": "#00000000",
+                "under": None,
+                "over": None,
+                "nonfinite": "drop",
+            },
+        )
+        canvas.add_colorbar(
+            "roundtrip-scatter",
+            {"label": "Mapped values"},
+            object_id="roundtrip-colorbar",
+        )
         canvas.add_curve("x", 0, 3, "-", "green", "curve")
         canvas.add_component_line([0, 1], [2, 3], "-", "cyan", "line")
         linear_method = list(interpolate_dict)[2]

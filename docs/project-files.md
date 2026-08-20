@@ -1,13 +1,17 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 10. One file contains one project, its typed Table document, and one Matplotlib Figure component tree. The loader accepts only the exact integer version `10`; schema v4-v9 and unknown versions are intentionally unsupported and are not migrated in-process.
+MyGUI project files use strict JSON schema version 11. One file contains one
+project, its typed Table document, and one Matplotlib Figure component tree.
+The loader accepts exact integer v11 and strictly validated integer v10 for
+in-memory migration. Schema v4-v9, non-integer values, and unknown versions are
+rejected before application state is published.
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 10,
+  "schema_version": 11,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -18,7 +22,7 @@ MyGUI project files use strict JSON schema version 10. One file contains one pro
 ```
 
 - `schema` is always `mygui-project`.
-- `schema_version` is always the integer `10`.
+- Newly saved `schema_version` is always the integer `11`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -78,6 +82,7 @@ The controlled kind/role combinations are:
 | `legend` | `legend` |
 | `line` | `line`, `function_curve`, `data_plot`, `fit_curve`, `interpolation` |
 | `scatter` | `scatter` |
+| `colorbar` | `colorbar` |
 | `in_axes` | `in_axes_zoom`, `in_axes_image` |
 
 ## Figure hierarchy and fixed components
@@ -110,7 +115,7 @@ Tick, Tick Label, Grid, and Legend targets may be recreated by Matplotlib. Their
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v10)](component-properties-v10.md) for the complete property matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v11)](component-properties-v11.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -120,6 +125,7 @@ Role-specific `data` fields are:
 | `function_curve` | `expression`, `x_start`, `x_stop` |
 | `data_plot` | `x_ref`, `y_ref`, `preprocess` |
 | `scatter` | `x_ref`, `y_ref`, optional `color_ref`, optional `size_ref`, `preprocess` |
+| `colorbar` | `source_component_id` |
 | `interpolation` | `x_ref`, `y_ref`, `preprocess`, `method`, `k`, `samples`, `lam`, `lam_auto` |
 | `fit_curve` | `x_ref`, `y_ref`, `preprocess`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
 | `in_axes_zoom` | no persisted data; mirrors are derived at runtime |
@@ -128,6 +134,14 @@ Role-specific `data` fields are:
 Free Text, Title, and Axis Label records share the safe Text typography, alignment, bbox, math/TeX, z-order, and export contract. Only Free Text persists a selectable data/axes/figure coordinate system.
 
 Legend properties use tagged location and anchor records, complete entry/title fonts, columns/layout, points/scaling, spacing/padding, frame appearance, dragging, z-order/export fields, and `entry_scope` (`axes` or `twin_pair`).
+
+A `colorbar/colorbar` record is a removable child of its owner Axes. Its
+selector contains the Colorbar stable object ID, and `data` contains only the
+stable `source_component_id`. The source must be a scalar-mapped Scatter in the
+same Axes, with a valid `color_ref`, and may be referenced by only one
+Colorbar. Placement, label/ticker/font, outline, extend, spacing, and edge
+settings are Colorbar properties. Colormap, norm, limits, and scalar values
+remain owned only by the Scatter. See [Colorbar Component](colorbar-component.md).
 
 An `in_axes` record is a removable child of a main Axes and uses
 `selector: {"object_id": component_id}`. Both roles persist normalized parent
@@ -161,15 +175,20 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v10.
+snapshot only and does not change schema v11.
 
 ## Stable IDs and compatibility
 
-Component, project, Sheet, column, layout, and data-reference IDs are persisted unchanged and must remain stable across every schema-v10 save/open round trip. Schema versions v4 through v9, non-integer versions, and unknown versions are rejected before Table or Figure state is published. A future format change must use a new schema version rather than silently normalizing an older file.
+Component, project, Sheet, column, layout, and data-reference IDs are persisted
+unchanged across every schema-v11 save/open round trip. Strict v10 input is
+validated with the v10 graph before migration; because v10 cannot contain a
+Colorbar, its component tree is copied unchanged and only the schema version is
+advanced before complete v11 validation. Malformed v10 and versions v4 through
+v9 are rejected before Table or Figure state is published.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
-Legend directly from the v10 tree. Zoom mirrors receive one final batch refresh
+Colorbar after its source, with Legend restored from the v11 tree. Zoom mirrors receive one final batch refresh
 after their sources exist. Restore does not
 create legacy chart arrays or Modifier records as an intermediate runtime
 format. The Registry tree is subsequently the source for every save.
@@ -188,6 +207,8 @@ Before Table or Figure application state changes, the loader validates:
 - exactly one Figure root matching `root_component_id`;
 - unique component IDs, known kind/role pairs, existing parents, an acyclic connected hierarchy, and unique semantic selectors;
 - required fixed Axes children, valid layout cells, twin pairs, and consistent shared-axis groups;
+- Colorbar source existence, Scatter role, shared owner Axes, active scalar
+  mapping and `color_ref`, and one-Colorbar-per-source cardinality;
 - property/data JSON types, finite numbers, normalized colors, and unique chart order values;
 - data references, compatible column types, preprocessing expressions,
   interpolation methods, and fitting engines.
@@ -205,11 +226,11 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v10.
+are not added to schema v11.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v10 project stays clean through those UI-only interactions, and a
+schema-v11 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export

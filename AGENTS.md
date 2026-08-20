@@ -36,6 +36,10 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   Presentation modules must not import Matplotlib, read `canvas.fig`, resolve
   live targets, or mutate Artists directly. `main.py` has the startup-only
   backend-selection exception.
+- **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` is owned by its Colorbar
+  Component. It is never registered as an ordinary `ComponentKind.AXES` and
+  never receives the fixed Axes semantic subtree; lifecycle operations enter
+  through `ColorbarService` and the reversible Colorbar removal contract.
 - **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of Matplotlib TeX
   rcParams. TeX starts disabled, preserves a non-empty external preamble (or
   installs the MyGUI default), and is enabled only after validation;
@@ -95,11 +99,12 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   removable components declare `REMOVE` and exactly one handler. Deletion is a
   prepared all-or-nothing transaction and post-delete selection is computed
   from the confirmed deletion set.
-- **CORE-PERSISTENCE-V10:** Persist component state only through the exact
-  integer schema-v10 component tree. UI profiles, widgets, callbacks, tree
-  keys, and expansion/selection state never enter project files. v4-v9 loading
-  is intentionally retired. Any persisted format change requires a dedicated
-  schema-v11 migration task with validation, rollback, and round-trip coverage.
+- **CORE-PERSISTENCE-V11:** Persist component state only through the exact
+  integer schema-v11 component tree. UI profiles, widgets, callbacks, tree
+  keys, and expansion/selection state never enter project files. Only strict
+  validated schema v10 may migrate to v11; v4-v9 loading remains retired. Any
+  later persisted format change requires a dedicated migration task with
+  validation, rollback, and round-trip coverage.
 - Runtime-created persisted components declare `RESTORE_PHASE` and exactly one
   `ComponentMaterializer`; fixed semantic components use `None`. Preserve
   stable IDs and empty valid data-backed components.

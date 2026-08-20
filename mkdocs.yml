@@ -65,6 +65,7 @@ nav:
       - Fitting: fitting.md
       - In-Axes Elements: in-axes.md
       - Text Element: text-element.md
+      - Colorbar Component: colorbar-component.md
       - Color Picker: color-picker.md
   - Editing Components:
       - Components Tree: components-tree.md
@@ -81,7 +82,8 @@ nav:
       - Component Inspector Architecture: component-inspector.md
       - Atomic Component Deletion: component-deletion.md
       - Component Extension Template: component-extension-template.md
-      - Component Properties (schema v10): component-properties-v10.md
+      - Component Properties (schema v11): component-properties-v11.md
+      - Legacy schema v10 migration properties: component-properties-v10.md
   - Maintenance & QA:
       - Manual Smoke Test: smoke-test.md
       - Documentation Site: documentation-site.md

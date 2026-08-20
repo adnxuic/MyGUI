@@ -21,6 +21,13 @@ pending data state. Failure restores the exact identities and publishes no
 intermediate events or success message. Commit publishes one batch lifecycle,
 one final refresh/draw, one selection, and at most one Message Bar result.
 
+Colorbar removal uses `ColorbarRemovalHandle`, not ordinary Artist-list
+removal. It pins the Colorbar, auxiliary Axes, Figure Axes ordering, owner Axes
+layout/anchor, source callback registry, and source binding. Owner Axes removal
+uses `AxesSubtreeRemovalHandle` so external Colorbar auxiliary Axes commit and
+roll back with the Axes subtree. Source Scatter cascades are expanded during
+deletion planning, before Registry commit.
+
 New removable components require tests for single deletion, same-cohort batch
 deletion, dependency cascade, candidate revalidation, selection fallback,
 palette restoration, and failures at preparation, physical removal, Inspector

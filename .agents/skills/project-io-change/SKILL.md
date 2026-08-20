@@ -6,7 +6,7 @@ description: Change MyGUI save, open, restore, dirty-state, or project publicati
 # Project IO Change
 
 Read the routed persistence, component, and testing pages. Preserve
-`CORE-PERSISTENCE-V10`, `CORE-REGISTRATION-ATOMICITY`, and
+`CORE-PERSISTENCE-V11`, `CORE-REGISTRATION-ATOMICITY`, and
 `CORE-TABLE-REPOSITORY`.
 
 Trace the operation from file validation through repository/Canvas preparation,

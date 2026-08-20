@@ -1,4 +1,4 @@
-"""Normalize and validate the strict schema-v10 Figure component tree."""
+"""Normalize and validate strict schema-v10 and schema-v11 Figure trees."""
 
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ _COLOR_PROPERTIES = frozenset(
         "gapcolor",
         "region_color",
         "region_facecolor",
+        "outline_color",
     }
 )
 
@@ -83,8 +84,8 @@ def _canonical_json_value(value: Any, path: str) -> Any:
     return deepcopy(value)
 
 
-def normalize_v10_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Return a JSON-friendly copy of one schema-v10 Figure tree."""
+def _normalize_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Return a JSON-friendly copy of one component-tree wire record."""
 
     figure = deepcopy(_expect_dict(figure_snapshot, "figure"))
     components = _expect_list(figure.get("components"), "figure.components")
@@ -110,6 +111,18 @@ def normalize_v10_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
                     f"figure.components[{index}].properties.{name}."
                 ) from exc
     return figure
+
+
+def normalize_v10_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a strict schema-v10 Figure tree before migration."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v11_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v11 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
 
 
 def _validate_json_value(value: Any, path: str) -> None:
@@ -242,6 +255,7 @@ def _validate_parent(
         ComponentKind.AXIS,
         ComponentKind.SPINE,
         ComponentKind.LEGEND,
+        ComponentKind.COLORBAR,
     }:
         valid = parent_kind is ComponentKind.AXES
     elif state.kind is ComponentKind.TICK_GROUP:
@@ -311,7 +325,8 @@ def _validate_parent(
         if selector.get("name") not in _SPINE_NAMES:
             raise ValueError(f"Invalid Spine selector at {path}.selector.")
     if (
-        state.kind in _CHART_KINDS | {ComponentKind.IN_AXES}
+        state.kind
+        in _CHART_KINDS | {ComponentKind.IN_AXES, ComponentKind.COLORBAR}
         or state.role is ComponentRole.TEXT
     ) and selector.get("object_id") != state.id:
         raise ValueError(f"Invalid object selector at {path}.selector.object_id.")
@@ -548,18 +563,21 @@ def _validate_layouts(
     validate_share_groups(share_y, "y")
 
 
-def validate_v10_figure(
+def _validate_figure(
     figure_snapshot: Any,
     available_refs: dict[ColumnRef, ColumnType],
     project_id: str,
     project_name: str | None = None,
+    *,
+    schema_version: int,
 ) -> None:
-    """Validate one exact schema-v10 Figure before runtime publication."""
+    """Validate one exact versioned Figure before runtime publication."""
 
     figure = _expect_dict(figure_snapshot, "figure")
     if set(figure) != {"root_component_id", "components"}:
         raise ValueError(
-            "Schema v10 figure must contain only root_component_id and components."
+            f"Schema v{schema_version} figure must contain only "
+            "root_component_id and components."
         )
     root_id = figure.get("root_component_id")
     if not isinstance(root_id, str) or not root_id.strip():
@@ -572,6 +590,10 @@ def validate_v10_figure(
     for index, raw in enumerate(raw_components):
         path = f"figure.components[{index}]"
         state = _state_from_raw(raw, path)
+        if schema_version == 10 and state.kind is ComponentKind.COLORBAR:
+            raise ValueError(
+                f"Invalid project field {path}: Colorbar is not part of schema v10."
+            )
         if state.id in by_id:
             raise ValueError(f"Duplicate component id at {path}: {state.id}")
         by_id[state.id] = state
@@ -585,7 +607,8 @@ def validate_v10_figure(
         or roots[0].kind is not ComponentKind.FIGURE
     ):
         raise ValueError(
-            "Schema v10 requires one Figure root matching root_component_id."
+            f"Schema v{schema_version} requires one Figure root matching "
+            "root_component_id."
         )
     root = roots[0]
     children: dict[str, list[ComponentState]] = {}
@@ -644,5 +667,79 @@ def validate_v10_figure(
     ]
     if len(chart_orders) != len(set(chart_orders)):
         raise ValueError("Chart component order values must be unique.")
+    colorbar_sources: set[str] = set()
+    for state in states:
+        if state.kind is not ComponentKind.COLORBAR:
+            continue
+        path = paths[state.id]
+        if set(state.data) != {"source_component_id"}:
+            raise ValueError(
+                f"Invalid project field {path}.data: expected only "
+                "source_component_id."
+            )
+        source_id = state.data["source_component_id"]
+        source = by_id.get(source_id)
+        if (
+            source is None
+            or source.kind is not ComponentKind.SCATTER
+            or source.role is not ComponentRole.SCATTER
+        ):
+            raise ValueError(
+                f"Invalid project field {path}.data.source_component_id: "
+                "expected a Scatter component id."
+            )
+        if source.parent_id != state.parent_id:
+            raise ValueError(
+                f"Invalid project field {path}: Colorbar and source must "
+                "share one owner Axes."
+            )
+        if (
+            not source.properties.get("color_mapping", {}).get("enabled")
+            or source.data.get("color_ref") is None
+        ):
+            raise ValueError(
+                f"Invalid project field {path}.data.source_component_id: "
+                "Scatter scalar color mapping is not enabled."
+            )
+        if source_id in colorbar_sources:
+            raise ValueError(
+                f"Invalid project field {path}.data.source_component_id: "
+                "a Scatter may own at most one Colorbar."
+            )
+        colorbar_sources.add(source_id)
     if project_name is not None and root.properties.get("name", "") != project_name:
         raise ValueError("Project and Figure component names must match.")
+
+
+def validate_v10_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Strictly validate a schema-v10 Figure before migration."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=10,
+    )
+
+
+def validate_v11_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v11 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=11,
+    )

@@ -2,17 +2,16 @@
 
 ## Project and component state
 
-- Project files intentionally accept only exact integer schema v10. Historical
-  v4-v9 files require an external conversion step before they can be opened.
+- Project files save exact integer schema v11 and migrate strictly valid v10
+  files. Historical v4-v9 files require an external conversion step.
 - Component property edits, component/Axes deletion, chart color changes, and
   whole-Axes palette application are not connected to the application Undo
   stack.
 - The Components tree does not provide drag reparenting or ordering, inline
   rename, visibility controls, or canvas highlighting. Selection and expansion
   state last only for the current application session.
-- Patch, Bar, Annotation, standalone data-coordinate Image, and Colorbar
-  Controllers are not supported. Raster images are supported only as `in_axes`
-  Elements.
+- Patch, Bar, Annotation, and standalone data-coordinate Image Controllers are
+  not supported. Raster images are supported only as `in_axes` Elements.
 - Multi-series Plot, Scatter, and Interpolation creation uses one shared X with
   multiple Y columns. Arbitrary X/Y pair batches and batch Fit creation are not
   available.

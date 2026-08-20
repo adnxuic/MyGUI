@@ -53,6 +53,7 @@ from .inspector import (
     TreePresentationSpec,
 )
 from .inputs import (
+    ColorbarInput,
     DataReferenceInput,
     InAxesInput,
     InterpolationOptionsInput,
@@ -63,6 +64,7 @@ from .inputs import (
 from .profiles import register_production_profiles
 from .sections import (
     AxesLayoutSection,
+    ColorbarSourceSection,
     DataReferenceSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
@@ -115,6 +117,7 @@ __all__ = [
     "SectionSpec",
     "TreePresentationSpec",
     "DataReferenceInput",
+    "ColorbarInput",
     "InAxesInput",
     "InterpolationOptionsInput",
     "LineAppearanceInput",
@@ -122,6 +125,7 @@ __all__ = [
     "ScatterMappingInput",
     "register_production_profiles",
     "AxesLayoutSection",
+    "ColorbarSourceSection",
     "DataReferenceSection",
     "ImageInAxesSourceSection",
     "PropertySection",

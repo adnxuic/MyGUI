@@ -88,6 +88,13 @@ Function Curve, Data Plot, Fit Curve, Interpolation, and Generic Line use the sa
 
 Scatter uses `ScatterAppearanceSection` and the color/size mapping section; their parameters are documented in [Chart Component Parameters](chart-component-parameters.md).
 
+Colorbar uses one exact Element profile with Source, Placement, Scale & Ticks,
+Label, Appearance, and Advanced sections. `ColorbarSourceSection` displays the
+read-only stable Scatter relationship and detaches its Registry subscription
+on disposal. Every editable field is a `PropertySection` control routed through
+`ColorbarService`; constructor-sensitive placement edits rebuild without
+replacing the Inspector. See [Colorbar Component](colorbar-component.md).
+
 ## Text and Legend profiles
 
 Title, X Label, Y Label, and free Text share the ordered Content, Typography, Rotation and alignment, Position and visibility, and Rendering sections documented in [Text Element](text-element.md). All render-sensitive Text properties use `TextRenderService`. `apply_many()` accepts multiple `(controller, property_patch)` pairs, applies them in one Registry transaction, performs one render verification per Figure, and rolls back every target if validation or rendering fails. Free Text may be deleted; semantic Title and Axis Label Controllers are hidden with `visible` and are not removed.
@@ -127,7 +134,7 @@ readable value such as `Linear`, `Automatic`, `Scalar`, `sans-serif · 10 pt`,
 locator/formatter, scale, font, text box, marked points, Scatter color/size
 mapping, and Zoom connectors.
 
-Both control families validate through the same closed schema-v10 value
+Both control families validate through the same closed schema-v11 value
 normalizer and submit one complete value to one Controller/Service
 transaction. A cancelled dialog changes nothing, and a rejected change
 restores the prior summary, control state, and Controller value together with
@@ -149,7 +156,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v10.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v11.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -159,7 +166,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v10
+state, artists, Locator bindings, a complete tree projection, and schema-v11
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -200,7 +207,9 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 - `LineAppearanceInput`: label, canonical line style, optional width, and injected `ColorChoiceWidget`.
 - `DataReferenceInput`: project-scoped X/Y column choices with signal-safe programmatic synchronization.
 - `InterpolationOptionsInput`: method, sample count, order `k`, and automatic or explicit smoothing lambda.
+- `ColorbarInput`: eligible source, location, label, fraction, shrink, aspect,
+  and pad. It contains no Controller and cannot create Matplotlib state.
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v10. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope` is business state; profile and widget state remain UI-only.
+The project format uses schema v11. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope` and Colorbar `source_component_id` are business state; profile and widget state remain UI-only.

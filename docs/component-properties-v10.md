@@ -1,4 +1,9 @@
-# Component Properties (schema v10)
+# Legacy Component Properties (schema v10 migration input)
+
+This page records the closed property contracts accepted by the strict v10
+migration validator. New projects save schema v11; see
+[Component Properties (schema v11)](component-properties-v11.md). Schema v10
+cannot contain Colorbar Components.
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
@@ -198,11 +203,13 @@ persistent property set declared by the role's Controller; missing and
 unknown keys are rejected before Table/Figure publication. Composite values
 must already use their tagged object shape.
 
-Only exact integer schema version `10` is accepted. Saving writes v10. Schema
-v4-v9, booleans/floats/strings that resemble `10`, and unknown versions are
-rejected; this release intentionally provides no in-process v9 migration.
-Inspector profiles, section expansion, tree session keys, QWidget state, and
-callbacks are never serialized.
+Only exact integer schema version `10` enters the migration path. The complete
+v10 snapshot is validated first, copied without component rewrites, changed to
+schema version `11`, and validated again before publication. Saving always
+writes v11. Schema v4-v9, booleans/floats/strings that resemble a supported
+version, and unknown versions are rejected. Inspector profiles, section
+expansion, tree session keys, QWidget state, and callbacks are never
+serialized.
 
 ## Matplotlib reference
 

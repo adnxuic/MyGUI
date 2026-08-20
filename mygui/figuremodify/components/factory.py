@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
+from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 
 from mygui.figuremodify.axes_layout import stable_layout_id, stable_share_group
@@ -16,6 +18,7 @@ from mygui.figuremodify.axes_layout import stable_layout_id, stable_share_group
 from .controllers import (
     AxesController,
     AxisLabelController,
+    ColorbarController,
     FigureController,
     GridController,
     LegendController,
@@ -40,15 +43,17 @@ def _random_id(_path: str) -> str:
     return str(uuid4())
 
 
-def _v10_layout_records(
+def _layout_records(
     figure: Figure,
     figure_id: str,
+    *,
+    axes_values: list[Axes] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[Axes, dict[str, Any]]]:
-    """Describe an existing regular Figure with schema-v10 layout records."""
+    """Describe an existing regular Figure with persisted layout records."""
 
     groups: dict[int, list[tuple[int, Axes, Any, int, int]]] = {}
     standalone: list[tuple[int, Axes]] = []
-    for index, axes in enumerate(figure.axes):
+    for index, axes in enumerate(axes_values or list(figure.axes)):
         try:
             subplot_spec = axes.get_subplotspec()
             grid_spec = subplot_spec.get_gridspec()
@@ -355,7 +360,26 @@ def register_figure_components(
     result = registry or ComponentRegistry()
     make_id = id_factory or _random_id
     figure_id = root_id or make_id("figure")
-    layout_definitions, subplot_records = _v10_layout_records(figure, figure_id)
+    known_colorbars: list[tuple[Colorbar, Any]] = []
+    seen_colorbars: set[int] = set()
+    for axes in figure.axes:
+        for mappable in (*tuple(axes.collections), *tuple(axes.images)):
+            colorbar = getattr(mappable, "colorbar", None)
+            if (
+                isinstance(colorbar, Colorbar)
+                and isinstance(colorbar.ax, Axes)
+                and colorbar.ax.figure is figure
+                and id(colorbar) not in seen_colorbars
+            ):
+                known_colorbars.append((colorbar, mappable))
+                seen_colorbars.add(id(colorbar))
+    auxiliary_axes = {colorbar.ax for colorbar, _source in known_colorbars}
+    regular_axes = [axes for axes in figure.axes if axes not in auxiliary_axes]
+    layout_definitions, subplot_records = _layout_records(
+        figure,
+        figure_id,
+        axes_values=regular_axes,
+    )
     figure_state = ComponentState(
         id=figure_id,
         kind=ComponentKind.FIGURE,
@@ -369,7 +393,7 @@ def register_figure_components(
     result.register(figure_controller, target=figure)
     figure_controller.sync_from_target()
 
-    figure_text_order = len(figure.axes)
+    figure_text_order = len(regular_axes)
     for text_index, text in enumerate(figure.texts):
         text_id = make_id(f"figure/text/{text_index}")
         state = ComponentState(
@@ -394,7 +418,9 @@ def register_figure_components(
         text.set_gid(text_id)
 
     chart_order = 0
-    for axes_index, axes in enumerate(figure.axes):
+    axes_ids_by_target: dict[int, str] = {}
+    source_ids_by_target: dict[int, str] = {}
+    for axes_index, axes in enumerate(regular_axes):
         path = f"figure/axes/{axes_index}"
         axes_id = make_id(path)
         axes_state = ComponentState(
@@ -409,6 +435,7 @@ def register_figure_components(
         )
         axes_controller = AxesController(axes_state)
         result.register(axes_controller, target=axes)
+        axes_ids_by_target[id(axes)] = axes_id
         axes_controller.sync_from_target()
         next_order = len(
             create_semantic_children(
@@ -484,13 +511,69 @@ def register_figure_components(
                 },
                 properties=ScatterController.default_properties(),
             )
+            if collection.get_array() is not None:
+                properties = deepcopy(state.properties)
+                mapping = deepcopy(properties["color_mapping"])
+                mapping["enabled"] = True
+                mapping["cmap"] = collection.get_cmap().name
+                properties["color_mapping"] = mapping
+                state = state.clone(properties=properties)
             controller = ScatterController(state)
             result.register(controller, target=collection)
             controller.sync_from_target()
             collection.set_gid(scatter_id)
+            source_ids_by_target[id(collection)] = scatter_id
             scatter_index += 1
             next_order += 1
             chart_order += 1
+
+    for colorbar_index, (colorbar, source) in enumerate(known_colorbars):
+        source_id = source_ids_by_target.get(id(source))
+        owner = getattr(source, "axes", None)
+        axes_id = axes_ids_by_target.get(id(owner))
+        if source_id is None or axes_id is None:
+            continue
+        path = f"figure/axes/{regular_axes.index(owner)}/colorbar/{colorbar_index}"
+        colorbar_id = make_id(path)
+        properties = ColorbarController.default_properties()
+        info = getattr(colorbar.ax, "_colorbar_info", {})
+        properties.update(
+            {
+                "location": str(
+                    info.get(
+                        "location",
+                        "right" if colorbar.orientation == "vertical" else "bottom",
+                    )
+                ),
+                "fraction": float(info.get("fraction", 0.15)),
+                "shrink": float(info.get("shrink", 1.0)),
+                "aspect": float(info.get("aspect", 20.0)),
+                "pad": float(info.get("pad", 0.05)),
+                "extend": str(colorbar.extend),
+                "spacing": str(colorbar.spacing),
+                "drawedges": bool(colorbar.drawedges),
+            }
+        )
+        order = max(
+            (
+                child.state.order
+                for child in result.children(axes_id)
+            ),
+            default=-1,
+        ) + 1
+        state = ComponentState(
+            id=colorbar_id,
+            kind=ComponentKind.COLORBAR,
+            role=ComponentRole.COLORBAR,
+            parent_id=axes_id,
+            order=order,
+            selector={"object_id": colorbar_id},
+            properties=properties,
+            data={"source_component_id": source_id},
+        )
+        controller = ColorbarController(state)
+        result.register(controller, target=colorbar)
+        controller.sync_from_target(strict=True)
 
     result.validate_tree()
     return result

@@ -78,7 +78,7 @@ palette. A Figure style change alone does not recolor existing components.
 - In-Axes Components store their resolved background, frame, indicator, and
   display properties without consuming the Axes chart-color cursor.
 
-These values use the existing schema-v10 component tree. Opening a project
+These values use the existing schema-v11 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
 

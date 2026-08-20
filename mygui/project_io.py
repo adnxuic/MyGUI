@@ -1,4 +1,4 @@
-"""Validate, save, and load strict schema-v10 MyGUI project snapshots."""
+"""Validate, migrate, save, and load strict schema-v11 project snapshots."""
 
 from __future__ import annotations
 
@@ -7,19 +7,22 @@ import hashlib
 import logging
 import os
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.components.serialization import (
-    normalize_v10_figure,
+    normalize_v11_figure,
     validate_v10_figure,
+    validate_v11_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 10
+PROJECT_SCHEMA_VERSION = 11
+MIGRATABLE_PROJECT_SCHEMA_VERSION = 10
 LOGGER = logging.getLogger(__name__)
 
 
@@ -136,8 +139,13 @@ def _validate_table(table_snapshot: Any, project_id: str,
     return refs
 
 
-def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
-    """Validate project snapshot."""
+def _validate_project_snapshot_version(
+    snapshot: dict[str, Any],
+    *,
+    version: int,
+    figure_validator,
+) -> None:
+    """Validate one exact project schema version."""
 
     validate_json_budget(snapshot, limits=load_resource_limits())
     root = _expect_dict(snapshot, "project")
@@ -148,11 +156,11 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
     )
     if _expect_string(root.get("schema"), "schema") != PROJECT_SCHEMA_NAME:
         raise ValueError("Unsupported project file.")
-    version = root.get("schema_version")
-    if type(version) is not int or version != PROJECT_SCHEMA_VERSION:
+    actual_version = root.get("schema_version")
+    if type(actual_version) is not int or actual_version != version:
         raise ValueError(
-            f"Unsupported project schema version {version!r}; "
-            f"only schema v{PROJECT_SCHEMA_VERSION} is supported."
+            f"Unsupported project schema version {actual_version!r}; "
+            f"expected exact integer schema v{version}."
         )
     project = _expect_dict(root.get("project"), "project")
     _expect_exact_keys(project, {"id", "name"}, "project.project")
@@ -164,7 +172,33 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
         "Project name",
     )
     refs = _validate_table(root.get("table"), project_id, project_name)
-    validate_v10_figure(root.get("figure"), refs, project_id, project_name)
+    figure_validator(root.get("figure"), refs, project_id, project_name)
+
+
+def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate one exact current schema-v11 project snapshot."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=PROJECT_SCHEMA_VERSION,
+        figure_validator=validate_v11_figure,
+    )
+
+
+def migrate_v10_to_v11(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Strictly validate and migrate a schema-v10 tree to schema v11."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=MIGRATABLE_PROJECT_SCHEMA_VERSION,
+        figure_validator=validate_v10_figure,
+    )
+    migrated = deepcopy(snapshot)
+    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
+    # The eight-field component tree is unchanged. Schema v10 cannot contain
+    # Colorbar records, so no component-level rewrite is needed.
+    validate_project_snapshot(migrated)
+    return migrated
 
 
 def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
@@ -177,7 +211,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v10_figure(canvas.component_snapshot())
+    figure = normalize_v11_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -235,6 +269,19 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
             parse_constant=_reject_json_constant,
         )
     validate_json_budget(snapshot, limits=limits)
+    version = snapshot.get("schema_version") if isinstance(snapshot, dict) else None
+    if type(version) is not int:
+        raise ValueError(
+            f"Unsupported project schema version {version!r}; schema versions "
+            "must use exact integers."
+        )
+    if version == MIGRATABLE_PROJECT_SCHEMA_VERSION:
+        return migrate_v10_to_v11(snapshot)
+    if version != PROJECT_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported project schema version {version!r}; only schema "
+            f"v{PROJECT_SCHEMA_VERSION} and strict v10 migration are supported."
+        )
     validate_project_snapshot(snapshot)
     return snapshot
 

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -51,6 +52,75 @@ from .common import (
     FocusAwareSpinBox,
     LineStyleEditor,
 )
+
+
+class ColorbarInput(QFrame):
+    """Controller-free source and placement input for Colorbar creation."""
+
+    def __init__(self, sources, *, parent=None):
+        super().__init__(parent)
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.source_input = QComboBox(self)
+        for component_id, label in sources:
+            self.source_input.addItem(str(label), str(component_id))
+        layout.addRow("Source:", self.source_input)
+
+        self.location_input = QComboBox(self)
+        self.location_input.addItems(("right", "left", "top", "bottom"))
+        layout.addRow("Location:", self.location_input)
+        self.label_input = QLineEdit(self)
+        layout.addRow("Label:", self.label_input)
+
+        self.fraction_input = FocusAwareDoubleSpinBox(self)
+        self.fraction_input.setRange(0.001, 1.0)
+        self.fraction_input.setDecimals(3)
+        self.fraction_input.setSingleStep(0.01)
+        self.fraction_input.setValue(0.15)
+        layout.addRow("Fraction:", self.fraction_input)
+
+        self.shrink_input = FocusAwareDoubleSpinBox(self)
+        self.shrink_input.setRange(0.001, 1.0)
+        self.shrink_input.setDecimals(3)
+        self.shrink_input.setSingleStep(0.05)
+        self.shrink_input.setValue(1.0)
+        layout.addRow("Shrink:", self.shrink_input)
+
+        self.aspect_input = FocusAwareDoubleSpinBox(self)
+        self.aspect_input.setRange(0.001, 10000.0)
+        self.aspect_input.setDecimals(3)
+        self.aspect_input.setValue(20.0)
+        layout.addRow("Aspect:", self.aspect_input)
+
+        self.pad_input = FocusAwareDoubleSpinBox(self)
+        self.pad_input.setRange(0.0, 1.0)
+        self.pad_input.setDecimals(3)
+        self.pad_input.setSingleStep(0.01)
+        self.pad_input.setValue(0.05)
+        layout.addRow("Pad:", self.pad_input)
+
+    def has_source(self) -> bool:
+        """Return whether creation has one eligible stable source id."""
+
+        return self.source_input.count() > 0
+
+    def source_component_id(self) -> str | None:
+        """Return the selected stable source component id."""
+
+        value = self.source_input.currentData(Qt.UserRole)
+        return str(value) if value is not None else None
+
+    def properties(self) -> dict[str, object]:
+        """Return the complete user-selected Colorbar creation patch."""
+
+        return {
+            "location": self.location_input.currentText(),
+            "label": self.label_input.text(),
+            "fraction": float(self.fraction_input.value()),
+            "shrink": float(self.shrink_input.value()),
+            "aspect": float(self.aspect_input.value()),
+            "pad": float(self.pad_input.value()),
+        }
 
 
 class DataReferenceInput(QFrame):

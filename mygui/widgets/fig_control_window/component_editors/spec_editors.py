@@ -1,4 +1,4 @@
-"""Structured dialog editors for the closed schema-v10 value contracts."""
+"""Structured dialog editors for the closed schema-v11 value contracts."""
 
 from __future__ import annotations
 

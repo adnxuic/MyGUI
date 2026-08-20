@@ -26,7 +26,11 @@ from mygui.figuremodify.matplotlib_adapter import available_font_families
 from mygui.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
 )
-from mygui.widgets.fig_control_window.component_editors import InAxesInput
+from mygui import status_messages
+from mygui.widgets.fig_control_window.component_editors import (
+    ColorbarInput,
+    InAxesInput,
+)
 
 from mygui.resources import load_qss_resource
 
@@ -232,6 +236,60 @@ class PyInAxesDialog(QDialog):
         super().accept()
 
 
+class PyColorbarDialog(QDialog):
+    """Collect Controller-free source and placement values for a Colorbar."""
+
+    ICON_PATH = icon_path("element_images/colorbar.svg")
+
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("colorbar_dialog")
+        self.setWindowTitle(dialog_name or "Colorbar")
+        self.setWindowIcon(QIcon(self.ICON_PATH))
+        self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+        sources = canvas.eligible_colorbar_sources() if canvas is not None else ()
+        layout = QVBoxLayout(self)
+        self.input = ColorbarInput(sources, parent=self)
+        layout.addWidget(self.input)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+        if not self.input.has_source():
+            self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+            status_messages.show_warning(
+                "No scalar-mapped Scatter without a Colorbar is available "
+                "under the selected Axes."
+            )
+
+    def accept(self):
+        """Create the Colorbar without closing when validation fails."""
+
+        canvas = getattr(self.figure_window, "current_canva", None)
+        source_id = self.input.source_component_id()
+        if canvas is None or not canvas.has_current_axes:
+            status_messages.show_warning(
+                "Select an Axes before creating a Colorbar."
+            )
+            return
+        if source_id is None:
+            status_messages.show_warning(
+                "No eligible scalar-mapped Scatter source is available."
+            )
+            return
+        try:
+            canvas.add_colorbar(source_id, self.input.properties())
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return
+        super().accept()
+
+
 @dataclass(frozen=True, slots=True)
 class ElementActionSpec:
     """Declare one Elements action and its resolved icon."""
@@ -248,5 +306,9 @@ element_action_specs = {
     "in_axes": ElementActionSpec(
         PyInAxesDialog,
         PyInAxesDialog.ICON_PATH,
+    ),
+    "Colorbar": ElementActionSpec(
+        PyColorbarDialog,
+        PyColorbarDialog.ICON_PATH,
     ),
 }

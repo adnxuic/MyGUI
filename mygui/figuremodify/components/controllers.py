@@ -15,6 +15,7 @@ from matplotlib import colors as mcolors
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
 from matplotlib.collections import PathCollection
+from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
@@ -45,7 +46,8 @@ from .base import ComponentController
 from .errors import ComponentNotFoundError, ComponentValidationError
 from .matplotlib_removal import (
     MATPLOTLIB_REMOVAL,
-    AxesRemovalHandle,
+    AxesSubtreeRemovalHandle,
+    ColorbarRemovalHandle,
     InAxesRemovalHandle,
 )
 from .models import (
@@ -718,7 +720,7 @@ class FigureController(ContainerController):
         super().__init__(state, **kwargs)
 
     def _validate_data(self, state: ComponentState) -> None:
-        """Require the schema-v10 layout collection."""
+        """Require the current persisted layout collection."""
 
         _exact_data_fields(state, {"layouts"})
         layouts = state.data.get("layouts")
@@ -1063,22 +1065,34 @@ class AxesController(ContainerController):
                     deepcopy(target_properties[key]),
                 )
 
-    def prepare_remove(self) -> "AxesRemovalHandle":
-        """Capture Matplotlib's pinned Axes containers without mutating them."""
+    def prepare_remove(self) -> AxesSubtreeRemovalHandle:
+        """Capture the Axes plus Colorbar-owned auxiliary Axes atomically."""
 
-        return MATPLOTLIB_REMOVAL.prepare_axes(self.resolve_target())
+        colorbars = ()
+        if self._registry is not None:
+            colorbars = tuple(
+                controller.resolve_target()
+                for controller in self._registry.query(
+                    kind=ComponentKind.COLORBAR,
+                    parent_id=self.component_id,
+                )
+            )
+        return MATPLOTLIB_REMOVAL.prepare_axes_subtree(
+            self.resolve_target(),
+            colorbars,
+        )
 
-    def commit_remove(self, handle: "AxesRemovalHandle") -> None:
+    def commit_remove(self, handle: AxesSubtreeRemovalHandle) -> None:
         """Temporarily detach an Axes without notifying Matplotlib observers."""
 
         MATPLOTLIB_REMOVAL.commit(handle)
 
-    def rollback_remove(self, handle: "AxesRemovalHandle") -> None:
+    def rollback_remove(self, handle: AxesSubtreeRemovalHandle) -> None:
         """Restore the exact Axes containers and current-Axes stack."""
 
         MATPLOTLIB_REMOVAL.rollback(handle)
 
-    def _finalize_remove(self, handle: "AxesRemovalHandle") -> None:
+    def _finalize_remove(self, handle: AxesSubtreeRemovalHandle) -> None:
         """Publish Matplotlib's Axes removal only after Registry commit."""
 
         MATPLOTLIB_REMOVAL.finalize(handle)
@@ -2145,7 +2159,7 @@ class AxisLabelController(TextController):
                     "Axis label has no parent Axis target."
                 )
             # Axis draw recomputes an automatic label coordinate from renderer
-            # extents.  Once a v10 position is restored or edited, retain the
+            # extents. Once a persisted position is restored or edited, retain the
             # existing transform but explicitly disable that automatic pass so
             # the persisted value remains stable across save/open/draw cycles.
             parent.set_label_coords(
@@ -4105,6 +4119,367 @@ class ScatterController(CollectionController):
         return UpdateImpact.NONE
 
 
+class ColorbarController(ComponentController[Colorbar]):
+    """Control one Colorbar without duplicating its source mapping state."""
+
+    KIND = ComponentKind.COLORBAR
+    ROLES = frozenset({ComponentRole.COLORBAR})
+    DELETION_POLICY = DeletionPolicy.REMOVE
+    RESTORE_PHASE = RestorePhase.COLORBAR
+    CAPABILITIES = frozenset({"colorbar", "source_dependency", "font", "color"})
+    DELETE_IMPACTS = UpdateImpact.REDRAW
+    REBUILD_KEYS = frozenset(
+        {
+            "location",
+            "fraction",
+            "shrink",
+            "aspect",
+            "pad",
+            "extend",
+            "spacing",
+            "drawedges",
+        }
+    )
+    PROPERTY_SPECS = (
+        PropertySpec("visible", bool, True, editor=EditorKind.BOOL),
+        PropertySpec("label", str, "", editor=EditorKind.TEXT),
+        PropertySpec(
+            "location",
+            str,
+            "right",
+            editor=EditorKind.ENUM,
+            choices=("left", "right", "top", "bottom"),
+        ),
+        PropertySpec(
+            "fraction",
+            float,
+            0.15,
+            editor=EditorKind.NUMBER,
+            minimum=0.001,
+            maximum=1.0,
+        ),
+        PropertySpec(
+            "shrink",
+            float,
+            1.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.001,
+            maximum=1.0,
+        ),
+        PropertySpec(
+            "aspect",
+            float,
+            20.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.001,
+        ),
+        PropertySpec(
+            "pad",
+            float,
+            0.05,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+        ),
+        PropertySpec(
+            "extend",
+            str,
+            "neither",
+            editor=EditorKind.ENUM,
+            choices=("neither", "both", "min", "max"),
+            advanced=True,
+        ),
+        PropertySpec(
+            "spacing",
+            str,
+            "uniform",
+            editor=EditorKind.ENUM,
+            choices=("uniform", "proportional"),
+            advanced=True,
+        ),
+        PropertySpec(
+            "drawedges",
+            bool,
+            False,
+            editor=EditorKind.BOOL,
+            advanced=True,
+        ),
+        PropertySpec(
+            "locator",
+            dict,
+            deepcopy(DEFAULT_MAJOR_LOCATOR),
+            editor=EditorKind.LOCATOR_SPEC,
+            normalizer=normalize_locator,
+        ),
+        PropertySpec(
+            "formatter",
+            dict,
+            deepcopy(DEFAULT_FORMATTER),
+            editor=EditorKind.FORMATTER_SPEC,
+            normalizer=normalize_formatter,
+        ),
+        PropertySpec(
+            "minor_ticks",
+            bool,
+            False,
+            editor=EditorKind.BOOL,
+        ),
+        PropertySpec(
+            "ticklocation",
+            str,
+            "auto",
+            editor=EditorKind.ENUM,
+            choices=("auto", "left", "right", "top", "bottom"),
+        ),
+        PropertySpec(
+            "label_font",
+            dict,
+            deepcopy(_DEFAULT_FONT_SPEC),
+            editor=EditorKind.FONT_SPEC,
+            normalizer=normalize_font,
+        ),
+        PropertySpec(
+            "tick_font",
+            dict,
+            deepcopy(_DEFAULT_FONT_SPEC),
+            editor=EditorKind.FONT_SPEC,
+            normalizer=normalize_font,
+        ),
+        PropertySpec(
+            "outline_visible",
+            bool,
+            True,
+            editor=EditorKind.BOOL,
+        ),
+        PropertySpec(
+            "outline_color",
+            str,
+            "#000000",
+            editor=EditorKind.COLOR,
+            normalizer=_normalize_color,
+        ),
+        PropertySpec(
+            "outline_linewidth",
+            float,
+            0.8,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+        ),
+    )
+
+    def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        self._constructor_properties = {
+            key: self.property_specs()[key].normalize(
+                deepcopy(state.properties.get(key, self.property_specs()[key].default))
+            )
+            for key in self.REBUILD_KEYS
+        }
+        self._label_font_value = normalize_font(
+            state.properties.get("label_font", deepcopy(_DEFAULT_FONT_SPEC))
+        )
+        self._tick_font_value = normalize_font(
+            state.properties.get("tick_font", deepcopy(_DEFAULT_FONT_SPEC))
+        )
+        self._minor_ticks = bool(state.properties.get("minor_ticks", False))
+        self._ticklocation = str(state.properties.get("ticklocation", "auto"))
+        super().__init__(state, **kwargs)
+
+    @staticmethod
+    def _orientation(location: str) -> str:
+        return "vertical" if location in {"left", "right"} else "horizontal"
+
+    def _axis(self, target: Colorbar):
+        return (
+            target.ax.yaxis
+            if self._orientation(self._constructor_properties["location"])
+            == "vertical"
+            else target.ax.xaxis
+        )
+
+    @staticmethod
+    def _font_from_text(text: Text, fallback: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return normalize_font(
+                {
+                    "family": list(text.get_fontfamily()),
+                    "size": float(text.get_fontsize()),
+                    "weight": text.get_fontweight(),
+                    "style": text.get_fontstyle(),
+                    "stretch": text.get_fontproperties().get_stretch(),
+                    "variant": text.get_fontproperties().get_variant(),
+                    "color": _read_color(text.get_color()),
+                }
+            )
+        except Exception:
+            return deepcopy(fallback)
+
+    @staticmethod
+    def _apply_font(texts: list[Text], value: dict[str, Any]) -> None:
+        for text in texts:
+            text.set_fontfamily(value["family"])
+            text.set_fontsize(value["size"])
+            text.set_fontweight(value["weight"])
+            text.set_fontstyle(value["style"])
+            text.set_fontstretch(value["stretch"])
+            text.set_fontvariant(value["variant"])
+            text.set_color(value["color"])
+
+    def _validate_candidate(self, state: ComponentState) -> None:
+        if state.selector.get("object_id") != state.id:
+            raise ComponentValidationError(
+                "Colorbar selector object_id must equal its component id."
+            )
+        location = str(state.properties["location"])
+        ticklocation = str(state.properties["ticklocation"])
+        allowed = (
+            {"auto", "left", "right"}
+            if location in {"left", "right"}
+            else {"auto", "top", "bottom"}
+        )
+        if ticklocation not in allowed:
+            raise ComponentValidationError(
+                f"Tick location {ticklocation!r} is incompatible with "
+                f"Colorbar location {location!r}."
+            )
+        validate_fixed_ticker_pair(
+            state.properties["locator"],
+            state.properties["formatter"],
+        )
+
+    def _validate_data(self, state: ComponentState) -> None:
+        if set(state.data) != {"source_component_id"}:
+            raise ComponentValidationError(
+                "Colorbar data requires only source_component_id."
+            )
+        source_id = state.data["source_component_id"]
+        if not isinstance(source_id, str) or not source_id.strip():
+            raise ComponentValidationError(
+                "Colorbar source_component_id must be a non-empty string."
+            )
+
+    def _read_property(self, target: Colorbar, spec: PropertySpec) -> Any:
+        key = spec.key
+        if key in self.REBUILD_KEYS:
+            return deepcopy(self._constructor_properties[key])
+        axis = self._axis(target)
+        if key == "visible":
+            return bool(target.ax.get_visible())
+        if key == "label":
+            return str(axis.label.get_text())
+        if key == "locator":
+            return locator_from_axis(
+                target.locator,
+                self._state.properties.get(key, spec.default),
+                minor=False,
+            )
+        if key == "formatter":
+            return formatter_from_axis(
+                target.formatter,
+                self._state.properties.get(key, spec.default),
+                minor=False,
+            )
+        if key == "minor_ticks":
+            return self._minor_ticks
+        if key == "ticklocation":
+            return self._ticklocation
+        if key == "label_font":
+            return self._font_from_text(axis.label, self._label_font_value)
+        if key == "tick_font":
+            labels = list(axis.get_ticklabels(minor=False))
+            return (
+                self._font_from_text(labels[0], self._tick_font_value)
+                if labels
+                else deepcopy(self._tick_font_value)
+            )
+        if key == "outline_visible":
+            return bool(target.outline.get_visible())
+        if key == "outline_color":
+            return _read_color(target.outline.get_edgecolor())
+        if key == "outline_linewidth":
+            return float(target.outline.get_linewidth())
+        return super()._read_property(target, spec)
+
+    def _write_property(
+        self, target: Colorbar, spec: PropertySpec, value: Any
+    ) -> None:
+        key = spec.key
+        if key in self.REBUILD_KEYS:
+            self._constructor_properties[key] = deepcopy(value)
+            return
+        axis = self._axis(target)
+        if key == "visible":
+            target.ax.set_visible(bool(value))
+            return
+        if key == "label":
+            target.set_label(str(value))
+            return
+        if key == "locator":
+            target.locator = build_locator(value)
+            target.update_ticks()
+            return
+        if key == "formatter":
+            target.formatter = build_formatter(value)
+            target.update_ticks()
+            return
+        if key == "minor_ticks":
+            target.minorticks_on() if value else target.minorticks_off()
+            self._minor_ticks = bool(value)
+            return
+        if key == "ticklocation":
+            actual = self._constructor_properties["location"] if value == "auto" else value
+            axis.set_ticks_position(actual)
+            self._ticklocation = str(value)
+            return
+        if key == "label_font":
+            self._label_font_value = normalize_font(value)
+            self._apply_font([axis.label], self._label_font_value)
+            return
+        if key == "tick_font":
+            self._tick_font_value = normalize_font(value)
+            self._apply_font(
+                [
+                    *axis.get_ticklabels(minor=False),
+                    *axis.get_ticklabels(minor=True),
+                ],
+                self._tick_font_value,
+            )
+            return
+        if key == "outline_visible":
+            target.outline.set_visible(bool(value))
+            return
+        if key == "outline_color":
+            target.outline.set_edgecolor(value)
+            return
+        if key == "outline_linewidth":
+            target.outline.set_linewidth(float(value))
+            return
+        super()._write_property(target, spec, value)
+
+    def _request_updates(
+        self, impacts: UpdateImpact, target: Any | None = None
+    ) -> None:
+        if impacts == UpdateImpact.NONE:
+            return
+        colorbar = target if isinstance(target, Colorbar) else self.resolve_target()
+        figure = colorbar.ax.figure
+        if self._registry is not None:
+            self._registry.request_update(figure, impacts)
+        elif figure.canvas is not None and UpdateImpact.REDRAW in impacts:
+            figure.canvas.draw_idle()
+
+    def prepare_remove(self) -> ColorbarRemovalHandle:
+        return MATPLOTLIB_REMOVAL.prepare_colorbar(self.resolve_target())
+
+    def commit_remove(self, handle: ColorbarRemovalHandle) -> None:
+        MATPLOTLIB_REMOVAL.commit(handle)
+
+    def rollback_remove(self, handle: ColorbarRemovalHandle) -> None:
+        MATPLOTLIB_REMOVAL.rollback(handle)
+
+    def _finalize_remove(self, handle: ColorbarRemovalHandle) -> None:
+        MATPLOTLIB_REMOVAL.finalize(handle)
+
+
 CONTROLLER_TYPES: dict[
     tuple[ComponentKind, ComponentRole],
     type[ComponentController[Any]],
@@ -4142,6 +4517,7 @@ CONTROLLER_TYPES: dict[
         ComponentRole.INTERPOLATION,
     ): InterpolationController,
     (ComponentKind.SCATTER, ComponentRole.SCATTER): ScatterController,
+    (ComponentKind.COLORBAR, ComponentRole.COLORBAR): ColorbarController,
     (
         ComponentKind.IN_AXES,
         ComponentRole.IN_AXES_ZOOM,

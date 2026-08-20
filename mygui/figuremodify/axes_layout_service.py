@@ -81,7 +81,7 @@ class AxesLayoutService:
             secondary._mygui_merged_legend_owner = primary
 
     def restore_runtime_relationships(self, *, refresh: bool = False) -> None:
-        """Rebuild non-persisted artist links from authoritative v10 state."""
+        """Rebuild non-persisted artist links from authoritative persisted state."""
 
         self._clear_runtime_relationships()
         by_cell: dict[tuple[str, int, int], dict[str, AxesController]] = {}
@@ -516,7 +516,11 @@ class AxesLayoutService:
         self._validate_shared_views(spec, groups)
         definition = spec.layout_definition(layout_id)
         grid = self._grid_from_definition(self.canvas.fig, definition)
-        start_index = len(self.canvas.fig.axes)
+        # Figure.axes also contains auxiliary Matplotlib Axes such as a
+        # Colorbar's cax.  Persisted semantic Axes indexes belong exclusively
+        # to registered AXES components, so auxiliary targets must not advance
+        # the selector sequence.
+        start_index = len(self.registry.query(kind=ComponentKind.AXES))
         allocated_ids_before = set(self.canvas._allocated_component_ids)
         descriptors: list[_AxesDescriptor] = []
         x_anchors: dict[str, Axes] = {}
@@ -609,7 +613,7 @@ class AxesLayoutService:
         return component_ids
 
     def materialize(self, axes_states: Iterable[ComponentState]) -> tuple[str, ...]:
-        """Create persisted v10 Axes in selector order before applying state."""
+        """Create persisted Axes in selector order before applying state."""
 
         ordered = sorted(
             tuple(axes_states),
