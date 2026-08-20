@@ -1,0 +1,8 @@
+# Local npm cache (avoids the root-owned global cache)
+.npm-cache/
+
+# Node
+node_modules/
+
+# Local logs
+*.log

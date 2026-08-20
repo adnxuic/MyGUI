@@ -1,0 +1,17 @@
+# Build output
+dist/
+
+# Node
+node_modules/
+
+# Host package links (created by scripts/link-host-deps.sh)
+vendor/
+
+# Isolated DSH home used by dsh/verify-e2e.sh
+.dsh-home/
+
+# Local npm cache (avoids the root-owned global cache)
+.npm-cache/
+
+# Local logs
+*.log

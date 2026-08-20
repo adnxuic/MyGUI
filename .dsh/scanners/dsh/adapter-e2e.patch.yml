@@ -1,0 +1,8 @@
+# Adapter E2E verification overlay (verification only — never part of a
+# production composition). Loaded together with scanners.patch.yml by
+# dsh/verify-adapter-e2e.sh; the plugin asserts the full phase-2 lifecycle
+# (registry -> adapter mount -> tool visible -> run -> unmount -> tool absent,
+# plus failure cleanup and non-persistence) and exits the process.
+- insert:
+    - id: mygui-scanners-adapter-e2e
+      name: mygui-scanners/dist/plugins/adapter-e2e-plugin.js

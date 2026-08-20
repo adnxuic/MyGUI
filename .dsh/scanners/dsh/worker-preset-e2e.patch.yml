@@ -1,0 +1,7 @@
+# Worker-preset E2E verification overlay (verification only — never part of a
+# production composition). Loaded by dsh/verify-worker-preset-e2e.sh together
+# with scanners.patch.yml; the plugin mount-validates the scanner-worker agent
+# preset through agentPresets.standingKeyFor and exits the process.
+- insert:
+    - id: mygui-scanners-worker-preset-e2e
+      name: mygui-scanners/dist/plugins/worker-preset-e2e-plugin.js
