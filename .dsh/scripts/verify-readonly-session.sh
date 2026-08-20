@@ -21,17 +21,21 @@
 #
 # Requires: bash, node >= 22, the dsh CLI, a DEEPSEEK API credential (read
 # from $DEEPSEEK_API_KEY or the user's ~/.dsh/.credentials.yaml), and the
-# scanner-worker preset installed at ~/.dsh/.agent-presets/scanner-worker.
+# version-controlled scanner-worker preset under .dsh/agents/scanner-worker.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 HOME_DIR="$ROOT/scanners/.dsh-home/rel"
+PRESET_SOURCE="$ROOT/agents/scanner-worker"
 
-DSH_BIN=""
-if command -v dsh >/dev/null 2>&1; then
+DSH_BIN="${DSH_BIN:-}"
+if [ -n "$DSH_BIN" ] && [ ! -x "$DSH_BIN" ]; then
+  echo "error: DSH_BIN is not executable: $DSH_BIN" >&2
+  exit 1
+elif [ -z "$DSH_BIN" ] && command -v dsh >/dev/null 2>&1; then
   DSH_BIN="$(command -v dsh)"
-elif [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
+elif [ -z "$DSH_BIN" ] && [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
   DSH_BIN="$(ls -t "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -n 1)"
 fi
 if [ -z "$DSH_BIN" ]; then
@@ -45,12 +49,12 @@ echo "DSH_HOME   : $HOME_DIR"
 echo "workspace  : $REPO_ROOT"
 
 rm -rf "$HOME_DIR"
-mkdir -p "$HOME_DIR/.agent-presets"
+mkdir -p "$HOME_DIR/.agent-presets/scanner-worker"
 
-if [ -d "$HOME/.dsh/.agent-presets/scanner-worker" ]; then
-  cp -r "$HOME/.dsh/.agent-presets/scanner-worker/." "$HOME_DIR/.agent-presets/scanner-worker/"
+if [ -f "$PRESET_SOURCE/preset.yml" ]; then
+  cp -r "$PRESET_SOURCE/." "$HOME_DIR/.agent-presets/scanner-worker/"
 else
-  echo "error: scanner-worker preset not found under ~/.dsh/.agent-presets" >&2
+  echo "error: version-controlled scanner-worker preset is incomplete: $PRESET_SOURCE" >&2
   exit 1
 fi
 

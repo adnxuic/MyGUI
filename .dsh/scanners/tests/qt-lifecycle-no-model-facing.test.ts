@@ -47,14 +47,15 @@ test('registry discovers architecture + qt-lifecycle; unload unregisters; remoun
   // Both scanners are visible, sorted deterministically.
   assert.deepEqual(
     ctx.myguiScanners.list().map((entry) => `${entry.id}@${entry.version}`),
-    ['mygui.architecture@0.2.0', 'mygui.qt-lifecycle@0.1.0'],
+    ['mygui.architecture@0.3.0', 'mygui.qt-lifecycle@0.2.0'],
   );
 
   // The qt scanner runs and produces the expected contract.
   const qtScannerModule = await import('../src/scanners/qt-lifecycle/scanner.ts');
   const result = await ctx.myguiScanners.run('mygui.qt-lifecycle', { workspace: process.cwd() });
-  assert.equal(result.scannerId, 'mygui.qt-lifecycle');
-  assert.equal(qtScannerModule.DEFAULT_EXCLUDE.length, 3);
+  assert.equal(result.scanner.id, 'mygui.qt-lifecycle');
+  assert.equal(qtScannerModule.DEFAULT_EXCLUDE.length, 4);
+  assert.ok(qtScannerModule.DEFAULT_EXCLUDE.includes('.agents/**'));
 
   // Unloading the qt-lifecycle plugin unregisters its scanner.
   await qtHandle.dispose();

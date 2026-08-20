@@ -59,13 +59,13 @@ in the same session.
 
 - `ScannerAdapterConfig` — scannerId, toolName, toolDescription, workspace.
 - `ScannerToolArgs` — `include?`, `exclude?`, `changedFiles?` (forwarded
-  unchanged; no other knobs in v0.1.0).
+  unchanged; the Adapter adds no scanner-specific knobs).
 - `ScannerWorkerRequest` — task, workspace, optional filters, optional
   `requestedScanners`.
 - `ScannerWorkerResult` — status (`completed` | `partial` |
   `missing_capability` | `failed`), requested/executed ids, merged findings
-  (phase-1 contract), raw `ScannerResult[]`, per-scanner lifecycle records,
-  diagnostics.
+  and gray boundaries, preserved scanner errors, raw ScannerResult v2 values,
+  per-scanner lifecycle records, and diagnostics.
 
 ## Selection policy
 

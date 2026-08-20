@@ -117,8 +117,8 @@ const adapterE2EPlugin: Plugin.Function<object> = async (ctx: Context) => {
   ok(`after mount: ${ADAPTER_TOOL} is PRESENT`);
 
   const scan = JSON.parse((await adapter.execute({})).json);
-  ok(`execute() ran the real scanner: scannerId=${scan.scannerId} files=${scan.filesScanned} findings=${scan.summary.total} bySeverity=${JSON.stringify(scan.summary.bySeverity)}`);
-  ok(`execute() forwarded include/exclude/changedFiles: ${scan.workspace === workspace ? 'workspace ok' : 'WORKSPACE MISMATCH'}`);
+  ok(`execute() ran the real scanner: scannerId=${scan.scanner.id} files=${scan.coverage.filesVisited.length} findings=${scan.summary.findings} bySeverity=${JSON.stringify(scan.summary.bySeverity)}`);
+  ok(`execute() forwarded include/exclude/changedFiles: ${scan.scope.workspace === workspace ? 'workspace ok' : 'WORKSPACE MISMATCH'}`);
 
   unmount();
   if (visibleNames().includes(ADAPTER_TOOL)) {

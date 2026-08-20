@@ -17,6 +17,10 @@ class LinePanel(QFrame):
         # legal: routed through the controller
         controller.set_property("visible", True)
 
+    def refresh_ambiguous(self, target):
+        # gray boundary: lexical analysis cannot prove target is an Artist
+        target.set_visible(True)
+
     def binding_ok(self):
         # legal: this is a Qt label binding, not an artist
         self._text_binding.set_text("hello")

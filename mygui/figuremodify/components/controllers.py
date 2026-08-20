@@ -95,7 +95,6 @@ from .property_values import (
     normalize_locator,
     normalize_marker,
     normalize_markevery,
-    normalize_norm,
     normalize_scale,
     normalize_scatter_color_map,
     normalize_scatter_size_map,

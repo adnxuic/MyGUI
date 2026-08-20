@@ -10,9 +10,9 @@ export * from './contracts.ts';
 
 export {
   MyguiScannersService,
-  validateScannerResult,
   type ScannerDescriptor,
 } from './registry/service.ts';
+export { validateScannerResult } from './validation.ts';
 export { default as myguiScannerRegistryPlugin, name as myguiScannerRegistryName, provide as myguiScannerRegistryProvide } from './registry/plugin.ts';
 
 export { createArchitectureScanner } from './scanners/architecture/scanner.ts';

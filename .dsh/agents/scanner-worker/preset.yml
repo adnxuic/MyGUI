@@ -1,0 +1,2 @@
+name: MyGUI Scanner Worker
+description: Read-only MyGUI Scanner orchestration through persistent Registry scanners and temporary dynamic Adapters.

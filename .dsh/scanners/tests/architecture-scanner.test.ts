@@ -18,17 +18,18 @@ test('full scan of the positive workspace returns a valid, deterministic result'
   const first = await scanner.run({ workspace });
   const second = await scanner.run({ workspace });
 
-  assert.equal(first.scannerId, 'mygui.architecture');
-  assert.equal(first.scannerVersion, '0.2.0');
-  assert.equal(first.workspace, workspace);
-  assert.ok(Number.isInteger(first.filesScanned) && first.filesScanned > 0);
+  assert.equal(first.contractVersion, 2);
+  assert.equal(first.scanner.id, 'mygui.architecture');
+  assert.equal(first.scanner.version, '0.3.0');
+  assert.equal(first.scope.workspace, workspace);
+  assert.ok(first.coverage.filesVisited.length > 0);
   assert.ok(Number.isFinite(first.durationMs) && first.durationMs >= 0);
   assert.ok(!Number.isNaN(Date.parse(first.startedAt)));
 
   const { summary } = first;
-  assert.equal(summary.total, first.findings.length);
+  assert.equal(summary.findings, first.findings.length);
   const counted = Object.values(summary.bySeverity).reduce((sum, count) => sum + (count ?? 0), 0);
-  assert.equal(counted, summary.total);
+  assert.equal(counted, summary.findings);
 
   // Deterministic: identical findings (same order, same ids/fingerprints).
   assert.deepEqual(
@@ -43,8 +44,14 @@ test('full scan of the positive workspace returns a valid, deterministic result'
     assert.ok(finding.confidence >= 0 && finding.confidence <= 1);
     assert.ok(finding.evidence.length > 0 && finding.evidence.length <= 200);
     assert.ok(finding.reason.length > 0);
+    assert.ok(finding.suggestedAction.length > 0);
     assert.equal(typeof finding.fingerprint, 'string');
   }
+  assert.ok(
+    first.grayBoundaries.some((item) => item.category === 'ambiguous-ui-artist-mutation'),
+    'ambiguous target mutation must remain visible as a gray boundary',
+  );
+  assert.equal(first.verdict, 'violation', 'findings take precedence over gray boundaries');
 });
 
 test('test files are excluded by default and included on explicit request', async () => {
@@ -70,7 +77,7 @@ test('changedFiles restricts the scan', async () => {
     workspace,
     changedFiles: ['mygui/widgets/ui/panel.py'],
   });
-  assert.ok(result.filesScanned >= 1);
+  assert.ok(result.coverage.filesVisited.length >= 1);
   assert.ok(
     result.findings.every((finding) => finding.file === 'mygui/widgets/ui/panel.py'),
     'findings must come only from changed files',
@@ -83,13 +90,17 @@ test('abort signal cancels the scan', async () => {
   const controller = new AbortController();
   controller.abort();
   const result = await scanner.run({ workspace, signal: controller.signal });
-  assert.equal(result.filesScanned, 0);
+  assert.equal(result.coverage.filesVisited.length, 0);
   assert.deepEqual(result.findings, []);
+  assert.equal(result.status, 'partial');
+  assert.equal(result.verdict, 'unknown');
 });
 
 test('missing workspace directory yields diagnostics, not a crash', async () => {
   const scanner = createArchitectureScanner();
   const result = await scanner.run({ workspace: resolve(FIXTURES, 'does-not-exist') });
-  assert.equal(result.filesScanned, 0);
-  assert.equal(result.summary.total, 0);
+  assert.equal(result.coverage.filesVisited.length, 0);
+  assert.equal(result.summary.findings, 0);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.verdict, 'unknown');
 });

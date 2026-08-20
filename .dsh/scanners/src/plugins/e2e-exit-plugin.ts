@@ -89,14 +89,18 @@ const e2eExitPlugin: Plugin.Function<object> = async (ctx: Context) => {
 
   // Real scan of the workspace through the registry.
   const result = await ctx.myguiScanners.run('mygui.architecture', { workspace });
-  process.stdout.write(`E2E-OK: run(mygui.architecture) files=${result.filesScanned} findings=${result.summary.total} `);
+  process.stdout.write(`E2E-OK: run(mygui.architecture) files=${result.coverage.filesVisited.length} findings=${result.summary.findings} `);
   process.stdout.write(`${JSON.stringify(result.summary.bySeverity)}\n`);
   process.stdout.write(`E2E-SCAN-JSON ${JSON.stringify({
-    scannerId: result.scannerId,
-    scannerVersion: result.scannerVersion,
-    revision: result.revision ?? null,
-    filesScanned: result.filesScanned,
-    findings: result.summary.total,
+    contractVersion: result.contractVersion,
+    scannerId: result.scanner.id,
+    scannerVersion: result.scanner.version,
+    revision: result.scope.revision ?? null,
+    filesScanned: result.coverage.filesVisited.length,
+    findings: result.summary.findings,
+    grayBoundaries: result.summary.grayBoundaries,
+    status: result.status,
+    verdict: result.verdict,
     bySeverity: result.summary.bySeverity,
     durationMs: result.durationMs,
   })}\n`);

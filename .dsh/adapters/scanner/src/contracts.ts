@@ -20,7 +20,9 @@
 
 import type {
   ScannerDiagnostic,
+  ScannerError,
   ScannerFinding,
+  ScannerGrayBoundary,
   ScannerResult,
 } from '../../../scanners/src/contracts.ts';
 
@@ -89,6 +91,7 @@ export interface ScannerLifecycleRecord {
 
 /** Uniform result produced by the Scanner Worker. */
 export interface ScannerWorkerResult {
+  contractVersion: 2;
   status: 'completed' | 'partial' | 'missing_capability' | 'failed';
 
   /** Scanner ids the worker was asked to run (request or selection). */
@@ -98,6 +101,10 @@ export interface ScannerWorkerResult {
 
   /** All findings from the executed scanners, merged and deduplicated. */
   findings: ScannerFinding[];
+  /** Gray candidates remain first-class and are never folded into findings. */
+  grayBoundaries: ScannerGrayBoundary[];
+  /** Scanner execution/coverage failures preserved across partial results. */
+  errors: ScannerError[];
   /** The raw ScannerResults of the executed scanners. */
   scannerResults: ScannerResult[];
 

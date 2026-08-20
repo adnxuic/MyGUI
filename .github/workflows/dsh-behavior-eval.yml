@@ -1,0 +1,44 @@
+name: DSH Behavior Evaluation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  scanner-worker-behavior:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      DSH_BIN: ${{ github.workspace }}/.dsh/.tooling/node_modules/.bin/dsh
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: .dsh/scanners/package-lock.json
+      - name: Require behavior-eval credential
+        run: test -n "$DEEPSEEK_API_KEY"
+      - name: Install pinned DSH in isolation
+        run: npm install --prefix .dsh/.tooling --no-save --no-audit --no-fund @deepseek-ai/dsh@0.1.0-rc.7
+      - name: Build scanners from a fresh checkout
+        run: |
+          bash .dsh/scanners/scripts/link-host-deps.sh
+          npm ci --prefix .dsh/scanners --no-audit --no-fund
+          npm run build --prefix .dsh/scanners
+      - name: Evaluate read-only capability
+        run: bash .dsh/scripts/verify-readonly-session.sh
+      - name: Evaluate cold-start selection
+        run: bash .dsh/scripts/verify-coldstart-worker.sh
+      - name: Upload behavior evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-behavior-evidence
+          if-no-files-found: warn
+          path: .dsh/scanners/.dsh-home/

@@ -22,11 +22,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 HOME_DIR="$ROOT/scanners/.dsh-home/cold"
 SCANNERS="$ROOT/scanners"
+PRESET_SOURCE="$ROOT/agents/scanner-worker"
 
-DSH_BIN=""
-if command -v dsh >/dev/null 2>&1; then
+DSH_BIN="${DSH_BIN:-}"
+if [ -n "$DSH_BIN" ] && [ ! -x "$DSH_BIN" ]; then
+  echo "error: DSH_BIN is not executable: $DSH_BIN" >&2
+  exit 1
+elif [ -z "$DSH_BIN" ] && command -v dsh >/dev/null 2>&1; then
   DSH_BIN="$(command -v dsh)"
-elif [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
+elif [ -z "$DSH_BIN" ] && [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
   DSH_BIN="$(ls -t "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -n 1)"
 fi
 if [ -z "$DSH_BIN" ]; then
@@ -53,8 +57,12 @@ echo "DSH_HOME   : $HOME_DIR"
 echo "workspace  : $REPO_ROOT"
 
 rm -rf "$HOME_DIR"
-mkdir -p "$HOME_DIR/.agent-presets" "$HOME_DIR/profiles/headless/node_modules"
-cp -r "$HOME/.dsh/.agent-presets/scanner-worker/." "$HOME_DIR/.agent-presets/scanner-worker/"
+mkdir -p "$HOME_DIR/.agent-presets/scanner-worker" "$HOME_DIR/profiles/headless/node_modules"
+if [ ! -f "$PRESET_SOURCE/preset.yml" ]; then
+  echo "error: version-controlled scanner-worker preset is incomplete: $PRESET_SOURCE" >&2
+  exit 1
+fi
+cp -r "$PRESET_SOURCE/." "$HOME_DIR/.agent-presets/scanner-worker/"
 # The headless profile itself is the dsh CLI's built-in definition; only the
 # mygui-scanners link is added so scanners.patch.yml resolves.
 ln -sfn "$SCANNERS" "$HOME_DIR/profiles/headless/node_modules/mygui-scanners"

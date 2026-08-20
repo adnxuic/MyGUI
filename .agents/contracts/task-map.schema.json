@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mygui.local/contracts/task-map.schema.json",
+  "title": "MyGUI Agent Task Map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tasks"],
+  "properties": {
+    "version": {"const": 1},
+    "tasks": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/task"}
+    }
+  },
+  "$defs": {
+    "pathArray": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill", "architecture", "checks", "scanners", "focused_tests", "documentation", "manual_smoke"],
+      "properties": {
+        "skill": {"type": "string", "pattern": "^\\.agents/skills/[a-z0-9-]+/SKILL\\.md$"},
+        "architecture": {"$ref": "#/$defs/pathArray"},
+        "checks": {"$ref": "#/$defs/pathArray"},
+        "scanners": {"$ref": "#/$defs/pathArray"},
+        "focused_tests": {"$ref": "#/$defs/pathArray"},
+        "documentation": {"$ref": "#/$defs/pathArray"},
+        "manual_smoke": {"type": "boolean"}
+      }
+    }
+  }
+}

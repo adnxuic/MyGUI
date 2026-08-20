@@ -155,8 +155,8 @@ test('ARCH-SECOND-COMPONENT-STATE: positive fixture hits; canvas writes do not',
   const findings = await findingsFor(files, 'ARCH-SECOND-COMPONENT-STATE');
 
   const byLine = new Map(findings.map((finding) => [`${finding.file}:${finding.line}`, finding]));
-  assert.ok(byLine.has('mygui/widgets/ui/panel.py:28'), 'self.current_component_id = None');
-  assert.ok(byLine.has('mygui/widgets/ui/panel.py:32'), 'ComponentState(...) construction');
+  assert.ok(byLine.has('mygui/widgets/ui/panel.py:32'), 'self.current_component_id = None');
+  assert.ok(byLine.has('mygui/widgets/ui/panel.py:36'), 'ComponentState(...) construction');
   assert.ok(findings.every((finding) => finding.severity === 'high'));
 });
 

@@ -4,18 +4,22 @@
 # share the exact same cordis module instance. Run before `npm install`.
 #
 # Resolution order:
-#   1. a `dsh` binary on PATH,
-#   2. the most recently used npx cache checkout of @deepseek-ai/dsh.
+#   1. an explicit `DSH_BIN`,
+#   2. a `dsh` binary on PATH,
+#   3. the most recently used npx cache checkout of @deepseek-ai/dsh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR="$ROOT/vendor"
 mkdir -p "$VENDOR"
 
-DSH_BIN=""
-if command -v dsh >/dev/null 2>&1; then
+DSH_BIN="${DSH_BIN:-}"
+if [ -n "$DSH_BIN" ] && [ ! -x "$DSH_BIN" ]; then
+  echo "error: DSH_BIN is not executable: $DSH_BIN" >&2
+  exit 1
+elif [ -z "$DSH_BIN" ] && command -v dsh >/dev/null 2>&1; then
   DSH_BIN="$(command -v dsh)"
-elif [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
+elif [ -z "$DSH_BIN" ] && [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
   DSH_BIN="$(ls -t "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -n 1)"
 fi
 

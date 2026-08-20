@@ -148,6 +148,17 @@ export function receiverIsArtistLike(chain: AttrChain, model: PyFileModel): bool
   return false;
 }
 
+/** Strong widget/domain signal used to separate a gray candidate from a known non-Artist. */
+export function receiverIsKnownNonArtist(chain: AttrChain): boolean {
+  const receiver = chain.segments.slice(0, -1);
+  if (receiver.length === 0) return true;
+  const last = lastNamed({ ...chain, segments: receiver });
+  if (last === undefined) return false;
+  if (WIDGET_EXACT.has(last) || WIDGET_SUFFIX.test(last)) return true;
+  return /_(controller|service|coordinator|registry|model|state|repository|manager|factory|context|presenter)$/.test(last)
+    || /^(controller|service|coordinator|registry|model|state|repository|manager|factory|context|presenter)$/.test(last);
+}
+
 /** Truncated evidence text (brief, per the finding contract). */
 export function evidenceOf(model: PyFileModel, line: number, maxLength = 160): string {
   const raw = model.lines[line - 1]?.raw.trim() ?? '';
@@ -164,9 +175,10 @@ export function makeFinding(options: {
   confidence: number;
   title: string;
   reason: string;
+  suggestedAction?: string;
   tags?: string[];
 }): ScannerFinding {
-  const { model, ruleId, line, severity, confidence, title, reason, tags } = options;
+  const { model, ruleId, line, severity, confidence, title, reason, suggestedAction, tags } = options;
   const evidence = evidenceOf(model, line);
   const id = `${ruleId}@${model.path}#${line}`;
   return {
@@ -180,6 +192,7 @@ export function makeFinding(options: {
     title,
     evidence,
     reason,
+    suggestedAction: suggestedAction ?? 'Route the operation through the authoritative Controller or Service and add a regression test.',
     tags: tags ?? [],
     fingerprint: fingerprintFor(ruleId, model.path, line, evidence),
   };

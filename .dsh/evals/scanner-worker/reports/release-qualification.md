@@ -1,5 +1,8 @@
 # MyGUI DSH Scanner Subsystem — Release Qualification
 
+> Historical snapshot only. This report is not a live `READY` declaration;
+> current readiness is determined by the latest required CI jobs.
+
 Phase 3.5 · Date: 2026-08-19 · DSH tested version: `0.1.0-rc.7`
 
 This report clears the Phase 3 `READY WITH CONDITIONS` conditions. All

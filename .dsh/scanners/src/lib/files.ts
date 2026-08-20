@@ -3,7 +3,7 @@
  * Python sources with include/exclude glob support and cancellation.
  */
 
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from 'node:path';
 
 export interface FileCollectionOptions {
@@ -12,6 +12,14 @@ export interface FileCollectionOptions {
   exclude?: string[];
   changedFiles?: string[];
   signal?: AbortSignal;
+}
+
+export async function workspaceDirectoryExists(workspace: string): Promise<boolean> {
+  try {
+    return (await stat(workspace)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function assertNotAborted(signal?: AbortSignal): boolean {

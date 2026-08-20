@@ -56,7 +56,16 @@ interface MyguiScannersService {
 Error codes: `DUPLICATE_SCANNER`, `UNKNOWN_SCANNER`, `INVALID_REQUEST`
 (`ScannerRegistryError`); contract violations raise `ScannerContractError`.
 
-## 2. Finding contract
+## 2. ScannerResult v2 contract
+
+The cross-Harness authority is
+`.agents/contracts/scanner-result.schema.json`. Registry, Adapter, Worker and
+CLI reject older or malformed results rather than synthesizing missing
+fields. A result records `status`, `verdict`, the exact scan `scope`, findings,
+gray boundaries, coverage, errors and diagnostics. `unknown` is mandatory
+when a failure or incomplete coverage prevents a clean conclusion.
+
+### Finding contract
 
 Every finding is workspace-relative, brief, and fingerprint-stable:
 
@@ -70,12 +79,16 @@ interface ScannerFinding {
   file: string;          // workspace-relative, never absolute
   line?: number; column?: number;
   title: string; evidence: string; reason: string; // evidence stays short
+  suggestedAction: string;
   tags: string[];
   fingerprint: string;   // sha1(ruleId|file|line|normalized evidence)
 }
 ```
 
-No large fix plans are generated inside findings.
+No large fix plans are generated inside findings. Gray boundaries use their
+own records with classification, location, evidence, a non-violation reason,
+and a rule-evolution suggestion; they are never hidden or promoted to
+findings without review.
 
 ## 3. How to add a new Scanner
 
@@ -114,7 +127,7 @@ once the registry service is available and automatically reloads/unloads it
 when the service changes — registration and unregistration always follow the
 plugin fiber.
 
-## 5. The Architecture Scanner (v0.2.0)
+## 5. The Architecture Scanner (v0.3.0)
 
 `mygui.architecture` — static, read-only checks derived from the rules in the
 repository's `AGENTS.md` (it never modifies the repo, never formats, never
@@ -123,7 +136,7 @@ auto-fixes, never launches the GUI):
 | Rule | Checks |
 | --- | --- |
 | `ARCH-PRIVATE-CONTAINER-ACCESS` | accesses to `_figure_stack`, `_inspector_stack`, `_toolboxes`, `_chart_stack`, `_element_stack` from outside the owning container classes (owners computed from `self.<attr> =` assignments, including subclass ownership) |
-| `ARCH-UI-ARTIST-MUTATION` | `.set_*(...)` / `.remove()` / `.set_visible(...)` on Matplotlib-artist-like receivers in `mygui/widgets/` outside Controller/Service/Canvas classes; deliberately conservative — ambiguous receivers are not reported |
+| `ARCH-UI-ARTIST-MUTATION` | `.set_*(...)` / `.remove()` / `.set_visible(...)` on Matplotlib-artist-like receivers in `mygui/widgets/` outside Controller/Service/Canvas classes; ambiguous receiver types are emitted as gray boundaries |
 | `ARCH-UI-MPL-GLOBAL-STATE-MUTATION` | **independent** of the artist rule: UI code in `mygui/widgets/` directly mutating Matplotlib **process-global** mutable configuration — `rcParams[key] = ...` (mutation `assignment`), `rcParams.update({...})` (`update`), `matplotlib.rc(...)` / `mpl.rc(...)` / `rc(...)` (`rc-call`) — with import-alias resolution (`import matplotlib [as mpl]`, `from matplotlib import rcParams/rc`); reads are never reported; `*Controller` / `*Service` / `*Coordinator` / `*Canvas` classes and files outside `mygui/widgets/` (e.g. `mygui/tex_config.py`, the TeX configuration owner) are exempt |
 | `ARCH-SECOND-COMPONENT-STATE` | `ComponentState(...)` / `ComponentRegistry(...)` construction and `self.current_component_id = ...` writes in `mygui/widgets/` outside `PyFigureCanvas` |
 | `ARCH-CONTROLLER-BYPASS` | UI writes to controller state (`state.properties/data/selector` assignments, `.update()/.setdefault()/.pop()/.clear()` calls, whole-state replacement) instead of routing edits through Controllers/Services |
@@ -153,7 +166,7 @@ scopes are tracked by indentation, and attribute chains are extracted with
 one-level local alias resolution. No Python interpreter, no AST framework, no
 network, no LLM.
 
-## 5.5 The Qt Lifecycle Scanner (v0.1.0)
+## 5.5 The Qt Lifecycle Scanner (v0.2.0)
 
 `mygui.qt-lifecycle` — static, read-only Qt lifecycle / QObject ownership
 checks derived from the Qt patterns actually present in the MyGUI codebase

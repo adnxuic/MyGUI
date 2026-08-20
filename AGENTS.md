@@ -1,122 +1,171 @@
-# Codex Maintenance Guide
+# MyGUI Agent Constitution
 
-Scope: this file applies to the whole repository.
+Scope: this file applies to the whole repository. It defines global invariants,
+task routing, and completion gates. Task procedures live under `.agents/`.
 
-## Project Basics
+## Environment and Work Boundaries
 
-- This is a PySide6 + matplotlib desktop GUI for table-driven chart creation and editing.
-- Target Matplotlib 3.9.0 and PySide6 6.7.1 as installed in the project environment. Do not rely on APIs introduced after those versions.
-- Run the app from the repository root with `python main.py`.
-- Use the project environment at `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe` for repository tests, compilation checks, and maintenance scripts. Do not silently substitute another Python installation.
-- Resolve bundled icons, QSS, and JSON through `mygui.resources`; production code must not depend on the process working directory. Resource migrations must update every call site and retain non-root-CWD tests.
-- MATLAB and TeX support are optional local integrations. Failures in those paths must not block basic GUI maintenance.
-- Treat `mygui.figuremodify.matplotlib_adapter` as the sole production boundary for process-global Matplotlib style contexts and style/colormap/marker/font catalogs. Presentation modules under `mygui/widgets/fig_control_window/`, `title_bar/`, `component_tree/`, and `bottom_bar/` must not import Matplotlib, resolve live targets, or read `canvas.fig`; use Controllers, Services, Canvas capability queries, and immutable adapter catalogs. `main.py` retains the startup-only backend selection exception.
-- Treat `mygui.tex_config` as the sole writer of Matplotlib TeX rcParams. MyGUI starts TeX availability disabled, preserves a non-empty external preamble (or installs the MyGUI default), and enables TeX only after validation. Canvas render listeners apply enabled/preamble changes through `TextRenderService`; Inspector listeners synchronize controls only.
-- Treat `mygui.font_diagnostics` as the sole application bridge for process-level Matplotlib missing-glyph warnings/logs and Qt DirectWrite font-load warnings. Install it after `QApplication` creation and before application font/widget construction; preserve console reporting, deduplicate normalized diagnostics, and publish them through the Message Bar on the GUI thread. `TextRenderService` must scope both Matplotlib `UserWarning` and math-text logging diagnostics into the current edit transaction; a missing glyph rejects the edit, atomically restores the input, Controller, and Artist, and emits one red result instead of a success message.
+- MyGUI is a PySide6 desktop application for table-driven Matplotlib chart
+  creation and editing. Target Python 3.12, Matplotlib 3.9.0, and PySide6
+  6.7.1; do not use APIs introduced after those versions.
+- From the repository root, run the app with `python main.py`. For local
+  maintenance and verification use exactly
+  `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe`; CI may use its
+  workflow-installed Python 3.12 interpreter.
+- Read the relevant implementation, nearest tests, and routed Agent material
+  before changing code. Prefer small local changes, preserve unrelated user
+  edits, and do not combine repository hygiene or broad architecture work with
+  an unrelated fix.
+- Keep GUI behavior, resource names, QSS/JSON locations, historical Canvas
+  names, and tracked IDE/sync artifacts unchanged unless the task explicitly
+  targets them.
+- `mygui/widgets/`, `mygui/figuremodify/`, and `mygui/database/` retain their
+  current UI, figure-domain, and data responsibilities. New files follow the
+  nearest existing module.
 
-## Working Rules
+## Authoritative Runtime Boundaries
 
-- Read the relevant components before changing them. Prefer small, local edits over broad rewrites.
-- Do not perform large architecture refactors in the same change as a bug fix or maintenance update.
-- Keep GUI behavior unchanged unless the task explicitly asks for behavior changes.
-- Preserve existing resource names and QSS/JSON file locations unless the task is specifically about resource cleanup.
-- Do not delete tracked IDE files, backup files, or sync artifacts as part of unrelated work. Repository hygiene cleanup should be a separate commit.
-- Treat the `TableRepository` instance created by `MainWindow` as the shared runtime data authority. Changes around it need focused tests or a clear manual verification path; do not introduce a second global table store.
-- For data-related features, consider whether artifacts connected to that data must refresh when the source data changes.
-- Treat user-entered expression evaluation as high risk. Replacing `eval` should be done as a dedicated task.
-- When implementing features, consider the Message Bar and State Bar. Prefer surfacing useful user-facing information through the Message Bar, using red for errors, yellow for warnings, and green for successful actions.
-- New feature implementations must consider project IO. Ensure feature state can follow the project's save and import workflows when applicable.
-- When a feature needs color selection, reuse `ColorChoiceWidget` with the injected application `ColorLibrary`; do not create a separate color menu or eager `QAction` collection. Use `ColorCycleState` only for ordered chart-color sequences, preview with `peek()`, and call `commit()` only after the related operation succeeds.
-- Place new code files according to the existing `mygui/` directory responsibilities: `mygui/widgets/` is for window and UI components, `mygui/figuremodify/` is for drawing style modification logic, and `mygui/database/` is for data processing and data-related helpers. Follow the nearest existing module location before creating a new file.
-- Keep handoff notes up to date under `codex_handoff/`. Handoff notes should record only current limitations, not next-step plans.
-- After completing a feature, write feature documentation under `docs/` following the Documentation Rules section. Keep it to a concise feature description and detailed parameter documentation; do not include limitations or unrelated commentary.
-- Keep this file correct. When a change alters an architecture boundary, a name, a module responsibility, a schema version, or a startup validation gate that is recorded here, update `AGENTS.md` in the same change. Correct the stale rule in place instead of appending a newer variant, and treat this file as authoritative when it disagrees with `docs/`.
+- **CORE-RESOURCE-BOUNDARY:** Resolve bundled icons, QSS, and JSON only through
+  `mygui.resources`; production behavior must not depend on the process CWD.
+- **CORE-TABLE-REPOSITORY:** The `TableRepository` created by `MainWindow` is
+  the shared runtime data authority. Do not add another global table store;
+  refresh dependent artifacts when authoritative data changes.
+- **CORE-MATPLOTLIB-BOUNDARY:**
+  `mygui.figuremodify.matplotlib_adapter` is the sole production boundary for
+  process-global style contexts and style/colormap/marker/font catalogs.
+  Presentation modules must not import Matplotlib, read `canvas.fig`, resolve
+  live targets, or mutate Artists directly. `main.py` has the startup-only
+  backend-selection exception.
+- **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of Matplotlib TeX
+  rcParams. TeX starts disabled, preserves a non-empty external preamble (or
+  installs the MyGUI default), and is enabled only after validation;
+  render-sensitive changes go through `TextRenderService`.
+- **CORE-FONT-DIAGNOSTICS:** `mygui.font_diagnostics` is the sole application
+  bridge for Matplotlib missing-glyph and Qt DirectWrite diagnostics. Install
+  it after `QApplication` and before fonts/widgets. A missing glyph rejects the
+  edit, atomically restores UI/Controller/Artist state, and emits one red
+  result.
+- MATLAB and TeX are optional integrations. Their failure must not block basic
+  GUI maintenance. User-entered expression evaluation remains high risk and
+  any replacement of evaluation machinery is a dedicated task.
 
-## Documentation Rules
+## Component, Inspector, and Selection Invariants
 
-- User-facing documentation lives under `docs/` as MkDocs Markdown. `mkdocs.yml` is the only site configuration; a new page must be added to its `nav` in the same change, and no page may be left outside the nav.
-- After completing a feature, write its documentation under `docs/`: a concise feature description plus detailed parameter documentation. Keep current limitations only in `codex_handoff/`; do not put limitations, next-step plans, or unrelated commentary in `docs/`.
-- Parameter pages use the established table shape: one row per Inspector parameter with its control, meaning, and values or default, and the property key in parentheses so each row maps to one persisted or runtime value. When a Controller, `PropertySpec`, persisted key, or profile adds, renames, or removes a property, update the matching parameter page (`chart-component-parameters.md`, `axes-component-parameters.md`, `in-axes.md`, `text-element.md`, and related feature pages) in the same change; when the schema summary changes, update `component-properties-v10.md` as well.
-- Document current behavior, not plans. A UI or property change must refresh the affected parameter tables instead of leaving stale rows.
-- Matplotlib reference links in parameter pages must pin the project target version `https://matplotlib.org/3.9.0/...`; never use `stable` links. Inline links live in the Meaning/Description cell, and every row of an uncommon value family (cap/join styles, hatch, fill styles, sketch/snap, rotation mode, and similar) carries its own link. Each page's bottom `Matplotlib reference` list must include every referenced URL.
-- Site structure and link conventions are recorded in `docs/documentation-site.md`; update it in the same change when the nav, build, or link policy changes.
-- Verify documentation changes with the project environment: `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe -m mkdocs build --strict`. Fix every warning; `site/` is git-ignored build output and is never committed. Docs-only changes do not require the Python test suite.
+- **CORE-COMPONENT-STATE:** `ComponentRegistry`, `ComponentState`, Controllers,
+  and domain Services are the only mutable Figure-component business-state
+  path. UI submits through them and synchronizes from Registry events; it must
+  not maintain a second state model or mutate Artists/Controller state.
+- **CORE-EDITOR-PROFILES:** Production editors use `ComponentInspector` and one
+  exact `EditorProfile` per `(ComponentKind, ComponentRole)`, composed from
+  reusable Sections. `ComponentEditorManager.create()` is the only visible
+  editor creation path; no role-specific modification panels or silent generic
+  fallbacks may be reintroduced.
+- Every persistent `PropertySpec` has an explicit production editor contract.
+  Composite values use the closed tagged normalizers in
+  `property_values.py`; production properties never use editable JSON.
+  `EditorRegistry.validate_production_profiles()` and Matplotlib exposure
+  validation remain startup gates.
+- **CORE-SELECTION-AUTHORITY:** `PyFigureCanvas.current_component_id` is the
+  only component selection authority. Tree search affects display only. Tree
+  groups use typed `GroupNodeKey`; `COMPONENT_ID_ROLE` is reserved for real
+  IDs, and UI projection state is never persisted.
+- Inspector/container ownership, lifecycle, tree projection, data refresh, and
+  editor placement follow `.agents/architecture/inspector.md` and
+  `.agents/architecture/component-system.md`. Containers expose public APIs and
+  idempotent recursive `dispose()`; external code does not access private Qt
+  stack/toolbox fields.
+- UI synchronization blocks recursive signals, rolls back UI/Controller/Artist
+  state atomically on failure, detaches all listeners during disposal, and
+  emits at most one Message Bar result per user action (red error, yellow
+  warning, green success).
 
-## Component Architecture Rules
+## Transactions, Deletion, and Persistence
 
-- Treat `ComponentRegistry`, `ComponentState`, Controllers, and domain Services as the only mutable business-state path for Figure components. Inspector/UI code must not maintain a second component state model or directly mutate Matplotlib artists; it must submit through the relevant Controller or Service and synchronize from Registry events.
-- Build production modification panels with `ComponentInspector` and registered `EditorProfile` objects composed from reusable `EditorSection` implementations. Use `PropertySection` for `PropertySpec`-backed fields and keep `ComponentEditorBase` only as the generic fallback. Do not reintroduce role-specific `Py*ModWidget` classes, monolithic modification panels, `_ChartModWidgetMixin`, or compatibility wrappers around Inspector profiles.
-- Reuse `LineAppearanceSection` for all Line roles and `DataReferenceSection` with a role-specific submit strategy. Preserve the established refresh semantics: Plot refreshes automatically, Interpolation recomputes automatically, and Fit records a pending source change until the user explicitly refits.
-- Route render-sensitive Text changes through `TextRenderService`, using `apply_many()` for one logical multi-target edit. Keep Legend on `LegendController`/axes commands rather than treating it as a Text component. Fixed semantic components such as Title and axis labels are hidden instead of removed; only genuinely removable components may expose deletion.
-- UI synchronization must block recursive signals, roll back the control, Controller state, and artist atomically on failure, and emit at most one Message Bar result for one user action. Sections and editor bindings must detach Registry, repository, TeX, MATLAB, and asynchronous callbacks from `dispose()` or equivalent lifecycle cleanup.
-- Creation dialogs may reuse only Controller-free input widgets such as line appearance, data reference, and interpolation option inputs. Accepted dialogs must still create components through the canvas/Controller workflow, and `PyFigureCanvas` must register profiles and ask `ComponentEditorManager` for editors instead of constructing role-specific controls.
-- Any newly supported Figure component type must derive all applicable creation defaults from the current authoritative Figure `style`, including line, marker, fill, text, and color-cycle properties. Resolve those defaults through the shared style-creation service, show exposed values in its creation input, create the Matplotlib artist under the same style context, and synchronize the Controller from the new artist before registration. Explicit user choices and an active user-selected Axes palette take precedence; style changes affect only components created afterward unless the user explicitly reapplies a palette or style.
-- Persist Figure component state only through the schema-v10 component tree. Profile selection, Section expansion, QWidget state, callbacks, and other UI-only data must never enter `ComponentState` or project files. The loader accepts only an exact integer schema version `10`; schema v4-v9 compatibility has been intentionally retired and there is no in-process migration. Any future persisted field or format change must introduce schema v11 with a dedicated migration, validation, rollback, and save/open round-trip task; preserve stable component IDs and empty data-backed components.
+- **CORE-REGISTRATION-ATOMICITY:** Component creation/publication uses
+  `ComponentRegistry.registration_transaction()`. Artists, Controllers,
+  Registry/Locator bindings, Inspectors, listeners, IDs, pending state,
+  selection, redraw/events, and color-cycle commits form one logical operation.
+  Publish user-visible effects only after commit and restore exact pre-call
+  identity on failure.
+- Axes creation/deletion includes its fixed semantic subtree in one compound
+  transaction. Project creation/restore is staged before tab publication and
+  cleaned up by stable project/object ID on either side of publication.
+- **CORE-DELETION-COORDINATOR:** Every production deletion enters through
+  `DeletionCoordinator` with `DeletionRequest`. Fixed semantics hide; genuinely
+  removable components declare `REMOVE` and exactly one handler. Deletion is a
+  prepared all-or-nothing transaction and post-delete selection is computed
+  from the confirmed deletion set.
+- **CORE-PERSISTENCE-V10:** Persist component state only through the exact
+  integer schema-v10 component tree. UI profiles, widgets, callbacks, tree
+  keys, and expansion/selection state never enter project files. v4-v9 loading
+  is intentionally retired. Any persisted format change requires a dedicated
+  schema-v11 migration task with validation, rollback, and round-trip coverage.
+- Runtime-created persisted components declare `RESTORE_PHASE` and exactly one
+  `ComponentMaterializer`; fixed semantic components use `None`. Preserve
+  stable IDs and empty valid data-backed components.
+- Detailed transaction, deletion, materialization, palette, and restore
+  procedures live in `.agents/architecture/persistence.md` and
+  `.agents/architecture/deletion.md`.
 
-## Property and Editor Value Contracts
+## Documentation and Completion
 
-- Keep every persisted composite value in the closed tagged contracts of `mygui/figuremodify/components/property_values.py`. Those normalizers reject unknown keys, non-finite numbers, and invalid kind/parameter combinations, and must never deserialize callables, Matplotlib objects, or other runtime state. Extend a contract there instead of validating the same value a second time in UI code.
-- Every `PropertySpec` must declare an explicit `EditorKind`; use `AUTO` only when the value type or `choices` uniquely determine the control. A composite value must declare its own dedicated editor kind. `EditorKind.JSON` is reserved for tests and tooling; no production property may render as an editable JSON text field.
-- Place value-contract editors by interaction: dialog-backed summary editors belong in `mygui/widgets/fig_control_window/component_editors/spec_editors.py`, inline compound editors in `inline_spec_editors.py`, and generic numeric/text primitives in `common.py`. Each one exposes `value()`, `set_value(value, *, emit=False)`, and `valueChanged(object)`, submits one complete normalized value, and leaves domain validation to the Controller so one rejected edit produces one rollback and one red Message Bar result. A cancelled dialog must change nothing.
-- `EditorRegistry.validate_production_profiles()` is the startup gate for property exposure, and `freeze()` runs it again before the Canvas publishes components. It requires one exact profile per `(ComponentKind, ComponentRole)`, rejects duplicate, unknown, or omitted persistent keys across exposed and intentionally hidden declarations, checks data/proxy coverage and enum choices, and runs `validate_matplotlib_exposure_contracts()`. Every public Matplotlib 3.9 setter must stay classified exactly once as `core`, `advanced`, `alias`, `derived/owned_elsewhere`, or `unsupported` with a reason; adding a supported property means updating that manifest in the same change.
+- User-facing documentation is MkDocs content under `docs/`; every page appears
+  in `mkdocs.yml`. Feature/property changes update the relevant parameter page
+  and schema summary in the same change. Matplotlib links pin version 3.9.0.
+- Feature pages describe current behavior concisely and document parameters in
+  detail; limitations and plans stay out of `docs/`. Parameter tables keep one
+  row per Inspector field with control, meaning, values/default, and the
+  persisted/runtime property key. Uncommon Matplotlib value families carry a
+  pinned 3.9.0 inline link on every applicable row, and each page lists all
+  referenced URLs. Changes to nav/build/link policy also update
+  `docs/documentation-site.md`.
+- New feature state participates in project save/import workflows when
+  applicable; do not ship runtime state that silently disappears on reopen.
+- `.agents/` is operational Agent Engineering knowledge, not user docs.
+  `codex_handoff/current-limitations.md` records current limitations only;
+  scanner output and task evidence are temporary artifacts under the ignored
+  `build/agent-results/` path.
+- Update this file in place when a global invariant, architecture owner,
+  schema version, or startup gate changes. Update the relevant Skill and
+  architecture page when a workflow changes. `AGENTS.md` is authoritative over
+  `.agents/`, which is authoritative over conflicting narrative under `docs/`.
+- Use `ColorChoiceWidget` with the injected `ColorLibrary`; ordered chart colors
+  use `ColorCycleState.peek()` and call `commit()` only after the related
+  transaction succeeds.
+- Interactive desktop smoke checks remain required when a routed task declares
+  them; Qt offscreen tests do not cover multi-monitor scaling, native dialogs,
+  real TeX/MATLAB runtimes, or drag/drop.
 
-## Component Tree and Selection Rules
+## Task Router
 
-- `PyFigureCanvas.current_component_id` is the only authoritative component selection. The Components tree, search filter, and Inspector synchronize that value and must not maintain a second selected-component model. Tree sessions may retain only UI state such as typed expansion keys.
-- Represent projection nodes with `ComponentNodeKey` and `GroupNodeKey`, exposed through `TreeNodeKey` and `NODE_KEY_ROLE`. Keep `COMPONENT_ID_ROLE` exclusively for real component IDs. Never encode UI groups as reserved component-ID strings or persist tree keys in `ComponentState` or schema-v10 files.
-- Build a complete candidate projection and validate duplicate keys, missing parents, parent/child relationships, cycles, and reachability before atomically replacing the active model. A failed rebuild must leave the previous usable projection intact.
-- Drive labels, grouping, previews, and ordering from the profile's UI-only `TreePresentationSpec`. Do not add component-role presentation branches to the tree or container code.
-- Keep tree responsibilities split under `mygui/widgets/component_tree/`: typed keys, presentation resolution, Model/Filter, View/Host, and deletion dialog code must remain in their corresponding modules instead of growing a new monolithic tree widget.
-- Commit and emit a component selection only after its Inspector has been ensured and displayed successfully. On failure, restore the tree highlight, Canvas selection, Inspector visibility/cache, and related UI state together, and emit one red Message Bar result for the user action.
-- A user-entered search that hides the current component must keep the Canvas and Inspector selection while clearing only the visible tree highlight. Programmatic or external selection of a filtered component must clear the search, and clearing search must restore the current component highlight.
-- Compute post-delete selection from the actual confirmed deletion set: next surviving same-group component, previous survivor, parent, nearest surviving ancestor, then Figure root. “Delete similar components” means the same parent, `ComponentKind`, `ComponentRole`, and deletion policy.
+Before implementing a matching task, read the routed `SKILL.md` completely and
+the architecture pages named by `.agents/task-map.yaml`:
 
-## Inspector Container Rules
+| Task | Required Skill |
+| --- | --- |
+| New Figure/chart/element component | `.agents/skills/add-figure-component/SKILL.md` |
+| Add/change an Inspector property | `.agents/skills/modify-component-property/SKILL.md` |
+| Change persisted schema or fields | `.agents/skills/schema-migration/SKILL.md` |
+| Change save/open/restore publication | `.agents/skills/project-io-change/SKILL.md` |
+| Diagnose GUI state/lifecycle regression | `.agents/skills/debug-gui-regression/SKILL.md` |
+| Audit architecture boundaries | `.agents/skills/architecture-audit/SKILL.md` |
+| Promote or dismiss a gray boundary | `.agents/skills/evolve-architecture-rule/SKILL.md` |
+| Diagnose or repair CI | `.agents/skills/fix-ci/SKILL.md` |
 
-- Use responsibility-based names for Inspector layout code: `Host` owns project-level selection, `Panel` owns one Figure/Axes scope, `Stack` switches role-specific toolboxes, `ToolBox` owns visible Inspectors, `Section` edits part of a component, and `Input` is Controller-free dialog input.
-- Keep the production hierarchy `FigureInspectorHost` -> `FigureInspectorPanel` -> `AxesInspectorPanel` -> `AxesSemanticInspectorPanel`/Chart and Element stacks. High-level Figure/Axes navigation belongs in `mygui/widgets/fig_control_window/figure_inspector.py`; reusable Inspector stacks and toolboxes belong in `mygui/widgets/fig_control_window/component_editors/containers.py`.
-- The `all_mod_widgets/` directory is retained only for existing QSS resources. Do not place new Python editor or container implementations there, and do not move its QSS files without updating every explicit resource path.
-- Window and Canvas callers must use the public container methods for add, find, show, remove, clear, and toolbox lookup. They must not access `_figure_stack`, `_inspector_stack`, `_toolboxes`, `_chart_stack`, `_element_stack`, or other private Qt layout state.
-- `FigureInspectorHost` owns the empty-project offset and project-index mapping. `FigureInspectorPanel` owns Figure elements and Axes selection. `AxesInspectorPanel` routes components from the explicit `EditorProfile.placement`; do not restore role hardcoding or `_is_semantic` classification.
-- `ComponentEditorManager.create()` is the only production path for creating visible component editors. Toolboxes provide `add_inspector()` and `remove_inspector()` to Manager lifecycle callbacks; container removal must not bypass `dispose()`.
-- Use the exact `EditorKey = (ComponentKind, ComponentRole)` for Profile, toolbox, and Inspector routing. Every production Controller must have one unique Profile with a valid explicit placement, a `TreePresentationSpec`, and non-empty unique `SectionSpec` keys. Validate the complete production registry during Canvas startup so invalid, missing, or duplicate declarations fail before component publication.
-- Figure-root Inspectors may be prepared during Figure setup; all other component Inspectors are created on first selection and cached by component. `show_component()` may ensure an Inspector, but lookup-only APIs must not create one as a side effect. `ComponentEditorBase` remains only an explicitly selected generic or test fallback and is never a silent production fallback.
-- Resolve Figure and Axes ownership through `ComponentRegistry` ancestry, not Matplotlib artist inspection or private Qt layout state.
-- Every Inspector container level must provide idempotent recursive `dispose()`. Release Manager tracking before Section cleanup, isolate individual cleanup exceptions, undo partially constructed Sections in reverse order, and detach Registry, repository, TeX, MATLAB, and asynchronous listeners. Removing or clearing a container must use these public lifecycle paths rather than only `deleteLater()`.
-- Treat container renames as atomic repository-wide migrations: update imports, attributes, methods, tests, docs, and handoff notes together, then remove the old names rather than adding aliases or `__getattr__` compatibility paths.
-- Historical Canvas names such as `PyFigureCanvas`, `py_figure_canves.py`, `current_canva`, and `canva` remain outside the Inspector container naming scheme. Do not rename them opportunistically as part of unrelated Inspector work; handle them only in a dedicated repository-wide naming task.
+When multiple routes apply, use all applicable Skills and the union of their
+checks. Ordinary local maintenance that matches none still obeys this file.
 
-## Component Registration and Project Transactions
+## Verification Protocol
 
-- Use `ComponentRegistry.registration_transaction()` for component publication. Treat artist creation, Controller/Registry registration, Locator bindings, lazy Inspector insertion, tree lifecycle events, selection, pending refresh state, and color-cycle consumption as one logical operation.
-- Publish lifecycle events, redraw, success messages, and selection changes only after the transaction commits. Roll back to the exact pre-call state on failure, including artists, Controllers, Locator entries, cached Inspectors, listeners, pending updates, allocated IDs, and creation-color cursors; do not expose intermediate `ADDED` or `REMOVED` events, and show at most one red error result.
-- Create or delete an Axes together with its fixed semantic subtree as one compound transaction. Do not leave a partially registered Axes, semantic Controller, Inspector panel, or ID allocation after failure.
-- Use Registry batch event contexts and batch subscriptions for compound operations. Axes creation/deletion, project restore, and other logical batches should cause one tree projection rebuild and one final refresh, while preserving persisted Axes state.
-- Stage project creation and restore before publication. Prepare the Canvas, Inspector hierarchy, tree session, project fingerprints, and subscriptions before adding official mappings or tabs. Failures before or after tab insertion must clean up by stable object/project ID rather than scanning tabs or matching display names.
-
-## Component Deletion Rules
-
-- Every newly supported Figure component must make an explicit deletion decision as part of the same feature: fixed semantic components use a non-removable policy and hide instead of deleting; genuinely removable components use `REMOVE` and must be fully integrated with the deletion transaction architecture before publication.
-- Route every production deletion entry through `DeletionCoordinator` with a `DeletionRequest`; Tree single/batch deletion, Inspector deletion, Axes deletion, and data-dependency cascades must not directly call Registry or Controller physical-delete primitives.
-- Register exactly one deletion handler for every production `EditorKey` whose Controller exposes `REMOVE`. Declare whether the handler owns a subtree, reject Registry children from leaf handlers, and explicitly compose side effects such as `ColorCycleDeletionEffect`; do not infer deletion behavior from property names or Matplotlib artist type.
-- Treat deletion as an all-or-nothing prepared transaction. Include artists, Controllers, Locator bindings, survivor states, Inspector containers, tree/schema/live-Axes-target validation, palette cursors, and authoritative selection in the snapshot and rollback contract. Publish lifecycle events, redraw, selection, and one Message Bar result only after commit.
-- New removable components must participate in precise instance labeling, same-parent/kind/role batch cohorts, candidate revalidation, and Coordinator-owned post-delete selection. Search filtering is display-only and must not reduce the deletion business scope.
-
-## New Figure Component Checklist
-
-- Prefer an existing `ComponentKind` and `ComponentRole`. Adding a kind, role, or persisted property is a separate schema migration task with validation, rollback, and save/open round-trip coverage.
-- Implement `ComponentState`, Controller, explicit deletion policy, property/data validation, Locator binding, and any domain Service first. Fixed semantic components hide; only genuinely removable components expose deletion. For every new `REMOVE` component, add its exact `DeletionHandlerRegistry` declaration and prove that Canvas startup deletion-handler validation succeeds.
-- For every runtime-created persisted component, declare `RESTORE_PHASE` on its Controller and register exactly one `ComponentMaterializer`. Canvas startup `ComponentMaterializerRegistry.validate_complete()` must reject missing, extra, duplicate, non-callable, and phase-mismatched declarations before components are published. Fixed semantic components use `RESTORE_PHASE = None`.
-- Resolve all applicable line, marker, fill, text, and color defaults from the current authoritative Figure style. Show exposed defaults in a Controller-free creation input, create the Matplotlib artist under the same style context, and synchronize Controller state from the artist before registration.
-- Reuse the injected `ColorLibrary`. For ordered chart colors, call `ColorCycleState.peek()` for the candidate and `commit()` only after the full registration transaction succeeds. Explicit user values and the active Axes palette take precedence.
-- Register one exact `EditorProfile` per supported `EditorKey`, with explicit `EditorPlacement`, reusable `EditorSection` factories, unique `SectionSpec` keys, and a complete UI-only `TreePresentationSpec`. A new supported component must not require edits to tree grouping or container dispatch code.
-- Route all edits through Controllers or Services. Continue using `TextRenderService.apply_many()` for one logical render-sensitive text edit, keep Legend on `LegendController`/Axes commands, and preserve Plot/Interpolation/Fit data-reference refresh semantics.
-- Cover successful creation, empty data where valid, lazy Inspector reuse, single and same-cohort batch deletion, data-dependency deletion where applicable, data-source refresh, every failure rollback stage, stable-ID schema-v10 save/open, and the absence of Profile/Section/tree UI state from persisted files. Deletion tests must assert exact artist/Controller/Inspector/Locator identity on rollback, correct palette and selection restoration, and no partial events or success messages. Document the final feature and parameters under `docs/`; keep only current limitations in `codex_handoff/`.
-
-## Component Verification Baseline
-
-- Run the complete suite from the repository root with `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe -m unittest discover -s tests -v`. Do not replace the project interpreter with a system Python.
-- Run `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe -m compileall -q mygui tests main.py` and the applicable Qt tests with `QT_QPA_PLATFORM=offscreen` after component-tree, Inspector, transaction, or project-restore changes.
-- Add focused tests for typed-key collisions, search/selection synchronization, deletion fallback, profile validation, lazy Inspector identity, idempotent cleanup, Registry batch counts, project publication rollback, tagged-value normalization and editor round trips, and schema-v10 round trips whenever those paths change.
-- Fault-injection tests must cover artist creation, Registry registration, Section construction, Stack insertion, state synchronization, and failures on both sides of tab publication. Assert no residual artist, Controller, Locator binding, tree node, listener, color consumption, or selection change.
-- Offscreen tests do not replace interactive smoke checks for multi-Figure/multi-Axes navigation, tree search, Chart/Element switching, creation/deletion, save/open, and operation without TeX or MATLAB.
+- Run routed checks from `.agents/checks/` with the project interpreter. The
+  canonical local full command is:
+  `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_full.py --profile local`.
+- The application baseline is compileall, Ruff, the complete unittest suite
+  with `QT_QPA_PLATFORM=offscreen`, branch coverage (global 74%, listed critical
+  files 80%), and applicable focused fault-injection/round-trip tests.
+- Documentation changes run `python -m mkdocs build --strict`; docs-only changes
+  do not require the Python application suite.
+- A routed required check that is failed, unknown, or not run prevents a
+  completed result. Report verification exactly; never equate “not run” with
+  pass. Use `.agents/architecture/testing-map.md` for focused suites and manual
+  smoke coverage.

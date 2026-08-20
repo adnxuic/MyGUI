@@ -1,6 +1,6 @@
 {
   "name": "mygui-scanners",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Persistent, non-model-facing DSH Scanner infrastructure for MyGUI: a Cordis Scanner Registry service plus the first Architecture Scanner.",
   "private": true,
   "type": "module",
@@ -25,8 +25,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test \"tests/*.test.ts\"",
-    "test:only": "node --test \"tests/*.test.ts\"",
+    "test": "npm run build && node --experimental-strip-types --test \"tests/*.test.ts\"",
+    "test:only": "node --experimental-strip-types --test \"tests/*.test.ts\"",
     "scan": "npm run build && node dist/cli/scan.js",
     "verify:e2e": "bash dsh/verify-e2e.sh",
     "setup:host-links": "bash scripts/link-host-deps.sh"

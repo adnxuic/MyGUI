@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Context } from '@deepseek-ai/cordis';
 import {
+  SCANNER_CONTRACT_VERSION,
   ScannerContractError,
   ScannerRegistryError,
   type ScannerDefinition,
@@ -26,14 +27,18 @@ function makeScanner(id: string, overrides: Partial<ScannerDefinition> = {}): Sc
       const startedAt = new Date().toISOString();
       const findings: never[] = [];
       return {
-        scannerId: id,
-        scannerVersion: '1.0.0',
-        workspace: request.workspace,
+        contractVersion: SCANNER_CONTRACT_VERSION,
+        scanner: { id, version: '1.0.0' },
+        status: 'completed',
+        verdict: 'clean',
+        scope: { workspace: request.workspace, include: [], exclude: [], changedFiles: [] },
         startedAt,
         durationMs: 1,
-        filesScanned: 1,
         findings,
-        summary: { total: 0, bySeverity: {} },
+        grayBoundaries: [],
+        coverage: { filesVisited: ['sample.py'], filesSkipped: [], limitations: [] },
+        errors: [],
+        summary: { findings: 0, grayBoundaries: 0, errors: 0, bySeverity: {} },
         diagnostics: [],
       };
     },
@@ -62,9 +67,9 @@ test('register, list, get, describe, run', async () => {
   });
 
   const result = await ctx.myguiScanners.run('mygui.alpha', { workspace: '/ws' });
-  assert.equal(result.scannerId, 'mygui.alpha');
-  assert.equal(result.workspace, '/ws');
-  assert.equal(result.summary.total, 0);
+  assert.equal(result.scanner.id, 'mygui.alpha');
+  assert.equal(result.scope.workspace, '/ws');
+  assert.equal(result.summary.findings, 0);
 });
 
 test('list() is sorted by id deterministically', () => {
@@ -167,8 +172,7 @@ test('run() rejects contract violations instead of faking success', async () => 
     makeScanner('mygui.bad', {
       async run(request) {
         const result = await makeScanner('mygui.bad').run(request);
-        // Tamper: summary.total no longer matches findings.
-        return { ...result, summary: { total: 42, bySeverity: {} } };
+        return { ...result, summary: { ...result.summary, findings: 42 } };
       },
     }),
   );
@@ -194,11 +198,12 @@ test('run() rejects contract violations instead of faking success', async () => 
               title: 't',
               evidence: 'e',
               reason: 'r',
+              suggestedAction: 'a',
               tags: [],
               fingerprint: 'f',
             },
           ],
-          summary: { total: 1, bySeverity: { high: 1 } },
+          summary: { ...result.summary, findings: 1, bySeverity: { high: 1 } },
         };
       },
     }),
@@ -225,11 +230,12 @@ test('run() rejects contract violations instead of faking success', async () => 
               title: 't',
               evidence: 'e',
               reason: 'r',
+              suggestedAction: 'a',
               tags: [],
               fingerprint: 'f',
             },
           ],
-          summary: { total: 1, bySeverity: { high: 1 } },
+          summary: { ...result.summary, findings: 1, bySeverity: { high: 1 } },
         };
       },
     }),
@@ -238,6 +244,72 @@ test('run() rejects contract violations instead of faking success', async () => 
     ctx.myguiScanners.run('mygui.badconf', { workspace: '/ws' }),
     (error: unknown) => error instanceof ScannerContractError && error.message.includes('confidence'),
   );
+
+  ctx.myguiScanners.register(
+    makeScanner('mygui.v1', {
+      async run(request) {
+        const result = await makeScanner('mygui.v1').run(request);
+        return { ...result, contractVersion: 1 } as unknown as ScannerResult;
+      },
+    }),
+  );
+  await assert.rejects(
+    ctx.myguiScanners.run('mygui.v1', { workspace: '/ws' }),
+    (error: unknown) => error instanceof ScannerContractError && error.message.includes('exactly 2'),
+  );
+
+  ctx.myguiScanners.register(
+    makeScanner('mygui.extra', {
+      async run(request) {
+        const result = await makeScanner('mygui.extra').run(request);
+        return { ...result, legacyField: true } as ScannerResult;
+      },
+    }),
+  );
+  await assert.rejects(
+    ctx.myguiScanners.run('mygui.extra', { workspace: '/ws' }),
+    (error: unknown) => error instanceof ScannerContractError && error.message.includes('unknown fields'),
+  );
+});
+
+test('gray and partial ScannerResult v2 states remain explicit', async () => {
+  const ctx = plainContext();
+  new MyguiScannersService(ctx);
+  ctx.myguiScanners.register(makeScanner('mygui.gray', {
+    async run(request) {
+      const result = await makeScanner('mygui.gray').run(request);
+      return {
+        ...result,
+        verdict: 'gray_boundary',
+        grayBoundaries: [{
+          id: 'gray-1', scannerId: 'mygui.gray', category: 'receiver-type', confidence: 0.5,
+          file: 'sample.py', line: 2, evidence: 'target.set_color(...)',
+          whyNotViolation: 'The receiver type cannot be resolved statically.',
+          evolutionCandidate: 'Classify the receiver before evolving the rule.', fingerprint: 'gray-1',
+        }],
+        summary: { ...result.summary, grayBoundaries: 1 },
+      };
+    },
+  }));
+  const gray = await ctx.myguiScanners.run('mygui.gray', { workspace: '/ws' });
+  assert.equal(gray.verdict, 'gray_boundary');
+
+  ctx.myguiScanners.register(makeScanner('mygui.partial', {
+    async run(request) {
+      const result = await makeScanner('mygui.partial').run(request);
+      return {
+        ...result,
+        status: 'partial',
+        verdict: 'unknown',
+        coverage: { ...result.coverage, filesSkipped: [{ file: 'unreadable.py', reason: 'permission denied' }] },
+        errors: [{ code: 'READ_ERROR', message: 'permission denied', recoverable: true, file: 'unreadable.py' }],
+        summary: { ...result.summary, errors: 1 },
+      };
+    },
+  }));
+  const partial = await ctx.myguiScanners.run('mygui.partial', { workspace: '/ws' });
+  assert.equal(partial.status, 'partial');
+  assert.equal(partial.verdict, 'unknown');
 });
 
 test('invalid scanner definitions are rejected at registration', () => {

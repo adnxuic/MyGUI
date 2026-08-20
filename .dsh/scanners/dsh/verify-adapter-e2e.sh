@@ -22,10 +22,13 @@ if [ ! -f "$ROOT/dist/plugins/adapter-e2e-plugin.js" ]; then
   exit 1
 fi
 
-DSH_BIN=""
-if command -v dsh >/dev/null 2>&1; then
+DSH_BIN="${DSH_BIN:-}"
+if [ -n "$DSH_BIN" ] && [ ! -x "$DSH_BIN" ]; then
+  echo "error: DSH_BIN is not executable: $DSH_BIN" >&2
+  exit 1
+elif [ -z "$DSH_BIN" ] && command -v dsh >/dev/null 2>&1; then
   DSH_BIN="$(command -v dsh)"
-elif [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
+elif [ -z "$DSH_BIN" ] && [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
   DSH_BIN="$(ls -t "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -n 1)"
 fi
 if [ -z "$DSH_BIN" ]; then

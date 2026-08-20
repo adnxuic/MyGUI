@@ -1,0 +1,115 @@
+version: 1
+tasks:
+  add_figure_component:
+    skill: .agents/skills/add-figure-component/SKILL.md
+    architecture:
+      - .agents/architecture/component-system.md
+      - .agents/architecture/inspector.md
+      - .agents/architecture/persistence.md
+      - .agents/architecture/deletion.md
+    checks: [verify_fast, verify_component_contracts, verify_project_io, verify_architecture]
+    scanners: [mygui.architecture, mygui.qt-lifecycle]
+    focused_tests:
+      - tests.test_component_controllers
+      - tests.test_component_materializers
+      - tests.test_component_inspector
+      - tests.test_component_runtime_integration
+      - tests.test_component_deletion_and_project_close
+      - tests.test_project_object_roundtrip
+    documentation: [docs/component-extension-template.md, docs/component-properties-v10.md]
+    manual_smoke: true
+  modify_component_property:
+    skill: .agents/skills/modify-component-property/SKILL.md
+    architecture:
+      - .agents/architecture/component-system.md
+      - .agents/architecture/inspector.md
+      - .agents/architecture/persistence.md
+    checks: [verify_fast, verify_component_contracts, verify_architecture]
+    scanners: [mygui.architecture]
+    focused_tests:
+      - tests.test_component_controllers
+      - tests.test_component_editors
+      - tests.test_component_inspector
+      - tests.test_matplotlib_property_contract
+    documentation: [docs/chart-component-parameters.md, docs/axes-component-parameters.md]
+    manual_smoke: true
+  schema_migration:
+    skill: .agents/skills/schema-migration/SKILL.md
+    architecture:
+      - .agents/architecture/persistence.md
+      - .agents/architecture/component-system.md
+      - .agents/architecture/testing-map.md
+    checks: [verify_fast, verify_component_contracts, verify_project_io, verify_architecture]
+    scanners: [mygui.architecture]
+    focused_tests:
+      - tests.test_project_schema
+      - tests.test_project_io
+      - tests.test_project_object_roundtrip
+      - tests.test_component_materializers
+    documentation: [docs/project-files.md, docs/component-properties-v10.md]
+    manual_smoke: true
+  project_io_change:
+    skill: .agents/skills/project-io-change/SKILL.md
+    architecture:
+      - .agents/architecture/persistence.md
+      - .agents/architecture/component-system.md
+      - .agents/architecture/testing-map.md
+    checks: [verify_fast, verify_project_io, verify_architecture]
+    scanners: [mygui.architecture]
+    focused_tests:
+      - tests.test_project_io
+      - tests.test_project_object_roundtrip
+      - tests.test_gui_file_flow
+      - tests.test_component_deletion_and_project_close
+    documentation: [docs/project-files.md]
+    manual_smoke: true
+  debug_gui_regression:
+    skill: .agents/skills/debug-gui-regression/SKILL.md
+    architecture:
+      - .agents/architecture/ui-state-boundaries.md
+      - .agents/architecture/inspector.md
+      - .agents/architecture/testing-map.md
+    checks: [verify_fast, verify_architecture]
+    scanners: [mygui.architecture, mygui.qt-lifecycle]
+    focused_tests:
+      - tests.test_gui_layout
+      - tests.test_component_tree
+      - tests.test_component_inspector
+      - tests.test_background_task
+    documentation: []
+    manual_smoke: true
+  architecture_audit:
+    skill: .agents/skills/architecture-audit/SKILL.md
+    architecture:
+      - .agents/architecture/ui-state-boundaries.md
+      - .agents/architecture/component-system.md
+      - .agents/architecture/inspector.md
+      - .agents/architecture/persistence.md
+      - .agents/architecture/deletion.md
+    checks: [verify_agent_core, verify_architecture]
+    scanners: [mygui.architecture, mygui.qt-lifecycle]
+    focused_tests:
+      - tests.test_matplotlib_boundaries
+      - tests.test_package_boundary
+      - tests.test_matplotlib_property_contract
+    documentation: []
+    manual_smoke: false
+  evolve_architecture_rule:
+    skill: .agents/skills/evolve-architecture-rule/SKILL.md
+    architecture:
+      - .agents/architecture/rule-evolution.md
+      - .agents/architecture/ui-state-boundaries.md
+      - .agents/architecture/testing-map.md
+    checks: [verify_agent_core, verify_architecture]
+    scanners: [mygui.architecture, mygui.qt-lifecycle]
+    focused_tests: []
+    documentation: []
+    manual_smoke: false
+  fix_ci:
+    skill: .agents/skills/fix-ci/SKILL.md
+    architecture: [.agents/architecture/testing-map.md]
+    checks: [verify_agent_core, verify_full]
+    scanners: []
+    focused_tests: []
+    documentation: []
+    manual_smoke: false

@@ -1,11 +1,12 @@
-name: Windows CI
+name: Repository CI
 
 on:
   push:
   pull_request:
 
 jobs:
-  validate:
+  application:
+    name: Windows application
     runs-on: windows-latest
     env:
       QT_QPA_PLATFORM: offscreen
@@ -20,18 +21,53 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
-      - name: Compile
-        run: python -m compileall -q mygui tests main.py
-      - name: Ruff
-        run: python -m ruff check mygui tests main.py
-      - name: Unit tests with branch coverage
-        run: python -m coverage run -m unittest discover -s tests -v
-      - name: Coverage gate
-        run: python -m coverage report
-      - name: Critical component-contract coverage gate
-        run: >-
-          python -m coverage report --fail-under=80
-          mygui/project_io.py
-          mygui/widgets/figure_canvas/component_materializers.py
-          mygui/widgets/figure_canvas/project_metadata.py
-          mygui/widgets/figure_canvas/py_figure_canves.py
+      - name: Run shared application profile
+        run: python .agents/checks/verify_full.py --profile application
+      - name: Upload application evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-evidence
+          if-no-files-found: error
+          path: |
+            build/agent-results/*.json
+            .coverage
+
+  agent-engineering:
+    name: Ubuntu Agent Engineering
+    runs-on: ubuntu-latest
+    env:
+      DSH_BIN: ${{ github.workspace }}/.dsh/.tooling/node_modules/.bin/dsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            .dsh/scanners/package-lock.json
+            .dsh/adapters/scanner/package-lock.json
+      - name: Install Agent Core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Install pinned DSH in isolation
+        run: npm install --prefix .dsh/.tooling --no-save --no-audit --no-fund @deepseek-ai/dsh@0.1.0-rc.7
+      - name: Install deterministic scanner dependencies
+        run: |
+          bash .dsh/scanners/scripts/link-host-deps.sh
+          npm ci --prefix .dsh/scanners --no-audit --no-fund
+          npm ci --prefix .dsh/adapters/scanner --no-audit --no-fund
+      - name: Run shared Agent Engineering profile
+        run: python .agents/checks/verify_full.py --profile agent-engineering
+      - name: Upload Agent Engineering evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-engineering-evidence
+          if-no-files-found: error
+          path: build/agent-results/*.json

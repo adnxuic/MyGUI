@@ -1,0 +1,23 @@
+---
+name: add-figure-component
+description: Add a persisted MyGUI Figure, chart, or in-Axes component with complete Controller, Inspector, transaction, deletion, restore, test, and documentation integration.
+---
+
+# Add Figure Component
+
+Read the architecture pages routed by `.agents/task-map.yaml`. Preserve
+`CORE-COMPONENT-STATE`, `CORE-EDITOR-PROFILES`,
+`CORE-REGISTRATION-ATOMICITY`, `CORE-DELETION-COORDINATOR`, and
+`CORE-PERSISTENCE-V10`.
+
+Before coding, decide whether existing kind/role/schema contracts are enough;
+route any persisted shape change through `schema-migration`. Implement domain
+state and validation first, then Controller/Service, style-derived creation,
+materializer/deletion declarations, exact EditorProfile, and transactional
+Canvas publication. UI Inputs remain Controller-free.
+
+Verify creation, empty valid data, style/palette precedence, data refresh,
+lazy Inspector reuse, deletion cohorts, failure rollback at every publication
+stage, and stable schema-v10 save/open. Update the routed parameter and feature
+documentation. Do not finish while a required check or manual smoke item is not
+run.

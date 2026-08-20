@@ -17,16 +17,20 @@ REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
 HOME_DIR="$ROOT/.dsh-home"
 PROFILE_DIR="$HOME_DIR/profiles/scanners"
 PRESET_DIR="$HOME_DIR/.agent-presets/scanner-worker"
+PRESET_SOURCE="$REPO_ROOT/.dsh/agents/scanner-worker"
 
 if [ ! -f "$ROOT/dist/plugins/worker-preset-e2e-plugin.js" ]; then
   echo "error: build the package first: npm run build (in $ROOT)" >&2
   exit 1
 fi
 
-DSH_BIN=""
-if command -v dsh >/dev/null 2>&1; then
+DSH_BIN="${DSH_BIN:-}"
+if [ -n "$DSH_BIN" ] && [ ! -x "$DSH_BIN" ]; then
+  echo "error: DSH_BIN is not executable: $DSH_BIN" >&2
+  exit 1
+elif [ -z "$DSH_BIN" ] && command -v dsh >/dev/null 2>&1; then
   DSH_BIN="$(command -v dsh)"
-elif [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
+elif [ -z "$DSH_BIN" ] && [ -n "$HOME" ] && compgen -G "$HOME/.npm/_npx/*/node_modules/.bin/dsh" >/dev/null 2>&1; then
   DSH_BIN="$(ls -t "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -n 1)"
 fi
 if [ -z "$DSH_BIN" ]; then
@@ -72,12 +76,12 @@ cat > "$PROFILE_DIR/agent-presets.patch.yml" <<EOF
       name: '@deepseek-ai/dsh-cordis-host-runner'
 EOF
 
-# Copy the live scanner-worker preset into the isolated home (preset root
-# discovery is $DSH_HOME/.agent-presets/<id>/).
-if [ -d "$HOME/.dsh/.agent-presets/scanner-worker" ]; then
-  cp -r "$HOME/.dsh/.agent-presets/scanner-worker/." "$PRESET_DIR/"
+# Copy the version-controlled preset into the isolated home (preset root
+# discovery is $DSH_HOME/.agent-presets/<id>/). Never depend on user state.
+if [ -f "$PRESET_SOURCE/preset.yml" ]; then
+  cp -r "$PRESET_SOURCE/." "$PRESET_DIR/"
 else
-  echo "error: scanner-worker preset not found under ~/.dsh/.agent-presets" >&2
+  echo "error: version-controlled scanner-worker preset is incomplete: $PRESET_SOURCE" >&2
   exit 1
 fi
 

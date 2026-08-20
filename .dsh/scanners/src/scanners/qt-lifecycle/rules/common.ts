@@ -76,9 +76,10 @@ export function makeQtFinding(options: {
   confidence: number;
   title: string;
   reason: string;
+  suggestedAction?: string;
   tags?: string[];
 }): ScannerFinding {
-  const { model, ruleId, line, severity, confidence, title, reason, tags } = options;
+  const { model, ruleId, line, severity, confidence, title, reason, suggestedAction, tags } = options;
   const evidence = evidenceOf(model, line);
   const id = `${ruleId}@${model.path}#${line}`;
   return {
@@ -92,6 +93,7 @@ export function makeQtFinding(options: {
     title,
     evidence,
     reason,
+    suggestedAction: suggestedAction ?? 'Make QObject ownership and teardown explicit, then add positive and negative lifecycle tests.',
     tags: tags ?? [],
     fingerprint: fingerprintFor(ruleId, model.path, line, evidence),
   };

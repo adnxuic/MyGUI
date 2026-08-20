@@ -19,7 +19,7 @@ import { createQtLifecycleScanner } from './scanner.ts';
 export const name = 'mygui-scanner-qt-lifecycle';
 
 export interface QtLifecycleScannerConfig {
-  /** Reserved for future tuning; unused in v0.1.0. */
+  /** Reserved for future tuning; currently unused. */
   [key: string]: unknown;
 }
 

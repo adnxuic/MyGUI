@@ -42,10 +42,11 @@ receive inspection request
    when the scanner throws. A failed scan must never leave a model-facing
    tool behind. Do not `cordis_undefine` after a normal run; keep the
    definition for re-run/debugging.
-8. **Return structured results** — ScannerWorkerResult with status, ids,
-   findings (phase-1 contract), scannerResults, lifecycle evidence, and
-   diagnostics. Never swallow a scanner failure: mark `partial`/`failed`
-   explicitly.
+8. **Return structured results** — ScannerWorkerResult v2 with status, ids,
+   findings, gray boundaries, scanner errors, raw ScannerResult v2 values,
+   lifecycle evidence, and diagnostics. Preserve partial successful evidence
+   when another scanner fails. Never translate `unknown` into clean or swallow
+   a scanner failure: mark `partial`/`failed` explicitly.
 9. **Never modify the repository** — detection only. No fixes, no refactors,
    no commits.
 10. **Report missing capability** — when no registered scanner matches the

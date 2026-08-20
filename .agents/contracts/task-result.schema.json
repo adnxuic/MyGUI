@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mygui.local/contracts/task-result.schema.json",
+  "title": "MyGUI TaskResult v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "status", "scope", "changes", "findings", "architectureImpact", "persistenceImpact", "verification", "grayBoundaries", "limitations", "remainingRisks"],
+  "properties": {
+    "contractVersion": {"const": 1},
+    "status": {"enum": ["completed", "partial", "blocked", "failed"]},
+    "scope": {"type": "string"},
+    "changes": {"$ref": "#/$defs/strings"},
+    "findings": {"$ref": "#/$defs/strings"},
+    "architectureImpact": {"type": "string"},
+    "persistenceImpact": {"type": "string"},
+    "verification": {"type": "array", "items": {"$ref": "#/$defs/verification"}},
+    "grayBoundaries": {"type": "array"},
+    "limitations": {"$ref": "#/$defs/strings"},
+    "remainingRisks": {"$ref": "#/$defs/strings"}
+  },
+  "$defs": {
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "command", "status", "required", "durationMs", "evidence"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1}, "command": {"type": "string"},
+        "status": {"enum": ["passed", "failed", "not_run"]},
+        "required": {"type": "boolean"}, "durationMs": {"type": "number", "minimum": 0},
+        "evidence": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,5 +1,8 @@
 # Scanner Worker — Phase 3 Report: Hardening + Qt Lifecycle Scanner + Real Multi-Scanner
 
+> Historical snapshot only. Current readiness is determined by the latest
+> required CI jobs and their uploaded TaskResult/ScannerResult artifacts.
+
 Date: 2026-08-19 · Method: in-session agent evaluation (see README.md)
 Supersedes the Phase 2 report; Phase 2 historical semantics (e.g. Case 4
 `missing_capability` BEFORE the Qt scanner existed) are preserved in

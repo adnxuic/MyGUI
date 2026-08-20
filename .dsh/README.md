@@ -56,8 +56,8 @@ lives under `.dsh/scanners/`, and there is deliberately **no** `.dsh/tools/`.
   registry service, the `mygui.architecture` and `mygui.qt-lifecycle`
   scanner plugins, tests, and the repo-local DSH composition overlays.
   See `scanners/README.md`.
-- `agents/scanner-worker/` — the **MyGUI Scanner Worker** DSH agent preset
-  (installed under `~/.dsh/.agent-presets/scanner-worker/`). It orchestrates
+- `agents/scanner-worker/` — the version-controlled **MyGUI Scanner Worker**
+  DSH agent preset source. It is copied into isolated DSH homes for checks and orchestrates
   persistent scanners through temporary adapters and enforces
   capability-level read-only (`scanner-readonly.mjs`). See
   `agents/scanner-worker/README.md`.
@@ -88,16 +88,21 @@ persistent Registry (myguiScanners)
         -> scanner tools no longer model-facing
 ```
 
-## Release status
+## Current authority and versions
 
 ```text
-Release status: READY          (as of the Phase 3.5 release qualification)
 DSH tested version: 0.1.0-rc.7
+ScannerResult contract: v2
+mygui-scanners package: 0.2.0
+mygui-scanner-adapter package: 0.2.0
+mygui.architecture scanner: 0.3.0
+mygui.qt-lifecycle scanner: 0.2.0
 ```
 
-Qualification evidence lives in `.dsh/evals/scanner-worker/reports/`
-(`latest.md` = behavioral eval; `release-qualification.md` = release
-checklist). The release verification command is
-`bash .dsh/scripts/verify.sh`; runtime behaviors are verified by
-`verify-readonly-session.sh` and `verify-coldstart-worker.sh`. No claim is
-made about DSH versions other than the tested `0.1.0-rc.7`.
+The latest required CI run is the authority for readiness. Markdown under
+`.dsh/evals/scanner-worker/reports/` is retained as historical evidence and
+must not be treated as a live `READY` signal. The deterministic release
+verification command is `bash .dsh/scripts/verify.sh`; runtime behavior evals
+remain non-blocking scheduled/manual evidence. CI installs the pinned DSH
+version in an isolated directory and supplies its executable through
+`DSH_BIN`; local cache discovery is only a compatibility fallback.

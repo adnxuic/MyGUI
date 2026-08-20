@@ -1,128 +1,122 @@
-/**
- * Scanner contracts — the shared, strongly typed surface of the MyGUI Scanner
- * infrastructure.
- *
- * These types are deliberately small and closed. Every scanner (current and
- * future: architecture, Qt lifecycle, project IO, persistence/schema, test
- * gap, CI) produces `ScannerResult` through the same `ScannerDefinition`
- * shape and is consumed through the `myguiScanners` registry service.
- *
- * Scanner plugins are Harness-internal capabilities. Nothing in this module
- * is model-facing: no tool schemas, no prompts, no LLM surface.
- */
+/** Portable ScannerResult v2 contracts shared by every MyGUI DSH scanner. */
 
-/** Severity ladder used by every finding. */
+export const SCANNER_CONTRACT_VERSION = 2 as const;
+
 export type ScannerSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+export type ScannerStatus = 'completed' | 'partial' | 'failed';
+export type ScannerVerdict = 'clean' | 'violation' | 'gray_boundary' | 'unknown';
 
-/** One violation (or notable observation) produced by a rule. */
 export interface ScannerFinding {
-  /** Stable id unique within one scan result (e.g. `${ruleId}@${file}#${line}`). */
   id: string;
-  /** The scanner that produced this finding. */
   scannerId: string;
-  /** The rule that produced this finding. */
   ruleId: string;
-
   severity: ScannerSeverity;
-  /** Rule confidence in `[0, 1]` that this is a real violation. */
   confidence: number;
-
-  /** Workspace-relative path (forward slashes). Never absolute. */
   file: string;
-  /** 1-based line number, when the finding is anchored to a line. */
   line?: number;
-  /** 1-based column, when known. */
   column?: number;
-
-  /** Short human-readable title. */
   title: string;
-  /** Short verbatim (or near-verbatim) code evidence. Keep it brief. */
   evidence: string;
-  /** Why this code matches the rule. */
   reason: string;
-
-  /** Free-form tags, e.g. `['ui']`, `['test-code']`, `['high-confidence']`. */
+  suggestedAction: string;
   tags: string[];
-
-  /**
-   * Stable fingerprint: identical for the same code + rule across runs.
-   * Used to dedupe findings over time (same fingerprint = same issue).
-   */
   fingerprint: string;
 }
 
-/** Recoverable, non-fatal note attached to a scan. */
-export interface ScannerDiagnostic {
-  level: 'info' | 'warning' | 'error';
+export interface ScannerGrayBoundary {
+  id: string;
+  scannerId: string;
+  category: string;
+  confidence: number;
+  file: string;
+  line?: number;
+  column?: number;
+  evidence: string;
+  whyNotViolation: string;
+  evolutionCandidate: string;
+  fingerprint: string;
+}
+
+export interface ScannerSkippedFile {
+  file: string;
+  reason: string;
+}
+
+export interface ScannerError {
+  code: string;
   message: string;
-  /** Workspace-relative file the diagnostic refers to, when applicable. */
+  recoverable: boolean;
   file?: string;
 }
 
-/** Uniform output of every scanner. */
-export interface ScannerResult {
-  scannerId: string;
-  scannerVersion: string;
-
-  /** Absolute workspace root that was scanned. */
-  workspace: string;
-  /** VCS revision (e.g. git HEAD) at scan time, when determinable. */
-  revision?: string;
-
-  /** ISO-8601 timestamp of scan start. */
-  startedAt: string;
-  /** Wall time of the scan in milliseconds. */
-  durationMs: number;
-
-  filesScanned: number;
-
-  findings: ScannerFinding[];
-
-  summary: {
-    total: number;
-    bySeverity: Partial<Record<ScannerSeverity, number>>;
-  };
-
-  diagnostics: ScannerDiagnostic[];
+export interface ScannerDiagnostic {
+  level: 'info' | 'warning' | 'error';
+  message: string;
+  file?: string;
 }
 
-/** Uniform request accepted by every scanner. */
-export interface ScannerRequest {
-  /** Absolute path of the workspace root to scan. */
+export interface ScannerScope {
   workspace: string;
+  revision?: string;
+  include: string[];
+  exclude: string[];
+  changedFiles: string[];
+}
 
-  /** Glob patterns to include (defaults to the scanner's own defaults). */
+export interface ScannerCoverage {
+  filesVisited: string[];
+  filesSkipped: ScannerSkippedFile[];
+  limitations: string[];
+}
+
+export interface ScannerResult {
+  contractVersion: typeof SCANNER_CONTRACT_VERSION;
+  scanner: { id: string; version: string };
+  status: ScannerStatus;
+  verdict: ScannerVerdict;
+  scope: ScannerScope;
+  startedAt: string;
+  durationMs: number;
+  findings: ScannerFinding[];
+  grayBoundaries: ScannerGrayBoundary[];
+  coverage: ScannerCoverage;
+  errors: ScannerError[];
+  diagnostics: ScannerDiagnostic[];
+  summary: {
+    findings: number;
+    grayBoundaries: number;
+    errors: number;
+    bySeverity: Partial<Record<ScannerSeverity, number>>;
+  };
+}
+
+export interface ScannerRequest {
+  workspace: string;
   include?: string[];
-  /** Glob patterns to exclude (scanner defaults still apply). */
   exclude?: string[];
-
-  /** Restrict scanning to these workspace-relative files, when provided. */
   changedFiles?: string[];
-
-  /** Cancellation signal; scanners must observe it where practical. */
   signal?: AbortSignal;
 }
 
-/** Stable metadata + entry point of one scanner. */
 export interface ScannerDefinition {
-  /** Stable unique scanner id, e.g. `mygui.architecture`. */
   id: string;
-  /** Semantic version of the scanner implementation, e.g. `0.1.0`. */
   version: string;
-  /** One-line description shown by `list()`/`describe()`. */
   description: string;
-  /**
-   * Optional capability tags exposed through `list()`/`describe()` metadata,
-   * e.g. `['ui_artist_mutation', 'ui_matplotlib_global_state_mutation']`.
-   * Lets Worker selection match natural-language tasks ("rcParams mutation",
-   * "presentation-layer side effects", ...) to this scanner.
-   */
   capabilities?: string[];
-
   run(request: ScannerRequest): Promise<ScannerResult>;
 }
 
-/** Stable error class for registry-level failures. */
+export function deriveVerdict(
+  status: ScannerStatus,
+  findings: ScannerFinding[],
+  grayBoundaries: ScannerGrayBoundary[],
+): ScannerVerdict {
+  if (status !== 'completed') return 'unknown';
+  if (findings.length > 0) return 'violation';
+  if (grayBoundaries.length > 0) return 'gray_boundary';
+  return 'clean';
+}
+
 export class ScannerRegistryError extends Error {
   readonly code: string;
   constructor(code: string, message: string) {
@@ -132,7 +126,6 @@ export class ScannerRegistryError extends Error {
   }
 }
 
-/** A scanner violated the result contract (programmer error — fail loudly). */
 export class ScannerContractError extends Error {
   constructor(message: string) {
     super(message);

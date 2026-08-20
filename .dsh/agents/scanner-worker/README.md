@@ -24,24 +24,19 @@ cordis_stop -> tool absent
 
 ## Where the preset lives
 
-The actual DSH preset is installed at
-`${DSH_HOME:-$HOME/.dsh}/.agent-presets/scanner-worker/` (directory per
-preset, as required by the DSH agent-preset roster). It contains:
+The version-controlled preset source is this directory. Verification copies it
+to an isolated `${DSH_HOME}/.agent-presets/scanner-worker/`; an interactive
+installation may copy the same source to the user's DSH home. It contains:
 
 - `preset.yml` — display name + description for the session picker;
 - `agent.cordis.yml` — the lean composition (see below);
 - `scanner-cordis.mjs` — the Worker's local Cordis toolset (see below);
 - `scanner-readonly.mjs` — capability-level read-only hardening (Phase 3);
-- `skills/` — `scanner-orchestration` (this Worker's operating policy) and
-  `cordis-plugin-development` (how to mount/unmount dynamic packages);
-- `NOTICE` — authorship notice from the preset authoring flow.
+- `skills/scanner-orchestration/` — the Worker's compact operating policy.
 
-The files in this directory (`README.md` + `scanner-cordis.mjs` +
-`scanner-readonly.mjs` + `agent.cordis.yml`) describe the preset; the
-runtime copy under `~/.dsh/.agent-presets/` is the loadable one.
-**When any of these files changes here, copy it into the preset directory
-again** (and restart dsh — Node's ESM cache keeps the first loaded version
-alive for the process lifetime).
+This directory is authoritative. Do not qualify a release from an untracked
+user-home preset; restart DSH after updating an interactive installed copy
+because Node retains the first loaded ESM version for the process lifetime.
 
 ## Read-only hardening (Phase 3 / 3.5)
 
@@ -121,9 +116,10 @@ appear only while their Adapter is mounted and disappear when it is stopped.
   EXECUTED -> STOPPED -> TOOL ABSENT, with `cordis_stop` in a finally-style
   path even when the scanner throws. Normal runs stop but do NOT
   `cordis_undefine` (definitions stay for re-run/debugging).
-- **Structured result**: `ScannerWorkerResult` with status, requested/
-  executed ids, merged findings (phase-1 contract), raw `ScannerResult[]`,
-  lifecycle evidence, diagnostics.
+- **Structured result**: `ScannerWorkerResult` v2 with status, requested/
+  executed ids, merged findings, gray boundaries, scanner errors, raw
+  `ScannerResult[]`, lifecycle evidence, and diagnostics. Old ScannerResult
+  contracts and `unknown`-as-clean interpretations are rejected.
 
 ## Full operating policy
 

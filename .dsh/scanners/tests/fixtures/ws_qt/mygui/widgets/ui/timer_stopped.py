@@ -15,3 +15,13 @@ class StoppedTimerOwner:
 
     def flush(self):
         pass
+
+
+class AmbiguousStoppedTimerOwner:
+    """Cleanup vocabulary exists but is not tied to the constructed timer."""
+
+    def __init__(self):
+        self._secondary_timer = QTimer()
+
+    def close(self):
+        self._other_timer.stop()

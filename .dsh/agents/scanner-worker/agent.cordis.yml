@@ -47,8 +47,10 @@
          (include/exclude/changedFiles), collect the ScannerResult.
       5. Stop: cordis_stop the adapter — ALWAYS, even on scanner failure
          (try/finally). Verify the tool is absent afterwards.
-      6. Report: return a structured ScannerWorkerResult (status, requested/
-         executed ids, findings, scannerResults, lifecycle, diagnostics).
+      6. Report: return a structured ScannerWorkerResult v2 (status, requested/
+         executed ids, findings, grayBoundaries, errors, scannerResults,
+         lifecycle, diagnostics). Preserve successful evidence on partial
+         failure and never report an unknown ScannerResult as clean.
 
       Rules:
       - NEVER reimplement an existing scanner. The dynamic adapter is a thin

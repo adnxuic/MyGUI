@@ -18,10 +18,11 @@ test('full scan of ws_qt hits exactly the three positive fixtures with correct l
 
   const result = await scanner.run({ workspace });
 
-  assert.equal(result.scannerId, 'mygui.qt-lifecycle');
-  assert.equal(result.scannerVersion, '0.1.0');
-  assert.equal(result.workspace, workspace);
-  assert.ok(result.filesScanned >= 7);
+  assert.equal(result.contractVersion, 2);
+  assert.equal(result.scanner.id, 'mygui.qt-lifecycle');
+  assert.equal(result.scanner.version, '0.2.0');
+  assert.equal(result.scope.workspace, workspace);
+  assert.ok(result.coverage.filesVisited.length >= 7);
 
   const byRule = new Map(result.findings.map((finding) => [finding.ruleId, finding]));
 
@@ -69,7 +70,11 @@ test('legitimate Qt patterns never report (parent, stop path, disconnect contrac
   ] });
 
   assert.deepEqual(result.findings, [], 'no false positives on legitimate Qt lifecycle patterns');
-  assert.equal(result.filesScanned, 4);
+  assert.equal(result.coverage.filesVisited.length, 4);
+  assert.ok(
+    result.grayBoundaries.some((item) => item.category === 'ambiguous-qt-timer-cleanup'),
+    'receiver-ambiguous cleanup must be preserved for rule review',
+  );
 });
 
 test('deterministic result and stable fingerprints across runs', async () => {
@@ -95,7 +100,7 @@ test('changedFiles restricts the scan to exactly the listed files', async () => 
     workspace,
     changedFiles: ['mygui/widgets/ui/timer_leak.py'],
   });
-  assert.equal(result.filesScanned, 1);
+  assert.equal(result.coverage.filesVisited.length, 1);
   assert.ok(
     result.findings.every((finding) => finding.file === 'mygui/widgets/ui/timer_leak.py'),
     'findings must come only from changed files',
@@ -110,6 +115,8 @@ test('abort signal cancels the scan', async () => {
     workspace: resolve(FIXTURES, 'ws_qt'),
     signal: controller.signal,
   });
-  assert.equal(result.filesScanned, 0);
+  assert.equal(result.coverage.filesVisited.length, 0);
   assert.equal(result.findings.length, 0);
+  assert.equal(result.status, 'partial');
+  assert.equal(result.verdict, 'unknown');
 });

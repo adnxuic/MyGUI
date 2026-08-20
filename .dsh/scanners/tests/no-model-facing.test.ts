@@ -48,7 +48,7 @@ test('loading both scanner plugins registers no model-facing tools', async () =>
     ['mygui.architecture'],
   );
   const result = await ctx.myguiScanners.run('mygui.architecture', { workspace: process.cwd() });
-  assert.equal(result.scannerId, 'mygui.architecture');
+  assert.equal(result.scanner.id, 'mygui.architecture');
 
   // No tool registration was ever attempted, and the tool surface has no
   // scanner tools.
