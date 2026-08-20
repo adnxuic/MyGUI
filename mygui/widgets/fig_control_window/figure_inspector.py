@@ -59,7 +59,6 @@ class AxesInspectorPanel(QFrame):
         self.setObjectName("axes_inspector_panel")
         self.axes_controller = axes_controller
         self.context = context
-        self.axes = axes_controller.resolve_target()
         self._disposed = False
         self.semantic_panel = None
         self._chart_stack = None
@@ -70,8 +69,8 @@ class AxesInspectorPanel(QFrame):
                 axes_controller,
                 context,
             )
-            self._chart_stack = ChartInspectorStack(self.axes)
-            self._element_stack = ElementInspectorStack(self.axes)
+            self._chart_stack = ChartInspectorStack(self)
+            self._element_stack = ElementInspectorStack(self)
             self._inspector_stack.addWidget(self.semantic_panel)
             self._inspector_stack.addWidget(self._chart_stack)
             self._inspector_stack.addWidget(self._element_stack)
@@ -280,7 +279,7 @@ class FigureElementInspectorPanel(QFrame):
         self._disposed = False
         self._element_stack = None
         try:
-            self._element_stack = ElementInspectorStack(None, self)
+            self._element_stack = ElementInspectorStack(self)
             layout = QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)

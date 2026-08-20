@@ -71,23 +71,6 @@ class DeletionCoordinator:
             parent_id = parent.state.parent_id if parent is not None else None
         return canvas.root_component_id
 
-    def _candidate_axes_map(self) -> dict[object, str]:
-        canvas = self.canvas
-        registry = canvas.component_registry
-        surviving = sorted(
-            registry.query(kind=ComponentKind.AXES),
-            key=lambda controller: int(controller.state.selector["index"]),
-        )
-        result = {
-            controller.resolve_target(): controller.component_id
-            for controller in surviving
-        }
-        if len(result) != len(surviving):
-            raise ValueError("Two surviving Axes resolve to the same artist.")
-        if any(axes not in canvas.fig.axes for axes in result):
-            raise ValueError("A surviving Axes is detached from its Figure.")
-        return result
-
     def delete(
         self,
         request: DeletionRequest,
@@ -195,17 +178,14 @@ class DeletionCoordinator:
                 ).as_batch_change()
             )
 
-        candidate_axes_map: dict[object, str] = {}
-
         def verify_candidate() -> None:
-            nonlocal candidate_axes_map
             canvas.component_registry.validate_tree()
+            canvas.component_registry.validate_axes_targets()
             ComponentTreeModel.validate_registry_projection(
                 canvas.component_registry,
                 canvas.editor_registry,
             )
             normalize_v10_figure(canvas.validate_component_snapshot())
-            candidate_axes_map = self._candidate_axes_map()
 
         try:
             outcome = prepared.execute(verifier=verify_candidate)
@@ -254,7 +234,6 @@ class DeletionCoordinator:
                         f"Components were deleted, but Inspector cleanup reported: {exc}",
                     )
                 )
-        canvas._axes_component_ids = candidate_axes_map
         try:
             canvas.axes_layout_service.restore_runtime_relationships(refresh=True)
         except Exception as exc:

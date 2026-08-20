@@ -26,8 +26,8 @@ def _feature_indicators():
             name="tex",
             label="TeX",
             is_enabled=tex_config.is_tex_enabled,
-            register_listener=tex_config.register_tex_state_listener,
-            unregister_listener=tex_config.unregister_tex_state_listener,
+            register_listener=tex_config.register_tex_availability_listener,
+            unregister_listener=tex_config.unregister_tex_availability_listener,
         ),
     )
 

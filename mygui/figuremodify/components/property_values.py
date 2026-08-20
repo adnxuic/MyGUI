@@ -17,6 +17,8 @@ import numpy as np
 from matplotlib import colors as mcolors
 from matplotlib import ticker
 
+from mygui.figuremodify.matplotlib_adapter import has_colormap
+
 from .errors import ComponentValidationError
 
 
@@ -858,11 +860,8 @@ def normalize_scatter_color_map(value: Any) -> dict[str, Any]:
     expected = {"enabled", "cmap", "norm", "bad", "under", "over", "nonfinite"}
     _exact(spec, expected, "Scatter color map")
     cmap = str(spec["cmap"])
-    try:
-        import matplotlib
-        matplotlib.colormaps[cmap]
-    except KeyError as exc:
-        raise ComponentValidationError(f"Unknown colormap {cmap!r}.") from exc
+    if not has_colormap(cmap):
+        raise ComponentValidationError(f"Unknown colormap {cmap!r}.")
     if spec["nonfinite"] not in {"drop", "bad"}:
         raise ComponentValidationError("Scatter nonfinite policy is invalid.")
     return {

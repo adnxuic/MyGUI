@@ -22,6 +22,7 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentMutation,
     ComponentRole,
+    ComponentValidationError,
 )
 from mygui.figuremodify.components.serialization import (
     validate_v10_figure,
@@ -405,7 +406,27 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
 
         self.assertEqual(self.canvas.fig.axes, [])
         self.assertEqual(len(self.canvas.component_registry), 1)
-        self.assertEqual(self.canvas._axes_component_ids, {})
+        self.canvas.component_registry.validate_axes_targets()
+        self.assertEqual(self.canvas._allocated_component_ids, before_ids)
+        self.assertEqual(self.canvas.axes_layout_service._grids, before_grids)
+
+    def test_runtime_target_validation_failure_rolls_back_axes_creation(self):
+        before_ids = set(self.canvas._allocated_component_ids)
+        before_grids = dict(self.canvas.axes_layout_service._grids)
+
+        with mock.patch.object(
+            self.canvas.component_registry,
+            "validate_axes_targets",
+            side_effect=ComponentValidationError("injected target failure"),
+        ):
+            with self.assertRaisesRegex(
+                ComponentValidationError,
+                "injected target failure",
+            ):
+                create_regular_axes(self.canvas)
+
+        self.assertEqual(self.canvas.fig.axes, [])
+        self.assertEqual(len(self.canvas.component_registry), 1)
         self.assertEqual(self.canvas._allocated_component_ids, before_ids)
         self.assertEqual(self.canvas.axes_layout_service._grids, before_grids)
 
@@ -422,6 +443,45 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         axes = self.canvas.component_registry.resolve_target(axes_id)
         self.assertTrue(any(line.get_visible() for line in axes.get_xgridlines()))
         self.assertTrue(any(line.get_visible() for line in axes.get_ygridlines()))
+
+    def test_layout_service_reads_constrained_state_from_figure_controller(self):
+        root = self.canvas.component_registry.get(self.canvas.root_component_id)
+        self.assertTrue(
+            root.set_property(
+                "layout_engine",
+                {
+                    "kind": "constrained",
+                    "params": {
+                        "w_pad": None,
+                        "h_pad": None,
+                        "wspace": None,
+                        "hspace": None,
+                        "rect": None,
+                    },
+                },
+            ).ok
+        )
+        self.assertTrue(
+            self.canvas.axes_layout_service.constrained_layout_enabled()
+        )
+
+    def test_registry_rejects_duplicate_live_axes_targets(self):
+        create_regular_axes(self.canvas, nrows=1, ncols=2)
+        controllers = self.canvas.component_registry.query(
+            kind=ComponentKind.AXES
+        )
+        first_target = controllers[0].resolve_target()
+
+        with mock.patch.object(
+            controllers[1],
+            "resolve_target",
+            return_value=first_target,
+        ):
+            with self.assertRaisesRegex(
+                ComponentValidationError,
+                "same artist",
+            ):
+                self.canvas.component_registry.validate_axes_targets()
 
     def test_limit_inversion_proxy_reverses_only_authoritative_limits(self):
         axes_id, = create_regular_axes(self.canvas)

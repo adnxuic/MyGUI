@@ -21,13 +21,12 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QWidget,
 )
-from matplotlib.lines import Line2D
-
 from mygui.figuremodify.components.property_values import (
     normalize_legend_anchor,
     normalize_line_pattern,
     normalize_marker,
 )
+from mygui.figuremodify.matplotlib_adapter import available_marker_definitions
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
@@ -258,11 +257,7 @@ class MarkerSpecEditor(InlineValueEditor):
     @staticmethod
     def _symbol_choices() -> tuple[tuple[str, Any], ...]:
         choices: list[tuple[str, Any]] = [("None", "None")]
-        for key, description in Line2D.markers.items():
-            if key is None or (isinstance(key, str) and not key.strip()):
-                continue
-            if str(description) == "nothing":
-                continue
+        for key, description in available_marker_definitions():
             choices.append((f"{key} \u00b7 {description}", key))
         return tuple(choices)
 

@@ -106,6 +106,7 @@ from mygui.figuremodify.style_base.creation_defaults import (
     ComponentCreationDefaults,
     resolve_component_creation_defaults,
 )
+from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qtagg import (
@@ -113,7 +114,6 @@ from matplotlib.backends.backend_qtagg import (
 )
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-from matplotlib import style as mpl_style
 
 import numpy as np
 
@@ -171,7 +171,7 @@ class PyFigureCanvas(QWidget):
         self.style = style
         self.project_path = project_path
         self._disposed = False
-        self._tex_state_listener = None
+        self._tex_render_listener = None
         self._restoring_component_tree_now = False
         self._selection_repair_pending = False
         if color_library is None:
@@ -186,7 +186,7 @@ class PyFigureCanvas(QWidget):
             if isinstance(component_tree, dict)
             else None
         )
-        with mpl_style.context(style):
+        with matplotlib_style_context(style):
             self.fig = Figure(figsize=(width, height), dpi=dpi)
         # QtAgg scales ``Figure.dpi`` to the active screen's device pixel
         # ratio.  Keep the user/project DPI separate so that moving the
@@ -291,8 +291,6 @@ class PyFigureCanvas(QWidget):
             FigureController(root_state),
             target=self.fig,
         )
-        self._axes_component_ids: dict[Axes, str] = {}
-
         self.figure_inspector: Optional[FigureInspectorPanel] = None
 
         self.current_axes_component_id: str | None = None
@@ -333,8 +331,8 @@ class PyFigureCanvas(QWidget):
         layout.addWidget(self.scroArea)
 
         self.setLayout(layout)
-        self._tex_state_listener = self._tex_availability_changed
-        tex_config.register_tex_state_listener(self._tex_state_listener)
+        self._tex_render_listener = self._tex_runtime_changed
+        tex_config.register_tex_render_listener(self._tex_render_listener)
 
     @property
     def project_name(self) -> str:
@@ -351,6 +349,18 @@ class PyFigureCanvas(QWidget):
             return None
         target = self.component_registry.resolve_target(component_id)
         return target if isinstance(target, Axes) else None
+
+    @property
+    def has_current_axes(self) -> bool:
+        """Return whether the authoritative Axes selection is usable."""
+
+        component_id = self.current_axes_component_id
+        if component_id is None or component_id not in self.component_registry:
+            return False
+        return (
+            self.component_registry.get(component_id).state.kind
+            is ComponentKind.AXES
+        )
 
     @property
     def current_axes_controller(self) -> AxesController | None:
@@ -613,7 +623,6 @@ class PyFigureCanvas(QWidget):
             path=axes_path,
             id_factory=self._component_id,
         )
-        self._axes_component_ids[axe] = axes_id
         return axes_id, self._axes_controller_map(axes_id)
 
     def _register_chart_controller(
@@ -827,11 +836,11 @@ class PyFigureCanvas(QWidget):
         if self._disposed:
             return
         self._disposed = True
-        if self._tex_state_listener is not None:
-            tex_config.unregister_tex_state_listener(
-                self._tex_state_listener
+        if self._tex_render_listener is not None:
+            tex_config.unregister_tex_render_listener(
+                self._tex_render_listener
             )
-            self._tex_state_listener = None
+            self._tex_render_listener = None
         self.cancel_pending_draw()
         try:
             self.repository.transaction_committed.disconnect(self._table_changed)
@@ -846,15 +855,22 @@ class PyFigureCanvas(QWidget):
         self.axes_layout_service.dispose()
         self.in_axes_service.dispose()
 
-    def _tex_availability_changed(self, enabled: bool) -> None:
-        """Apply the global TeX capability through TextRenderService."""
+    def _tex_runtime_changed(
+        self,
+        change: tex_config.TexRuntimeChange,
+    ) -> str | None:
+        """Apply global TeX runtime changes through TextRenderService."""
 
         if self._disposed:
-            return
-        result = self.text_render_service.apply_tex_availability(enabled)
+            return None
+        result = self.text_render_service.apply_tex_availability(
+            change.after.enabled,
+            force=change.preamble_changed and change.after.enabled,
+        )
         if not result.committed:
             self.message_presenter.discard_pending()
-            status_messages.show_warning(result.message)
+            return result.message
+        return None
 
     def closeEvent(self, event):
         """Handle Qt close events and release owned resources."""
@@ -1210,7 +1226,7 @@ class PyFigureCanvas(QWidget):
         }
         if linewidth is not None:
             plot_kwargs["linewidth"] = float(linewidth)
-        with mpl_style.context(self.component_style):
+        with matplotlib_style_context(self.component_style):
             (line,) = self.current_axes.plot(series.x, series.y, **plot_kwargs)
         transaction.on_rollback(
             lambda line=line: self._remove_created_artist(line)
@@ -1253,7 +1269,7 @@ class PyFigureCanvas(QWidget):
         color_order: int | None = None,
     ):
         object_id = object_id or new_id()
-        with mpl_style.context(self.component_style):
+        with matplotlib_style_context(self.component_style):
             scatter = self.current_axes.scatter(
                 series.x,
                 series.y,
@@ -1327,7 +1343,7 @@ class PyFigureCanvas(QWidget):
         color_order: int | None = None,
     ):
         object_id = object_id or new_id()
-        with mpl_style.context(self.component_style):
+        with matplotlib_style_context(self.component_style):
             (line,) = self.current_axes.plot(
                 series.x,
                 series.y,
@@ -1511,7 +1527,7 @@ class PyFigureCanvas(QWidget):
         x = np.linspace(x_start, x_stop, 1000)
         y = evaluate_curve_expression(func_text, x)
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
+            with matplotlib_style_context(self.component_style):
                 (line,) = self.current_axes.plot(
                     x, y, ls=style, color=color, label=label
                 )
@@ -1569,7 +1585,7 @@ class PyFigureCanvas(QWidget):
         color = normalize_color(color)
         object_id = object_id or new_id()
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
+            with matplotlib_style_context(self.component_style):
                 (line,) = self.current_axes.plot(
                     np.asarray(x),
                     np.asarray(y),
@@ -1879,7 +1895,7 @@ class PyFigureCanvas(QWidget):
         if style is not None:
             plot_kwargs["linestyle"] = style
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
+            with matplotlib_style_context(self.component_style):
                 (line,) = self.current_axes.plot(
                     line_x,
                     line_y,
@@ -2110,7 +2126,7 @@ class PyFigureCanvas(QWidget):
         """Add text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
-        with mpl_style.context(self.component_style):
+        with matplotlib_style_context(self.component_style):
             text_artist = self.current_axes.text(
                 x,
                 y,
@@ -2159,7 +2175,7 @@ class PyFigureCanvas(QWidget):
         """Add global text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
-        with mpl_style.context(self.component_style):
+        with matplotlib_style_context(self.component_style):
             text_artist = self.fig.text(
                 x,
                 y,
@@ -2236,7 +2252,7 @@ class PyFigureCanvas(QWidget):
         controller = None
         mirrored = None
         with self.component_registry.registration_transaction() as transaction:
-            with mpl_style.context(self.component_style):
+            with matplotlib_style_context(self.component_style):
                 runtime = self.in_axes_service.create_runtime(
                     parent_axes,
                     tuple(properties["bounds"]),
@@ -2285,7 +2301,7 @@ class PyFigureCanvas(QWidget):
             save_dpi = self.document_dpi
         else:
             save_dpi = dpi
-        with mpl_style.context(self.component_style):
+        with matplotlib_style_context(self.component_style):
             self.fig.savefig(filename, dpi=save_dpi)
 
     def dependent_records(self, refs: set[ColumnRef]) -> ComponentDependencySnapshot:
@@ -2862,6 +2878,7 @@ class PyFigureCanvas(QWidget):
                 )
         self.axes_layout_service.restore_runtime_relationships(refresh=True)
         self.component_registry.validate_tree()
+        self.component_registry.validate_axes_targets()
         if tex_fallback:
             status_messages.show_warning(
                 "TeX text is displayed with Matplotlib text rendering until "

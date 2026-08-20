@@ -37,7 +37,6 @@ class AxesSemanticInspectorPanel(QFrame):
         super().__init__()
         self.axes_controller = axes_controller
         self.context = context
-        self.axes = axes_controller.resolve_target()
         self._inspectors: dict[str, QWidget] = {}
         self._disposed = False
 
@@ -397,9 +396,8 @@ class _ComponentInspectorStack(QFrame):
     EMPTY_TITLE = "No component selected"
     EMPTY_DETAIL = "Select a Component in the tree to edit its parameters."
 
-    def __init__(self, axes, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.axes = axes
         self._toolboxes = {}
         self._disposed = False
         self.toolbox_stack = QStackedWidget(self)

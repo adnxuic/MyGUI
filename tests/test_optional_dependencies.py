@@ -27,6 +27,7 @@ from mygui.database import ColumnRef, TableRepository, matlab_adapter, scipy_fit
 from mygui.database.safe_expression import evaluate_curve_expression
 from mygui.figuremodify.component_services import FitService, TextRenderService
 from mygui.figuremodify.components import (
+    ComponentBatchChange,
     ComponentKind,
     ComponentRegistry,
     ComponentRole,
@@ -74,6 +75,20 @@ def make_text_controller(figure, text_artist):
         editor_manager=manager,
     )
     return controller, service, context
+
+
+def register_text_render_service(service):
+    """Attach the same Canvas-owned TeX refresh adapter used in production."""
+
+    def listener(change):
+        result = service.apply_tex_availability(
+            change.after.enabled,
+            force=change.preamble_changed and change.after.enabled,
+        )
+        return None if result.committed else result.message
+
+    tex_config.register_tex_render_listener(listener)
+    return listener
 
 
 def make_fit_editor(
@@ -140,8 +155,11 @@ class OptionalDependencyTests(unittest.TestCase):
 
     def tearDown(self):
         tex_config.set_tex_enabled(False, notify=False)
-        tex_config.clear_tex_state_listeners()
-        mpl.rcParams['text.latex.preamble'] = mpl.rcParamsDefault['text.latex.preamble']
+        tex_config.clear_tex_runtime_listeners()
+        tex_config.configure_tex_runtime(
+            preamble=tex_config.default_preamble_text(),
+            notify=False,
+        )
         status_messages.clear_status_handler()
         self.close_matlab_log_handlers()
         self.close_tex_log_handlers()
@@ -208,7 +226,7 @@ class OptionalDependencyTests(unittest.TestCase):
                     and status_events[-1][1] == "error"
                 )
 
-            self.assertFalse(window.is_latex)
+            self.assertFalse(tex_config.is_tex_enabled())
             self.assertFalse(window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
             self.assertEqual(status_events[-1], ("No TeX executable was found on PATH.", "error"))
@@ -223,6 +241,136 @@ class OptionalDependencyTests(unittest.TestCase):
             ),
             "\\usepackage{amsmath}\n\\usepackage{xcolor}",
         )
+
+    def test_tex_runtime_update_separates_availability_and_render_events(self):
+        tex_config.configure_tex_runtime(
+            enabled=False,
+            preamble="\\usepackage{old}",
+            notify=False,
+        )
+        availability = []
+        renders = []
+
+        def render_listener(change):
+            renders.append(change)
+            return "first Figure used safe fallback"
+
+        tex_config.register_tex_availability_listener(availability.append)
+        tex_config.register_tex_render_listener(render_listener)
+        update = tex_config.configure_tex_runtime(
+            enabled=True,
+            preamble=" \\usepackage{amsmath} \n\n \\usepackage{xcolor} ",
+        )
+
+        self.assertTrue(update.change.enabled_changed)
+        self.assertTrue(update.change.preamble_changed)
+        self.assertEqual(availability, [True])
+        self.assertEqual(renders, [update.change])
+        self.assertEqual(update.warnings, ("first Figure used safe fallback",))
+        self.assertEqual(
+            tex_config.read_tex_runtime(),
+            tex_config.TexRuntimeState(
+                True,
+                "\\usepackage{amsmath}\n\\usepackage{xcolor}",
+            ),
+        )
+
+    def test_tex_runtime_assignment_failure_restores_both_rcparams(self):
+        tex_config.configure_tex_runtime(
+            enabled=False,
+            preamble="\\usepackage{old}",
+            notify=False,
+        )
+        before = tex_config.read_tex_runtime()
+        rcparams_type = type(mpl.rcParams)
+        original_setitem = rcparams_type.__setitem__
+        failed = False
+
+        def fail_enabled_once(target, key, value):
+            nonlocal failed
+            if key == "text.usetex" and bool(value) and not failed:
+                failed = True
+                raise RuntimeError("injected rcParams failure")
+            return original_setitem(target, key, value)
+
+        with patch.object(rcparams_type, "__setitem__", new=fail_enabled_once):
+            with self.assertRaisesRegex(RuntimeError, "rcParams failure"):
+                tex_config.configure_tex_runtime(
+                    enabled=True,
+                    preamble="\\usepackage{new}",
+                )
+
+        self.assertEqual(tex_config.read_tex_runtime(), before)
+
+    def test_tex_startup_disables_external_flag_and_preserves_preamble(self):
+        tex_config.configure_tex_runtime(
+            enabled=True,
+            preamble="\\usepackage{external}",
+            notify=False,
+        )
+
+        update = tex_config.initialize_tex_runtime()
+
+        self.assertTrue(update.change.enabled_changed)
+        self.assertEqual(
+            tex_config.read_tex_runtime(),
+            tex_config.TexRuntimeState(False, "\\usepackage{external}"),
+        )
+
+    def test_enabled_preamble_change_forces_canvas_render_refresh(self):
+        from main import MainWindow
+
+        window = MainWindow()
+        try:
+            canvas = window.figure_window.add_figure(
+                width=4,
+                height=3,
+                dpi=100,
+                style="default",
+                canva_name="tex-preamble-refresh",
+            )
+            tex_config.configure_tex_runtime(
+                enabled=True,
+                preamble="\\usepackage{old}",
+                notify=False,
+            )
+            committed = ComponentBatchChange((), True)
+            with patch.object(
+                canvas.text_render_service,
+                "apply_tex_availability",
+                return_value=committed,
+            ) as apply_availability:
+                update = tex_config.configure_tex_runtime(
+                    preamble="\\usepackage{new}",
+                )
+
+            self.assertEqual(update.warnings, ())
+            apply_availability.assert_called_once_with(True, force=True)
+        finally:
+            window.close()
+
+    def test_tex_panel_combines_multiple_canvas_refresh_warnings(self):
+        tex_config.configure_tex_runtime(
+            enabled=True,
+            preamble="\\usepackage{old}",
+            notify=False,
+        )
+        window = PyTexWindow()
+        status_events = []
+        tex_config.register_tex_render_listener(lambda _change: "Figure A fallback")
+        tex_config.register_tex_render_listener(lambda _change: "Figure B fallback")
+        status_messages.set_status_handler(
+            lambda message, level: status_events.append((message, level))
+        )
+        try:
+            window._commit_preamble("\\usepackage{new}", time.monotonic())
+
+            self.assertEqual(len(status_events), 1)
+            self.assertEqual(status_events[0][1], "warning")
+            self.assertIn("Figure A fallback", status_events[0][0])
+            self.assertIn("Figure B fallback", status_events[0][0])
+        finally:
+            window.close()
 
     def test_tex_render_probe_failure_warns_and_keeps_usetex_disabled(self):
         window = PyTexWindow()
@@ -247,7 +395,7 @@ class OptionalDependencyTests(unittest.TestCase):
                     )
 
             validate_tex_runtime.assert_called_once_with(tex_config.default_preamble_text())
-            self.assertFalse(window.is_latex)
+            self.assertFalse(tex_config.is_tex_enabled())
             self.assertFalse(window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
             self.assertEqual(status_events[-1], ("render probe failed", "error"))
@@ -274,15 +422,18 @@ class OptionalDependencyTests(unittest.TestCase):
                             return_value=None,
                         ) as validate_tex_runtime:
                     window.latex_engine.setChecked(True)
-                    self.wait_until(lambda: window.is_latex)
+                    self.wait_until(tex_config.is_tex_enabled)
 
             expected_preamble = "\\usepackage{amsmath}\n\\usepackage{xcolor}"
             validate_tex_runtime.assert_called_once_with(expected_preamble)
-            self.assertTrue(window.is_latex)
+            self.assertTrue(tex_config.is_tex_enabled())
             self.assertTrue(window.latex_engine.isChecked())
             self.assertTrue(mpl.rcParams['text.usetex'])
             self.assertEqual(mpl.rcParams['text.latex.preamble'], expected_preamble)
-            self.assertEqual(window.preamble_text, expected_preamble)
+            self.assertEqual(
+                tex_config.read_tex_runtime().preamble,
+                expected_preamble,
+            )
             self.assertEqual(
                 status_events[-1],
                 ("TeX runtime check passed; TeX rendering is enabled.", "success"),
@@ -298,10 +449,11 @@ class OptionalDependencyTests(unittest.TestCase):
         status_events = []
         try:
             old_preamble = "\\usepackage{old}"
-            tex_config.set_tex_enabled(True, notify=False)
-            mpl.rcParams['text.latex.preamble'] = old_preamble
-            window.is_latex = True
-            window.preamble_text = old_preamble
+            tex_config.configure_tex_runtime(
+                enabled=True,
+                preamble=old_preamble,
+                notify=False,
+            )
             window.preamble_input.setPlainText("\\usepackage{broken}")
             status_messages.set_status_handler(
                 lambda message, level: status_events.append((message, level))
@@ -322,10 +474,10 @@ class OptionalDependencyTests(unittest.TestCase):
                     )
 
             validate_tex_runtime.assert_called_once_with("\\usepackage{broken}")
-            self.assertTrue(window.is_latex)
+            self.assertTrue(tex_config.is_tex_enabled())
             self.assertTrue(mpl.rcParams['text.usetex'])
             self.assertEqual(mpl.rcParams['text.latex.preamble'], old_preamble)
-            self.assertEqual(window.preamble_text, old_preamble)
+            self.assertEqual(tex_config.read_tex_runtime().preamble, old_preamble)
             self.assertEqual(status_events[-1], ("bad preamble", "error"))
             log_text = "\n".join(logs.output)
             self.assertIn("TeX preamble update request started", log_text)
@@ -336,7 +488,7 @@ class OptionalDependencyTests(unittest.TestCase):
     def test_tex_preamble_update_while_disabled_skips_runtime_probe(self):
         window = PyTexWindow()
         try:
-            window.is_latex = False
+            tex_config.set_tex_enabled(False, notify=False)
             window.preamble_input.setPlainText("\\usepackage{amsmath}\n\n\\usepackage{xcolor}")
 
             with patch(
@@ -348,7 +500,10 @@ class OptionalDependencyTests(unittest.TestCase):
             validate_tex_runtime.assert_not_called()
             self.assertFalse(mpl.rcParams['text.usetex'])
             self.assertEqual(mpl.rcParams['text.latex.preamble'], expected_preamble)
-            self.assertEqual(window.preamble_text, expected_preamble)
+            self.assertEqual(
+                tex_config.read_tex_runtime().preamble,
+                expected_preamble,
+            )
         finally:
             window.close()
 
@@ -392,7 +547,7 @@ class OptionalDependencyTests(unittest.TestCase):
                 )
 
             self.assertIsNotNone(window.fig_control_window.tex_window)
-            self.assertFalse(tex_window.is_latex)
+            self.assertFalse(tex_config.is_tex_enabled())
             self.assertFalse(tex_window.latex_engine.isChecked())
             self.assertFalse(mpl.rcParams['text.usetex'])
             self.assertEqual(status_events[-1], ("render probe failed", "error"))
@@ -423,7 +578,7 @@ class OptionalDependencyTests(unittest.TestCase):
         self.assertEqual(controller.state.properties["text"], "safe")
         self.assertIn("Text render failed", "\n".join(logs.output))
 
-    def test_text_render_reports_missing_glyph_warning_to_message_bar(self):
+    def test_text_render_rejects_missing_glyph_and_reports_error(self):
         figure = Figure()
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "safe")
@@ -450,7 +605,10 @@ class OptionalDependencyTests(unittest.TestCase):
                 )
                 context.messages.present(result)
 
-        self.assertEqual(status_events[-1][1], "warning")
+        self.assertFalse(result.ok)
+        self.assertEqual(text.get_text(), "safe")
+        self.assertEqual(controller.state.properties["text"], "safe")
+        self.assertEqual(status_events[-1][1], "error")
         self.assertIn("U+FFE5", status_events[-1][0])
         self.assertIn("Matplotlib text glyph warning", "\n".join(logs.output))
 
@@ -486,7 +644,7 @@ class OptionalDependencyTests(unittest.TestCase):
             widget.close()
             context.editor_manager.close()
 
-    def test_text_widget_keeps_glyph_status_when_successful_render_warns(self):
+    def test_text_widget_rolls_back_when_render_reports_missing_glyph(self):
         figure = Figure()
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "safe")
@@ -514,10 +672,53 @@ class OptionalDependencyTests(unittest.TestCase):
                 "draw",
                 side_effect=draw_warning,
             ):
-                content.set_text_content()
+                committed = content.set_text_content()
 
-            self.assertEqual(status_events[-1][1], "warning")
+            self.assertFalse(committed)
+            self.assertEqual(content.text_content.toPlainText(), "safe")
+            self.assertEqual(text.get_text(), "safe")
+            self.assertEqual(controller.state.properties["text"], "safe")
+            self.assertEqual(len(status_events), 1)
+            self.assertEqual(status_events[-1][1], "error")
             self.assertIn("U+FFE5", status_events[-1][0])
+        finally:
+            widget.close()
+            context.editor_manager.close()
+
+    def test_text_widget_reports_real_mathtext_chinese_glyph_logs(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        text = figure.text(
+            0.5,
+            0.5,
+            "safe",
+            fontfamily="DejaVu Sans",
+        )
+        controller, _service, context = make_text_controller(figure, text)
+        widget = context.editor_manager.create(controller, context=context)
+        content = widget.section("content")
+        status_events = []
+        try:
+            status_messages.set_status_handler(
+                lambda message, level: status_events.append((message, level))
+            )
+            content.text_content.blockSignals(True)
+            content.text_content.setPlainText("$\\int$￥都为")
+            content.text_content.blockSignals(False)
+
+            self.assertFalse(content.set_text_content())
+
+            self.assertEqual(content.text_content.toPlainText(), "safe")
+            self.assertEqual(text.get_text(), "safe")
+            self.assertEqual(controller.state.properties["text"], "safe")
+            self.assertEqual(len(status_events), 1)
+            self.assertEqual(status_events[-1][1], "error")
+            self.assertIn("U+FFE5", status_events[-1][0])
+            self.assertIn("U+90FD", status_events[-1][0])
+            self.assertIn("U+4E3A", status_events[-1][0])
+            self.assertTrue(
+                all(level != "success" for _message, level in status_events)
+            )
         finally:
             widget.close()
             context.editor_manager.close()
@@ -578,8 +779,9 @@ class OptionalDependencyTests(unittest.TestCase):
         FigureCanvasAgg(figure)
         text = figure.text(0.5, 0.5, "plain")
         text.set_usetex(True)
-        controller, _service, context = make_text_controller(figure, text)
+        controller, service, context = make_text_controller(figure, text)
         controller.set_property("usetex", True)
+        listener = register_text_render_service(service)
 
         widget = context.editor_manager.create(controller, context=context)
         render = widget.section("render")
@@ -602,6 +804,7 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertTrue(text.get_usetex())
             self.assertTrue(controller.state.properties["usetex"])
         finally:
+            tex_config.unregister_tex_render_listener(listener)
             widget.close()
             context.editor_manager.close()
 
@@ -613,12 +816,9 @@ class OptionalDependencyTests(unittest.TestCase):
         text.set_usetex(True)
         controller, service, context = make_text_controller(figure, text)
         controller.set_property("usetex", True)
+        listener = register_text_render_service(service)
         widget = context.editor_manager.create(controller, context=context)
         render = widget.section("render")
-        messages = []
-        status_messages.set_status_handler(
-            lambda message, level: messages.append((message, level))
-        )
         try:
             tex_config.set_tex_enabled(False)
             self.assertFalse(text.get_usetex())
@@ -627,16 +827,16 @@ class OptionalDependencyTests(unittest.TestCase):
                 "draw",
                 side_effect=RuntimeError("injected TeX render probe failure"),
             ):
-                tex_config.set_tex_enabled(True)
+                update = tex_config.set_tex_enabled(True)
 
             self.assertTrue(controller.state.properties["usetex"])
             self.assertFalse(text.get_usetex())
             self.assertFalse(service.effective_usetex(controller.component_id))
             self.assertTrue(render.tex_render.isChecked())
-            self.assertEqual(len(messages), 1)
-            self.assertEqual(messages[0][1], "warning")
-            self.assertIn("render probe failed", messages[0][0])
+            self.assertEqual(len(update.warnings), 1)
+            self.assertIn("render probe failed", update.warnings[0])
         finally:
+            tex_config.unregister_tex_render_listener(listener)
             widget.close()
             context.editor_manager.close()
 

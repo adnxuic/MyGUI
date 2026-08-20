@@ -4,6 +4,14 @@ from pathlib import Path
 
 import matplotlib as mpl
 
+from mygui.figuremodify.matplotlib_adapter import (
+    available_colormap_names,
+    available_font_families,
+    available_marker_definitions,
+    available_style_names,
+    copy_colormap,
+    matplotlib_style_context,
+)
 from mygui.figuremodify.style_base.creation_defaults import (
     MATPLOTLIB_STYLE_PALETTE_SOURCE,
     resolve_component_creation_defaults,
@@ -76,6 +84,41 @@ class StyleCreationDefaultsTests(unittest.TestCase):
 
         after = {key: mpl.rcParams[key] for key in keys}
         self.assertEqual(after, before)
+
+    def test_adapter_restores_nested_and_exception_style_contexts(self):
+        keys = ("axes.facecolor", "lines.linewidth", "text.color")
+        before = {key: mpl.rcParams[key] for key in keys}
+
+        with matplotlib_style_context("ggplot"):
+            outer = {key: mpl.rcParams[key] for key in keys}
+            with self.assertRaisesRegex(RuntimeError, "injected"):
+                with matplotlib_style_context("dark_background"):
+                    self.assertNotEqual(
+                        mpl.rcParams["axes.facecolor"],
+                        outer["axes.facecolor"],
+                    )
+                    raise RuntimeError("injected")
+            self.assertEqual(
+                {key: mpl.rcParams[key] for key in keys},
+                outer,
+            )
+
+        self.assertEqual(
+            {key: mpl.rcParams[key] for key in keys},
+            before,
+        )
+
+    def test_adapter_catalogs_are_immutable_and_resolvable(self):
+        self.assertIn("ggplot", available_style_names())
+        self.assertIn("viridis", available_colormap_names())
+        self.assertIn("o", {value for value, _label in available_marker_definitions()})
+        fonts = available_font_families()
+        self.assertIsInstance(fonts, tuple)
+        self.assertEqual(fonts, tuple(sorted(set(fonts))))
+        first = copy_colormap("viridis")
+        second = copy_colormap("viridis")
+        self.assertIsNot(first, second)
+        self.assertEqual(first.name, "viridis")
 
     def test_custom_compound_cycle_consumes_only_color_key(self):
         with tempfile.TemporaryDirectory() as directory:

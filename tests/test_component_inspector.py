@@ -239,7 +239,10 @@ class ComponentInspectorTests(unittest.TestCase):
             context=context,
         )
         render = inspector.section("render")
-        self.assertIn(render._listener, tex_config._TEX_STATE_LISTENERS)
+        self.assertIn(
+            render._listener,
+            tex_config._TEX_AVAILABILITY_LISTENERS,
+        )
 
         outcome = ComponentDeletionService(registry).delete(
             DeletionRequest((controller.component_id,))
@@ -248,7 +251,10 @@ class ComponentInspectorTests(unittest.TestCase):
         self.assertTrue(outcome.committed)
         self.assertTrue(inspector._disposed)
         self.assertTrue(render._disposed)
-        self.assertNotIn(render._listener, tex_config._TEX_STATE_LISTENERS)
+        self.assertNotIn(
+            render._listener,
+            tex_config._TEX_AVAILABILITY_LISTENERS,
+        )
         self.assertIsNone(
             context.editor_manager.editor(controller.component_id)
         )
@@ -696,7 +702,7 @@ class ComponentInspectorTests(unittest.TestCase):
             kind=ComponentKind.TEXT,
             role=ComponentRole.TEXT,
         )
-        tex_before = tuple(tex_config._TEX_STATE_LISTENERS)
+        tex_before = tuple(tex_config._TEX_AVAILABILITY_LISTENERS)
         with patch.object(
             TextRenderSection,
             "_sync_tex_button",
@@ -704,7 +710,10 @@ class ComponentInspectorTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "TeX Section"):
                 TextRenderSection(text, context=context)
-        self.assertEqual(tuple(tex_config._TEX_STATE_LISTENERS), tex_before)
+        self.assertEqual(
+            tuple(tex_config._TEX_AVAILABILITY_LISTENERS),
+            tex_before,
+        )
 
         axes_controller = registry.find_one(kind=ComponentKind.AXES)
         registry_before = tuple(registry._event_subscribers)
@@ -765,7 +774,7 @@ class ComponentInspectorTests(unittest.TestCase):
             matlab_before,
         )
 
-        stack = ChartInspectorStack(axes)
+        stack = ChartInspectorStack()
         original_count = stack.toolbox_stack.count()
         original_add = stack.toolbox_stack.addWidget
 

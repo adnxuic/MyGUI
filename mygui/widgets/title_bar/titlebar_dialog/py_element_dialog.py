@@ -21,9 +21,8 @@ from PySide6.QtWidgets import (
 )
 from mygui.resources import icon_path
 
-from matplotlib import font_manager
-
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
+from mygui.figuremodify.matplotlib_adapter import available_font_families
 from mygui.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
 )
@@ -95,9 +94,7 @@ class PyTextDialog(QDialog):
         self.layout.addWidget(QLabel('Choose a Font:'))
 
         # 获取所有系统字体及 Matplotlib 字体
-        font_paths = font_manager.findSystemFonts()
-        fonts = [font_manager.FontProperties(fname=path).get_name() for path in font_paths]
-        font_list = sorted(set(fonts))
+        font_list = available_font_families()
 
         # 代理类，使得下拉菜单中的字体显示为对应字体
         class FontDelegate(QStyledItemDelegate):
@@ -157,7 +154,7 @@ class PyTextDialog(QDialog):
 
         # 如果current_axes为空，弹出警告
         if self.local_button.isChecked():
-            if self.figure_window.current_canva.current_axes is None:
+            if not self.figure_window.current_canva.has_current_axes:
                 QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
                 return
             self.figure_window.current_canva.add_text(text=self.text_edit.text(),
@@ -220,7 +217,7 @@ class PyInAxesDialog(QDialog):
         """Validate and create one inset without closing on failure."""
 
         canvas = getattr(self.figure_window, "current_canva", None)
-        if canvas is None or canvas.current_axes is None:
+        if canvas is None or not canvas.has_current_axes:
             QMessageBox.warning(
                 self,
                 "No Axes selected",

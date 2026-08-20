@@ -10,7 +10,6 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from enum import Enum
-import re
 import warnings
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -19,6 +18,10 @@ import numpy as np
 from matplotlib.axes import Axes
 
 from mygui import tex_config
+from mygui.font_diagnostics import (
+    capture_font_diagnostics,
+    normalize_font_diagnostic,
+)
 from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
@@ -1735,18 +1738,6 @@ class FitService:
         )
 
 
-def _missing_glyph_message(message: str) -> str | None:
-    if "Glyph" not in message or "missing from font" not in message:
-        return None
-    match = re.search(r"Glyph\s+(\d+)", message)
-    if not match:
-        return "Current font is missing a glyph; text may render incorrectly."
-    codepoint = int(match.group(1))
-    return (
-        f"Current font is missing glyph U+{codepoint:04X}; text may render incorrectly."
-    )
-
-
 class TextRenderService:
     """Verify render-sensitive Text changes before publishing them."""
 
@@ -1794,7 +1785,6 @@ class TextRenderService:
             self._tex_effective_overrides.clear()
             return ComponentBatchChange((), True)
         targets = [controller.resolve_target() for controller in requested]
-        before = [bool(target.get_usetex()) for target in targets]
         figures = []
         seen: set[int] = set()
         for target in targets:
@@ -1814,9 +1804,10 @@ class TextRenderService:
         except Exception as exc:
             # Enabling TeX failed its render probe. Keep every requested Text
             # on the known-safe Matplotlib renderer while preserving state.
-            safe_values = (
-                [False] * len(targets) if enabled else before
-            )
+            # A failed availability transition must still leave requested
+            # Text on the known-safe non-TeX renderer.  Restoring ``True``
+            # after a failed disable would contradict the global capability.
+            safe_values = [False] * len(targets)
             for target, safe_value in zip(targets, safe_values):
                 try:
                     target.set_usetex(safe_value)
@@ -1871,8 +1862,9 @@ class TextRenderService:
         if not result.committed:
             return replace(
                 change,
-                message=(
-                    "Text render failed; keeping the last valid text and rendering settings."
+                message=result.message or (
+                    "Text render failed; keeping the last valid text and "
+                    "rendering settings."
                 ),
             )
         return _notices(change, *result.notices)
@@ -1909,7 +1901,7 @@ class TextRenderService:
         if not resolved:
             return ComponentBatchChange((), True)
 
-        glyph_notices: list[ComponentNotice] = []
+        glyph_messages: dict[str, str] = {}
 
         def verify() -> None:
             figures = []
@@ -1921,24 +1913,54 @@ class TextRenderService:
                 seen.add(id(figure))
                 figures.append(figure)
             for figure in figures:
-                with warnings.catch_warnings(record=True) as caught:
+                with (
+                    capture_font_diagnostics() as captured,
+                    warnings.catch_warnings(record=True) as caught,
+                ):
                     warnings.simplefilter("always", UserWarning)
                     figure.canvas.draw()
                 for warning in caught:
                     message = str(warning.message)
-                    glyph_message = _missing_glyph_message(message)
-                    if glyph_message is not None:
+                    notice = normalize_font_diagnostic(message)
+                    if (
+                        notice is not None
+                        and notice.key.startswith("matplotlib-glyph:")
+                    ):
+                        glyph_messages.setdefault(notice.key, notice.message)
                         tex_config.tex_logger().warning(
                             "Matplotlib text glyph warning action=component-render message=%s",
                             message,
                         )
-                        glyph_notices.append(_warning(glyph_message))
                     else:
                         warnings.warn(
                             warning.message,
                             warning.category,
                             stacklevel=2,
                         )
+                for notice in captured.notices:
+                    if not notice.key.startswith("matplotlib-glyph:"):
+                        continue
+                    glyph_messages.setdefault(notice.key, notice.message)
+                    tex_config.tex_logger().warning(
+                        "Matplotlib text glyph warning action=component-render message=%s",
+                        notice.message,
+                    )
+            if glyph_messages:
+                codepoints = [
+                    key.removeprefix("matplotlib-glyph:")
+                    for key in glyph_messages
+                    if key != "matplotlib-glyph:unknown"
+                ]
+                detail = (
+                    "glyphs "
+                    + ", ".join(f"U+{codepoint}" for codepoint in codepoints)
+                    if codepoints
+                    else "one or more glyphs"
+                )
+                raise ValueError(
+                    f"The current text font cannot render {detail}; "
+                    "the text was not updated."
+                )
 
         result = self.registry.apply_transaction(
             tuple(
@@ -1955,16 +1977,18 @@ class TextRenderService:
                 "Text render failed action=component-render error=%s",
                 result.message,
             )
+            detail = result.message.strip()
+            message = (
+                "Text render failed; keeping the last valid text and "
+                "rendering settings."
+            )
+            if detail:
+                message += f" {detail}"
             return replace(
                 result,
-                message=(
-                    "Text render failed; keeping the last valid text and rendering settings."
-                ),
+                message=message,
             )
-        return replace(
-            result,
-            notices=tuple(result.notices) + tuple(glyph_notices),
-        )
+        return result
 
 
 class ComponentDeletionService:

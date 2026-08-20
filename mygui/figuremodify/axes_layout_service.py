@@ -6,10 +6,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from matplotlib import style as mpl_style
 from matplotlib.axes import Axes
 from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
+
+from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 
 from mygui.figuremodify.axes_layout import (
     AxesLayer,
@@ -178,7 +179,7 @@ class AxesLayoutService:
     def creation_view_defaults(self) -> AxesViewSpec:
         """Resolve exposed Axes creation defaults from the Figure style."""
 
-        with mpl_style.context(self.canvas.component_style):
+        with matplotlib_style_context(self.canvas.component_style):
             figure = Figure()
             axes = figure.add_subplot(1, 1, 1)
             x_major = any(line.get_visible() for line in axes.get_xgridlines())
@@ -202,6 +203,18 @@ class AxesLayoutService:
                 y_major_grid=y_major,
                 y_minor_grid=y_minor,
             )
+
+    def constrained_layout_enabled(self) -> bool:
+        """Return constrained/compressed layout from Figure Controller state."""
+
+        layout = self._root().read_state().properties.get(
+            "layout_engine",
+            {"kind": "none", "params": {}},
+        )
+        return isinstance(layout, dict) and layout.get("kind") in {
+            "constrained",
+            "compressed",
+        }
 
     def layout_definitions(self) -> tuple[dict[str, Any], ...]:
         data = self._root().state.data
@@ -467,11 +480,6 @@ class AxesLayoutService:
                 ),
             )
             item.component_id = axes_id
-            transaction.on_rollback(
-                lambda target=item.target: self.canvas._axes_component_ids.pop(
-                    target, None
-                )
-            )
             axes_controller = self.registry.get(axes_id)
             self.canvas.figure_inspector.add_axes_inspector(
                 axes_controller,
@@ -530,7 +538,7 @@ class AxesLayoutService:
                 definitions,
                 constrained_layout=spec.constrained_layout,
             )
-            with mpl_style.context(self.canvas.component_style):
+            with matplotlib_style_context(self.canvas.component_style):
                 for cell in sorted(spec.cells, key=lambda item: (item.row, item.column)):
                     x_group, y_group = groups[(cell.row, cell.column)]
                     primary = self.canvas.fig.add_subplot(
@@ -587,6 +595,7 @@ class AxesLayoutService:
                 start_index=start_index,
             )
             self._apply_outer_labels(descriptors, spec)
+            self.registry.validate_axes_targets()
             self.canvas.validate_component_snapshot()
             if component_ids:
                 first_controller = self.registry.get(component_ids[0])
@@ -627,7 +636,7 @@ class AxesLayoutService:
                     allocated_ids_before,
                 )
             )
-            with mpl_style.context(self.canvas.component_style):
+            with matplotlib_style_context(self.canvas.component_style):
                 for state in ordered:
                     subplot = state.data["subplot"]
                     layout_id = subplot["layout_id"]
@@ -671,6 +680,7 @@ class AxesLayoutService:
                 transaction,
                 start_index=0,
             )
+            self.registry.validate_axes_targets()
         self._grids.update(grids)
         return component_ids
 

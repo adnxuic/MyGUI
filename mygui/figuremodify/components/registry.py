@@ -1307,6 +1307,38 @@ class ComponentRegistry:
                 "Chart component order values must be unique."
             )
 
+    def validate_axes_targets(self) -> None:
+        """Validate unique live Axes bindings against the Figure root."""
+
+        roots = self.query(kind=ComponentKind.FIGURE)
+        if len(roots) != 1:
+            raise ComponentValidationError(
+                "Axes target validation requires exactly one Figure root."
+            )
+        figure = roots[0].resolve_target()
+        if not isinstance(figure, Figure):
+            raise ComponentValidationError("Figure target is unavailable.")
+
+        seen: set[int] = set()
+        for controller in self.query(kind=ComponentKind.AXES):
+            target = controller.resolve_target()
+            if not isinstance(target, Axes):
+                raise ComponentValidationError(
+                    f"Axes component {controller.component_id!r} has no Axes target."
+                )
+            identity = id(target)
+            if identity in seen:
+                raise ComponentValidationError(
+                    "Two surviving Axes resolve to the same artist."
+                )
+            seen.add(identity)
+            if target.figure is not figure or not any(
+                candidate is target for candidate in figure.axes
+            ):
+                raise ComponentValidationError(
+                    "A surviving Axes is detached from its Figure."
+                )
+
     @staticmethod
     def _validate_parent_kind(
         state: ComponentState,

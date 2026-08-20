@@ -6,7 +6,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable
 
-import matplotlib
 from PySide6.QtCore import QSignalBlocker, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -25,6 +24,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from mygui.figuremodify.matplotlib_adapter import available_colormap_names
 
 from mygui.figuremodify.components.errors import ComponentValidationError
 from mygui.figuremodify.components.property_values import (
@@ -990,7 +991,7 @@ class _ScatterColorMapDialog(QDialog):
         form = QFormLayout(self.details)
         form.setContentsMargins(0, 6, 0, 0)
         self.cmap_input = QComboBox(self.details)
-        self.cmap_input.addItems(sorted(matplotlib.colormaps))
+        self.cmap_input.addItems(available_colormap_names())
         self.cmap_input.setCurrentText(str(spec["cmap"]))
         self.norm_input = NormSpecEditor(spec["norm"], parent=self.details)
         self.bad_input = ColorChoiceWidget(

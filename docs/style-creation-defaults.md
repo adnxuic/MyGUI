@@ -23,6 +23,11 @@ inside a short `matplotlib.style.context`. Reading the resulting artists
 preserves Matplotlib-specific behavior such as Classic scatter size. The
 context is closed before Qt displays the dialog.
 
+All process-global style contexts and Matplotlib style, colormap, marker, and
+font catalogs pass through one application adapter. Creation dialogs consume
+immutable catalog snapshots and do not import Matplotlib or retain live
+artists. The Canvas remains the Matplotlib/Qt creation boundary.
+
 ## Available styles
 
 The Style gallery offers these Matplotlib styles:

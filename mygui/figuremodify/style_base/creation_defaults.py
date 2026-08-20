@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from hashlib import sha256
 
 import matplotlib as mpl
-from matplotlib import style as mpl_style
 from matplotlib.figure import Figure
+
+from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 
 from .color_models import PaletteDefinition, PaletteSource, normalize_color
 
@@ -91,7 +92,7 @@ def resolve_style_palette(style: str | None) -> PaletteDefinition:
     """Resolve only the ordered chart colors for a Matplotlib style."""
 
     style_name = str(style or "default")
-    with mpl_style.context(style_name):
+    with matplotlib_style_context(style_name):
         cycle_colors = tuple(
             normalize_color(color)
             for color in mpl.rcParams["axes.prop_cycle"].by_key().get(
@@ -118,7 +119,7 @@ def resolve_component_creation_defaults(
     """
 
     style_name = str(style or "default")
-    with mpl_style.context(style_name):
+    with matplotlib_style_context(style_name):
         figure = Figure()
         line_axes = figure.add_subplot(1, 3, 1)
         scatter_axes = figure.add_subplot(1, 3, 2)

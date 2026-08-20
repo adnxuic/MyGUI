@@ -11,7 +11,6 @@ from typing import Any
 import warnings
 
 import numpy as np
-from matplotlib import style as mpl_style
 from matplotlib import colors as mcolors
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
@@ -37,6 +36,10 @@ from mygui.database.fit_result import (
 )
 from mygui.database.safe_expression import compile_math_expression
 from mygui.resource_limits import load_resource_limits
+from mygui.figuremodify.matplotlib_adapter import (
+    available_style_names,
+    copy_colormap,
+)
 
 from .base import ComponentController
 from .errors import ComponentNotFoundError, ComponentValidationError
@@ -497,7 +500,7 @@ def _figure_style(value: Any) -> str:
     style = value.strip()
     if (
         style != "default"
-        and style not in mpl_style.available
+        and style not in available_style_names()
         and not Path(style).is_file()
     ):
         raise ComponentValidationError(
@@ -3947,7 +3950,7 @@ class ScatterController(CollectionController):
         if isinstance(runtime_data, ScatterData):
             color_spec = state.properties["color_mapping"]
             if color_spec["enabled"] and runtime_data.colors is not None:
-                cmap = __import__("matplotlib").colormaps[color_spec["cmap"]].copy()
+                cmap = copy_colormap(color_spec["cmap"])
                 cmap.set_bad(color_spec["bad"])
                 if color_spec["under"] is not None:
                     cmap.set_under(color_spec["under"])

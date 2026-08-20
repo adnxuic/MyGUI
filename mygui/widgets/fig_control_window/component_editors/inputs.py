@@ -18,8 +18,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-import matplotlib
-
 from mygui.database import (
     ColumnRef,
     ColumnType,
@@ -27,6 +25,7 @@ from mygui.database import (
     TableChangeSet,
     TableRepository,
 )
+from mygui.figuremodify.matplotlib_adapter import available_colormap_names
 from mygui.database.interpolate_func import (
     DEFAULT_INTERPOLATION_SAMPLES,
     MAX_INTERPOLATION_SAMPLES,
@@ -296,7 +295,7 @@ class ScatterMappingInput(QFrame):
         self.color_enabled = QCheckBox("Map color", self)
         self.color_ref_input = QComboBox(self)
         self.cmap_input = QComboBox(self)
-        self.cmap_input.addItems(sorted(matplotlib.colormaps))
+        self.cmap_input.addItems(available_colormap_names())
         self.cmap_input.setCurrentText("viridis")
         self.color_nonfinite_input = QComboBox(self)
         self.color_nonfinite_input.addItem("Drop non-finite", "drop")

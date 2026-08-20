@@ -174,7 +174,7 @@ class PyLayoutDialog(QDialog):
         )
         if canvas is not None:
             self.input.constrained_input.setChecked(
-                bool(canvas.fig.get_constrained_layout())
+                canvas.axes_layout_service.constrained_layout_enabled()
             )
         self.layout.addWidget(self.input)
 

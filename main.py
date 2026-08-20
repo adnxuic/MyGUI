@@ -21,7 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mygui import status_messages
+from mygui import status_messages, tex_config
+from mygui.font_diagnostics import (
+    flush_font_diagnostics,
+    install_font_diagnostic_bridge,
+)
+
+tex_config.initialize_tex_runtime()
 from mygui.database import TableRepository
 from mygui.excel_io import import_excel_into_workspace, is_supported_excel_workbook
 from mygui.resources import load_qss_resource, resource_path
@@ -208,6 +214,7 @@ class MainWindow(QMainWindow):
         self.bottom_bar = PyBottomBar()
         self.bottom_bar.setFixedHeight(CONTROL_SIZES["bottom_bar"])
         status_messages.set_status_handler(self.bottom_bar.show_message)
+        flush_font_diagnostics()
         self.central_widget_layout.addWidget(self.bottom_bar, stretch=0)
         self.setCentralWidget(self.central_widget)
 
@@ -605,6 +612,7 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     configure_windows_taskbar_identity()
     app = QApplication(sys.argv)
+    font_diagnostic_bridge = install_font_diagnostic_bridge()
     configure_application_icon(app)
     configure_application_font(app)
     app.setStyleSheet(

@@ -573,7 +573,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             object_id="ordered-generic",
         )
 
-        axes_id = self.canvas._axes_component_ids[self.canvas.current_axes]
+        axes_id = self.canvas.current_axes_component_id
         queried = self.canvas.component_registry.query(
             capabilities={"color", "data"},
             parent_id=axes_id,

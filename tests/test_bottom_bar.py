@@ -120,7 +120,7 @@ class StateBarTests(unittest.TestCase):
     def tearDown(self):
         matlab_adapter.clear_matlab_state_listeners()
         matlab_adapter.set_matlab_enabled(False, notify=False)
-        tex_config.clear_tex_state_listeners()
+        tex_config.clear_tex_runtime_listeners()
         tex_config.set_tex_enabled(False, notify=False)
 
     def _make_state_bar(self):
@@ -136,8 +136,8 @@ class StateBarTests(unittest.TestCase):
                 name="tex",
                 label="TeX",
                 is_enabled=tex_config.is_tex_enabled,
-                register_listener=tex_config.register_tex_state_listener,
-                unregister_listener=tex_config.unregister_tex_state_listener,
+                register_listener=tex_config.register_tex_availability_listener,
+                unregister_listener=tex_config.unregister_tex_availability_listener,
             ),
         )
         return PyStateBar(indicators)
@@ -172,7 +172,7 @@ class StateBarTests(unittest.TestCase):
         bar.cleanup()
         # No listeners remain after cleanup.
         self.assertEqual(matlab_adapter._MATLAB_STATE_LISTENERS, [])
-        self.assertEqual(tex_config._TEX_STATE_LISTENERS, [])
+        self.assertEqual(tex_config._TEX_AVAILABILITY_LISTENERS, [])
 
 
 class BottomBarMessageFlowTests(unittest.TestCase):
@@ -184,7 +184,7 @@ class BottomBarMessageFlowTests(unittest.TestCase):
         status_messages.clear_status_handler()
         matlab_adapter.clear_matlab_state_listeners()
         matlab_adapter.set_matlab_enabled(False, notify=False)
-        tex_config.clear_tex_state_listeners()
+        tex_config.clear_tex_runtime_listeners()
         tex_config.set_tex_enabled(False, notify=False)
 
     def test_status_messages_reach_message_bar(self):

@@ -235,7 +235,7 @@ class PyCurveDialog(QDialog):
             return
 
         # Warn if current axes is empty
-        if self.figure_window.current_canva.current_axes is None:
+        if not self.figure_window.current_canva.has_current_axes:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
@@ -335,7 +335,7 @@ class PyPlotDialog(QDialog):
             return
 
         # Warn if current axes is empty
-        if self.figure_window.current_canva.current_axes is None:
+        if not self.figure_window.current_canva.has_current_axes:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
@@ -456,7 +456,7 @@ class PyScatterDialog(QDialog):
             return
 
         # Warn if current axes is empty
-        if self.figure_window.current_canva.current_axes is None:
+        if not self.figure_window.current_canva.has_current_axes:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
@@ -560,7 +560,7 @@ class PyFitDialog(QDialog):
             return
 
         # Warn if current axes is empty
-        if self.figure_window.current_canva.current_axes is None:
+        if not self.figure_window.current_canva.has_current_axes:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
@@ -694,7 +694,7 @@ class PyInterpolationDialog(QDialog):
             return
 
         # Warn if current axes is empty
-        if self.figure_window.current_canva.current_axes is None:
+        if not self.figure_window.current_canva.has_current_axes:
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 

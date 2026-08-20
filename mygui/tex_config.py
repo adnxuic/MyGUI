@@ -3,6 +3,7 @@
 import json
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
@@ -37,8 +38,44 @@ DEFAULT_PREAMBLE_LINES = (
     r"\usepackage{newtxtext,newtxmath}",
 )
 TEX_ENGINE_COMMANDS = ("latex", "pdflatex", "xelatex", "tectonic")
-TexStateListener = Callable[[bool], None]
-_TEX_STATE_LISTENERS: list[TexStateListener] = []
+
+
+@dataclass(frozen=True, slots=True)
+class TexRuntimeState:
+    """Process-wide Matplotlib TeX configuration owned by MyGUI."""
+
+    enabled: bool
+    preamble: str
+
+
+@dataclass(frozen=True, slots=True)
+class TexRuntimeChange:
+    """Describe one atomic TeX runtime configuration change."""
+
+    before: TexRuntimeState
+    after: TexRuntimeState
+
+    @property
+    def enabled_changed(self) -> bool:
+        return self.before.enabled != self.after.enabled
+
+    @property
+    def preamble_changed(self) -> bool:
+        return self.before.preamble != self.after.preamble
+
+
+@dataclass(frozen=True, slots=True)
+class TexRuntimeUpdate:
+    """Return the committed configuration and per-Figure refresh warnings."""
+
+    change: TexRuntimeChange
+    warnings: tuple[str, ...] = ()
+
+
+TexAvailabilityListener = Callable[[bool], None]
+TexRenderListener = Callable[[TexRuntimeChange], str | None]
+_TEX_AVAILABILITY_LISTENERS: list[TexAvailabilityListener] = []
+_TEX_RENDER_LISTENERS: list[TexRenderListener] = []
 
 
 def _configured_log_level() -> int:
@@ -172,46 +209,149 @@ def is_tex_enabled() -> bool:
     return bool(mpl.rcParams.get("text.usetex", False))
 
 
-def register_tex_state_listener(listener: TexStateListener) -> None:
-    """Register tex state listener."""
+def read_tex_runtime() -> TexRuntimeState:
+    """Return the current process-wide TeX runtime configuration."""
 
-    if listener not in _TEX_STATE_LISTENERS:
-        _TEX_STATE_LISTENERS.append(listener)
+    return TexRuntimeState(
+        enabled=is_tex_enabled(),
+        preamble=str(mpl.rcParams.get("text.latex.preamble", "")),
+    )
 
 
-def unregister_tex_state_listener(listener: TexStateListener) -> None:
-    """Unregister tex state listener."""
+def register_tex_availability_listener(
+    listener: TexAvailabilityListener,
+) -> None:
+    """Register a listener for the enabled availability flag."""
+
+    if listener not in _TEX_AVAILABILITY_LISTENERS:
+        _TEX_AVAILABILITY_LISTENERS.append(listener)
+
+
+def unregister_tex_availability_listener(
+    listener: TexAvailabilityListener,
+) -> None:
+    """Unregister an availability listener."""
 
     try:
-        _TEX_STATE_LISTENERS.remove(listener)
+        _TEX_AVAILABILITY_LISTENERS.remove(listener)
     except ValueError:
         pass
 
 
-def clear_tex_state_listeners() -> None:
-    """Clear tex state listeners."""
+def register_tex_render_listener(listener: TexRenderListener) -> None:
+    """Register one Canvas-owned TeX render listener."""
 
-    _TEX_STATE_LISTENERS.clear()
+    if listener not in _TEX_RENDER_LISTENERS:
+        _TEX_RENDER_LISTENERS.append(listener)
 
 
-def _notify_tex_state_listeners(enabled: bool) -> None:
-    for listener in list(_TEX_STATE_LISTENERS):
+def unregister_tex_render_listener(listener: TexRenderListener) -> None:
+    """Unregister one Canvas-owned TeX render listener."""
+
+    try:
+        _TEX_RENDER_LISTENERS.remove(listener)
+    except ValueError:
+        pass
+
+
+def clear_tex_runtime_listeners() -> None:
+    """Clear availability and render listeners for process teardown/tests."""
+
+    _TEX_AVAILABILITY_LISTENERS.clear()
+    _TEX_RENDER_LISTENERS.clear()
+
+
+def _notify_tex_availability_listeners(enabled: bool) -> None:
+    for listener in list(_TEX_AVAILABILITY_LISTENERS):
         try:
             listener(enabled)
         except Exception:
             # Qt raises RuntimeError when a Python callback still references a
             # QObject whose C++ instance has already been destroyed.
-            tex_logger().exception("TeX state listener failed and was detached")
-            unregister_tex_state_listener(listener)
+            tex_logger().exception(
+                "TeX availability listener failed and was detached"
+            )
+            unregister_tex_availability_listener(listener)
 
 
-def set_tex_enabled(enabled: bool, notify: bool = True) -> None:
-    """Enable or disable Matplotlib TeX rendering."""
+def _notify_tex_render_listeners(
+    change: TexRuntimeChange,
+) -> tuple[str, ...]:
+    warnings: list[str] = []
+    for listener in list(_TEX_RENDER_LISTENERS):
+        try:
+            message = listener(change)
+            if message:
+                warnings.append(str(message))
+        except Exception as exc:
+            tex_logger().exception(
+                "TeX render listener failed and was detached"
+            )
+            unregister_tex_render_listener(listener)
+            warnings.append(f"A Figure could not refresh its TeX rendering: {exc}")
+    return tuple(warnings)
 
-    previous = is_tex_enabled()
-    mpl.rcParams["text.usetex"] = bool(enabled)
-    if notify and previous != bool(enabled):
-        _notify_tex_state_listeners(bool(enabled))
+
+def configure_tex_runtime(
+    *,
+    enabled: bool | None = None,
+    preamble: str | None = None,
+    notify: bool = True,
+) -> TexRuntimeUpdate:
+    """Atomically update global TeX rcParams and refresh interested Canvases."""
+
+    before = read_tex_runtime()
+    after = TexRuntimeState(
+        enabled=before.enabled if enabled is None else bool(enabled),
+        preamble=(
+            before.preamble
+            if preamble is None
+            else normalize_preamble(str(preamble))
+        ),
+    )
+    change = TexRuntimeChange(before, after)
+    if not change.enabled_changed and not change.preamble_changed:
+        return TexRuntimeUpdate(change)
+
+    try:
+        mpl.rcParams["text.latex.preamble"] = after.preamble
+        mpl.rcParams["text.usetex"] = after.enabled
+    except Exception:
+        mpl.rcParams["text.latex.preamble"] = before.preamble
+        mpl.rcParams["text.usetex"] = before.enabled
+        raise
+
+    warnings: tuple[str, ...] = ()
+    if notify:
+        if change.enabled_changed or (
+            change.preamble_changed and change.after.enabled
+        ):
+            warnings = _notify_tex_render_listeners(change)
+        if change.enabled_changed:
+            _notify_tex_availability_listeners(change.after.enabled)
+    return TexRuntimeUpdate(change, warnings)
+
+
+def set_tex_enabled(enabled: bool, notify: bool = True) -> TexRuntimeUpdate:
+    """Compatibility convenience routed through the atomic runtime update."""
+
+    return configure_tex_runtime(enabled=enabled, notify=notify)
+
+
+def initialize_tex_runtime() -> TexRuntimeUpdate:
+    """Start MyGUI with TeX safely disabled and an editable preamble."""
+
+    current = read_tex_runtime()
+    preamble = (
+        current.preamble
+        if current.preamble.strip()
+        else default_preamble_text()
+    )
+    return configure_tex_runtime(
+        enabled=False,
+        preamble=preamble,
+        notify=False,
+    )
 
 
 def default_preamble_text() -> str:

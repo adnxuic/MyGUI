@@ -91,7 +91,7 @@ class SelectorMenuBar(QFrame):
             return
 
         if (self.chart_button.isChecked() or self.element_button.isChecked()) and (
-            self.figure_window.current_canva.current_axes is None
+            not self.figure_window.current_canva.has_current_axes
         ):
             QMessageBox.warning(self, "Axes Required", "Please add a layout before using chart or element tools.")
             self.layout_button.setChecked(True)

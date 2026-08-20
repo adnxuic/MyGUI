@@ -656,7 +656,6 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         registry = self.canvas.component_registry
         original_snapshot = self.canvas.component_snapshot()
         original_axes = tuple(self.canvas.fig.axes)
-        original_map = dict(self.canvas._axes_component_ids)
         original_allocated = set(self.canvas._allocated_component_ids)
         original_selection = (
             self.canvas.current_axes_component_id,
@@ -679,7 +678,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             unsubscribe()
 
         self.assertEqual(tuple(self.canvas.fig.axes), original_axes)
-        self.assertEqual(self.canvas._axes_component_ids, original_map)
+        registry.validate_axes_targets()
         self.assertEqual(
             self.canvas._allocated_component_ids, original_allocated
         )
@@ -698,7 +697,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertEqual(events, [])
 
     def test_direct_panel_removal_recursively_disposes_cached_sections(self):
-        baseline = len(tex_config._TEX_STATE_LISTENERS)
+        baseline = len(tex_config._TEX_AVAILABILITY_LISTENERS)
         axes_id = self.canvas.current_axes_component_id
         self.canvas.add_text(
             0.2,
@@ -708,7 +707,10 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             10,
             object_id="listener-text",
         )
-        self.assertEqual(len(tex_config._TEX_STATE_LISTENERS), baseline + 1)
+        self.assertEqual(
+            len(tex_config._TEX_AVAILABILITY_LISTENERS),
+            baseline + 1,
+        )
         self.assertIsNotNone(
             self.canvas.component_editor_manager.editor("listener-text")
         )
@@ -719,7 +721,10 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         self.assertFalse(
             self.canvas.figure_inspector.remove_axes_inspector(axes_id)
         )
-        self.assertEqual(len(tex_config._TEX_STATE_LISTENERS), baseline)
+        self.assertEqual(
+            len(tex_config._TEX_AVAILABILITY_LISTENERS),
+            baseline,
+        )
         self.assertIsNone(
             self.canvas.component_editor_manager.editor("listener-text")
         )
@@ -1044,9 +1049,9 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch.object(
-                self.canvas.deletion_coordinator,
-                "_candidate_axes_map",
-                side_effect=RuntimeError("injected Axes map failure"),
+                registry,
+                "validate_axes_targets",
+                side_effect=RuntimeError("injected Axes target failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))
             assert_unchanged()

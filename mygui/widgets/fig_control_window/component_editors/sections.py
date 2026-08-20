@@ -1048,9 +1048,9 @@ class TextRenderSection(QWidget, EditorSection):
         self.layout.addWidget(self.tex_render)
         self.layout.addStretch()
         self._listener = self._tex_state_changed
-        tex_config.register_tex_state_listener(self._listener)
+        tex_config.register_tex_availability_listener(self._listener)
         self._lifecycle.add(
-            lambda: tex_config.unregister_tex_state_listener(
+            lambda: tex_config.unregister_tex_availability_listener(
                 self._listener
             )
         )
@@ -1077,9 +1077,6 @@ class TextRenderSection(QWidget, EditorSection):
     def _tex_state_changed(self, enabled: bool):
         if self._disposed:
             return
-        result = self.context.text_rendering.apply_tex_availability(enabled)
-        if not result.committed:
-            status_messages.show_warning(result.message)
         self._sync_tex_button()
 
     def set_tex_render(self, state):
@@ -1209,11 +1206,6 @@ class LegendLocationSection(QWidget, EditorSection):
         self.sync_from_controller()
 
     def _ensure_target(self) -> None:
-        try:
-            self.controller.resolve_target()
-            return
-        except Exception:
-            pass
         self.context.axes_commands.ensure_legend(
             self.controller.state.parent_id
         )

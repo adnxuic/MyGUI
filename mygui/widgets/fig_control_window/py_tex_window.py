@@ -10,8 +10,6 @@ from mygui.widgets.fig_control_window.background_task import (
 from mygui import tex_config
 from mygui import status_messages
 
-import matplotlib as mpl
-
 import time
 
 class PyTexWindow(QFrame):
@@ -32,10 +30,11 @@ class PyTexWindow(QFrame):
 
         self.layout = QVBoxLayout()
 
+        runtime = tex_config.read_tex_runtime()
+
         # 设置是否用latex引擎
-        self.is_latex = False
         self.latex_engine = QCheckBox("Use Latex Engine")
-        self.latex_engine.setChecked(False)
+        self.latex_engine.setChecked(runtime.enabled)
         self.latex_engine.checkStateChanged.connect(self.use_latex_engine)
         self.layout.addWidget(self.latex_engine)
 
@@ -45,9 +44,8 @@ class PyTexWindow(QFrame):
         self.preamble_box.setLayout(self.preamble_layout)
 
         # 设置默认导入的包
-        self.preamble_text = tex_config.default_preamble_text()
         self.preamble_input = QPlainTextEdit()
-        self.preamble_input.setPlainText(self.preamble_text)
+        self.preamble_input.setPlainText(runtime.preamble)
 
         self.preamble_layout.addWidget(self.preamble_input)
 
@@ -68,10 +66,12 @@ class PyTexWindow(QFrame):
             self._validation_request_id += 1
             cancel_background_tasks(self)
             self._set_validation_busy(False)
-            self.is_latex = False
-            tex_config.set_tex_enabled(False)
+            update = tex_config.configure_tex_runtime(enabled=False)
             logger.info("TeX disable request succeeded")
-            status_messages.show_message("TeX rendering disabled.", "info")
+            if update.warnings:
+                status_messages.show_warning("; ".join(update.warnings))
+            else:
+                status_messages.show_message("TeX rendering disabled.", "info")
             return
 
         preamble = tex_config.normalize_preamble(self.preamble_input.toPlainText())
@@ -123,10 +123,10 @@ class PyTexWindow(QFrame):
             self._reject_latex(error)
             return
 
-        self.preamble_text = preamble
-        mpl.rcParams['text.latex.preamble'] = preamble
-        self.is_latex = True
-        tex_config.set_tex_enabled(True)
+        update = tex_config.configure_tex_runtime(
+            enabled=True,
+            preamble=preamble,
+        )
         elapsed = time.monotonic() - started_at
         preamble_line_count = len(preamble.splitlines()) if preamble else 0
         logger.info(
@@ -134,7 +134,12 @@ class PyTexWindow(QFrame):
             elapsed,
             preamble_line_count,
         )
-        status_messages.show_success("TeX runtime check passed; TeX rendering is enabled.")
+        if update.warnings:
+            status_messages.show_warning("; ".join(update.warnings))
+        else:
+            status_messages.show_success(
+                "TeX runtime check passed; TeX rendering is enabled."
+            )
 
     @staticmethod
     def _has_tex_engine() -> bool:
@@ -149,8 +154,7 @@ class PyTexWindow(QFrame):
         self.latex_engine.blockSignals(True)
         self.latex_engine.setChecked(False)
         self.latex_engine.blockSignals(False)
-        self.is_latex = False
-        tex_config.set_tex_enabled(False)
+        tex_config.configure_tex_runtime(enabled=False)
         status_messages.show_error(message)
 
     def update_preamble(self):
@@ -162,11 +166,11 @@ class PyTexWindow(QFrame):
         logger = tex_config.tex_logger()
         logger.info(
             "TeX preamble update request started enabled=%s preamble_line_count=%s",
-            self.is_latex,
+            tex_config.is_tex_enabled(),
             preamble_line_count,
         )
 
-        if self.is_latex:
+        if tex_config.is_tex_enabled():
             self._validation_request_id += 1
             request_id = self._validation_request_id
             self._set_validation_busy(True)
@@ -218,17 +222,19 @@ class PyTexWindow(QFrame):
     def _commit_preamble(self, preamble: str, started_at: float) -> None:
         logger = tex_config.tex_logger()
 
-        self.preamble_text = preamble
-        mpl.rcParams['text.latex.preamble'] = preamble
+        update = tex_config.configure_tex_runtime(preamble=preamble)
+        enabled = update.change.after.enabled
         elapsed = time.monotonic() - started_at
         preamble_line_count = len(preamble.splitlines()) if preamble else 0
         logger.info(
             "TeX preamble update request succeeded elapsed=%.3fs enabled=%s preamble_line_count=%s",
             elapsed,
-            self.is_latex,
+            enabled,
             preamble_line_count,
         )
-        if self.is_latex:
+        if update.warnings:
+            status_messages.show_warning("; ".join(update.warnings))
+        elif enabled:
             status_messages.show_success("TeX preamble updated and verified.")
         else:
             status_messages.show_message("TeX preamble updated.", "info")
