@@ -26,6 +26,17 @@ FORBIDDEN_IMPLEMENTATION_TOKENS = {
     "cordis_define", "cordis_run", "cordis_stop", "dynamicCordisRunner",
     "scanner-readonly.mjs",
 }
+COMPILED_PYTHON_SUFFIXES = {".pyc", ".pyo"}
+
+
+def _agent_source_files(agents: Path):
+    """Yield authored Agent Core files without generated Python bytecode."""
+    for path in agents.rglob("*"):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts or path.suffix.lower() in COMPILED_PYTHON_SUFFIXES:
+            continue
+        yield path
 
 
 def _scanner_ids(root: Path) -> set[str]:
@@ -117,9 +128,7 @@ def validate_agent_core(root: Path = ROOT) -> list[str]:
         if not entry.get("enforcement"):
             errors.append(f"{rule_id}: no enforcement declared")
 
-    for path in agents.rglob("*"):
-        if not path.is_file():
-            continue
+    for path in _agent_source_files(agents):
         if path.resolve() == Path(__file__).resolve():
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")

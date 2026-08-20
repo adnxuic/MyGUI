@@ -43,6 +43,18 @@ class AgentEngineeringTests(unittest.TestCase):
     def test_current_agent_core_is_consistent(self):
         self.assertEqual(self.agent_core.validate_agent_core(ROOT), [])
 
+    def test_agent_source_scan_ignores_generated_python_bytecode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            agents = Path(directory) / ".agents"
+            source = agents / "checks" / "check.py"
+            bytecode = agents / "checks" / "__pycache__" / "check.pyc"
+            source.parent.mkdir(parents=True)
+            bytecode.parent.mkdir(parents=True)
+            source.write_text("authored source", encoding="utf-8")
+            bytecode.write_bytes(b"cordis_run dynamicCordisRunner")
+
+            self.assertEqual(list(self.agent_core._agent_source_files(agents)), [source])
+
     def test_yaml_loader_rejects_duplicate_task_or_rule_keys(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "duplicate.yaml"
