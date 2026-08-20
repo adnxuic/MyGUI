@@ -1,7 +1,7 @@
 QFrame#figure_window
 {
     background-color: {{COLOR_CONTENT_BACKGROUND}};
-    border: 1px solid #d1d5db;
+    border: 1px solid {{COLOR_BORDER}};
 }
 
 QFrame#figure_empty_state
@@ -17,7 +17,7 @@ QFrame#figure_empty_state QLabel#empty_state_title
 
 QFrame#figure_empty_state QLabel#empty_state_detail
 {
-    color: #4b5563;
+    color: {{COLOR_TEXT_MUTED}};
 }
 
 QFrame#figure_empty_state QPushButton#empty_state_primary_button
@@ -32,7 +32,7 @@ QFrame#figure_empty_state QPushButton#empty_state_primary_button
 
 QFrame#figure_empty_state QPushButton#empty_state_primary_button:hover
 {
-    background-color: #1d4ed8;
+    background-color: {{COLOR_ACCENT_HOVER}};
 }
 
 QFrame#figure_empty_state QPushButton#empty_state_primary_button:focus
@@ -43,4 +43,62 @@ QFrame#figure_empty_state QPushButton#empty_state_primary_button:focus
 QTabWidget::pane
 {
     border: 0px;
+}
+
+QTabBar::tab
+{
+    background-color: transparent;
+    color: {{COLOR_TEXT_MUTED}};
+    padding: 6px {{SPACE_MD}}px;
+    border: 0px;
+    border-bottom: 2px solid transparent;
+    margin-right: 2px;
+}
+
+QTabBar::tab:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QTabBar::tab:selected
+{
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    font-weight: 600;
+    border-bottom: 2px solid {{COLOR_ACCENT}};
+}
+
+QToolBar#figure_toolbar
+{
+    background-color: {{COLOR_SURFACE}};
+    border: 0px;
+    border-bottom: 1px solid {{COLOR_BORDER}};
+    spacing: {{SPACE_XS}}px;
+    padding: 2px {{SPACE_XS}}px;
+}
+
+QToolBar#figure_toolbar QToolButton
+{
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: {{RADIUS_SM}}px;
+    padding: 2px;
+}
+
+QToolBar#figure_toolbar QToolButton:hover
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QToolBar#figure_toolbar QToolButton:focus
+{
+    border-color: {{COLOR_FOCUS}};
+}
+
+QToolBar#figure_toolbar QToolButton:pressed,
+QToolBar#figure_toolbar QToolButton:checked
+{
+    background-color: {{COLOR_ACCENT_SOFT}};
+    border-color: {{COLOR_ACCENT}};
 }

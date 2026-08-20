@@ -327,6 +327,7 @@ class PyFigureCanvas(QWidget):
         layout = QVBoxLayout()
 
         toolbox = NavigationToolbar(self.canva, self)
+        toolbox.setObjectName("figure_toolbar")
 
         layout.addWidget(toolbox)
         layout.addWidget(self.scroArea)

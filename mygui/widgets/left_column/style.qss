@@ -28,7 +28,7 @@ QPushButton#table_button:hover,
 QPushButton#components_button:hover,
 QPushButton#setting_button:hover
 {
-    background-color: #e5e7eb;
+    background-color: {{COLOR_HOVER_LIGHT}};
 }
 
 QPushButton#table_button:focus,

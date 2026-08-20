@@ -34,13 +34,13 @@ QLabel#empty_state_title
 
 QLabel#empty_state_detail
 {
-    color: #4b5563;
+    color: {{COLOR_TEXT_MUTED}};
 }
 
 QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox
 {
     min-height: 28px;
-    border: 1px solid #9ca3af;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
     border-radius: {{RADIUS_SM}}px;
     background-color: {{COLOR_SURFACE}};
     color: {{COLOR_TEXT_PRIMARY}};
@@ -55,7 +55,7 @@ QSpinBox:focus, QDoubleSpinBox:focus
 QPushButton
 {
     min-height: 30px;
-    border: 1px solid #9ca3af;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
     border-radius: {{RADIUS_SM}}px;
     background-color: {{COLOR_SURFACE}};
     color: {{COLOR_TEXT_PRIMARY}};
@@ -70,4 +70,17 @@ QPushButton:hover
 QPushButton:focus
 {
     border: 2px solid {{COLOR_FOCUS}};
+}
+
+QPushButton:pressed
+{
+    background-color: {{COLOR_ACCENT_SOFT}};
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton:disabled
+{
+    color: {{COLOR_BORDER_STRONG}};
+    background-color: {{COLOR_SURFACE_ALT}};
+    border-color: {{COLOR_BORDER}};
 }

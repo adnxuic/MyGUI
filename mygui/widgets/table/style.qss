@@ -10,7 +10,7 @@ QTableView
 {
     background-color: {{COLOR_SURFACE}};
     alternate-background-color: #f8fafc;
-    gridline-color: #e5e7eb;
+    gridline-color: {{COLOR_HOVER_LIGHT}};
     selection-background-color: {{COLOR_ACCENT}};
     selection-color: {{COLOR_TEXT_ON_DARK}};
     border: 0px;
@@ -23,11 +23,11 @@ QTableView:focus
 
 QHeaderView::section
 {
-    background-color: #f3f4f6;
+    background-color: {{COLOR_SURFACE_ALT}};
     color: {{COLOR_TEXT_PRIMARY}};
     border: 0px;
-    border-right: 1px solid #d1d5db;
-    border-bottom: 1px solid #d1d5db;
+    border-right: 1px solid {{COLOR_BORDER}};
+    border-bottom: 1px solid {{COLOR_BORDER}};
     padding: 3px;
 }
 
@@ -35,7 +35,7 @@ QToolBar#table_toolbar
 {
     background-color: {{COLOR_SURFACE}};
     border: 0px;
-    border-bottom: 1px solid #d1d5db;
+    border-bottom: 1px solid {{COLOR_BORDER}};
     spacing: 2px;
 }
 
@@ -48,7 +48,7 @@ QToolBar#table_toolbar QToolButton
 
 QToolBar#table_toolbar QToolButton:hover
 {
-    background-color: #e5e7eb;
+    background-color: {{COLOR_HOVER_LIGHT}};
 }
 
 QToolBar#table_toolbar QToolButton:focus

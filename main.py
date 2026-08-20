@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use("QtAgg")
 
 from PySide6.QtCore import QCoreApplication, QSettings, QTimer, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from mygui import status_messages
 from mygui.database import TableRepository
 from mygui.excel_io import import_excel_into_workspace, is_supported_excel_workbook
-from mygui.resources import resource_path
+from mygui.resources import load_qss_resource, resource_path
 from mygui.text_io import import_text_into_workspace
 from mygui.widgets.bottom_bar.py_bottom_bar import PyBottomBar
 from mygui.widgets.component_tree import ComponentTreeHost
@@ -38,7 +38,7 @@ from mygui.widgets.left_column import (
 from mygui.widgets.mainwindow_init import mainwindow_qss
 from mygui.widgets.right_column.py_right_column import PyRightColumn
 from mygui.widgets.table.py_table import PyTable
-from mygui.widgets.theme import CONTROL_SIZES
+from mygui.widgets.theme import CONTROL_SIZES, FONT_FAMILIES, FONT_SIZE_PT
 from mygui.widgets.title_bar.py_title_bar import PyTitleBar
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
@@ -69,6 +69,16 @@ def configure_application_icon(application: QApplication) -> QIcon:
     icon = QIcon(str(APP_ICON_PATH))
     application.setWindowIcon(icon)
     return icon
+
+
+def configure_application_font(application: QApplication) -> QFont:
+    """Apply the shared cross-platform font stack and return the Qt font."""
+
+    font = QFont()
+    font.setFamilies(list(FONT_FAMILIES))
+    font.setPointSize(FONT_SIZE_PT)
+    application.setFont(font)
+    return font
 
 
 class MainWindow(QMainWindow):
@@ -596,6 +606,10 @@ if __name__ == "__main__":
     configure_windows_taskbar_identity()
     app = QApplication(sys.argv)
     configure_application_icon(app)
+    configure_application_font(app)
+    app.setStyleSheet(
+        load_qss_resource("mygui/widgets/mainwindow_init/app_style.qss")
+    )
     QCoreApplication.setOrganizationName("MyGUI")
     QCoreApplication.setApplicationName("MyGUI")
     window = MainWindow(settings=QSettings())

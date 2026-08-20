@@ -25,7 +25,7 @@ QPushButton#matlab_button
 QPushButton#tex_button:hover,
 QPushButton#matlab_button:hover
 {
-    background-color: #1f2937;
+    background-color: {{COLOR_COMMAND_HOVER}};
 }
 
 QPushButton#tex_button:focus,

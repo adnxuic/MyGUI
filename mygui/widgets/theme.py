@@ -18,10 +18,19 @@ COLORS = MappingProxyType(
         "text_on_dark": "#f8fafc",
         "text_muted_on_dark": "#cbd5e1",
         "accent": "#2563eb",
+        "accent_hover": "#1d4ed8",
+        "accent_soft": "#dbeafe",
         "focus": "#60a5fa",
         "success": "#4ade80",
         "warning": "#fde047",
         "error": "#ff7d7d",
+        "border": "#d1d5db",
+        "border_strong": "#9ca3af",
+        "hover_light": "#e5e7eb",
+        "surface_alt": "#f3f4f6",
+        "text_muted": "#4b5563",
+        "command_hover": "#1f2937",
+        "separator": "#94a3b8",
     }
 )
 
@@ -53,6 +62,9 @@ CONTROL_SIZES = MappingProxyType(
     }
 )
 
+FONT_FAMILIES = ("Segoe UI", "Microsoft YaHei", "sans-serif")
+FONT_SIZE_PT = 9
+
 
 QSS_TOKENS = MappingProxyType(
     {
@@ -64,10 +76,19 @@ QSS_TOKENS = MappingProxyType(
         "COLOR_TEXT_ON_DARK": COLORS["text_on_dark"],
         "COLOR_TEXT_MUTED_ON_DARK": COLORS["text_muted_on_dark"],
         "COLOR_ACCENT": COLORS["accent"],
+        "COLOR_ACCENT_HOVER": COLORS["accent_hover"],
+        "COLOR_ACCENT_SOFT": COLORS["accent_soft"],
         "COLOR_FOCUS": COLORS["focus"],
         "COLOR_SUCCESS": COLORS["success"],
         "COLOR_WARNING": COLORS["warning"],
         "COLOR_ERROR": COLORS["error"],
+        "COLOR_BORDER": COLORS["border"],
+        "COLOR_BORDER_STRONG": COLORS["border_strong"],
+        "COLOR_HOVER_LIGHT": COLORS["hover_light"],
+        "COLOR_SURFACE_ALT": COLORS["surface_alt"],
+        "COLOR_TEXT_MUTED": COLORS["text_muted"],
+        "COLOR_COMMAND_HOVER": COLORS["command_hover"],
+        "COLOR_SEPARATOR": COLORS["separator"],
         "SPACE_XS": str(SPACING["xs"]),
         "SPACE_SM": str(SPACING["sm"]),
         "SPACE_MD": str(SPACING["md"]),

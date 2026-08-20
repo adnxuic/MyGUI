@@ -1,0 +1,246 @@
+/*
+ * Application-level stylesheet applied to QApplication at startup.
+ * Covers only controls that no widget-level QSS styles, so component
+ * stylesheets keep full control over their own scope.
+ */
+
+QMenu
+{
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border: 1px solid {{COLOR_BORDER}};
+    border-radius: {{RADIUS_MD}}px;
+    padding: {{SPACE_XS}}px;
+}
+
+QMenu::item
+{
+    padding: 6px 28px 6px 28px;
+    border-radius: {{RADIUS_SM}}px;
+    background-color: transparent;
+}
+
+QMenu::item:selected
+{
+    background-color: {{COLOR_ACCENT_SOFT}};
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QMenu::item:disabled
+{
+    color: {{COLOR_BORDER_STRONG}};
+}
+
+QMenu::separator
+{
+    height: 1px;
+    background-color: {{COLOR_BORDER}};
+    margin: {{SPACE_XS}}px {{SPACE_SM}}px;
+}
+
+QToolTip
+{
+    background-color: {{COLOR_COMMAND_BACKGROUND}};
+    color: {{COLOR_TEXT_ON_DARK}};
+    border: 1px solid {{COLOR_COMMAND_BACKGROUND}};
+    border-radius: {{RADIUS_SM}}px;
+    padding: {{SPACE_XS}}px {{SPACE_SM}}px;
+}
+
+QScrollBar:vertical
+{
+    background-color: transparent;
+    width: 10px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical
+{
+    background-color: {{COLOR_BORDER}};
+    min-height: 24px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical:hover
+{
+    background-color: {{COLOR_BORDER_STRONG}};
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical
+{
+    height: 0px;
+    border: 0px;
+    background-color: transparent;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical
+{
+    background-color: transparent;
+}
+
+QScrollBar:horizontal
+{
+    background-color: transparent;
+    height: 10px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal
+{
+    background-color: {{COLOR_BORDER}};
+    min-width: 24px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:horizontal:hover
+{
+    background-color: {{COLOR_BORDER_STRONG}};
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal
+{
+    width: 0px;
+    border: 0px;
+    background-color: transparent;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal
+{
+    background-color: transparent;
+}
+
+QComboBox QAbstractItemView
+{
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border: 1px solid {{COLOR_BORDER}};
+    border-radius: {{RADIUS_SM}}px;
+    padding: 2px;
+    outline: 0px;
+    selection-background-color: {{COLOR_ACCENT_SOFT}};
+    selection-color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QCheckBox::indicator
+{
+    width: 16px;
+    height: 16px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+}
+
+QCheckBox::indicator:hover
+{
+    border-color: {{COLOR_ACCENT}};
+}
+
+QCheckBox::indicator:checked
+{
+    background-color: {{COLOR_ACCENT}};
+    border-color: {{COLOR_ACCENT}};
+    image: url({{ICON_CHECK}});
+}
+
+QCheckBox::indicator:indeterminate
+{
+    background-color: {{COLOR_ACCENT}};
+    border-color: {{COLOR_ACCENT}};
+    image: url({{ICON_CHECK_INDETERMINATE}});
+}
+
+QRadioButton::indicator
+{
+    width: 16px;
+    height: 16px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: 8px;
+    background-color: {{COLOR_SURFACE}};
+}
+
+QRadioButton::indicator:hover
+{
+    border-color: {{COLOR_ACCENT}};
+}
+
+QRadioButton::indicator:checked
+{
+    background-color: {{COLOR_ACCENT}};
+    border: 2px solid {{COLOR_ACCENT}};
+}
+
+QMessageBox QPushButton
+{
+    min-width: 72px;
+}
+
+QComboBox::drop-down
+{
+    subcontrol-origin: border;
+    subcontrol-position: center right;
+    width: 24px;
+    border: 0px;
+    background-color: transparent;
+}
+
+QComboBox::drop-down:hover
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+    border-top-right-radius: {{RADIUS_SM}}px;
+    border-bottom-right-radius: {{RADIUS_SM}}px;
+}
+
+QComboBox::down-arrow
+{
+    image: url({{ICON_ARROW_DOWN}});
+    width: 12px;
+    height: 12px;
+}
+
+QAbstractSpinBox::up-button
+{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 20px;
+    border: 0px;
+    border-left: 1px solid {{COLOR_BORDER}};
+    background-color: transparent;
+}
+
+QAbstractSpinBox::up-button:hover
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QAbstractSpinBox::up-arrow
+{
+    image: url({{ICON_ARROW_UP}});
+    width: 10px;
+    height: 10px;
+}
+
+QAbstractSpinBox::down-button
+{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 20px;
+    border: 0px;
+    border-left: 1px solid {{COLOR_BORDER}};
+    background-color: transparent;
+}
+
+QAbstractSpinBox::down-button:hover
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QAbstractSpinBox::down-arrow
+{
+    image: url({{ICON_ARROW_DOWN}});
+    width: 10px;
+    height: 10px;
+}

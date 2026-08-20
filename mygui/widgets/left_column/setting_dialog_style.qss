@@ -2,7 +2,7 @@ QDialog#setting_dialog
 {
     background-color: {{COLOR_SURFACE}};
     color: {{COLOR_TEXT_PRIMARY}};
-    border: 1px solid #d1d5db;
+    border: 1px solid {{COLOR_BORDER}};
     border-radius: {{RADIUS_MD}}px;
     min-width: 320px;
     min-height: 160px;
@@ -16,7 +16,7 @@ QLabel#settings_section_title
 QPushButton
 {
     min-height: 32px;
-    border: 1px solid #9ca3af;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
     border-radius: {{RADIUS_SM}}px;
     background-color: {{COLOR_SURFACE}};
     padding: 0px {{SPACE_MD}}px;
@@ -30,4 +30,17 @@ QPushButton:hover
 QPushButton:focus
 {
     border: 2px solid {{COLOR_FOCUS}};
+}
+
+QPushButton:pressed
+{
+    background-color: {{COLOR_ACCENT_SOFT}};
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton:disabled
+{
+    color: {{COLOR_BORDER_STRONG}};
+    background-color: {{COLOR_SURFACE_ALT}};
+    border-color: {{COLOR_BORDER}};
 }

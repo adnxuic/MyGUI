@@ -1,6 +1,6 @@
 QFrame#style_menu
 {
     background-color: {{COLOR_SURFACE}};
-    border: 1px solid #d1d5db;
+    border: 1px solid {{COLOR_BORDER}};
     border-radius: {{RADIUS_MD}}px;
 }

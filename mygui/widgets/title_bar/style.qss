@@ -17,7 +17,7 @@ QFrame#menu_bar
 
 QFrame#command_separator
 {
-    background-color: #94a3b8;
+    background-color: {{COLOR_SEPARATOR}};
     min-width: 1px;
     max-width: 1px;
     min-height: 28px;
@@ -40,7 +40,7 @@ QPushButton#change_button
 QPushButton#change_button:hover,
 QPushButton#change_button:focus
 {
-    background-color: #1f2937;
+    background-color: {{COLOR_COMMAND_HOVER}};
     border-color: {{COLOR_FOCUS}};
 }
 
@@ -66,7 +66,7 @@ QPushButton#menu_button
 QPushButton#select_menu_button:hover,
 QPushButton#menu_button:hover
 {
-    background-color: #1f2937;
+    background-color: {{COLOR_COMMAND_HOVER}};
 }
 
 QPushButton#select_menu_button:focus,
@@ -99,7 +99,7 @@ QToolBar#selector_toolbar
 {
     background-color: {{COLOR_SURFACE}};
     border: 0px;
-    border-bottom: 1px solid #d1d5db;
+    border-bottom: 1px solid {{COLOR_BORDER}};
     spacing: {{SPACE_XS}}px;
     padding: 2px {{SPACE_XS}}px;
 }
@@ -135,14 +135,14 @@ QToolBar#selector_toolbar QToolButton#layout_template_button
 QToolBar#selector_toolbar QToolButton:hover,
 QToolButton#select_button:hover
 {
-    background-color: #e5e7eb;
-    border-color: #9ca3af;
+    background-color: {{COLOR_HOVER_LIGHT}};
+    border-color: {{COLOR_BORDER_STRONG}};
 }
 
 QToolBar#selector_toolbar QToolButton:pressed,
 QToolBar#selector_toolbar QToolButton:checked
 {
-    background-color: #dbeafe;
+    background-color: {{COLOR_ACCENT_SOFT}};
     border-color: {{COLOR_ACCENT}};
 }
 
@@ -154,7 +154,7 @@ QToolButton#select_button:focus
 
 QToolBar#selector_toolbar QToolButton:disabled
 {
-    color: #9ca3af;
+    color: {{COLOR_BORDER_STRONG}};
 }
 
 QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button
@@ -170,8 +170,8 @@ QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button
 
 QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button:hover
 {
-    background-color: #e5e7eb;
-    border-color: #9ca3af;
+    background-color: {{COLOR_HOVER_LIGHT}};
+    border-color: {{COLOR_BORDER_STRONG}};
 }
 
 QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button:focus
@@ -191,6 +191,6 @@ QPushButton#pull_down_button
 QPushButton#pull_down_button:hover,
 QPushButton#pull_down_button:focus
 {
-    background-color: #e5e7eb;
+    background-color: {{COLOR_HOVER_LIGHT}};
     border-color: {{COLOR_FOCUS}};
 }

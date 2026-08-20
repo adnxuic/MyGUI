@@ -14,7 +14,7 @@ QWidget#left_workspace
 QSplitter#workspace_splitter::handle,
 QSplitter#explorer_control_splitter::handle
 {
-    background-color: #d1d5db;
+    background-color: {{COLOR_BORDER}};
     width: 6px;
 }
 

@@ -10,7 +10,7 @@ QLineEdit#component_tree_search
     padding: 0px 8px;
     color: {{COLOR_TEXT_PRIMARY}};
     background-color: {{COLOR_CONTENT_BACKGROUND}};
-    border: 1px solid #d1d5db;
+    border: 1px solid {{COLOR_BORDER}};
     border-radius: {{RADIUS_SM}}px;
 }
 
@@ -38,9 +38,10 @@ QTreeView#component_tree_view::item:selected
 {
     color: {{COLOR_TEXT_ON_DARK}};
     background-color: {{COLOR_ACCENT}};
+    border-radius: {{RADIUS_SM}}px;
 }
 
 QTreeView#component_tree_view::item:hover:!selected
 {
-    background-color: #e5e7eb;
+    background-color: {{COLOR_HOVER_LIGHT}};
 }

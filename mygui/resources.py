@@ -58,6 +58,19 @@ def load_json_resource(relative_path: str | Path) -> Any:
     return json.loads(load_text_resource(relative_path))
 
 
+def _icon_qss_tokens() -> dict[str, str]:
+    """Return QSS tokens that resolve bundled icon files to POSIX URLs."""
+
+    return {
+        "ICON_ARROW_DOWN": Path(icon_path("arrow_down.svg")).as_posix(),
+        "ICON_ARROW_UP": Path(icon_path("arrow_up.svg")).as_posix(),
+        "ICON_CHECK": Path(icon_path("check.svg")).as_posix(),
+        "ICON_CHECK_INDETERMINATE": Path(
+            icon_path("check_indeterminate.svg")
+        ).as_posix(),
+    }
+
+
 def load_qss_resource(
     relative_path: str | Path,
     *,
@@ -69,6 +82,7 @@ def load_qss_resource(
 
     source = load_text_resource(relative_path)
     replacements = dict(QSS_TOKENS)
+    replacements.update(_icon_qss_tokens())
     if tokens is not None:
         if not isinstance(tokens, Mapping):
             raise TypeError("tokens must be a mapping")
