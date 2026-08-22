@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import time
+import traceback as traceback_module
 import unittest
 
 
@@ -66,8 +67,20 @@ class TimedTextTestResult(unittest.TextTestResult):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.test_timings: list[dict[str, object]] = []
+        self.failure_details: list[dict[str, str]] = []
+        self.error_details: list[dict[str, str]] = []
         self._test_started = 0.0
         self._test_status = "passed"
+
+    @staticmethod
+    def _issue(test, err) -> dict[str, str]:
+        exception_type, exception, _traceback = err
+        return {
+            "testId": _normalized_test_id(test.id()),
+            "exceptionType": exception_type.__name__,
+            "message": str(exception),
+            "traceback": "".join(traceback_module.format_exception(*err)),
+        }
 
     def startTest(self, test):
         self._test_started = time.perf_counter()
@@ -87,10 +100,12 @@ class TimedTextTestResult(unittest.TextTestResult):
 
     def addError(self, test, err):
         self._test_status = "error"
+        self.error_details.append(self._issue(test, err))
         super().addError(test, err)
 
     def addFailure(self, test, err):
         self._test_status = "failed"
+        self.failure_details.append(self._issue(test, err))
         super().addFailure(test, err)
 
     def addSkip(self, test, reason):
@@ -103,16 +118,35 @@ class TimedTextTestResult(unittest.TextTestResult):
 
     def addUnexpectedSuccess(self, test):
         self._test_status = "unexpected_success"
+        self.failure_details.append({
+            "testId": _normalized_test_id(test.id()),
+            "exceptionType": "UnexpectedSuccess",
+            "message": "Test unexpectedly succeeded.",
+            "traceback": "",
+        })
         super().addUnexpectedSuccess(test)
 
     def addSubTest(self, test, subtest, err):
         if err is not None:
-            self._test_status = (
-                "failed"
-                if issubclass(err[0], test.failureException)
-                else "error"
-            )
+            if issubclass(err[0], test.failureException):
+                self._test_status = "failed"
+                self.failure_details.append(self._issue(subtest, err))
+            else:
+                self._test_status = "error"
+                self.error_details.append(self._issue(subtest, err))
         super().addSubTest(test, subtest, err)
+
+
+def _load_error(test) -> dict[str, str]:
+    exception = getattr(test, "_exception", None)
+    return {
+        "testId": _normalized_test_id(test.id()),
+        "exceptionType": (
+            type(exception).__name__ if exception is not None else "TestLoadError"
+        ),
+        "message": str(exception or "unittest could not load the requested test"),
+        "traceback": "",
+    }
 
 
 def _write_json(path: str | Path, value: object) -> None:
@@ -169,15 +203,21 @@ def _run_batch(plan_path: str | Path, batch_index: int, output: str | Path) -> i
     load_complete = not failed_loads and loaded_ids == test_ids
     if not load_complete:
         result = {
-            "contractVersion": 1,
+            "contractVersion": 2,
             "batchIndex": batch_index,
             "batchCount": batch_count,
             "expectedCount": len(test_ids),
             "testsRun": 0,
             "complete": False,
             "successful": False,
-            "failures": 0,
-            "errors": len(failed_loads),
+            "failureCount": 0,
+            "errorCount": len(failed_loads),
+            "failures": [],
+            "errors": [
+                _load_error(test)
+                for test in loaded
+                if type(test).__name__ == "_FailedTest"
+            ],
             "skipped": 0,
             "testTimings": [],
             "loadErrors": sorted(failed_loads),
@@ -202,15 +242,17 @@ def _run_batch(plan_path: str | Path, batch_index: int, output: str | Path) -> i
         and sorted(observed_ids) == sorted(test_ids)
     )
     result = {
-        "contractVersion": 1,
+        "contractVersion": 2,
         "batchIndex": batch_index,
         "batchCount": batch_count,
         "expectedCount": len(test_ids),
         "testsRun": test_result.testsRun,
         "complete": complete,
         "successful": test_result.wasSuccessful() and complete,
-        "failures": len(test_result.failures),
-        "errors": len(test_result.errors),
+        "failureCount": len(test_result.failure_details),
+        "errorCount": len(test_result.error_details),
+        "failures": test_result.failure_details,
+        "errors": test_result.error_details,
         "skipped": len(test_result.skipped),
         "durationMs": round((time.monotonic() - started) * 1000, 3),
         "testTimings": test_result.test_timings,

@@ -28,6 +28,16 @@ def _load(name: str):
     return module
 
 
+class CoverageIssueFixture(unittest.TestCase):
+    """Explicitly loaded fixture; method names avoid normal discovery."""
+
+    def failure(self):
+        self.fail("structured failure")
+
+    def error(self):
+        raise RuntimeError("structured error")
+
+
 class AgentEngineeringTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -80,6 +90,10 @@ class AgentEngineeringTests(unittest.TestCase):
         self.assertGreaterEqual(
             self.verify_full.APPLICATION_TEST_TIMEOUT_SECONDS,
             3600,
+        )
+        self.assertGreaterEqual(
+            self.verify_full.APPLICATION_BATCH_TIMEOUT_SECONDS,
+            60,
         )
 
     def test_application_discovery_returns_unique_exact_test_ids(self):
@@ -171,6 +185,48 @@ class AgentEngineeringTests(unittest.TestCase):
             "test_example",
         )
 
+    def test_application_plan_keeps_gui_sensitive_tests_in_one_serial_pool(self):
+        gui_modules = {
+            "test_component_editors",
+            "test_component_inspector",
+            "test_figure_history",
+            "test_component_runtime_integration",
+            "test_gui_data_flow",
+            "test_gui_layout",
+        }
+        self.assertTrue(
+            gui_modules <= self.verify_full.GUI_SENSITIVE_TEST_MODULES
+        )
+        test_ids = [
+            "tests.test_component_editors.GuiTests.test_widget",
+            "tests.test_gui_layout.GuiTests.test_layout",
+            "tests.test_safe_expression.CoreTests.test_expression",
+            "tests.test_resource_limits.CoreTests.test_budget",
+        ]
+
+        plan = self.verify_full._build_test_plan(test_ids, 4)
+
+        groups = {group["name"]: group for group in plan["groups"]}
+        self.assertEqual(groups["application-gui"]["workers"], 1)
+        self.assertTrue(groups["application-gui"]["serial"])
+        gui_batches = [
+            plan["batches"][index]
+            for index in groups["application-gui"]["batchIndexes"]
+        ]
+        self.assertEqual(
+            [test_id for batch in gui_batches for test_id in batch["testIds"]],
+            test_ids[:2],
+        )
+        self.assertEqual(len(gui_batches), 2)
+        self.assertTrue(all(len(batch["testIds"]) == 1 for batch in gui_batches))
+        self.assertEqual(groups["application-core"]["workers"], 2)
+        flattened = [
+            test_id
+            for batch in plan["batches"]
+            for test_id in batch["testIds"]
+        ]
+        self.assertEqual(sorted(flattened), sorted(test_ids))
+
     def test_test_worker_environment_is_strictly_validated(self):
         with patch.dict(os.environ, {"MYGUI_TEST_SHARDS": "8"}):
             self.assertEqual(self.verify_full.default_test_shards(), 8)
@@ -179,6 +235,71 @@ class AgentEngineeringTests(unittest.TestCase):
                 with patch.dict(os.environ, {"MYGUI_TEST_SHARDS": invalid}):
                     with self.assertRaisesRegex(ValueError, "1 through 16"):
                         self.verify_full.default_test_shards()
+
+    def test_application_timeout_environment_is_strictly_validated(self):
+        with patch.dict(
+            os.environ,
+            {"APPLICATION_BATCH_TIMEOUT_SECONDS": "45"},
+        ):
+            self.assertEqual(
+                self.verify_full.configured_timeout_seconds(
+                    "APPLICATION_BATCH_TIMEOUT_SECONDS",
+                    1200,
+                ),
+                45,
+            )
+        for invalid in ("", "seconds", "0", "-1"):
+            with self.subTest(value=invalid):
+                with patch.dict(
+                    os.environ,
+                    {"APPLICATION_BATCH_TIMEOUT_SECONDS": invalid},
+                ):
+                    with self.assertRaisesRegex(ValueError, "positive integer"):
+                        self.verify_full.configured_timeout_seconds(
+                            "APPLICATION_BATCH_TIMEOUT_SECONDS",
+                            1200,
+                        )
+
+    def test_coverage_batch_records_structured_failures_and_errors(self):
+        test_ids = [
+            "tests.test_agent_engineering.CoverageIssueFixture.failure",
+            "tests.test_agent_engineering.CoverageIssueFixture.error",
+        ]
+        plan = {
+            "batches": [{"index": 0, "testIds": test_ids}],
+        }
+        suite = unittest.TestSuite([
+            CoverageIssueFixture("failure"),
+            CoverageIssueFixture("error"),
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan_path = root / "plan.json"
+            result_path = root / "batch-000.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            with patch.object(
+                self.coverage_batch.unittest.defaultTestLoader,
+                "loadTestsFromNames",
+                return_value=suite,
+            ):
+                returncode = self.coverage_batch._run_batch(
+                    plan_path,
+                    0,
+                    result_path,
+                )
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(returncode, 1)
+        self.assertEqual(result["contractVersion"], 2)
+        self.assertEqual(result["failureCount"], 1)
+        self.assertEqual(result["errorCount"], 1)
+        self.assertEqual(result["failures"][0]["testId"], test_ids[0])
+        self.assertEqual(result["failures"][0]["exceptionType"], "AssertionError")
+        self.assertIn("structured failure", result["failures"][0]["message"])
+        self.assertIn("Traceback", result["failures"][0]["traceback"])
+        self.assertEqual(result["errors"][0]["testId"], test_ids[1])
+        self.assertEqual(result["errors"][0]["exceptionType"], "RuntimeError")
+        self.assertIn("structured error", result["errors"][0]["message"])
 
     def test_coverage_batch_timeout_and_oserror_are_required_failures(self):
         test_ids = ["tests.test_example.ExampleTests.test_one"]
@@ -207,6 +328,8 @@ class AgentEngineeringTests(unittest.TestCase):
                     self.assertTrue(step["required"])
                     self.assertFalse(metadata["complete"])
                     self.assertEqual(metadata["testsRun"], 0)
+                    self.assertTrue((root / "result.log").is_file())
+                    self.assertEqual(len(metadata["errors"]), 1)
 
     def test_coverage_batch_rejects_a_successful_process_with_incomplete_result(self):
         test_ids = ["tests.test_example.ExampleTests.test_one"]
@@ -220,7 +343,7 @@ class AgentEngineeringTests(unittest.TestCase):
                 "successful": True,
                 "testTimings": [],
             }), encoding="utf-8")
-            completed = subprocess.CompletedProcess([], 0, stdout="")
+            completed = subprocess.CompletedProcess([], 0, stdout="full batch log")
             with patch.object(
                 self.verify_full.subprocess,
                 "run",
@@ -234,8 +357,10 @@ class AgentEngineeringTests(unittest.TestCase):
                     result_path,
                     time.monotonic() + 30,
                 )
+            preserved_log = (root / "result.log").read_text(encoding="utf-8")
         self.assertEqual(step["status"], "failed")
         self.assertFalse(metadata["complete"])
+        self.assertIn("full batch log", preserved_log)
 
     def test_future_exception_is_recorded_and_prevents_complete_coverage(self):
         test_id = "tests.test_example.ExampleTests.test_one"

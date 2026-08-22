@@ -174,6 +174,20 @@ class StateBarTests(unittest.TestCase):
         self.assertEqual(matlab_adapter._MATLAB_STATE_LISTENERS, [])
         self.assertEqual(tex_config._TEX_AVAILABILITY_LISTENERS, [])
 
+    def test_main_window_close_unregisters_bottom_bar_listeners(self):
+        from main import MainWindow
+
+        window = MainWindow()
+        self.assertEqual(len(matlab_adapter._MATLAB_STATE_LISTENERS), 1)
+        self.assertEqual(len(tex_config._TEX_AVAILABILITY_LISTENERS), 1)
+
+        window.close()
+        self.app.processEvents()
+
+        self.assertEqual(matlab_adapter._MATLAB_STATE_LISTENERS, [])
+        self.assertEqual(tex_config._TEX_AVAILABILITY_LISTENERS, [])
+        window.bottom_bar.cleanup()
+
 
 class BottomBarMessageFlowTests(unittest.TestCase):
     @classmethod

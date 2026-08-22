@@ -22,23 +22,33 @@ subprocesses through their current `sys.executable`. Qt tests run with
 `verify_full --profile application` runs the complete suite once under branch
 coverage with a one-hour subprocess budget, then applies global 74% and
 critical-file 80% reports. A discovery subprocess collects exact unittest IDs;
-empty, failed, or duplicate collections reject the run. Method-level measured
-weights feed deterministic LPT micro-batches, and a fixed worker pool runs each
-batch under `coverage run --parallel-mode`. Every batch continues after test
-failures, while timeout, process, future, and executed-count failures prevent
-partial coverage from reaching the coverage thresholds. `coverage combine`
-merges only complete batch data. The Matplotlib font cache is warmed serially
-before workers start so concurrent rebuilds cannot race.
+empty, failed, or duplicate collections reject the run. Tests that own
+QApplication/QWidget/QTimer event-loop state, Figure canvases, or process-global
+Matplotlib state run on one deterministic `application-gui` serial worker, with
+one fresh coverage process per test module. Pure contract, parsing, numerical,
+and static-analysis tests use measured weights in deterministic LPT
+`application-core` micro-batches and a fixed worker pool. Both pools run under
+`coverage run --parallel-mode`, so all test IDs contribute to the combined
+report. Every batch continues after test failures, while timeout, process,
+future, and executed-count failures prevent partial coverage from reaching the
+coverage thresholds. `coverage combine` merges only complete batch data. The
+Matplotlib font cache is warmed serially before workers start so concurrent
+rebuilds cannot race.
 
-`MYGUI_TEST_SHARDS` controls concurrent workers and accepts only integers from
-1 through 16. The default is `min(8, max(2, cpu_count))`; 1 restores one batch
-and one process. Worker counts above 1 use up to four micro-batches per worker
-for dynamic load balancing. The one-hour timeout covers the whole parallel test
-pool, not each queued batch. Per-batch and per-test timing evidence is written
-to ignored `build/agent-results/application-test-timings.json`. Windows CI pins
-four workers. The agent-engineering profile validates routing/contracts and
-deterministic DSH typecheck/tests/E2E. Documentation uses
-`mkdocs build --strict`.
+`MYGUI_TEST_SHARDS` controls application-core workers and accepts only integers
+from 1 through 16. The default is `min(8, max(2, cpu_count))`; the GUI pool
+always has one worker. Core worker counts above 1 use up to four micro-batches
+per worker for dynamic load balancing. `APPLICATION_TEST_TIMEOUT_SECONDS`
+defaults to one hour for the complete test plan and
+`APPLICATION_BATCH_TIMEOUT_SECONDS` defaults to 20 minutes. A batch receives
+the smaller of its per-batch limit and the remaining global budget. Complete
+plans, summaries, structured failures/errors, assigned test IDs, and untruncated
+batch logs are written under ignored `build/agent-results/application/`.
+Per-test and aggregated per-module timings remain available in
+`build/agent-results/application-test-timings.json`. Windows CI pins four core
+workers and uploads both evidence locations. The agent-engineering profile
+validates routing/contracts and deterministic DSH typecheck/tests/E2E.
+Documentation uses `mkdocs build --strict`.
 
 ## Fault injection
 

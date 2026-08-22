@@ -602,6 +602,7 @@ class MainWindow(QMainWindow):
         self._save_workspace_layout()
         if hasattr(self, "bottom_bar"):
             status_messages.clear_status_handler(self.bottom_bar.show_message)
+            self.bottom_bar.cleanup()
         if hasattr(self.figure_window, "clear_figures"):
             self.figure_window.clear_figures()
         if hasattr(self.table, "clear_tables"):

@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
-import tempfile
 import time
 
 from _runner import (
@@ -30,11 +31,58 @@ CRITICAL_FILES = [
     "mygui/widgets/figure_canvas/py_figure_canves.py",
 ]
 APPLICATION_TEST_TIMEOUT_SECONDS = 3600
+APPLICATION_BATCH_TIMEOUT_SECONDS = 1200
 MAX_TEST_WORKERS = 16
 TEST_BATCH_FACTOR = 4
 RESULT_DIR = ROOT / "build" / "agent-results"
+APPLICATION_RESULT_DIR = RESULT_DIR / "application"
 COVERAGE_BATCH_RUNNER = ROOT / ".agents" / "checks" / "_coverage_batch.py"
 APPLICATION_TIMINGS_PATH = RESULT_DIR / "application-test-timings.json"
+
+# These modules own QApplication/QWidget/QTimer event-loop state, Matplotlib
+# Figures or process-global catalogs/configuration. Keep them on one serial
+# worker and give each module a fresh process so lifecycle and global state do
+# not leak across module boundaries.
+# The remaining contract, parsing, numerical, and static-analysis tests form
+# the parallel application-core pool.
+GUI_SENSITIVE_TEST_MODULES = frozenset({
+    "test_application_icon",
+    "test_axes_layout",
+    "test_background_task",
+    "test_batch_chart_creation",
+    "test_bottom_bar",
+    "test_chart_modifier_styles",
+    "test_color_integration",
+    "test_color_library",
+    "test_color_picker",
+    "test_colorbar_component",
+    "test_command_gallery",
+    "test_component_controllers",
+    "test_component_deletion_and_project_close",
+    "test_component_editors",
+    "test_component_inspector",
+    "test_component_runtime_integration",
+    "test_component_services",
+    "test_component_tree",
+    "test_excel_import",
+    "test_figure_dpi",
+    "test_figure_history",
+    "test_font_diagnostics",
+    "test_gui_data_flow",
+    "test_gui_file_flow",
+    "test_gui_layout",
+    "test_in_axes",
+    "test_matplotlib_property_contract",
+    "test_optional_dependencies",
+    "test_project_io",
+    "test_project_object_roundtrip",
+    "test_project_schema",
+    "test_resource_locator",
+    "test_style_creation_defaults",
+    "test_table_document",
+    "test_table_ui",
+    "test_text_import",
+})
 
 # Per-module wall-clock seconds measured 2026-08-22 (Windows, 20 logical CPUs,
 # one process, no coverage instrumentation). Used only to balance parallel
@@ -117,6 +165,21 @@ def default_test_shards() -> int:
     return min(8, max(2, os.cpu_count() or 2))
 
 
+def configured_timeout_seconds(name: str, default: int) -> int:
+    """Return one positive timeout override in seconds."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        seconds = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer.") from exc
+    if seconds < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+    return seconds
+
+
 def _module_from_test_id(test_id: str) -> str:
     parts = str(test_id).split(".")
     module = next(
@@ -175,27 +238,76 @@ def _balanced_test_batches(
 
 
 def _build_test_plan(test_ids: list[str], requested_workers: int) -> dict:
-    workers = min(requested_workers, len(test_ids))
     weights = _test_weights(test_ids)
-    batches = _balanced_test_batches(test_ids, workers, weights=weights)
+    gui_ids = sorted(
+        test_id
+        for test_id in test_ids
+        if _module_from_test_id(test_id) in GUI_SENSITIVE_TEST_MODULES
+    )
+    core_ids = sorted(set(test_ids) - set(gui_ids))
+    batches = []
+    groups = []
+
+    def add_group(name: str, group_batches: list[list[str]], workers: int) -> None:
+        indexes = []
+        for test_batch in group_batches:
+            index = len(batches)
+            indexes.append(index)
+            batches.append({
+                "index": index,
+                "pool": name,
+                "estimatedSeconds": round(
+                    sum(weights[test_id] for test_id in test_batch),
+                    3,
+                ),
+                "testIds": test_batch,
+            })
+        groups.append({
+            "name": name,
+            "workers": workers,
+            "serial": workers == 1,
+            "batchIndexes": indexes,
+            "testCount": sum(len(batch) for batch in group_batches),
+        })
+
+    if gui_ids:
+        gui_by_module: dict[str, list[str]] = {}
+        for test_id in gui_ids:
+            gui_by_module.setdefault(
+                _module_from_test_id(test_id),
+                [],
+            ).append(test_id)
+        add_group(
+            "application-gui",
+            [gui_by_module[module] for module in sorted(gui_by_module)],
+            1,
+        )
+    core_workers = min(requested_workers, len(core_ids)) if core_ids else 0
+    if core_ids:
+        add_group(
+            "application-core",
+            _balanced_test_batches(core_ids, core_workers, weights=weights),
+            core_workers,
+        )
+
+    modules = sorted({_module_from_test_id(test_id) for test_id in test_ids})
+    missing_baselines = sorted(set(modules) - set(TEST_MODULE_SECONDS))
     return {
-        "contractVersion": 1,
+        "contractVersion": 2,
         "testCount": len(test_ids),
         "uniqueTestCount": len(set(test_ids)),
         "requestedWorkers": requested_workers,
-        "workers": workers,
+        "workers": core_workers,
+        "guiTestCount": len(gui_ids),
+        "coreTestCount": len(core_ids),
         "batchCount": len(batches),
-        "batches": [
-            {
-                "index": index,
-                "estimatedSeconds": round(
-                    sum(weights[test_id] for test_id in batch),
-                    3,
-                ),
-                "testIds": batch,
-            }
-            for index, batch in enumerate(batches)
-        ],
+        "groups": groups,
+        "batches": batches,
+        "timingBaseline": {
+            "collectedModules": modules,
+            "measuredModules": sorted(set(modules) & set(TEST_MODULE_SECONDS)),
+            "missingModules": missing_baselines,
+        },
     }
 
 
@@ -207,15 +319,37 @@ def _write_json(path: Path, value: object) -> None:
     )
 
 
-def _failed_batch_metadata(index: int, expected: int, reason: str) -> dict:
+def _write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value, encoding="utf-8")
+
+
+def _failed_batch_metadata(
+    index: int,
+    test_ids: list[str],
+    reason: str,
+    *,
+    pool: str,
+    exception_type: str = "InfrastructureError",
+) -> dict:
     return {
+        "contractVersion": 2,
         "batchIndex": index,
-        "expectedCount": expected,
+        "pool": pool,
+        "expectedCount": len(test_ids),
+        "assignedTestIds": list(test_ids),
         "testsRun": 0,
         "complete": False,
         "successful": False,
-        "failures": 0,
-        "errors": 1,
+        "failureCount": 0,
+        "errorCount": 1,
+        "failures": [],
+        "errors": [{
+            "testId": "",
+            "exceptionType": exception_type,
+            "message": reason,
+            "traceback": "",
+        }],
         "skipped": 0,
         "durationMs": 0,
         "testTimings": [],
@@ -242,6 +376,8 @@ def _run_coverage_batch(
     plan_path: Path,
     result_path: Path,
     deadline: float,
+    batch_timeout: int = APPLICATION_BATCH_TIMEOUT_SECONDS,
+    pool: str = "application-core",
 ) -> tuple[dict, dict, str]:
     command = [
         sys.executable, "-m", "coverage", "run", "--parallel-mode",
@@ -255,13 +391,33 @@ def _run_coverage_batch(
     env.update({"QT_QPA_PLATFORM": "offscreen", "MPLBACKEND": "qtagg"})
     started = time.monotonic()
     remaining = deadline - started
+    log_path = result_path.with_suffix(".log")
     if remaining <= 0:
-        evidence = "The global one-hour application test budget expired before launch."
+        evidence = "The global application test budget expired before launch."
+        metadata = _failed_batch_metadata(
+            index,
+            test_ids,
+            evidence,
+            pool=pool,
+            exception_type="GlobalTimeout",
+        )
+        metadata["timeoutReason"] = "global_timeout_before_launch"
+        metadata["effectiveTimeoutSeconds"] = 0
+        metadata["wallDurationMs"] = 0
+        _write_json(result_path, metadata)
+        _write_text(log_path, evidence + "\n")
         return (
             _batch_step(index, batch_count, command, "failed", 0, evidence),
-            _failed_batch_metadata(index, len(test_ids), evidence),
+            metadata,
             evidence,
         )
+    effective_timeout = min(float(batch_timeout), remaining)
+    timeout_reason = (
+        "batch_timeout"
+        if float(batch_timeout) <= remaining
+        else "remaining_global_budget"
+    )
+    output = ""
     try:
         completed = subprocess.run(
             command,
@@ -270,7 +426,7 @@ def _run_coverage_batch(
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=max(1, int(remaining)),
+            timeout=max(0.001, effective_timeout),
             check=False,
         )
         output = completed.stdout or ""
@@ -295,81 +451,149 @@ def _run_coverage_batch(
             else "failed"
         )
         summary = (
-            f"Batch {index + 1}/{batch_count}: expected={len(test_ids)}, "
+            f"Batch {index + 1}/{batch_count} ({pool}): expected={len(test_ids)}, "
             f"ran={metadata.get('testsRun')}, complete={complete}, "
             f"returncode={completed.returncode}."
         )
-        evidence = f"{output[-7000:]}\n{summary}".strip()
+        full_log = f"{output}{'' if output.endswith(chr(10)) or not output else chr(10)}{summary}\n"
+        evidence = full_log[-8000:].strip()
     except subprocess.TimeoutExpired as exc:
         status = "failed"
         raw_output = exc.stdout or ""
         if isinstance(raw_output, bytes):
             raw_output = raw_output.decode(errors="replace")
-        evidence = (
-            f"{raw_output[-6000:]}\nTimed out at the global application test deadline."
-        ).strip()
-        metadata = _failed_batch_metadata(index, len(test_ids), evidence)
-        output = evidence
-    except OSError as exc:
+        elapsed = time.monotonic() - started
+        timeout_message = (
+            f"Batch {index + 1}/{batch_count} ({pool}) timed out after "
+            f"{elapsed:.3f}s; reason={timeout_reason}; "
+            f"assigned_tests={len(test_ids)}."
+        )
+        assigned = "\n".join(f"- {test_id}" for test_id in test_ids)
+        full_log = (
+            f"{raw_output}{'' if raw_output.endswith(chr(10)) or not raw_output else chr(10)}"
+            f"{timeout_message}\nAssigned test IDs:\n{assigned}\n{timeout_message}\n"
+        )
+        evidence = full_log[-8000:].strip()
+        metadata = _failed_batch_metadata(
+            index,
+            test_ids,
+            timeout_message,
+            pool=pool,
+            exception_type=(
+                "BatchTimeout"
+                if timeout_reason == "batch_timeout"
+                else "GlobalTimeout"
+            ),
+        )
+        metadata["timeoutReason"] = timeout_reason
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         status = "failed"
-        evidence = f"Coverage batch infrastructure failure: {exc}"
-        metadata = _failed_batch_metadata(index, len(test_ids), evidence)
-        output = evidence
+        message = f"Coverage batch infrastructure failure: {type(exc).__name__}: {exc}"
+        full_log = (
+            f"{output}{'' if output.endswith(chr(10)) or not output else chr(10)}"
+            f"{message}\n"
+        )
+        evidence = full_log[-8000:].strip()
+        metadata = _failed_batch_metadata(
+            index,
+            test_ids,
+            message,
+            pool=pool,
+            exception_type=type(exc).__name__,
+        )
     duration_ms = (time.monotonic() - started) * 1000
+    metadata["contractVersion"] = 2
+    metadata["pool"] = pool
+    metadata["assignedTestIds"] = list(test_ids)
+    metadata["effectiveTimeoutSeconds"] = round(effective_timeout, 3)
     metadata["wallDurationMs"] = round(duration_ms, 3)
+    _write_json(result_path, metadata)
+    _write_text(log_path, full_log)
     return (
         _batch_step(index, batch_count, command, status, duration_ms, evidence),
         metadata,
-        output,
+        full_log,
     )
 
 
 def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
-                       timeout: int) -> tuple[list[dict], bool]:
+                       timeout: int,
+                       batch_timeout: int = APPLICATION_BATCH_TIMEOUT_SECONDS,
+                       ) -> tuple[list[dict], bool]:
     started = time.monotonic()
     deadline = started + timeout
-    workers = int(plan["workers"])
     batches = plan["batches"]
     outcomes: dict[int, tuple[dict, dict]] = {}
+    batch_by_index = {int(batch["index"]): batch for batch in batches}
+    groups = plan.get("groups") or [{
+        "name": "application-core",
+        "workers": max(1, int(plan.get("workers", 1))),
+        "batchIndexes": sorted(batch_by_index),
+    }]
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {
-            executor.submit(
-                _run_coverage_batch,
-                int(batch["index"]),
-                list(batch["testIds"]),
-                len(batches),
-                plan_path,
-                result_dir / f"batch-{int(batch['index']):03d}.json",
-                deadline,
-            ): batch
-            for batch in batches
-        }
-        for future in as_completed(futures):
-            batch = futures[future]
-            index = int(batch["index"])
-            try:
-                step, metadata, output = future.result()
-            except Exception as exc:
-                evidence = f"Coverage batch future failed: {type(exc).__name__}: {exc}"
-                command = ["coverage batch", str(index)]
-                step = _batch_step(
-                    index,
+    for group in groups:
+        pool = str(group["name"])
+        workers = max(1, int(group["workers"]))
+        group_batches = [
+            batch_by_index[int(index)]
+            for index in group["batchIndexes"]
+        ]
+        print(
+            f"\n=== {pool.upper()} "
+            f"(workers={workers}, batches={len(group_batches)}) ==="
+        )
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    _run_coverage_batch,
+                    int(batch["index"]),
+                    list(batch["testIds"]),
                     len(batches),
-                    command,
-                    "failed",
-                    0,
-                    evidence,
-                )
-                metadata = _failed_batch_metadata(
-                    index,
-                    len(batch["testIds"]),
-                    evidence,
-                )
-                output = evidence
-            outcomes[index] = (step, metadata)
-            print(f"\n== {step['id']} ({step['status']}) ==")
-            print(output[-6000:], end="" if output.endswith("\n") else "\n")
+                    plan_path,
+                    result_dir / f"batch-{int(batch['index']):03d}.json",
+                    deadline,
+                    batch_timeout,
+                    pool,
+                ): batch
+                for batch in group_batches
+            }
+            for future in as_completed(futures):
+                batch = futures[future]
+                index = int(batch["index"])
+                try:
+                    step, metadata, output = future.result()
+                except Exception as exc:
+                    evidence = (
+                        f"Coverage batch future failed: {type(exc).__name__}: {exc}"
+                    )
+                    command = ["coverage batch", str(index)]
+                    step = _batch_step(
+                        index,
+                        len(batches),
+                        command,
+                        "failed",
+                        0,
+                        evidence,
+                    )
+                    metadata = _failed_batch_metadata(
+                        index,
+                        list(batch["testIds"]),
+                        evidence,
+                        pool=pool,
+                        exception_type=type(exc).__name__,
+                    )
+                    _write_json(
+                        result_dir / f"batch-{index:03d}.json",
+                        metadata,
+                    )
+                    _write_text(
+                        result_dir / f"batch-{index:03d}.log",
+                        evidence + "\n",
+                    )
+                    output = evidence
+                outcomes[index] = (step, metadata)
+                print(f"\n== {step['id']} ({step['status']}) ==")
+                print(output[-6000:], end="" if output.endswith("\n") else "\n")
 
     wall_duration_ms = round((time.monotonic() - started) * 1000, 3)
     ordered = [outcomes[index] for index in range(len(batches))]
@@ -394,9 +618,28 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
         and sorted(observed_ids) == sorted(expected_ids)
     )
     successful = coverage_complete and all(step["status"] == "passed" for step in steps)
+    test_timings = [
+        timing
+        for result in batch_results
+        for timing in result.get("testTimings", [])
+        if isinstance(timing, dict)
+    ]
+    module_timings: dict[str, dict[str, float | int]] = {}
+    for timing in test_timings:
+        module = _module_from_test_id(str(timing["id"]))
+        aggregate = module_timings.setdefault(
+            module,
+            {"testCount": 0, "durationMs": 0.0},
+        )
+        aggregate["testCount"] = int(aggregate["testCount"]) + 1
+        aggregate["durationMs"] = round(
+            float(aggregate["durationMs"]) + float(timing.get("durationMs", 0)),
+            3,
+        )
     summary = {
-        "contractVersion": 1,
-        "workers": workers,
+        "contractVersion": 2,
+        "groups": groups,
+        "coreWorkers": int(plan.get("workers", 0)),
         "batchCount": len(batches),
         "testCount": len(expected_ids),
         "uniqueTestCount": len(set(expected_ids)),
@@ -406,16 +649,39 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
         "successful": successful,
         "wallDurationMs": wall_duration_ms,
         "batches": batch_results,
-        "testTimings": [
-            timing
+        "testTimings": test_timings,
+        "moduleTimings": module_timings,
+        "failures": [
+            {**issue, "batchIndex": result.get("batchIndex"), "pool": result.get("pool")}
             for result in batch_results
-            for timing in result.get("testTimings", [])
-            if isinstance(timing, dict)
+            for issue in result.get("failures", [])
+            if isinstance(issue, dict)
+        ],
+        "errors": [
+            {**issue, "batchIndex": result.get("batchIndex"), "pool": result.get("pool")}
+            for result in batch_results
+            for issue in result.get("errors", [])
+            if isinstance(issue, dict)
         ],
     }
     _write_json(APPLICATION_TIMINGS_PATH, summary)
+    _write_json(result_dir / "summary.json", summary)
+    issues = [*summary["failures"], *summary["errors"]]
+    if issues:
+        print("\n=== APPLICATION TEST FAILURES ===")
+        for issue in issues:
+            print(f"batch: {int(issue['batchIndex']) + 1}/{len(batches)} ({issue['pool']})")
+            print(f"test: {issue.get('testId') or '<batch infrastructure>'}")
+            print(f"exception: {issue.get('exceptionType') or 'Unknown'}")
+            print(f"message: {issue.get('message') or ''}")
+            traceback_text = str(issue.get("traceback") or "").strip()
+            if traceback_text:
+                print("traceback:")
+                print(traceback_text)
     summary_evidence = (
-        f"workers={workers}, batches={len(batches)}, "
+        f"gui_tests={plan.get('guiTestCount', 0)}, "
+        f"core_tests={plan.get('coreTestCount', len(expected_ids))}, "
+        f"core_workers={plan.get('workers', 0)}, batches={len(batches)}, "
         f"expected={len(expected_ids)}, ran={len(observed_ids)}, "
         f"unique={len(set(observed_ids))}, coverage_complete={coverage_complete}, "
         f"wall={wall_duration_ms / 1000:.3f}s; "
@@ -460,6 +726,34 @@ def _application_steps() -> list[dict]:
         "durationMs": 0,
         "evidence": worker_error or f"Requested {requested_workers} application test workers.",
     })
+    try:
+        global_timeout = configured_timeout_seconds(
+            "APPLICATION_TEST_TIMEOUT_SECONDS",
+            APPLICATION_TEST_TIMEOUT_SECONDS,
+        )
+        batch_timeout = configured_timeout_seconds(
+            "APPLICATION_BATCH_TIMEOUT_SECONDS",
+            APPLICATION_BATCH_TIMEOUT_SECONDS,
+        )
+        timeout_error = ""
+    except ValueError as exc:
+        global_timeout = 0
+        batch_timeout = 0
+        timeout_error = str(exc)
+    verification.append({
+        "id": "application_timeout_configuration",
+        "command": (
+            "validate APPLICATION_TEST_TIMEOUT_SECONDS and "
+            "APPLICATION_BATCH_TIMEOUT_SECONDS"
+        ),
+        "status": "failed" if timeout_error else "passed",
+        "required": True,
+        "durationMs": 0,
+        "evidence": timeout_error or (
+            f"global={global_timeout}s, per_batch={batch_timeout}s; "
+            "effective timeout is the smaller remaining budget."
+        ),
+    })
 
     coverage_commands = {
         "coverage_combine": f"{sys.executable} -m coverage combine",
@@ -493,18 +787,19 @@ def _application_steps() -> list[dict]:
         for step_id, command in coverage_commands.items():
             verification.append(not_run_step(step_id, command, reason))
 
-    if worker_error:
-        append_unavailable_test_steps(worker_error)
+    configuration_error = worker_error or timeout_error
+    if configuration_error:
+        append_unavailable_test_steps(configuration_error)
         verification.append(run_step(
             "agent_core", [sys.executable, ".agents/checks/verify_agent_core.py"]
         ))
         return verification
 
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="application-test-plan-",
-        dir=RESULT_DIR,
-    ) as directory:
+    if APPLICATION_RESULT_DIR.exists():
+        shutil.rmtree(APPLICATION_RESULT_DIR)
+    APPLICATION_RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    with nullcontext(APPLICATION_RESULT_DIR) as directory:
         run_dir = Path(directory)
         collection_path = run_dir / "collection.json"
         plan_path = run_dir / "plan.json"
@@ -546,6 +841,8 @@ def _application_steps() -> list[dict]:
                 ):
                     raise ValueError("Collected application test IDs are incomplete or invalid.")
                 plan = _build_test_plan(test_ids, requested_workers)
+                plan["globalTimeoutSeconds"] = global_timeout
+                plan["batchTimeoutSeconds"] = batch_timeout
                 flattened = [
                     test_id
                     for batch in plan["batches"]
@@ -566,7 +863,11 @@ def _application_steps() -> list[dict]:
                 "durationMs": 0,
                 "evidence": plan_error or (
                     f"tests={plan['testCount']}, unique={plan['uniqueTestCount']}, "
-                    f"workers={plan['workers']}, batches={plan['batchCount']}"
+                    f"gui={plan['guiTestCount']} (workers=1), "
+                    f"core={plan['coreTestCount']} (workers={plan['workers']}), "
+                    f"batches={plan['batchCount']}, "
+                    f"missing_timing_baselines="
+                    f"{plan['timingBaseline']['missingModules']}"
                 ),
             })
             if plan_error:
@@ -606,7 +907,8 @@ def _application_steps() -> list[dict]:
                         plan,
                         plan_path,
                         run_dir,
-                        APPLICATION_TEST_TIMEOUT_SECONDS,
+                        global_timeout,
+                        batch_timeout,
                     )
                     verification.extend(batch_steps)
                     if coverage_complete:

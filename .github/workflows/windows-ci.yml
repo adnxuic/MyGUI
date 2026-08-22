@@ -32,6 +32,7 @@ jobs:
           if-no-files-found: error
           path: |
             build/agent-results/*.json
+            build/agent-results/application/**
             .coverage
 
   agent-engineering:

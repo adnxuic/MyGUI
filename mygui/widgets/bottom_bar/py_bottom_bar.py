@@ -38,6 +38,8 @@ class PyBottomBar(QFrame):
     def __init__(self):
         super().__init__()
 
+        self._cleaned_up = False
+
         self.setObjectName("bottom_bar")
         qss_file = load_qss_resource("mygui/widgets/bottom_bar/style.qss")
         self.setStyleSheet(qss_file)
@@ -52,7 +54,15 @@ class PyBottomBar(QFrame):
         self.state_bar = PyStateBar(_feature_indicators())
         self.layout.addWidget(self.state_bar, stretch=0)
 
-        self.destroyed.connect(self.state_bar.cleanup)
+        self.destroyed.connect(self.cleanup)
+
+    def cleanup(self, *_args):
+        """Detach process-wide feature listeners exactly once."""
+
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        self.state_bar.cleanup()
 
     def show_message(self, message, level="info"):
         """Show message."""
