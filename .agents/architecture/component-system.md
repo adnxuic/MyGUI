@@ -13,6 +13,13 @@ Artist, Controller state dictionary, or a parallel UI state model.
 The corresponding scanner rules are `ARCH-SECOND-COMPONENT-STATE` and
 `ARCH-CONTROLLER-BYPASS`. The broader invariant is `CORE-COMPONENT-STATE`.
 
+Explicit user-intent entry points also pass through the project
+`FigureHistoryService`. History observes the committed Controller/Registry
+projection; it does not become a second business-state authority. Undo/Redo
+re-enters the same Controller, Service, materializer, and deletion paths under
+recording suspension. Direct scripted Service calls remain non-history
+operations unless their caller deliberately opens a history boundary.
+
 ## Component creation
 
 - Prefer existing `ComponentKind` and `ComponentRole`; adding persisted kinds,

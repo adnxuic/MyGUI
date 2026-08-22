@@ -182,9 +182,17 @@ class DebouncedTextBinding(QObject):
         blocker = QSignalBlocker(self.editor)
         if isinstance(self.editor, QPlainTextEdit):
             self.editor.setPlainText(text)
+            self.editor.document().setModified(False)
         else:
             self.editor.setText(text)
+            self.editor.setModified(False)
         del blocker
+
+    def _mark_committed(self) -> None:
+        if isinstance(self.editor, QPlainTextEdit):
+            self.editor.document().setModified(False)
+        else:
+            self.editor.setModified(False)
 
     def _queue(self, *_args) -> None:
         self._timer.start()
@@ -229,6 +237,7 @@ class DebouncedTextBinding(QObject):
                 self.rejected.emit(candidate)
                 return False
             self._last_valid_text = candidate
+            self._mark_committed()
             self.applied.emit(candidate)
             return True
         if not modification_succeeded(result):
@@ -245,6 +254,7 @@ class DebouncedTextBinding(QObject):
         elif status != "noop":
             status_messages.show_success(message or "Text updated.")
         self._last_valid_text = candidate
+        self._mark_committed()
         self.applied.emit(candidate)
         return True
 

@@ -41,6 +41,12 @@ target and produces one error result.
 - Sections, Inputs, containers, repository bindings, TeX/MATLAB listeners, and
   asynchronous callbacks detach in idempotent `dispose()` paths.
 
+Project Undo/Redo shortcuts are application-level only after resolving the
+active Figure project. An editable `QLineEdit`, `QTextEdit`, or
+`QPlainTextEdit` with an uncommitted local buffer keeps native text history;
+committed Inspector values and spin-box edits use project history. The Figure
+toolbar actions and Table toolbar actions bind the same per-project stack.
+
 These are enforced by `QT-TIMER-OWNERSHIP`, `QT-THREAD-LIFECYCLE`, and
 `QT-SIGNAL-REBIND`. Unproven ownership or shutdown paths are emitted as gray
 boundaries for review.

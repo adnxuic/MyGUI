@@ -50,6 +50,7 @@ nav:
   - Home: index.md
   - Getting Started:
       - GUI Workbench: workbench.md
+      - Project Undo and Redo: undo-redo.md
       - Keyboard and Mouse Reference: keyboard-and-mouse-reference.md
       - Bottom Bar: bottom-bar.md
   - Working with Data:

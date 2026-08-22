@@ -22,6 +22,7 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 - `mygui/widgets/`, `mygui/figuremodify/`, and `mygui/database/` retain their
   current UI, figure-domain, and data responsibilities. New files follow the
   nearest existing module.
+- Harness-specific execution and invocation policy lives in the corresponding adapter directory. Codex work must also follow `.codex/README.md`; DSH implementation policy remains under `.dsh/`.
 
 ## Authoritative Runtime Boundaries
 
@@ -99,6 +100,14 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   removable components declare `REMOVE` and exactly one handler. Deletion is a
   prepared all-or-nothing transaction and post-delete selection is computed
   from the confirmed deletion set.
+- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by
+  its `TableRepository` entry for one chronological Table/Figure history.
+  Figure commands retain immutable `ComponentState` deltas plus explicit
+  runtime mementos, never Artists, Controllers, QWidgets, or whole Figures;
+  replay enters through Controllers, domain Services, materializers, and
+  `DeletionCoordinator`. Restore, table-driven refresh, and replay are
+  recording-suspended. History is runtime-only, is absent from schema v11,
+  and is invalidated if a failed replay cannot prove a safe cursor.
 - **CORE-PERSISTENCE-V11:** Persist component state only through the exact
   integer schema-v11 component tree. UI profiles, widgets, callbacks, tree
   keys, and expansion/selection state never enter project files. Only strict

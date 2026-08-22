@@ -2,15 +2,21 @@
 
 from typing import Any, Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
     QFrame,
     QInputDialog,
+    QLineEdit,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QStackedWidget,
     QTabWidget,
+    QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 from mygui import status_messages
 from mygui.database import ColumnRef, TableRepository, validate_component_name
@@ -23,6 +29,82 @@ from mygui.widgets.fig_control_window.figure_inspector import (
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.resources import load_qss_resource
+
+
+class _ProjectHistoryShortcutFilter(QObject):
+    """Route project history keys while preserving native text editing."""
+
+    def __init__(self, figure_window: "PyFigureWindow") -> None:
+        super().__init__(figure_window)
+        self.figure_window = figure_window
+
+    @staticmethod
+    def _inside_spin_box(widget: QWidget) -> bool:
+        current = widget
+        while current is not None:
+            if isinstance(current, QAbstractSpinBox):
+                return True
+            current = current.parentWidget()
+        return False
+
+    @classmethod
+    def _native_text_history_available(
+        cls,
+        widget: QWidget,
+        *,
+        redo: bool,
+    ) -> bool:
+        if cls._inside_spin_box(widget):
+            return False
+        if isinstance(widget, QLineEdit):
+            available = (
+                widget.isRedoAvailable()
+                if redo
+                else widget.isUndoAvailable()
+            )
+            return widget.isModified() and available
+        if isinstance(widget, (QTextEdit, QPlainTextEdit)):
+            document = widget.document()
+            available = (
+                document.isRedoAvailable()
+                if redo
+                else document.isUndoAvailable()
+            )
+            return document.isModified() and available
+        return False
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        if event.type() != QEvent.Type.KeyPress:
+            return False
+        modifiers = event.modifiers()
+        control = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+        shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+        if not control or bool(modifiers & Qt.KeyboardModifier.AltModifier):
+            return False
+        key = event.key()
+        redo = key == Qt.Key.Key_Y or (key == Qt.Key.Key_Z and shift)
+        if key != Qt.Key.Key_Z and not redo:
+            return False
+
+        application = QApplication.instance()
+        focus = application.focusWidget() if application is not None else None
+        if focus is not None and focus.window() is not self.figure_window.window():
+            return False
+        if focus is not None and self._native_text_history_available(
+            focus,
+            redo=redo,
+        ):
+            return False
+
+        canvas = self.figure_window.current_canva
+        if canvas is None:
+            return False
+        if redo:
+            canvas.figure_history.redo()
+        else:
+            canvas.figure_history.undo()
+        event.accept()
+        return True
 
 class FigureTabWidget(QTabWidget):
     """Provide the figure tab widget Qt widget."""
@@ -105,6 +187,10 @@ class PyFigureWindow(QFrame):
         self.tabwindow = FigureTabWidget(self)
         self.tabwindow.currentChanged.connect(self.change_current_canvas)
         self.project_metadata = ProjectMetadataService(self, self.repository)
+        self._history_shortcut_filter = _ProjectHistoryShortcutFilter(self)
+        application = QApplication.instance()
+        if application is not None:
+            application.installEventFilter(self._history_shortcut_filter)
 
         self.content_stack.addWidget(self.empty_state)
         self.content_stack.addWidget(self.tabwindow)
@@ -265,6 +351,7 @@ class PyFigureWindow(QFrame):
             snapshot = project_snapshot(self, canvas=canvas)
         if fingerprint is None:
             fingerprint = self._snapshot_fingerprint(snapshot)
+        self.repository.undo_stack(canvas.project_id).setClean()
         self._clean_fingerprints[canvas.project_id] = fingerprint
 
     def is_canvas_dirty(self, canvas: PyFigureCanvas) -> bool:
@@ -334,10 +421,13 @@ class PyFigureWindow(QFrame):
         canvas = self.current_canva
         if canvas is None or canvas.current_axes_component_id is None:
             raise ValueError("Select an axes before committing a chart color.")
-        result = canvas.axes_commands.commit_color_selection(
-            canvas.current_axes_component_id,
-            selection,
-            preview_cycle=preview_cycle,
+        result = canvas.figure_history.perform(
+            "Choose Chart Color",
+            lambda: canvas.axes_commands.commit_color_selection(
+                canvas.current_axes_component_id,
+                selection,
+                preview_cycle=preview_cycle,
+            ),
         )
         return canvas.message_presenter.present(result)
 
@@ -546,7 +636,13 @@ class PyFigureWindow(QFrame):
     def rename_project(self, project_id: str, new_name: str):
         """Rename project."""
 
-        self.project_metadata.rename(project_id, new_name)
+        canvas = self.canvas.get(str(project_id))
+        if canvas is None:
+            raise KeyError(f"Unknown Figure project: {project_id}")
+        return canvas.figure_history.perform(
+            "Rename Project",
+            lambda: self.project_metadata.rename(project_id, new_name),
+        )
 
     def load_project_figure_snapshot(
         self,

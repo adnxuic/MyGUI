@@ -35,13 +35,19 @@ latest table values through the saved expressions.
 
 ## Editing commands
 
-Each project owns a 50-command undo stack. Cell edits, clear, paste, row sorting, type changes, and row/column insert, delete, and move actions are undoable. A multi-cell paste and a workbook import are each one command.
+Each project owns one 50-command timeline shared by Table and Figure edits.
+Cell edits, clear, paste, row sorting, type changes, and row/column insert,
+delete, and move actions are undoable. A multi-cell paste and a workbook import
+are each one command. See [Project Undo and Redo](undo-redo.md).
 
 TSV copy/paste accepts LF, CRLF, and CR line endings. Paste validates all locked column types before changing the document and automatically adds required rows or columns.
 
 ## Table UI actions
 
-The Table toolbar provides Undo, Redo, Rename Sheet, Delete Sheet, Add Row, Delete Row, Move Row Up, Move Row Down, Add Column, and Delete Column for the active Sheet.
+The Table toolbar provides Undo, Redo, Rename Sheet, Delete Sheet, Add Row,
+Delete Row, Move Row Up, Move Row Down, Add Column, and Delete Column for the
+active Sheet. Undo and Redo may name a Figure command because they use the
+active project's shared timeline.
 
 - The column-header right-click menu offers Rename Column, Change Type, Add Column Right, Delete Column, Move Left, Move Right, Sort Rows Ascending, and Sort Rows Descending.
 - The row-header right-click menu offers Insert Row Above, Delete Row, Move Up, and Move Down.

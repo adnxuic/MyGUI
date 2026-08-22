@@ -28,7 +28,10 @@ rejected before application state is published.
 - `table` is the typed table document.
 - `figure` contains only `root_component_id` and `components`; legacy axes/chart arrays are not written alongside the tree.
 
-Window geometry, splitter sizes, table visibility, command selection, and optional-integration runtime state are application preferences rather than project fields.
+Window geometry, splitter sizes, table visibility, Undo/Redo commands and stack
+cursor, command selection, component selection, and optional-integration
+runtime state are not project fields. A restored project therefore starts with
+an empty history while preserving the exact saved Table and Figure state.
 
 ## Table document
 

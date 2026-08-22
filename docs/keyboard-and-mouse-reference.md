@@ -2,6 +2,17 @@
 
 Keyboard shortcuts and mouse interactions for MyGUI controls. Shortcuts apply to the widget that currently has focus; the same key can mean different things in different widgets.
 
+## Project history
+
+| Key | Action |
+| --- | --- |
+| Ctrl+Z | Undoes the latest committed Table or Figure command in the active project. Uncommitted text in a text or cell editor uses native text Undo first. |
+| Ctrl+Y | Redoes the next committed command in the active project. Uncommitted text uses native text Redo first. |
+| Ctrl+Shift+Z | Redoes the next committed command in the active project. |
+
+The Table and Figure toolbar actions use the same per-project timeline. See
+[Project Undo and Redo](undo-redo.md).
+
 ## Table view
 
 | Key or mouse action | Action |
@@ -43,6 +54,7 @@ Every project tab contains one matplotlib navigation toolbar above its canvas:
 | Zoom | Toggles zoom-to-rectangle mode: drag a rectangle to zoom into it. |
 | Subplots | Opens the subplot configuration dialog, whose sliders set the Figure margins (left, right, bottom, top) and the horizontal and vertical spacing between Axes. |
 | Save | Opens the image save dialog (PNG by default). |
+| Undo / Redo | Steps through committed Table and Figure commands for this project. |
 
 ### Keyboard shortcuts
 

@@ -1,10 +1,17 @@
 """Host Matplotlib figures and register their editable components."""
 
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, Optional
 from PySide6.QtCore import QTimer, Qt, Signal
-from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDialogButtonBox,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorPanel,
@@ -31,6 +38,7 @@ from mygui.figuremodify.component_services import (
     InterpolationService,
     TextRenderService,
 )
+from mygui.figuremodify.history import FigureHistoryService
 from mygui.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
 from mygui.widgets.figure_canvas.project_metadata import ProjectMetadataPort
 from mygui.widgets.figure_canvas.component_materializers import (
@@ -118,6 +126,136 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
 import numpy as np
+
+
+def _history_command(text: str, *, scan_all: bool = False):
+    """Record one public Canvas operation as a single user intent."""
+
+    def decorate(method):
+        @wraps(method)
+        def wrapped(self, *args, **kwargs):
+            history = getattr(self, "figure_history", None)
+            if history is None:
+                return method(self, *args, **kwargs)
+            return history.perform(
+                text,
+                lambda: method(self, *args, **kwargs),
+                scan_all=scan_all,
+            )
+
+        return wrapped
+
+    return decorate
+
+
+class _ProjectNavigationToolbar(NavigationToolbar):
+    """Add project history boundaries to persisted canvas view actions."""
+
+    def __init__(self, canvas, parent, history) -> None:
+        self._project_history = history
+        super().__init__(canvas, parent)
+
+    def home(self, *args):
+        return self._project_history.perform(
+            "Reset Figure View",
+            lambda: super(_ProjectNavigationToolbar, self).home(*args),
+            scan_all=True,
+        )
+
+    def back(self, *args):
+        return self._project_history.perform(
+            "Back Figure View",
+            lambda: super(_ProjectNavigationToolbar, self).back(*args),
+            scan_all=True,
+        )
+
+    def forward(self, *args):
+        return self._project_history.perform(
+            "Forward Figure View",
+            lambda: super(_ProjectNavigationToolbar, self).forward(*args),
+            scan_all=True,
+        )
+
+    def edit_parameters(self):
+        result = super().edit_parameters()
+        dialog = getattr(self, "_fedit_dialog", None)
+        if dialog is None or bool(
+            dialog.property("mygui_history_connected")
+        ):
+            return result
+        dialog.setProperty("mygui_history_connected", True)
+        apply_button = dialog.bbox.button(
+            QDialogButtonBox.StandardButton.Apply
+        )
+        ok_button = dialog.bbox.button(
+            QDialogButtonBox.StandardButton.Ok
+        )
+        if apply_button is not None:
+            apply_button.pressed.connect(
+                lambda: self._project_history.begin_interaction(
+                    "Customize Figure"
+                )
+            )
+            apply_button.clicked.connect(
+                self._project_history.end_interaction
+            )
+        if ok_button is not None:
+            ok_button.pressed.connect(
+                lambda: self._project_history.begin_interaction(
+                    "Customize Figure"
+                )
+            )
+            dialog.accepted.connect(self._project_history.end_interaction)
+        dialog.rejected.connect(self._project_history.cancel_interaction)
+        return result
+
+    def press_pan(self, event):
+        started = self._project_history.begin_interaction("Pan Figure View")
+        try:
+            result = super().press_pan(event)
+        except Exception:
+            if started:
+                self._project_history.cancel_interaction()
+            raise
+        if started and self._pan_info is None:
+            self._project_history.cancel_interaction()
+        return result
+
+    def release_pan(self, event):
+        active = self._pan_info is not None
+        try:
+            result = super().release_pan(event)
+        except Exception:
+            if active:
+                self._project_history.cancel_interaction()
+            raise
+        if active:
+            self._project_history.end_interaction()
+        return result
+
+    def press_zoom(self, event):
+        started = self._project_history.begin_interaction("Zoom Figure View")
+        try:
+            result = super().press_zoom(event)
+        except Exception:
+            if started:
+                self._project_history.cancel_interaction()
+            raise
+        if started and self._zoom_info is None:
+            self._project_history.cancel_interaction()
+        return result
+
+    def release_zoom(self, event):
+        active = self._zoom_info is not None
+        try:
+            result = super().release_zoom(event)
+        except Exception:
+            if active:
+                self._project_history.cancel_interaction()
+            raise
+        if active:
+            self._project_history.end_interaction()
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +383,12 @@ class PyFigureCanvas(QWidget):
             color_ledger=self.color_consumption_ledger,
         )
         self.deletion_coordinator = DeletionCoordinator(self)
+        self.figure_history = FigureHistoryService(
+            repository=self.repository,
+            project_id=self.project_id,
+            canvas=self,
+            registry=self.component_registry,
+        )
         self._register_component_materializers(materializer_contracts)
         self.editor_registry.freeze()
         self.dependency_service = ComponentDependencyService(
@@ -268,6 +412,7 @@ class PyFigureCanvas(QWidget):
             in_axes=self.in_axes_service,
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
+            history=self.figure_history,
         )
         self.root_component_id = self._component_id("figure")
         source_root = self._source_component_state(self.root_component_id)
@@ -329,8 +474,21 @@ class PyFigureCanvas(QWidget):
 
         layout = QVBoxLayout()
 
-        toolbox = NavigationToolbar(self.canva, self)
+        toolbox = _ProjectNavigationToolbar(
+            self.canva,
+            self,
+            self.figure_history,
+        )
+        self.navigation_toolbar = toolbox
         toolbox.setObjectName("figure_toolbar")
+        toolbox.addSeparator()
+        stack = self.repository.undo_stack(self.project_id)
+        self.undo_action = stack.createUndoAction(self, "Undo")
+        self.redo_action = stack.createRedoAction(self, "Redo")
+        self.undo_action.setObjectName("figure_undo_action")
+        self.redo_action.setObjectName("figure_redo_action")
+        toolbox.addAction(self.undo_action)
+        toolbox.addAction(self.redo_action)
 
         layout.addWidget(toolbox)
         layout.addWidget(self.scroArea)
@@ -854,6 +1012,7 @@ class PyFigureCanvas(QWidget):
         if self._selection_unsubscribe is not None:
             self._selection_unsubscribe()
             self._selection_unsubscribe = None
+        self.figure_history.dispose()
         self.message_presenter.close()
         self.component_registry.set_observer_failure_handler(None)
         self.component_editor_manager.close()
@@ -886,12 +1045,13 @@ class PyFigureCanvas(QWidget):
     def _table_changed(self, changes: TableChangeSet):
         if changes.project_id != self.project_id:
             return
-        results = self.chart_data_service.refresh_affected(
-            changes.changed_columns
-        )
-        pending_fits = self.fit_service.mark_sources_changed(
-            changes.changed_columns
-        )
+        with self.figure_history.suspend_recording():
+            results = self.chart_data_service.refresh_affected(
+                changes.changed_columns
+            )
+            pending_fits = self.fit_service.mark_sources_changed(
+                changes.changed_columns
+            )
         self._observer_failures.extend(
             self.chart_data_service.drain_observer_failures()
         )
@@ -1490,27 +1650,42 @@ class PyFigureCanvas(QWidget):
     ) -> bool:
         """Submit a stable-ID deletion request to the Canvas coordinator."""
 
-        request = DeletionRequest(
-            tuple(str(item) for item in component_ids),
-            anchor_id=anchor_id,
-            reason=DeleteReason(reason),
-        )
-        return self.deletion_coordinator.delete(
-            request,
-            role_label=role_label,
-        )
+        ids = tuple(str(item) for item in component_ids)
+        reason = DeleteReason(reason)
 
+        def operation() -> bool:
+            request = DeletionRequest(
+                ids,
+                anchor_id=anchor_id,
+                reason=reason,
+            )
+            return self.deletion_coordinator.delete(
+                request,
+                role_label=role_label,
+            )
+
+        if reason is DeleteReason.DATA_DEPENDENCY:
+            with self.figure_history.suspend_recording():
+                return operation()
+        count = len(ids)
+        label = str(role_label).replace("_", " ").title()
+        text = f"Delete {label}" if count == 1 else f"Delete {count} {label} Components"
+        return self.figure_history.perform(text, operation)
+
+    @_history_command("Create Axes Layout", scan_all=True)
     def create_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
         """Create a validated Axes layout through the domain service."""
 
         return self.axes_layout_service.create(spec)
 
+    @_history_command("Change Axes Layout", scan_all=True)
     def update_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
         """Safely update geometry for an existing persisted layout."""
 
         return self.axes_layout_service.update_geometry(spec)
 
     # Add custom curve
+    @_history_command("Create Function Curve")
     def add_curve(
         self,
         func_text: str,
@@ -1574,6 +1749,7 @@ class PyFigureCanvas(QWidget):
             self.color_library.record_recent(color)
         return line
 
+    @_history_command("Create Line")
     def add_component_line(
         self,
         x,
@@ -1621,6 +1797,7 @@ class PyFigureCanvas(QWidget):
         return line
 
     # Add line plot
+    @_history_command("Create Plot")
     def add_plot(
         self,
         x,
@@ -1674,6 +1851,7 @@ class PyFigureCanvas(QWidget):
         self._finish_created_component(controller)
         return line
 
+    @_history_command("Create Plots")
     def add_plots(
         self,
         x_ref: ColumnRef,
@@ -1711,6 +1889,7 @@ class PyFigureCanvas(QWidget):
         )
 
     # Add scatter plot
+    @_history_command("Create Scatter")
     def add_scatter(
         self,
         x,
@@ -1770,6 +1949,7 @@ class PyFigureCanvas(QWidget):
         self._finish_created_component(controller)
         return scatter
 
+    @_history_command("Create Scatters")
     def add_scatters(
         self,
         x_ref: ColumnRef,
@@ -1828,6 +2008,7 @@ class PyFigureCanvas(QWidget):
         )
 
     # Add fit curve
+    @_history_command("Create Fit Curve")
     def add_fit_curve(
         self,
         x,
@@ -1952,6 +2133,7 @@ class PyFigureCanvas(QWidget):
         return line
 
     # Add interpolation curve
+    @_history_command("Create Interpolation")
     def add_interpolate_curve(
         self,
         x,
@@ -2046,6 +2228,7 @@ class PyFigureCanvas(QWidget):
                 )
         return line
 
+    @_history_command("Create Interpolations")
     def add_interpolate_curves(
         self,
         x_ref: ColumnRef,
@@ -2118,6 +2301,7 @@ class PyFigureCanvas(QWidget):
             return tex_config.is_tex_enabled()
         return bool(usetex) and tex_config.is_tex_enabled()
 
+    @_history_command("Create Text")
     def add_text(
         self,
         x: float,
@@ -2167,6 +2351,7 @@ class PyFigureCanvas(QWidget):
         self._finish_created_component(controller)
         return text_artist
 
+    @_history_command("Create Text")
     def add_global_text(
         self,
         x: float,
@@ -2214,6 +2399,7 @@ class PyFigureCanvas(QWidget):
         self._finish_created_component(controller)
         return text_artist
 
+    @_history_command("Create In-Axes Element")
     def add_in_axes(
         self,
         spec: InAxesCreateSpec,
@@ -2313,6 +2499,7 @@ class PyFigureCanvas(QWidget):
             for source in self.colorbar_service.eligible_sources(axes_id)
         )
 
+    @_history_command("Create Colorbar")
     def add_colorbar(
         self,
         source_component_id: str,
@@ -2717,6 +2904,111 @@ class PyFigureCanvas(QWidget):
         else:
             self.add_text(**kwargs)
 
+    @contextmanager
+    def _history_component_id_overrides(
+        self,
+        states: tuple[ComponentState, ...],
+    ):
+        """Temporarily make saved Axes semantic IDs reusable by materializers."""
+
+        figure = next(
+            (
+                state
+                for state in states
+                if state.kind is ComponentKind.FIGURE
+            ),
+            None,
+        )
+        if figure is None:
+            raise ValueError("Figure history target has no Figure root.")
+        tree = {
+            "root_component_id": figure.id,
+            "components": [state.to_dict() for state in states],
+        }
+        overrides = self._component_paths_from_tree(tree)
+        previous_overrides = dict(self._component_id_overrides)
+        previous_allocated = set(self._allocated_component_ids)
+        self._component_id_overrides.update(overrides)
+        self._allocated_component_ids.difference_update(overrides.values())
+        try:
+            yield
+        finally:
+            self._component_id_overrides = previous_overrides
+            self._allocated_component_ids = previous_allocated
+
+    def materialize_history_states(
+        self,
+        target_states: tuple[ComponentState, ...],
+        added_ids: set[str],
+    ) -> None:
+        """Restore structural history through Axes/materializer architecture."""
+
+        state_by_id = {state.id: state for state in target_states}
+        missing = set(added_ids) - set(state_by_id)
+        if missing:
+            raise ValueError(
+                "Figure history is missing target states: "
+                + ", ".join(sorted(missing))
+            )
+        axes_states = tuple(
+            sorted(
+                (
+                    state_by_id[component_id]
+                    for component_id in added_ids
+                    if state_by_id[component_id].kind is ComponentKind.AXES
+                ),
+                key=lambda state: int(state.selector["index"]),
+            )
+        )
+        dynamic_states = tuple(
+            state_by_id[component_id]
+            for component_id in added_ids
+            if (state_by_id[component_id].kind, state_by_id[component_id].role)
+            in self.component_materializers.keys
+        )
+        restorable_ids = {
+            state.id for state in axes_states
+        } | {state.id for state in dynamic_states}
+        fixed_ids = set(added_ids) - restorable_ids
+        for component_id in fixed_ids:
+            state = state_by_id[component_id]
+            cursor = state.parent_id
+            while cursor is not None and cursor not in restorable_ids:
+                parent = state_by_id.get(cursor)
+                cursor = parent.parent_id if parent is not None else None
+            if cursor is None:
+                raise ValueError(
+                    f"No materializer owns added component {component_id!r}."
+                )
+
+        previous_restoring = self._restoring_component_tree_now
+        self._restoring_component_tree_now = True
+        try:
+            with (
+                self._history_component_id_overrides(target_states),
+                self.component_registry.registration_transaction(),
+            ):
+                if axes_states:
+                    self.axes_layout_service.materialize(axes_states)
+                for phase in self.component_materializers.phases:
+                    for state in self.component_materializers.states_for_phase(
+                        dynamic_states,
+                        phase,
+                    ):
+                        self._restore_component_state(state)
+        finally:
+            self._restoring_component_tree_now = previous_restoring
+        unresolved = sorted(
+            component_id
+            for component_id in added_ids
+            if component_id not in self.component_registry
+        )
+        if unresolved:
+            raise ValueError(
+                "Figure history materialization did not restore: "
+                + ", ".join(unresolved)
+            )
+
     def _restore_component_state(self, state: ComponentState):
         """Materialize one dynamic component within registration scope."""
 
@@ -2756,11 +3048,12 @@ class PyFigureCanvas(QWidget):
         ids = request.component_ids
         if not ids:
             return True
-        return self.deletion_coordinator.delete(
-            request,
-            role_label="dependent",
-            present_success=False,
-        )
+        with self.figure_history.suspend_recording():
+            return self.deletion_coordinator.delete(
+                request,
+                role_label="dependent",
+                present_success=False,
+            )
 
     def prepare_data_dependents(
         self,
@@ -2794,10 +3087,11 @@ class PyFigureCanvas(QWidget):
         """Restore components captured before a table mutation."""
 
         try:
-            self.dependency_service.restore_states(snapshots)
-            target = snapshots.selected_component_id
-            if target is not None and target in self.component_registry:
-                self.select_component(target)
+            with self.figure_history.suspend_recording():
+                self.dependency_service.restore_states(snapshots)
+                target = snapshots.selected_component_id
+                if target is not None and target in self.component_registry:
+                    self.select_component(target)
         finally:
             self.message_presenter.discard_pending()
 
@@ -2810,6 +3104,7 @@ class PyFigureCanvas(QWidget):
         self._restoring_component_tree_now = True
         try:
             with (
+                self.figure_history.suspend_recording(),
                 self.component_registry.batch_events(),
                 self.in_axes_service.suspend_refresh(),
             ):

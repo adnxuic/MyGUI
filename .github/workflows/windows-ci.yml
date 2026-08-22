@@ -11,6 +11,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       MPLBACKEND: qtagg
+      MYGUI_TEST_SHARDS: "4"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

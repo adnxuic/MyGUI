@@ -22,6 +22,21 @@ from mygui.figuremodify.components import (
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
+def perform_editor_action(
+    context,
+    text: str,
+    operation: Callable[[], object],
+    *,
+    merge_key: tuple[object, ...] | None = None,
+):
+    """Use Figure history when a complete production context provides it."""
+
+    perform = getattr(context, "perform", None)
+    if not callable(perform):
+        return operation()
+    return perform(text, operation, merge_key=merge_key)
+
+
 class MessagePresenter:
     """Route component outcomes to the application Message Bar once."""
 
@@ -447,9 +462,24 @@ class EditorContext:
     in_axes: object | None = None
     dependency_service: object | None = None
     delete_command: Callable[..., bool] | None = None
+    history: object | None = None
 
     @property
     def repository(self):
         """Return the repository."""
 
         return self.chart_data.repository
+
+    def perform(
+        self,
+        text: str,
+        operation: Callable[[], object],
+        *,
+        merge_key: tuple[object, ...] | None = None,
+    ):
+        """Run one explicit editor intent through optional Figure history."""
+
+        history = self.history
+        if history is None:
+            return operation()
+        return history.perform(text, operation, merge_key=merge_key)

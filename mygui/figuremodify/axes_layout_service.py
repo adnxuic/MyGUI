@@ -26,6 +26,7 @@ from mygui.figuremodify.components import (
     ComponentMutation,
     ComponentRole,
     ComponentState,
+    UpdateImpact,
 )
 from mygui.figuremodify.components.base import _refresh_legend
 
@@ -45,6 +46,7 @@ class _AxesDescriptor:
     view: AxesViewSpec
     merge_legend: bool = False
     component_id: str | None = None
+    component_index: int | None = None
 
 
 class AxesLayoutService:
@@ -112,6 +114,51 @@ class AxesLayoutService:
             self._set_runtime_pair(primary_target, secondary_target, merged=merged)
             if refresh and merged and primary_target.get_legend() is not None:
                 _refresh_legend(primary_target)
+
+    def restore_persisted_geometry(self) -> None:
+        """Synchronize GridSpecs from authoritative Figure/Axes state.
+
+        Project restore, layout editing, and Figure-history replay all use the
+        same persisted layout definitions.  This method changes only derived
+        Matplotlib geometry and rolls that runtime projection back on failure.
+        """
+
+        definitions = {
+            str(item["id"]): item for item in self.layout_definitions()
+        }
+        grids = {
+            layout_id: self._grid_from_definition(self.canvas.fig, definition)
+            for layout_id, definition in definitions.items()
+        }
+        snapshots = []
+        try:
+            for controller in self.registry.query(kind=ComponentKind.AXES):
+                subplot = controller.state.data.get("subplot", {})
+                layout_id = str(subplot.get("layout_id", ""))
+                if layout_id not in grids:
+                    raise ValueError(
+                        f"Axes {controller.component_id!r} references an "
+                        "unavailable Figure layout."
+                    )
+                target = controller.resolve_target()
+                snapshots.append(
+                    (
+                        target,
+                        target.get_subplotspec(),
+                        tuple(target.get_position().bounds),
+                    )
+                )
+                target.set_subplotspec(
+                    grids[layout_id][
+                        int(subplot["row"]),
+                        int(subplot["column"]),
+                    ]
+                )
+        except Exception:
+            self._restore_subplot_specs(snapshots)
+            raise
+        self._grids = grids
+        self.registry.request_update(self.canvas.fig, UpdateImpact.REDRAW)
 
     def set_legend_scope(self, axes_id: str, scope: str):
         """Set independent/merged legend entries for one primary twin pair."""
@@ -466,7 +513,11 @@ class AxesLayoutService:
     ) -> tuple[str, ...]:
         component_ids: list[str] = []
         for offset, item in enumerate(descriptors):
-            axes_index = start_index + offset
+            axes_index = (
+                start_index + offset
+                if item.component_index is None
+                else int(item.component_index)
+            )
             axes_id, _controllers = self.canvas._register_axes_components(
                 item.target,
                 axes_index,
@@ -677,6 +728,7 @@ class AxesLayoutService:
                             subplot["share_x_group"],
                             subplot["share_y_group"],
                             AxesViewSpec(),
+                            component_index=int(state.selector["index"]),
                         )
                     )
             component_ids = self._register_descriptors(

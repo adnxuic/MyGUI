@@ -1,6 +1,6 @@
 # Matplotlib Component Controllers
 
-The component-controller layer under `mygui/figuremodify/components/` provides Qt-independent control of a Matplotlib Figure. It separates artist behavior, serializable state, semantic lookup, hierarchy, and redraw coordination so GUI editors, project restore, scripted changes, and later Undo commands can call the same API.
+The component-controller layer under `mygui/figuremodify/components/` provides Qt-independent control of a Matplotlib Figure. It separates artist behavior, serializable state, semantic lookup, hierarchy, and redraw coordination so GUI editors, project restore, scripted changes, and project Undo/Redo can call the same API.
 
 ## Architecture
 
@@ -17,7 +17,17 @@ flowchart LR
     Registry --> Updates["Relim / Autoscale / Legend / Redraw"]
     Services["Domain services"] --> Mutation
     Editors["Qt Editors"] --> Services
+    History["Project Figure history"] --> Services
+    Events --> History
 ```
+
+`FigureHistoryService` is a Qt-facing orchestration layer above this graph. It
+captures immutable before/after `ComponentState` deltas at explicit
+user-intent boundaries and pushes them to the `TableRepository` project's
+shared `QUndoStack`. Commands retain no Artist, Controller, QWidget, or Figure.
+Replay uses the same Controllers and Services; structural changes additionally
+use component materializers and `DeletionCoordinator` with stable IDs. See
+[Project Undo and Redo](undo-redo.md).
 
 The public value types are:
 

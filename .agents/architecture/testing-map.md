@@ -20,9 +20,25 @@ subprocesses through their current `sys.executable`. Qt tests run with
 
 `verify_fast` runs compileall, Ruff, and the route's focused modules.
 `verify_full --profile application` runs the complete suite once under branch
-coverage, then applies global 74% and critical-file 80% reports. The
-agent-engineering profile validates routing/contracts and deterministic DSH
-typecheck/tests/E2E. Documentation uses `mkdocs build --strict`.
+coverage with a one-hour subprocess budget, then applies global 74% and
+critical-file 80% reports. A discovery subprocess collects exact unittest IDs;
+empty, failed, or duplicate collections reject the run. Method-level measured
+weights feed deterministic LPT micro-batches, and a fixed worker pool runs each
+batch under `coverage run --parallel-mode`. Every batch continues after test
+failures, while timeout, process, future, and executed-count failures prevent
+partial coverage from reaching the coverage thresholds. `coverage combine`
+merges only complete batch data. The Matplotlib font cache is warmed serially
+before workers start so concurrent rebuilds cannot race.
+
+`MYGUI_TEST_SHARDS` controls concurrent workers and accepts only integers from
+1 through 16. The default is `min(8, max(2, cpu_count))`; 1 restores one batch
+and one process. Worker counts above 1 use up to four micro-batches per worker
+for dynamic load balancing. The one-hour timeout covers the whole parallel test
+pool, not each queued batch. Per-batch and per-test timing evidence is written
+to ignored `build/agent-results/application-test-timings.json`. Windows CI pins
+four workers. The agent-engineering profile validates routing/contracts and
+deterministic DSH typecheck/tests/E2E. Documentation uses
+`mkdocs build --strict`.
 
 ## Fault injection
 

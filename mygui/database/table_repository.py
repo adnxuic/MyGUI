@@ -141,9 +141,13 @@ class TableRepository(QObject):
         """Remove all owned entries and detach their callbacks."""
 
         project_ids = list(self._projects)
+        undo_stacks = list(self._undo_stacks.values())
         self._projects.clear()
         self._undo_stacks.clear()
         self._unpublished_projects.clear()
+        for stack in undo_stacks:
+            stack.clear()
+            stack.deleteLater()
         for project_id in project_ids:
             self.transaction_committed.emit(TableChangeSet(
                 project_id=project_id,
@@ -213,6 +217,7 @@ class TableRepository(QObject):
         self._unpublished_projects.discard(project_id)
         stack = self._undo_stacks.pop(project_id, None)
         if stack is not None:
+            stack.clear()
             stack.deleteLater()
         if project is not None and publish:
             self.transaction_committed.emit(TableChangeSet(
@@ -252,7 +257,7 @@ class TableRepository(QObject):
             raise KeyError(f"Unknown sheet: {sheet_id}") from exc
 
     def undo_stack(self, project_id: str) -> QUndoStack:
-        """Return the undo stack for the requested project."""
+        """Return the shared Table/Figure command stack for one project."""
 
         try:
             return self._undo_stacks[project_id]
@@ -260,7 +265,7 @@ class TableRepository(QObject):
             raise KeyError(f"Unknown project undo stack: {project_id}") from exc
 
     def push(self, project_id: str, command: QUndoCommand) -> bool:
-        """Push an undoable table mutation onto the project stack."""
+        """Push an undoable project mutation onto the shared stack."""
 
         self.undo_stack(project_id).push(command)
         return bool(getattr(command, "last_succeeded", False))

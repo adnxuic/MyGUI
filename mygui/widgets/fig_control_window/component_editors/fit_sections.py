@@ -23,7 +23,7 @@ from mygui.resources import load_qss_resource
 from mygui.figuremodify.components import FitCurveController, FitEngine
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
-from .context import EditorContext
+from .context import EditorContext, perform_editor_action
 from .inspector import EditorSection
 from .lifecycle import CallbackLifecycle
 
@@ -570,15 +570,18 @@ class FitDomainSection(QFrame):
                 "goodness": {},
             })
             stored_result = None
-        result = self.context.fitting.apply_result(
-            self.controller,
-            engine=engine,
-            fit_type=fit_type,
-            fit_options=fit_options,
-            fit_result=stored_result,
-            expression=value_expression,
-            x_start=x_start,
-            x_stop=x_stop,
+        result = perform_editor_action(self.context,
+            "Apply Fit Result",
+            lambda: self.context.fitting.apply_result(
+                self.controller,
+                engine=engine,
+                fit_type=fit_type,
+                fit_options=fit_options,
+                fit_result=stored_result,
+                expression=value_expression,
+                x_start=x_start,
+                x_stop=x_stop,
+            ),
         )
         if not self.context.messages.present(result):
             self.sync_from_controller()
@@ -608,10 +611,13 @@ class FitDomainSection(QFrame):
             and float(x_stop) == float(data["x_stop"])
         ):
             return True
-        result = self.context.fitting.update_display_range(
-            self.controller,
-            x_start,
-            x_stop,
+        result = perform_editor_action(self.context,
+            "Change Fit Display Range",
+            lambda: self.context.fitting.update_display_range(
+                self.controller,
+                x_start,
+                x_stop,
+            ),
         )
         if not self.context.messages.present(
             result,

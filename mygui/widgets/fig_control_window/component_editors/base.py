@@ -605,7 +605,20 @@ class ComponentEditorBase(QWidget):
         setter = getattr(self.controller, "set_property", None)
         if not callable(setter):
             raise AttributeError("Component controller does not provide set_property().")
-        return setter(key, value)
+        def operation():
+            return setter(key, value)
+
+        perform = getattr(self.context, "perform", None)
+        if not callable(perform):
+            return operation()
+        state = self.controller.state
+        role = str(getattr(state.role, "value", state.role)).replace("_", " ").title()
+        label = _display_label(self._specs.get(key, {}), key)
+        return perform(
+            f"Change {role} {label}",
+            operation,
+            merge_key=("property", self.controller.component_id, key),
+        )
 
     def _success_message(self, key: str, label: str) -> str:
         return f"{label} updated."

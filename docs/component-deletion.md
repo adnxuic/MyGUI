@@ -61,3 +61,10 @@ succeeds. A failed Canvas deletion compensates earlier Canvas commits and
 returns `False`, so the table command becomes obsolete without changing table
 data or its Undo stack. Undo restores stable IDs, data references, and the exact
 parent palette cursor.
+
+User-initiated Figure deletion is recorded as one project Figure command after
+`DeletionCoordinator` commits. Undo rematerializes removable roots and their
+fixed semantic descendants with the same IDs, restores survivor order,
+palette bookkeeping, and selection, then validates the complete schema-v11
+tree. Table dependency cascades remain inside their originating Table command
+and are recording-suspended so they do not create a second Figure command.

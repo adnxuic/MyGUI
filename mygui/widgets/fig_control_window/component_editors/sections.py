@@ -39,6 +39,7 @@ from .common import (
     FocusAwareDoubleSpinBox,
     FocusAwareSpinBox,
 )
+from .context import perform_editor_action
 from .inputs import DataReferenceInput
 from .inspector import EditorSection
 from .lifecycle import CallbackLifecycle
@@ -104,12 +105,15 @@ class DataReferenceSection(QWidget, EditorSection):
         y_ref = self.data_choice_widget.get_y_ref()
         x_ref = x_ref or ColumnRef.from_dict(data["x_ref"])
         y_ref = y_ref or ColumnRef.from_dict(data["y_ref"])
-        result = self._apply_references(
-            self.controller,
-            x_ref,
-            y_ref,
-            self.data_choice_widget.preprocess_values(),
-            axis,
+        result = perform_editor_action(self.context,
+            f"Change {self.controller.state.role.value.replace('_', ' ').title()} Data Source",
+            lambda: self._apply_references(
+                self.controller,
+                x_ref,
+                y_ref,
+                self.data_choice_widget.preprocess_values(),
+                axis,
+            ),
         )
         if not self.context.messages.present(
             result,
@@ -192,10 +196,13 @@ class RawXYDataSection(QWidget, EditorSection):
         try:
             x_values = self._parse(self.x_input.toPlainText(), "X")
             y_values = self._parse(self.y_input.toPlainText(), "Y")
-            result = self.controller.set_xy_data(
-                x_values,
-                y_values,
-                persist=True,
+            result = perform_editor_action(self.context,
+                "Change Line Data",
+                lambda: self.controller.set_xy_data(
+                    x_values,
+                    y_values,
+                    persist=True,
+                ),
             )
         except Exception as exc:
             status_messages.show_error(str(exc))
@@ -283,10 +290,13 @@ class AxesLimitsSection(QWidget, EditorSection):
         limits = tuple(self.controller.read_state().properties[key])
         if (limits[0] > limits[1]) == bool(inverted):
             return True
-        result = self.context.axes_layout.apply_linked_axis(
-            self.controller.component_id,
-            dimension,
-            limits=tuple(reversed(limits)),
+        result = perform_editor_action(self.context,
+            f"Change {dimension.upper()} Axis Inversion",
+            lambda: self.context.axes_layout.apply_linked_axis(
+                self.controller.component_id,
+                dimension,
+                limits=tuple(reversed(limits)),
+            ),
         )
         if not self.context.messages.present(
             result,
@@ -427,7 +437,10 @@ class ScatterMappingSection(QWidget, EditorSection):
     def _refs_changed(self, *_args) -> bool:
         if self._disposed:
             return False
-        result = self._apply()
+        result = perform_editor_action(self.context,
+            "Change Scatter Mapping Sources",
+            self._apply,
+        )
         if not self.context.messages.present(
             result,
             success="Scatter mapping updated.",
@@ -681,9 +694,12 @@ class ImageInAxesSourceSection(QWidget, EditorSection):
             return False
         try:
             data = embedded_image_data(filename)
-            result = self.context.in_axes.replace_image(
-                self.controller,
-                data,
+            result = perform_editor_action(self.context,
+                "Replace Inset Image",
+                lambda: self.context.in_axes.replace_image(
+                    self.controller,
+                    data,
+                ),
             )
         except Exception as exc:
             status_messages.show_error(str(exc))
@@ -1147,9 +1163,16 @@ class TextRenderSection(QWidget, EditorSection):
             )
             self._sync_tex_button()
             return False
-        result = self.context.text_rendering.apply(
-            self.controller,
-            {"usetex": checked},
+        result = perform_editor_action(self.context,
+            (
+                "Enable Text TeX Rendering"
+                if checked
+                else "Disable Text TeX Rendering"
+            ),
+            lambda: self.context.text_rendering.apply(
+                self.controller,
+                {"usetex": checked},
+            ),
         )
         if not self.context.messages.present(
             result,
@@ -1264,16 +1287,22 @@ class LegendLocationSection(QWidget, EditorSection):
 
     def _apply(self, key: str, value):
         self._ensure_target()
-        if key == "entry_scope":
-            result = self.context.axes_layout.set_legend_scope(
-                self.controller.state.parent_id,
-                str(value),
-            )
-        else:
-            result = self.context.axes_commands.apply_legend_properties(
+        def operation():
+            if key == "entry_scope":
+                return self.context.axes_layout.set_legend_scope(
+                    self.controller.state.parent_id,
+                    str(value),
+                )
+            return self.context.axes_commands.apply_legend_properties(
                 self.controller,
                 {key: value},
             )
+
+        result = perform_editor_action(self.context,
+            f"Change Legend {key.replace('_', ' ').title()}",
+            operation,
+            merge_key=("property", self.controller.component_id, key),
+        )
         if not self.context.messages.present(
             result,
             success="Legend layout updated.",
@@ -1503,9 +1532,12 @@ class PaletteSection(QWidget, EditorSection):
             parent_id=self.controller.component_id,
             recursive=True,
         )
-        result = self.context.axes_commands.apply_palette(
-            self.controller.component_id,
-            palette,
+        result = perform_editor_action(self.context,
+            "Apply Axes Palette",
+            lambda: self.context.axes_commands.apply_palette(
+                self.controller.component_id,
+                palette,
+            ),
         )
         if not self.context.messages.present(result, success=success):
             self.sync_from_controller()

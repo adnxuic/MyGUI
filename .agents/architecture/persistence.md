@@ -38,6 +38,36 @@ publication. Failure on either side of insertion cleans by stable object or
 project ID, never display names or tab scans. Compound restore uses Registry
 batch events so the tree rebuilds and redraws once.
 
+## Project history
+
+`TableRepository.undo_stack(project_id)` is the only command timeline for a
+project. Table and Figure commands must be pushed to that same stack in commit
+order; Canvas tabs do not own a second undo stack. A loaded or newly created
+project starts with an empty stack, and save does not clear the live stack.
+
+`FigureHistoryService` brackets explicit user-intent entry points. It reads the
+authoritative `ComponentState` projection before and after the operation and
+stores only changed records. Registry events identify published mutations;
+the boundary read also catches persisted effects produced by deferred relimit,
+autoscale, legend, and draw work. Commands may additionally retain small,
+deep-copied runtime mementos for the color-consumption ledger, Fit request
+generation, and stable-ID selection. Commands never retain Artists,
+Controllers, QWidgets, callback objects, or a Matplotlib Figure.
+
+Replay is recording-suspended and uses Controllers, domain Services,
+`DeletionCoordinator`, `AxesLayoutService`, and the declared component
+materializers. Structural replay restores original IDs and dependency order.
+After coalesced Matplotlib updates flush, replay performs one authoritative
+reconciliation pass before validating the Registry tree and schema-v11
+snapshot. A replay failure compensates toward the previous proven state,
+emits one error, and clears the uncertain history cursor. Project restore,
+table-dependency refresh, and command replay must never create nested commands.
+
+Undo history is runtime-only. Do not add stack indices, command payloads,
+selection mementos, merge keys, or runtime ledgers to project JSON. Dirty state
+continues to compare the current project fingerprint with the latest successful
+load/save fingerprint, so undoing exactly to that state becomes clean.
+
 ## Project documentation
 
 Persisted changes update `docs/project-files.md`, the relevant parameter page,

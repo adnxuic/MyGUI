@@ -616,6 +616,49 @@ class ColorConsumptionLedger:
     def __init__(self) -> None:
         self._entries: dict[str, list[_ColorConsumption]] = {}
 
+    def history_snapshot(self) -> dict[str, list[dict[str, Any]]]:
+        """Return a runtime-only, Artist-free memento for Figure history."""
+
+        return {
+            axes_id: [
+                {
+                    "component_id": entry.component_id,
+                    "before": deepcopy(entry.before),
+                    "after": deepcopy(entry.after),
+                    "deleted": bool(entry.deleted),
+                }
+                for entry in entries
+            ]
+            for axes_id, entries in self._entries.items()
+        }
+
+    def restore_history_snapshot(
+        self,
+        snapshot: dict[str, list[dict[str, Any]]],
+    ) -> None:
+        """Restore the exact palette-consumption ledger after replay."""
+
+        restored: dict[str, list[_ColorConsumption]] = {}
+        for axes_id, raw_entries in deepcopy(dict(snapshot)).items():
+            entries = []
+            for raw in raw_entries:
+                after = deepcopy(raw["after"])
+                ColorCycleState.from_dict(after)
+                before = deepcopy(raw.get("before"))
+                if before is not None:
+                    ColorCycleState.from_dict(before)
+                entries.append(
+                    _ColorConsumption(
+                        str(raw["component_id"]),
+                        before,
+                        after,
+                        bool(raw.get("deleted", False)),
+                    )
+                )
+            if entries:
+                restored[str(axes_id)] = entries
+        self._entries = restored
+
     def record(
         self,
         axes_id: str,
@@ -2021,6 +2064,30 @@ class FitService:
         self._request_generation: dict[str, int] = {}
         self._pending_source_changes: set[str] = set()
         self._observer_failures: list[ObserverFailure] = []
+
+    def history_snapshot(self) -> dict[str, Any]:
+        """Capture runtime-only pending/generation state for Figure history."""
+
+        return {
+            "request_generation": dict(self._request_generation),
+            "pending_source_changes": sorted(self._pending_source_changes),
+        }
+
+    def restore_history_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Restore Fit runtime state without publishing component changes."""
+
+        value = deepcopy(dict(snapshot))
+        self._request_generation = {
+            str(component_id): int(generation)
+            for component_id, generation in dict(
+                value.get("request_generation", {})
+            ).items()
+        }
+        self._pending_source_changes = {
+            str(component_id)
+            for component_id in value.get("pending_source_changes", ())
+            if str(component_id) in self.registry
+        }
 
     def drain_observer_failures(self) -> tuple[ObserverFailure, ...]:
         """Return and clear stale-marking reference failures."""

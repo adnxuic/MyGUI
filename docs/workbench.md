@@ -11,7 +11,7 @@ MyGUI uses one native desktop window with a full-width application command bar, 
 - The activity rails are 44 logical pixels wide. The bottom Message/State Bar is 28 logical pixels high.
 - Table and Components buttons switch the shared Explorer page. Clicking the active button again hides the Explorer; opening either page restores its last visible width.
 - Inspector sections remain independently scrollable when a restored or narrow window cannot show the complete form. TeX and MATLAB pages use the same bounded-scroll behavior, so switching tools does not resize the shell.
-- Every project tab shows a matplotlib navigation toolbar (Home, Back, Forward, Pan, Zoom, Subplots, Save) above its canvas. Toolbar buttons, mouse pan/zoom, and the canvas keyboard shortcuts are listed in [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) and the [matplotlib navigation guide](https://matplotlib.org/3.9.0/users/explain/figure/interactive.html).
+- Every project tab shows a matplotlib navigation toolbar (Home, Back, Forward, Pan, Zoom, Subplots, Save) plus the project's shared Undo/Redo actions above its canvas. Toolbar buttons, mouse pan/zoom, and keyboard shortcuts are listed in [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md), [Project Undo and Redo](undo-redo.md), and the [matplotlib navigation guide](https://matplotlib.org/3.9.0/users/explain/figure/interactive.html).
 - Component editing uses one profile-driven Inspector shell. Line charts share the same appearance groups; Text, Title, and Axis Labels share the same text sections; Legend keeps its Controller-specific layout and frame sections.
 
 ## Command bar and menus
@@ -60,7 +60,7 @@ These settings are application preferences. They are not written to .mygui.json 
 
 The canvas tab bar resolves context menus with tabAt(position). Rename Project and Close Project therefore operate on the clicked tab without switching a background project.
 
-Each project has a runtime clean fingerprint made from its full typed Table snapshot and normalized schema-v11 component tree. A new project has no clean baseline and is dirty. Loading or completing an atomic save establishes the baseline. Table edits, project rename, Component changes, Undo, and Matplotlib toolbar view changes are detected by comparing a fresh snapshot; fingerprint errors are treated as dirty.
+Each project has a runtime clean fingerprint made from its full typed Table snapshot and normalized schema-v11 component tree. A new project has no clean baseline and is dirty. Loading or completing an atomic save establishes the baseline. Table edits, project rename, Component changes, Undo, and Matplotlib toolbar view changes are detected by comparing a fresh snapshot; fingerprint errors are treated as dirty. Undoing exactly to the latest successful load/save fingerprint returns the project to clean state, while Redo makes it dirty again.
 
 Closing a dirty tab offers Save, Discard, and Cancel:
 
@@ -69,7 +69,7 @@ Closing a dirty tab offers Save, Discard, and Cancel:
 - Cancel leaves every project object unchanged.
 - A clean project closes without a prompt.
 
-Closing removes the matching project ID from the Canvas map, Figure Inspector, Table stack, TableRepository, and Undo stack, then disposes Registry, repository, TeX, MATLAB, fitting, and redraw callbacks idempotently. Closing the final project shows the Canvas, Table, and Inspector empty states. Application exit runs the same checks for every project before disposing any of them; a Cancel or failed save aborts exit, while projects saved earlier in that pass remain clean.
+Closing removes the matching project ID from the Canvas map, Figure Inspector, Table stack, TableRepository, and shared project Undo stack, then disposes Registry, history, repository, TeX, MATLAB, fitting, and redraw callbacks idempotently. Closing the final project shows the Canvas, Table, and Inspector empty states. Application exit runs the same checks for every project before disposing any of them; a Cancel or failed save aborts exit, while projects saved earlier in that pass remain clean.
 
 ## Application icon and taskbar identity
 

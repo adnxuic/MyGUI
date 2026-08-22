@@ -13,7 +13,7 @@ from mygui.resources import load_qss_resource
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 from .common import DebouncedTextBinding, RangeEditor
-from .context import EditorContext
+from .context import EditorContext, perform_editor_action
 from .inputs import InterpolationOptionsInput
 from .inspector import EditorSection
 
@@ -96,11 +96,15 @@ class FunctionCurveSection(QFrame, EditorSection):
 
     def _update_expression(self, expression: str):
         data = _controller_state(self.controller).data
-        return self.context.function_curves.update(
-            self.controller,
-            expression,
-            data["x_start"],
-            data["x_stop"],
+        return perform_editor_action(self.context,
+            "Change Function Curve Expression",
+            lambda: self.context.function_curves.update(
+                self.controller,
+                expression,
+                data["x_start"],
+                data["x_stop"],
+            ),
+            merge_key=("data", self.controller.component_id, "expression"),
         )
 
     def _range_change(self, x_start, x_stop):
@@ -110,11 +114,15 @@ class FunctionCurveSection(QFrame, EditorSection):
             and float(x_stop) == float(data["x_stop"])
         ):
             return True
-        result = self.context.function_curves.update(
-            self.controller,
-            data["expression"],
-            x_start,
-            x_stop,
+        result = perform_editor_action(self.context,
+            "Change Function Curve Range",
+            lambda: self.context.function_curves.update(
+                self.controller,
+                data["expression"],
+                x_start,
+                x_stop,
+            ),
+            merge_key=("data", self.controller.component_id, "range"),
         )
         if not self.context.messages.present(
             result,
@@ -232,12 +240,15 @@ class InterpolationSection(QFrame, EditorSection):
         state = _controller_state(self.controller)
         x_ref = ColumnRef.from_dict(state.data["x_ref"])
         y_ref = ColumnRef.from_dict(state.data["y_ref"])
-        result = self.context.interpolation.configure(
-            self.controller,
-            x_ref=x_ref,
-            y_ref=y_ref,
-            preprocess=state.data["preprocess"],
-            **options,
+        result = perform_editor_action(self.context,
+            "Change Interpolation Configuration",
+            lambda: self.context.interpolation.configure(
+                self.controller,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                preprocess=state.data["preprocess"],
+                **options,
+            ),
         )
         if not self.context.messages.present(
             result,

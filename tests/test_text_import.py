@@ -178,23 +178,42 @@ class TextDataImportTests(unittest.TestCase):
             read_text_source(binary)
 
     def test_fifty_thousand_row_detection_and_preview_are_linear(self):
-        lines = ["metadata", "X A B C D E F G"] + [
-            f"{row} 1 2 3 4 5 6 7" for row in range(50_000)
-        ]
-        source = TextDataSource(Path("large.custom"), "utf-8", lines)
+        # Guard against accidental quadratic blowup without a scheduler-sensitive
+        # wall-clock bound: verification shards the suite across parallel
+        # processes, so elapsed timings legitimately vary with CPU contention.
+        # Compare the 50k-row cost against a 10k-row baseline measured in the
+        # same process: linear behavior costs ~5x (plus fixed overhead),
+        # quadratic behavior costs ~25x. The 30s CPU-time ceiling is a pathological
+        # backstop that quadratic behavior (minutes) still violates.
+        def detect_and_preview(row_total, name):
+            lines = ["metadata", "X A B C D E F G"] + [
+                f"{row} 1 2 3 4 5 6 7" for row in range(row_total)
+            ]
+            source = TextDataSource(Path(name), "utf-8", lines)
+            started = time.process_time()
+            detection = detect_text_table(source)
+            preview_sheet, use_header, row_count = build_text_sheet(
+                source,
+                detection.delimiter,
+                detection.data_start_line,
+                detection.header_line,
+                row_limit=TEXT_PREVIEW_TYPE_ROWS,
+            )
+            return (
+                time.process_time() - started,
+                detection,
+                preview_sheet,
+                use_header,
+                row_count,
+            )
 
-        started = time.perf_counter()
-        detection = detect_text_table(source)
-        preview_sheet, use_header, row_count = build_text_sheet(
-            source,
-            detection.delimiter,
-            detection.data_start_line,
-            detection.header_line,
-            row_limit=TEXT_PREVIEW_TYPE_ROWS,
+        baseline_elapsed, *_ = detect_and_preview(10_000, "small.custom")
+        elapsed, detection, preview_sheet, use_header, row_count = (
+            detect_and_preview(50_000, "large.custom")
         )
-        elapsed = time.perf_counter() - started
 
-        self.assertLess(elapsed, 8.0)
+        self.assertLess(elapsed, baseline_elapsed * 15 + 1.5)
+        self.assertLess(elapsed, 30.0)
         self.assertTrue(use_header)
         self.assertEqual(row_count, 50_000)
         self.assertEqual(detection.column_count, 8)

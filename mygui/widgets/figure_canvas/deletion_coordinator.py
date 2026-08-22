@@ -24,6 +24,7 @@ class DeletionCoordinator:
     def __init__(self, canvas: "PyFigureCanvas") -> None:
         self.canvas = canvas
         self.presentation = TreePresentationResolver(canvas.editor_registry)
+        self.last_outcome: DeletionOutcome | None = None
 
     def _fallback_id(self, request: DeletionRequest, removed_ids: set[str]) -> str:
         canvas = self.canvas
@@ -77,6 +78,8 @@ class DeletionCoordinator:
         *,
         role_label: str = "component",
         present_success: bool = True,
+        present_result: bool = True,
+        fallback_id: str | None = None,
     ) -> bool:
         """Prepare, verify, commit, and publish one deletion result."""
 
@@ -84,16 +87,31 @@ class DeletionCoordinator:
         presenter = canvas.message_presenter
         try:
             prepared = canvas.deletion_service.prepare(request)
-            fallback_id = self._fallback_id(
-                request,
-                set(prepared.plan.removed_ids),
+            removed_ids = set(prepared.plan.removed_ids)
+            resolved_fallback = (
+                str(fallback_id)
+                if fallback_id is not None
+                else self._fallback_id(request, removed_ids)
             )
-            prepared.set_fallback(fallback_id)
+            if (
+                resolved_fallback in removed_ids
+                or resolved_fallback not in canvas.component_registry
+            ):
+                raise ValueError(
+                    "The requested post-delete selection is unavailable."
+                )
+            prepared.set_fallback(resolved_fallback)
         except Exception as exc:
             presenter.discard_pending()
-            return presenter.present(
-                DeletionOutcome(False, True, message=str(exc)).as_batch_change()
+            outcome = DeletionOutcome(False, True, message=str(exc))
+            self.last_outcome = outcome
+            return (
+                presenter.present(outcome.as_batch_change())
+                if present_result
+                else outcome.ok
             )
+
+        fallback_id = resolved_fallback
 
         previous_component_id = canvas.current_component_id
         previous_axes_id = canvas.current_axes_component_id
@@ -170,12 +188,16 @@ class DeletionCoordinator:
                     f"{message} UI rollback was incomplete: "
                     + "; ".join(ui_rollback_errors)
                 ).strip()
-            return presenter.present(
-                DeletionOutcome(
-                    False,
-                    not ui_rollback_errors,
-                    message=message,
-                ).as_batch_change()
+            outcome = DeletionOutcome(
+                False,
+                not ui_rollback_errors,
+                message=message,
+            )
+            self.last_outcome = outcome
+            return (
+                presenter.present(outcome.as_batch_change())
+                if present_result
+                else outcome.ok
             )
 
         def verify_candidate() -> None:
@@ -209,7 +231,12 @@ class DeletionCoordinator:
                     ).strip(),
                 )
             presenter.discard_pending()
-            return presenter.present(outcome.as_batch_change())
+            self.last_outcome = outcome
+            return (
+                presenter.present(outcome.as_batch_change())
+                if present_result
+                else outcome.ok
+            )
 
         cleanup_notices = list(outcome.notices)
         from mygui.figuremodify.components import ComponentNotice, MessageLevel
@@ -259,7 +286,10 @@ class DeletionCoordinator:
             selected_component_id=fallback_id,
             notices=tuple(cleanup_notices),
         )
+        self.last_outcome = outcome
         presenter.discard_pending()
+        if not present_result:
+            return outcome.ok
         if not present_success:
             return (
                 presenter.present(outcome.as_batch_change())

@@ -4,9 +4,6 @@
 
 - Project files save exact integer schema v11 and migrate strictly valid v10
   files. Historical v4-v9 files require an external conversion step.
-- Component property edits, component/Axes deletion, chart color changes, and
-  whole-Axes palette application are not connected to the application Undo
-  stack.
 - The Components tree does not provide drag reparenting or ordering, inline
   rename, visibility controls, or canvas highlighting. Selection and expansion
   state last only for the current application session.
@@ -29,8 +26,10 @@
   or disk-backed lazy storage. Undo history is limited to 50 commands per
   project and is discarded when the project closes.
 - Qt's `QUndoStack` cannot veto an index transition after a command-level
-  failure. Structural Table commands restore the repository snapshot and
-  report the failure; the stack position alone does not prove a commit.
+  failure. Structural Table commands restore the repository snapshot; Figure
+  replay compensates to the pre-replay state and clears that project's history
+  when cursor consistency cannot be proved. The stack position alone does not
+  prove a commit.
 - Date/time columns are timezone-naive local values. Formula columns and
   user-defined row filters are not provided.
 - Excel import reads the selected workbook into memory, supports `.xlsx` and
