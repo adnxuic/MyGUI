@@ -13,7 +13,7 @@ from unittest import mock
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QKeyEvent, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QLineEdit,
@@ -89,6 +89,41 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         self.stack.clear()
         return axes_id
 
+    def _add_text_inspector(
+        self,
+        *,
+        object_id: str,
+        text: str = "before",
+        x: float = 0.25,
+        y: float = 0.75,
+    ):
+        self.canvas.add_text(
+            x,
+            y,
+            text,
+            "DejaVu Sans",
+            12,
+            usetex=False,
+            object_id=object_id,
+        )
+        controller = self.canvas.component_registry.get(object_id)
+        inspector = self.canvas.create_component_editor(object_id)
+        return controller, inspector
+
+    def _create_text_inspector(
+        self,
+        *,
+        object_id: str = "history-inspector-text",
+        text: str = "before",
+    ):
+        self._create_axes_baseline()
+        controller, inspector = self._add_text_inspector(
+            object_id=object_id,
+            text=text,
+        )
+        self.stack.clear()
+        return controller, inspector
+
     def test_property_edits_merge_and_noop_does_not_pollute_history(self):
         controller = self.canvas.component_registry.get(
             self.canvas.root_component_id
@@ -121,6 +156,314 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         self.assertEqual(
             controller.state.properties["facecolor"], "#445566"
         )
+
+    def test_text_content_inspector_edit_enters_history_and_replays_service(self):
+        controller, inspector = self._create_text_inspector()
+        content = inspector.section("content")
+        editor = content.text_content
+        editor.setPlainText("afte")
+        editor.moveCursor(QTextCursor.End)
+        editor.insertPlainText("r")
+
+        self.assertTrue(content.set_text_content())
+
+        self.assertEqual(controller.resolve_target().get_text(), "after")
+        self.assertEqual(controller.read_state().properties["text"], "after")
+        self.assertEqual(editor.toPlainText(), "after")
+        self.assertEqual(editor.textCursor().position(), len("after"))
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(self.stack.undoText(), "Change Text Content")
+
+        original_apply = self.canvas.text_render_service.apply
+        with mock.patch.object(
+            self.canvas.text_render_service,
+            "apply",
+            wraps=original_apply,
+        ) as apply_spy:
+            self.stack.undo()
+            self.assertGreaterEqual(apply_spy.call_count, 1)
+            self.assertEqual(controller.resolve_target().get_text(), "before")
+            self.assertEqual(
+                controller.read_state().properties["text"],
+                "before",
+            )
+            self.assertEqual(editor.toPlainText(), "before")
+
+            apply_spy.reset_mock()
+            self.stack.redo()
+            self.assertGreaterEqual(apply_spy.call_count, 1)
+
+        self.assertEqual(controller.resolve_target().get_text(), "after")
+        self.assertEqual(controller.read_state().properties["text"], "after")
+        self.assertEqual(editor.toPlainText(), "after")
+
+    def test_text_content_debounced_inspector_edits_merge(self):
+        controller, inspector = self._create_text_inspector()
+        content = inspector.section("content")
+        editor = content.text_content
+
+        for value in ("one", "two", "final"):
+            editor.setPlainText(value)
+            self.assertTrue(content.set_text_content())
+
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(self.stack.undoText(), "Change Text Content")
+        self.assertEqual(controller.read_state().properties["text"], "final")
+        self.stack.undo()
+        self.assertEqual(controller.resolve_target().get_text(), "before")
+        self.assertEqual(controller.read_state().properties["text"], "before")
+        self.assertEqual(editor.toPlainText(), "before")
+        self.stack.redo()
+        self.assertEqual(controller.resolve_target().get_text(), "final")
+        self.assertEqual(controller.read_state().properties["text"], "final")
+        self.assertEqual(editor.toPlainText(), "final")
+
+    def test_repeated_text_typography_property_edits_merge(self):
+        controller, inspector = self._create_text_inspector()
+        typography = inspector.section("typography")
+        before_size = float(controller.read_state().properties["fontsize"])
+
+        for size in (before_size + 1.0, before_size + 2.0, before_size + 3.0):
+            self.assertTrue(typography.apply_property("fontsize", size))
+
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(self.stack.undoText(), "Change Text Font Size")
+        self.stack.undo()
+        self.assertEqual(
+            float(controller.read_state().properties["fontsize"]),
+            before_size,
+        )
+        self.stack.redo()
+        self.assertEqual(
+            float(controller.read_state().properties["fontsize"]),
+            before_size + 3.0,
+        )
+
+    def test_different_text_inspector_properties_do_not_merge(self):
+        controller, inspector = self._create_text_inspector()
+        content = inspector.section("content")
+        typography = inspector.section("typography")
+        before_size = float(controller.read_state().properties["fontsize"])
+
+        content.text_content.setPlainText("after")
+        self.assertTrue(content.set_text_content())
+        self.assertTrue(
+            typography.apply_property("fontsize", before_size + 6.0)
+        )
+
+        self.assertEqual(self.stack.count(), 2)
+        self.assertEqual(self.stack.undoText(), "Change Text Font Size")
+        self.stack.undo()
+        self.assertEqual(controller.read_state().properties["text"], "after")
+        self.assertEqual(
+            float(controller.read_state().properties["fontsize"]),
+            before_size,
+        )
+        self.assertEqual(content.text_content.toPlainText(), "after")
+        self.stack.undo()
+        self.assertEqual(controller.read_state().properties["text"], "before")
+        self.stack.redo()
+        self.assertEqual(controller.read_state().properties["text"], "after")
+        self.stack.redo()
+        self.assertEqual(
+            float(controller.read_state().properties["fontsize"]),
+            before_size + 6.0,
+        )
+
+    def test_same_text_property_on_different_components_does_not_merge(self):
+        self._create_axes_baseline()
+        first, first_inspector = self._add_text_inspector(
+            object_id="history-text-a",
+            text="A",
+        )
+        second, second_inspector = self._add_text_inspector(
+            object_id="history-text-b",
+            text="B",
+        )
+        first_before = first.read_state().properties["color"]
+        second_before = second.read_state().properties["color"]
+        self.stack.clear()
+
+        self.assertTrue(
+            first_inspector.section("typography").apply_property(
+                "color",
+                "#112233",
+            )
+        )
+        self.assertTrue(
+            second_inspector.section("typography").apply_property(
+                "color",
+                "#445566",
+            )
+        )
+
+        self.assertEqual(self.stack.count(), 2)
+        self.stack.undo()
+        self.assertEqual(first.read_state().properties["color"], "#112233")
+        self.assertEqual(second.read_state().properties["color"], second_before)
+        self.stack.undo()
+        self.assertEqual(first.read_state().properties["color"], first_before)
+        self.stack.redo()
+        self.stack.redo()
+        self.assertEqual(first.read_state().properties["color"], "#112233")
+        self.assertEqual(second.read_state().properties["color"], "#445566")
+
+    def test_noop_text_inspector_property_does_not_create_history(self):
+        controller, inspector = self._create_text_inspector()
+        typography = inspector.section("typography")
+        before = controller.read_state()
+
+        self.assertTrue(
+            typography.apply_property(
+                "fontsize",
+                before.properties["fontsize"],
+            )
+        )
+
+        self.assertEqual(controller.read_state(), before)
+        self.assertEqual(self.stack.count(), 0)
+        self.assertFalse(self.stack.canUndo())
+        self.assertFalse(self.stack.canRedo())
+
+    def test_failed_text_inspector_render_creates_no_history(self):
+        controller, inspector = self._create_text_inspector()
+        content = inspector.section("content")
+        before = controller.state.clone()
+        content.text_content.setPlainText("broken")
+
+        with mock.patch.object(
+            controller.resolve_target().figure.canvas,
+            "draw",
+            side_effect=RuntimeError("synthetic text render failure"),
+        ):
+            self.assertFalse(content.set_text_content())
+
+        self.assertEqual(controller.state, before)
+        self.assertEqual(controller.resolve_target().get_text(), "before")
+        self.assertEqual(content.text_content.toPlainText(), "before")
+        self.assertEqual(self.stack.count(), 0)
+        self.assertFalse(self.stack.canUndo())
+        self.assertFalse(self.stack.canRedo())
+
+    def test_all_text_property_sections_enter_project_history(self):
+        controller, inspector = self._create_text_inspector()
+        before = controller.read_state().properties
+        changes = (
+            ("typography", "fontsize", float(before["fontsize"]) + 3.0),
+            ("transform", "rotation", 35.0),
+            ("position", "position", (0.4, 0.6)),
+            ("advanced", "clip_on", not bool(before["clip_on"])),
+        )
+
+        for section_key, property_key, value in changes:
+            self.assertTrue(
+                inspector.section(section_key).apply_property(
+                    property_key,
+                    value,
+                )
+            )
+
+        final = controller.read_state().properties
+        self.assertEqual(self.stack.count(), len(changes))
+        self.assertEqual(self.stack.undoText(), "Change Text Clip On")
+        target = controller.resolve_target()
+        self.assertEqual(float(target.get_fontsize()), final["fontsize"])
+        self.assertEqual(float(target.get_rotation()), final["rotation"])
+        self.assertEqual(tuple(target.get_position()), final["position"])
+        self.assertEqual(bool(target.get_clip_on()), final["clip_on"])
+
+        for _section_key, _property_key, _value in changes:
+            self.stack.undo()
+        restored = controller.read_state().properties
+        for _section_key, property_key, _value in changes:
+            self.assertEqual(restored[property_key], before[property_key])
+
+        for _section_key, _property_key, _value in changes:
+            self.stack.redo()
+        replayed = controller.read_state().properties
+        for _section_key, property_key, value in changes:
+            self.assertEqual(replayed[property_key], value)
+
+    def test_multi_property_text_patch_is_one_atomic_unmerged_command(self):
+        controller, inspector = self._create_text_inspector()
+        typography = inspector.section("typography")
+        before = controller.read_state().properties
+        patch = {
+            "fontsize": float(before["fontsize"]) + 2.0,
+            "color": "#224466",
+        }
+        original_apply = self.canvas.text_render_service.apply
+
+        with mock.patch.object(
+            self.canvas.text_render_service,
+            "apply",
+            wraps=original_apply,
+        ) as apply_spy:
+            result = typography._apply_properties(patch)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(apply_spy.call_count, 1)
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(self.stack.undoText(), "Change Text Properties")
+
+        second_patch = {
+            "fontsize": patch["fontsize"] + 1.0,
+            "color": "#446688",
+        }
+        second_result = typography._apply_properties(second_patch)
+        self.assertTrue(second_result.ok)
+        self.assertEqual(self.stack.count(), 2)
+
+        self.stack.undo()
+        intermediate = controller.read_state().properties
+        self.assertEqual(intermediate["fontsize"], patch["fontsize"])
+        self.assertEqual(intermediate["color"], patch["color"])
+        self.stack.undo()
+        restored = controller.read_state().properties
+        self.assertEqual(restored["fontsize"], before["fontsize"])
+        self.assertEqual(restored["color"], before["color"])
+        self.stack.redo()
+        replayed = controller.read_state().properties
+        self.assertEqual(replayed["fontsize"], patch["fontsize"])
+        self.assertEqual(replayed["color"], patch["color"])
+        self.stack.redo()
+        final = controller.read_state().properties
+        self.assertEqual(final["fontsize"], second_patch["fontsize"])
+        self.assertEqual(final["color"], second_patch["color"])
+
+    def test_text_render_section_creates_exactly_one_history_command(self):
+        self._create_axes_baseline()
+        controller, _inspector = self._add_text_inspector(
+            object_id="history-render-text",
+        )
+        target = controller.resolve_target()
+        self.canvas.text_render_service.tex_enabled = lambda: True
+
+        with (
+            mock.patch(
+                "mygui.widgets.fig_control_window.component_editors."
+                "sections.tex_config.is_tex_enabled",
+                return_value=True,
+            ),
+            mock.patch.object(target.figure.canvas, "draw", return_value=None),
+        ):
+            inspector = self.canvas.create_component_editor(
+                controller.component_id
+            )
+            render = inspector.section("render")
+            self.stack.clear()
+
+            self.assertTrue(render.set_tex_render(True))
+            self.assertEqual(self.stack.count(), 1)
+            self.assertEqual(
+                self.stack.undoText(),
+                "Enable Text TeX Rendering",
+            )
+            self.assertTrue(controller.read_state().properties["usetex"])
+            self.stack.undo()
+            self.assertFalse(controller.read_state().properties["usetex"])
+            self.stack.redo()
+            self.assertTrue(controller.read_state().properties["usetex"])
 
     def test_axes_creation_undo_redo_restores_exact_stable_tree(self):
         before = deepcopy(self.canvas.component_snapshot())

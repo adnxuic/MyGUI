@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QApplication, QWidget
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
@@ -103,10 +104,117 @@ def _context(
     )
 
 
+def _managed_text_inspector(content: str = "abc"):
+    figure = Figure()
+    FigureCanvasAgg(figure)
+    figure.subplots()
+    figure.text(0.5, 0.5, content)
+    registry = register_figure_components(figure)
+    controller = registry.find_one(
+        kind=ComponentKind.TEXT,
+        role=ComponentRole.TEXT,
+    )
+    context = _context(registry, TableRepository(), ColorLibrary())
+    inspector = context.editor_manager.create(controller, context=context)
+    return controller, context, inspector
+
+
 class ComponentInspectorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_text_content_commit_preserves_cursor_at_end(self):
+        controller, context, inspector = _managed_text_inspector("abc")
+        try:
+            section = inspector.section("content")
+            editor = section.text_content
+            editor.moveCursor(QTextCursor.End)
+            editor.insertPlainText("d")
+
+            self.assertEqual(editor.textCursor().position(), 4)
+            self.assertTrue(section.set_text_content())
+            self.assertEqual(
+                controller.read_state().properties["text"],
+                "abcd",
+            )
+            self.assertEqual(editor.toPlainText(), "abcd")
+            self.assertEqual(editor.textCursor().position(), 4)
+        finally:
+            inspector.close()
+            context.editor_manager.close()
+
+    def test_text_content_commit_preserves_cursor_after_middle_insert(self):
+        controller, context, inspector = _managed_text_inspector("abcd")
+        try:
+            section = inspector.section("content")
+            editor = section.text_content
+            cursor = editor.textCursor()
+            cursor.setPosition(2)
+            editor.setTextCursor(cursor)
+            editor.insertPlainText("X")
+
+            self.assertEqual(editor.textCursor().position(), 3)
+            self.assertTrue(section.set_text_content())
+            self.assertEqual(
+                controller.read_state().properties["text"],
+                "abXcd",
+            )
+            self.assertEqual(editor.toPlainText(), "abXcd")
+            self.assertEqual(editor.textCursor().position(), 3)
+        finally:
+            inspector.close()
+            context.editor_manager.close()
+
+    def test_external_text_change_updates_editor_and_accepted_baseline(self):
+        controller, context, inspector = _managed_text_inspector("abc")
+        try:
+            section = inspector.section("content")
+
+            result = controller.set_property("text", "external")
+
+            self.assertTrue(result.ok)
+            self.assertEqual(
+                controller.read_state().properties["text"],
+                "external",
+            )
+            self.assertEqual(section.text_content.toPlainText(), "external")
+            self.assertEqual(
+                section._text_binding.last_valid_text,
+                "external",
+            )
+        finally:
+            inspector.close()
+            context.editor_manager.close()
+
+    def test_unrelated_change_does_not_clobber_pending_text_content(self):
+        controller, context, inspector = _managed_text_inspector("abc")
+        try:
+            content = inspector.section("content")
+            editor = content.text_content
+            editor.moveCursor(QTextCursor.End)
+            editor.insertPlainText("d")
+
+            result = controller.set_property("fontsize", 18.0)
+
+            self.assertTrue(result.ok)
+            self.assertEqual(editor.toPlainText(), "abcd")
+            self.assertEqual(editor.textCursor().position(), 4)
+            self.assertEqual(
+                controller.read_state().properties["text"],
+                "abc",
+            )
+            typography = inspector.section("typography")
+            self.assertEqual(typography.editor("fontsize").value(), 18.0)
+
+            self.assertTrue(content.set_text_content())
+            self.assertEqual(
+                controller.read_state().properties["text"],
+                "abcd",
+            )
+        finally:
+            inspector.close()
+            context.editor_manager.close()
 
     def test_line_roles_share_one_appearance_factory_and_field_order(self):
         roles = (

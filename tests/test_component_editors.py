@@ -6,13 +6,14 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QTextCursor, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QLineEdit,
+    QPlainTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -228,6 +229,55 @@ class ComponentEditorTests(unittest.TestCase):
             self.assertEqual(values, ["good", "bad"])
         finally:
             editor.close()
+
+    def test_identical_plain_text_sync_preserves_editing_session(self):
+        editor = QPlainTextEdit()
+        editor.setPlainText("abcdef")
+        binding = DebouncedTextBinding(editor, lambda _value: True)
+        text_events = []
+        editor.textChanged.connect(lambda: text_events.append(True))
+        cursor = editor.textCursor()
+        cursor.setPosition(2)
+        cursor.setPosition(4, QTextCursor.KeepAnchor)
+        editor.setTextCursor(cursor)
+        editor.document().setModified(True)
+        try:
+            binding.set_text("abcdef")
+
+            current = editor.textCursor()
+            self.assertEqual((current.anchor(), current.position()), (2, 4))
+            self.assertEqual(current.selectedText(), "cd")
+            self.assertEqual(text_events, [])
+            self.assertFalse(editor.document().isModified())
+            self.assertEqual(binding.last_valid_text, "abcdef")
+        finally:
+            editor.close()
+
+    def test_generic_text_editor_identical_sync_preserves_selection(self):
+        controller = _FakeController()
+        component_editor = ComponentEditorBase(
+            controller,
+            color_library=ColorLibrary(),
+        )
+        editor = component_editor.editor("label")
+        text_events = []
+        editor.textChanged.connect(text_events.append)
+        editor.setSelection(1, 3)
+        editor.setModified(True)
+        try:
+            component_editor.sync_from_controller()
+
+            self.assertEqual(editor.selectionStart(), 1)
+            self.assertEqual(editor.selectedText(), "efo")
+            self.assertEqual(editor.cursorPosition(), 4)
+            self.assertEqual(text_events, [])
+            self.assertFalse(editor.isModified())
+            self.assertEqual(
+                component_editor._text_bindings["label"].last_valid_text,
+                "before",
+            )
+        finally:
+            component_editor.close()
 
     def test_success_messages_skip_noop_changes(self):
         editor = QLineEdit("before")

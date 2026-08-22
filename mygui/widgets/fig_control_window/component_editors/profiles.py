@@ -10,6 +10,7 @@ from mygui.figuremodify.components import (
 )
 
 from .chart_sections import FunctionCurveSection, InterpolationSection
+from .context import perform_editor_action
 from .fit_sections import (
     FitActionsSection,
     FitDisplayRangeSection,
@@ -256,11 +257,43 @@ def _interpolation_options(controller, context, parent):
     )
 
 
-def _text_apply(controller, context):
-    return lambda properties: context.text_rendering.apply(
-        controller,
-        properties,
+_TEXT_HISTORY_LABELS = {
+    "text": "Content",
+    "fontsize": "Font Size",
+    "color": "Color",
+    "position": "Position",
+}
+
+
+def _text_history_label(property_key: str) -> str:
+    return _TEXT_HISTORY_LABELS.get(
+        property_key,
+        property_key.replace("_", " ").title(),
     )
+
+
+def _text_apply(controller, context):
+    def apply(properties):
+        patch = dict(properties)
+        if len(patch) == 1:
+            property_key = next(iter(patch))
+            text = f"Change Text {_text_history_label(property_key)}"
+            merge_key = (
+                "property",
+                controller.component_id,
+                property_key,
+            )
+        else:
+            text = "Change Text Properties"
+            merge_key = None
+        return perform_editor_action(
+            context,
+            text,
+            lambda: context.text_rendering.apply(controller, patch),
+            merge_key=merge_key,
+        )
+
+    return apply
 
 
 def _text_content(controller, context, parent):

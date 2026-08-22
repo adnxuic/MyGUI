@@ -412,6 +412,22 @@ class ComponentEditorManager:
                 editor = editor_ref()
                 if editor is None:
                     continue
+                property_key = (
+                    event.change.property_key
+                    if event.change is not None
+                    else None
+                )
+                sync_property = getattr(
+                    editor,
+                    "sync_property_from_controller",
+                    None,
+                )
+                if (
+                    property_key is not None
+                    and callable(sync_property)
+                    and sync_property(property_key)
+                ):
+                    continue
                 sync = getattr(
                     editor,
                     "sync_from_controller",

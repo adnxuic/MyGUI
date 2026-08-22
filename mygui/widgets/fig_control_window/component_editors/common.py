@@ -179,6 +179,9 @@ class DebouncedTextBinding(QObject):
         return self.editor.text()
 
     def _set_editor_text(self, text: str) -> None:
+        if self._text() == text:
+            self._mark_committed()
+            return
         blocker = QSignalBlocker(self.editor)
         if isinstance(self.editor, QPlainTextEdit):
             self.editor.setPlainText(text)

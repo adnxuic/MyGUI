@@ -249,6 +249,24 @@ class ComponentInspector(QFrame):
             if callable(sync):
                 sync()
 
+    def sync_property_from_controller(self, property_key: str) -> bool:
+        """Refresh only Sections that expose one changed property."""
+
+        handled = False
+        for spec in self.profile.sections:
+            if property_key in spec.intentionally_hidden:
+                handled = True
+            if property_key not in spec.property_keys:
+                continue
+            section = self._sections_by_key.get(spec.key)
+            if section is None:
+                continue
+            sync = getattr(section, "sync_from_controller", None)
+            if callable(sync):
+                sync()
+            handled = True
+        return handled
+
     def delete_object(self):
         """Delegate physical deletion to the Canvas-owned command."""
 
