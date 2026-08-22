@@ -22,6 +22,10 @@ from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
     axes_layout_preset,
     normalized_layout_icon,
 )
+from mygui.widgets.title_bar.titlebar_dialog.xrd_refinement_input import (
+    XrdRefinementInput,
+)
+from mygui.xrd_refinement import XrdRefinementImportService
 
 
 class PyStyleDialog(QDialog):
@@ -158,6 +162,8 @@ class PyLayoutDialog(QDialog):
             )
 
         self.layout = QVBoxLayout()
+        self._layout_valid = True
+        self._xrd_valid = True
         self.input = AxesLayoutInput(
             color_library=figure_window.color_library,
             preset_key=self.preset_key,
@@ -176,13 +182,25 @@ class PyLayoutDialog(QDialog):
             self.input.constrained_input.setChecked(
                 canvas.axes_layout_service.constrained_layout_enabled()
             )
+        self.xrd_input: XrdRefinementInput | None = None
+        if self.layout_id is None and self.preset_key == "main_residual":
+            if self.input.tabs is None:
+                raise RuntimeError("Main + Residual layout tabs are unavailable.")
+            self.xrd_input = XrdRefinementInput(
+                reflection_legend_supported=True,
+                parent=self.input.tabs,
+            )
+            self.input.tabs.addTab(self.xrd_input, "XRD Refinement")
+            self.xrd_input.validity_changed.connect(
+                self._xrd_validity_changed
+            )
         self.layout.addWidget(self.input)
 
         self.ok_button = QPushButton("Apply" if self.layout_id else "Create")
         self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
-        self.input.validity_changed.connect(self._sync_accept_enabled)
+        self.input.validity_changed.connect(self._layout_validity_changed)
         self.button_layout = QHBoxLayout()
         self.button_layout.addStretch(1)
         self.button_layout.addWidget(self.ok_button)
@@ -190,12 +208,22 @@ class PyLayoutDialog(QDialog):
         self.layout.addLayout(self.button_layout)
         self.setLayout(self.layout)
         self.resize(720, 620)
-        self._sync_accept_enabled(*self.input.refresh_validation())
+        self._layout_validity_changed(*self.input.refresh_validation())
+        if self.xrd_input is not None:
+            self._xrd_validity_changed(*self.xrd_input.refresh_validation())
 
-    def _sync_accept_enabled(self, valid: bool, _message: str) -> None:
+    def _layout_validity_changed(self, valid: bool, _message: str) -> None:
+        self._layout_valid = bool(valid)
+        self._sync_accept_enabled()
+
+    def _xrd_validity_changed(self, valid: bool, _message: str) -> None:
+        self._xrd_valid = bool(valid)
+        self._sync_accept_enabled()
+
+    def _sync_accept_enabled(self, *_args) -> None:
         """Keep submission unavailable while inline validation fails."""
 
-        self.ok_button.setEnabled(bool(valid))
+        self.ok_button.setEnabled(self._layout_valid and self._xrd_valid)
 
     def accept(self):
         """Submit the controller-free request to the Canvas layout service."""
@@ -207,8 +235,22 @@ class PyLayoutDialog(QDialog):
         try:
             spec = self.input.spec()
             if self.layout_id is None:
-                component_ids = canvas.create_axes_layout(spec)
-                message = f"Created layout with {len(component_ids)} Axes."
+                request = (
+                    None if self.xrd_input is None else self.xrd_input.request()
+                )
+                if request is None:
+                    component_ids = canvas.create_axes_layout(spec)
+                    message = f"Created layout with {len(component_ids)} Axes."
+                else:
+                    outcome = XrdRefinementImportService(
+                        canvas=canvas,
+                        table_view=self.figure_window.table,
+                    ).execute(spec, request)
+                    message = (
+                        "Imported XRD refinement data into "
+                        f"{outcome.table.profile_sheet.name} and "
+                        f"{outcome.table.reflection_sheet.name}; created the plot."
+                    )
             else:
                 component_ids = canvas.update_axes_layout(spec)
                 message = f"Updated layout for {len(component_ids)} Axes."

@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 and schema-v11 Figure trees."""
+"""Normalize and validate strict schema-v10, v11, and v12 Figure trees."""
 
 from __future__ import annotations
 
@@ -120,7 +120,13 @@ def normalize_v10_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v11_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v11 Figure component tree."""
+    """Normalize a strict schema-v11 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v12_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v12 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -256,6 +262,7 @@ def _validate_parent(
         ComponentKind.SPINE,
         ComponentKind.LEGEND,
         ComponentKind.COLORBAR,
+        ComponentKind.REFERENCE_MARKS,
     }:
         valid = parent_kind is ComponentKind.AXES
     elif state.kind is ComponentKind.TICK_GROUP:
@@ -326,7 +333,12 @@ def _validate_parent(
             raise ValueError(f"Invalid Spine selector at {path}.selector.")
     if (
         state.kind
-        in _CHART_KINDS | {ComponentKind.IN_AXES, ComponentKind.COLORBAR}
+        in _CHART_KINDS
+        | {
+            ComponentKind.IN_AXES,
+            ComponentKind.COLORBAR,
+            ComponentKind.REFERENCE_MARKS,
+        }
         or state.role is ComponentRole.TEXT
     ) and selector.get("object_id") != state.id:
         raise ValueError(f"Invalid object selector at {path}.selector.object_id.")
@@ -594,6 +606,14 @@ def _validate_figure(
             raise ValueError(
                 f"Invalid project field {path}: Colorbar is not part of schema v10."
             )
+        if (
+            schema_version < 12
+            and state.kind is ComponentKind.REFERENCE_MARKS
+        ):
+            raise ValueError(
+                f"Invalid project field {path}: Reference Marks is not part "
+                f"of schema v{schema_version}."
+            )
         if state.id in by_id:
             raise ValueError(f"Duplicate component id at {path}: {state.id}")
         by_id[state.id] = state
@@ -734,7 +754,7 @@ def validate_v11_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v11 Figure component tree."""
+    """Validate one predecessor schema-v11 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -742,4 +762,21 @@ def validate_v11_figure(
         project_id,
         project_name,
         schema_version=11,
+    )
+
+
+def validate_v12_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v12 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=12,
     )

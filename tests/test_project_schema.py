@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 from mygui.database import ColumnRef
 from mygui.project_io import (
+    PROJECT_SCHEMA_VERSION,
     load_project_file,
     project_snapshot,
     restore_project_snapshot,
@@ -21,7 +22,7 @@ from mygui.project_io import (
 from main import MainWindow
 
 
-class ProjectSchemaV10Tests(unittest.TestCase):
+class ProjectSchemaV12Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -111,6 +112,118 @@ class ProjectSchemaV10Tests(unittest.TestCase):
                 self.component(candidate, "line")["data"] = data
                 with self.assertRaisesRegex(ValueError, message):
                     validate_project_snapshot(candidate)
+
+    def test_schema_v12_reference_marks_exact_contract_and_rejections(self):
+        self.canvas.add_reference_marks(
+            [15.2, 15.2, 22.9],
+            {
+                "label": "YBCO",
+                "baseline": 0.12,
+                "height": 0.04,
+                "color": "#123456",
+            },
+            object_id="reference-ybco",
+            announce=False,
+        )
+        valid = self.snapshot()
+        self.assertEqual(valid["schema_version"], 12)
+        component = self.component(valid, "reflection_positions")
+        self.assertEqual(
+            set(component),
+            {
+                "id",
+                "kind",
+                "role",
+                "parent_id",
+                "order",
+                "selector",
+                "properties",
+                "data",
+            },
+        )
+        self.assertEqual(component["kind"], "reference_marks")
+        self.assertEqual(
+            component["selector"],
+            {"object_id": "reference-ybco"},
+        )
+        self.assertEqual(
+            set(component["properties"]),
+            {
+                "label",
+                "visible",
+                "baseline",
+                "height",
+                "color",
+                "linewidth",
+                "linestyle",
+                "alpha",
+                "zorder",
+                "clip_on",
+            },
+        )
+        self.assertEqual(component["data"], {"positions": [15.2, 15.2, 22.9]})
+        validate_project_snapshot(valid)
+
+        predecessor = deepcopy(valid)
+        predecessor["schema_version"] = 11
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "v11-cannot-contain-reference-marks.json"
+            path.write_text(json.dumps(predecessor), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "schema v11"):
+                load_project_file(path)
+
+        invalid_mutations = (
+            lambda item: item["selector"].update(index=0),
+            lambda item: item["properties"].pop("height"),
+            lambda item: item["properties"].update(unknown=True),
+            lambda item: item["properties"].update(baseline=-0.1),
+            lambda item: item["properties"].update(height=0.0),
+            lambda item: item["properties"].update(baseline=0.99, height=0.02),
+            lambda item: item["data"].update(unknown=[]),
+            lambda item: item["data"].update(positions="15.2, 22.9"),
+            lambda item: item["data"].update(positions=[15.2, True]),
+            lambda item: item["data"].update(positions=[float("nan")]),
+            lambda item: item.update(parent_id=item["parent_id"] + "/xaxis"),
+        )
+        for index, mutate in enumerate(invalid_mutations):
+            with self.subTest(index=index):
+                candidate = deepcopy(valid)
+                mutate(self.component(candidate, "reflection_positions"))
+                with self.assertRaises(ValueError):
+                    validate_project_snapshot(candidate)
+
+    def test_schema_v10_and_v11_migrate_to_v12_without_rewriting_components(self):
+        current = self.snapshot()
+        original_components = deepcopy(current["figure"]["components"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for source_version in (10, 11):
+                with self.subTest(source_version=source_version):
+                    source = deepcopy(current)
+                    source["schema_version"] = source_version
+                    path = root / f"schema-v{source_version}.mygui.json"
+                    path.write_text(json.dumps(source), encoding="utf-8")
+                    migrated = load_project_file(path)
+                    self.assertEqual(migrated["schema_version"], 12)
+                    self.assertEqual(
+                        migrated["figure"]["components"],
+                        original_components,
+                    )
+
+    def test_only_exact_integer_v10_v11_and_v12_are_accepted(self):
+        current = self.snapshot()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for version in (4, 9, 13, True, 12.0, "12"):
+                with self.subTest(version=version):
+                    candidate = deepcopy(current)
+                    candidate["schema_version"] = version
+                    path = root / f"unsupported-{str(version)}.json"
+                    path.write_text(json.dumps(candidate), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "schema version"):
+                        load_project_file(path)
+
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 12)
 
     def test_validation_rejects_invalid_graph_and_component_state(self):
         valid = self.snapshot()
@@ -204,7 +317,7 @@ class ProjectSchemaV10Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "expected exactly"):
                     validate_project_snapshot(candidate)
 
-    def test_invalid_v10_file_is_rejected_before_application_state_changes(self):
+    def test_invalid_current_file_is_rejected_before_application_state_changes(self):
         snapshot = self.snapshot()
         self.component(snapshot, "data_plot")["parent_id"] = "missing"
 

@@ -40,7 +40,7 @@ remain the only selection, refresh, Inspector lookup, and deletion targets.
 
 Labels are presentation-only and update from Registry events. Examples
 include `Figure — Project`, `Axes 1`, `Left Spine`, `Plot — Raw Data`, and
-`Text — note preview`. A Component Tooltip lists:
+`Text — note preview`, and `Reflection Positions — YBCO`. A Component Tooltip lists:
 
 | Field | Source |
 | --- | --- |
@@ -69,10 +69,11 @@ session; it does not keep a second selected ID. Switching project tabs
 reflects the Canvas selection and restores expansion.
 Closing a project releases its Registry and Canvas callbacks and discards its
 tree session. Selection, expansion, search text, and Explorer page state are
-not part of schema v11.
+not part of schema v12.
 
 When a project is first bound, the tree selects the current Axes when one
-exists, otherwise the Figure root. Creating an Axes, Chart, or free Text
+exists, otherwise the Figure root. Creating an Axes, Chart, free Text, or
+Reference Marks component
 selects the new Component and opens its exact Inspector, but does not force
 the Explorer to change page or become visible.
 

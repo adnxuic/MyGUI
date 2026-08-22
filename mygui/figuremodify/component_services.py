@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.collections import LineCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 
@@ -61,12 +62,14 @@ from mygui.figuremodify.components import (
     InterpolationController,
     LegendController,
     MessageLevel,
+    ReferenceMarksController,
     ObserverFailure,
     ScatterController,
     ScatterData,
     TextController,
     UpdateImpact,
     XYData,
+    normalize_reference_positions,
 )
 from mygui.figuremodify.components.property_values import (
     legend_anchor_value,
@@ -120,6 +123,180 @@ def _notices(
 
 def _warning(message: str) -> ComponentNotice:
     return ComponentNotice(MessageLevel.WARNING, message)
+
+
+class ReferenceMarksService:
+    """Create and edit one reflection set through one LineCollection."""
+
+    def __init__(self, registry: ComponentRegistry) -> None:
+        self.registry = registry
+
+    def _owner_axes(self, owner_axes_id: str) -> Axes:
+        controller = self.registry.get(str(owner_axes_id))
+        if controller.state.kind is not ComponentKind.AXES:
+            raise ComponentValidationError(
+                "Reference Marks owner must be an ordinary Axes component."
+            )
+        target = self.registry.resolve_target(controller.component_id)
+        if not isinstance(target, Axes):
+            raise ComponentValidationError(
+                "Reference Marks owner target must be a Matplotlib Axes."
+            )
+        return target
+
+    def preflight(
+        self,
+        owner_axes_id: str,
+        positions: Any,
+        properties: dict[str, Any] | None = None,
+    ) -> tuple[list[float], dict[str, Any]]:
+        """Validate a complete candidate before creating runtime state."""
+
+        self._owner_axes(owner_axes_id)
+        specs = ReferenceMarksController.property_specs()
+        requested = dict(properties or {})
+        unknown = set(requested) - set(specs)
+        if unknown:
+            raise ComponentValidationError(
+                f"Unknown Reference Marks properties: {sorted(unknown)!r}."
+            )
+        normalized = ReferenceMarksController.default_properties()
+        normalized.update(
+            {key: specs[key].normalize(value) for key, value in requested.items()}
+        )
+        normalized_positions = normalize_reference_positions(positions)
+        candidate = ComponentState(
+            id="reference-marks-preflight",
+            kind=ComponentKind.REFERENCE_MARKS,
+            role=ComponentRole.REFLECTION_POSITIONS,
+            parent_id=str(owner_axes_id),
+            order=0,
+            selector={"object_id": "reference-marks-preflight"},
+            properties=normalized,
+            data={"positions": normalized_positions},
+        )
+        ReferenceMarksController(candidate)
+        return normalized_positions, normalized
+
+    def create_runtime(
+        self,
+        owner_axes_id: str,
+        positions: Any,
+        properties: dict[str, Any] | None = None,
+    ) -> tuple[LineCollection, list[float], dict[str, Any]]:
+        """Create exactly one staged LineCollection with a blended transform."""
+
+        normalized_positions, normalized = self.preflight(
+            owner_axes_id,
+            positions,
+            properties,
+        )
+        owner = self._owner_axes(owner_axes_id)
+        runtime = LineCollection(
+            ReferenceMarksController.segments_for(
+                normalized_positions,
+                normalized["baseline"],
+                normalized["height"],
+            ),
+            colors=[normalized["color"]],
+            linewidths=[normalized["linewidth"]],
+            linestyles=normalized["linestyle"],
+            alpha=normalized["alpha"],
+            visible=normalized["visible"],
+            zorder=normalized["zorder"],
+            clip_on=normalized["clip_on"],
+            label=normalized["label"],
+            transform=owner.get_xaxis_transform(),
+        )
+        try:
+            owner.add_collection(runtime, autolim=False)
+            if runtime.axes is not owner:
+                raise ComponentValidationError(
+                    "Matplotlib did not attach Reference Marks to its owner Axes."
+                )
+        except Exception:
+            self.destroy_runtime(runtime)
+            raise
+        return runtime, normalized_positions, normalized
+
+    @staticmethod
+    def destroy_runtime(runtime: LineCollection) -> None:
+        """Remove a staged Reference Marks collection during rollback."""
+
+        if not isinstance(runtime, LineCollection):
+            return
+        try:
+            runtime.remove()
+        except (RuntimeError, ValueError):
+            pass
+
+    @staticmethod
+    def _verify_render(controller: ReferenceMarksController) -> None:
+        runtime = controller.resolve_target()
+        canvas = runtime.figure.canvas if runtime.figure is not None else None
+        if canvas is not None:
+            canvas.draw()
+
+    def apply_properties(
+        self,
+        component,
+        properties: dict[str, Any],
+    ) -> ComponentChange:
+        """Apply property edits and geometry as one verified transaction."""
+
+        controller = _controller(
+            self.registry,
+            component,
+            ReferenceMarksController,
+        )
+        batch = self.registry.apply_transaction(
+            (
+                ComponentMutation(
+                    controller.component_id,
+                    properties=dict(properties),
+                    data=controller.state.data,
+                ),
+            ),
+            verifier=lambda: self._verify_render(controller),
+        )
+        if not batch.committed or not batch.changes:
+            return _rejected(
+                controller,
+                batch.message or "Reference Marks render verification failed.",
+            )
+        return batch.changes[0]
+
+    def update_positions(
+        self,
+        component,
+        positions: Any,
+    ) -> ComponentChange:
+        """Replace only the authoritative ordered position sequence."""
+
+        controller = _controller(
+            self.registry,
+            component,
+            ReferenceMarksController,
+        )
+        try:
+            normalized = normalize_reference_positions(positions)
+        except Exception as exc:
+            return _rejected(controller, str(exc))
+        batch = self.registry.apply_transaction(
+            (
+                ComponentMutation(
+                    controller.component_id,
+                    data={"positions": normalized},
+                ),
+            ),
+            verifier=lambda: self._verify_render(controller),
+        )
+        if not batch.committed or not batch.changes:
+            return _rejected(
+                controller,
+                batch.message or "Reference Marks render verification failed.",
+            )
+        return batch.changes[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -820,6 +997,11 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
     ):
         handlers.register(ComponentKind.LINE, role, palette_leaf)
     handlers.register(ComponentKind.SCATTER, ComponentRole.SCATTER, palette_leaf)
+    handlers.register(
+        ComponentKind.REFERENCE_MARKS,
+        ComponentRole.REFLECTION_POSITIONS,
+        DeletionHandler(),
+    )
     handlers.register(
         ComponentKind.COLORBAR,
         ComponentRole.COLORBAR,

@@ -18,6 +18,37 @@ Horizontal Comparison exposes only **Share Y axis**. When it is disabled, both Y
 
 The title bar is the authoritative template selector. The dialog displays the selected icon, name, dimensions, and sharing summary; it does not expose a second template selector, arbitrary row/column controls, or cell-occupancy controls.
 
+## FullProf XRD refinement import
+
+The creation dialog for **Main Plot + Residual** alone includes an **XRD
+Refinement** tab. Its optional v1 input is a FullProf `.prf` result. Selecting
+a file parses and validates it immediately and previews its title, χ², profile
+point count, reflection count, and 2θ range. An invalid file is reported inline
+and disables **Create**. With **Import XRD refinement result** off, the controls
+are disabled and the template follows its ordinary layout-only creation path.
+
+| Dialog field | Control | Meaning | Default | Persisted key |
+| --- | --- | --- | --- | --- |
+| Import XRD refinement result | Checkbox | Enables the optional FullProf `.prf` workflow. | Off | Transient; not persisted |
+| File | Path plus **Browse…** | FullProf profile-result file, filtered as `FullProf PRF (*.prf)` and parsed when selected. | Empty | Transient; the source path is not persisted |
+| Observed | Checkbox | Includes the imported Observed Scatter in the Main legend. | On | Applied through the Scatter `properties.label` and Main Legend state |
+| Calculated | Checkbox | Includes the imported Calculated Data Plot in the Main legend. | On | Applied through the Data Plot `properties.label` and Main Legend state |
+| Reflection positions | Checkbox | Includes the existing Reflection Positions component in the Main legend. | Off | Applied through Reference Marks `properties.label` and Main Legend state |
+| Residual | Checkbox | Includes the Residual Data Plot in the lower legend. | Off | Applied through the Data Plot `properties.label` and lower Legend state |
+
+On creation, the upper semantic Axes at row 0 receives an Observed Scatter, a
+Calculated Data Plot, and the existing Reflection Positions component. The
+lower semantic Axes at row 1 receives a Residual Data Plot. The Residual values
+are recomputed as `Yobs - Ycal`; the offset FullProf difference column is not
+used for that line. The two Axes keep the template's shared-X and outer-label
+behavior. Main and Residual legends remain independent, and an empty legend
+selection hides the corresponding Legend.
+
+The import creates two commands in the project's shared history: **Import XRD
+Refinement Data**, followed by **Create XRD Refinement Plot**. Undo therefore
+removes the Figure setup before removing its source sheets; Redo restores the
+sheets before the data-backed components.
+
 ## Advanced geometry
 
 Advanced geometry is collapsed by default during creation and expanded while editing an existing layout.
@@ -51,7 +82,7 @@ Deleting a right-Y Axes leaves its primary Axes in place and resets a merged pri
 
 ## Project records
 
-Schema v11 stores geometry under the Figure root in `data.layouts`. Each layout contains:
+Schema v12 stores geometry under the Figure root in `data.layouts`. Each layout contains:
 
 - stable `id`;
 - `nrows`, `ncols`;
@@ -59,4 +90,4 @@ Schema v11 stores geometry under the Figure root in `data.layouts`. Each layout 
 - `margins.left/right/bottom/top`;
 - `spacing.wspace/hspace`.
 
-Each Axes stores `data.subplot` with `layout_id`, zero-based `row` and `column`, `layer` (`primary` or `right_y`), and nullable `share_x_group` / `share_y_group` IDs. Template keys, dialog summaries, expanded groups, and other UI state are not persisted.
+Each Axes stores `data.subplot` with `layout_id`, zero-based `row` and `column`, `layer` (`primary` or `right_y`), and nullable `share_x_group` / `share_y_group` IDs. Template keys, dialog summaries, expanded groups, XRD import controls, the PRF source path, and other UI state are not persisted.

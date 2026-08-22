@@ -16,7 +16,7 @@ tasks:
       - tests.test_component_runtime_integration
       - tests.test_component_deletion_and_project_close
       - tests.test_project_object_roundtrip
-    documentation: [docs/component-extension-template.md, docs/component-properties-v11.md]
+    documentation: [docs/component-extension-template.md, docs/component-properties-v12.md]
     manual_smoke: true
   modify_component_property:
     skill: .agents/skills/modify-component-property/SKILL.md
@@ -46,7 +46,7 @@ tasks:
       - tests.test_project_io
       - tests.test_project_object_roundtrip
       - tests.test_component_materializers
-    documentation: [docs/project-files.md, docs/component-properties-v11.md]
+    documentation: [docs/project-files.md, docs/component-properties-v12.md]
     manual_smoke: true
   project_io_change:
     skill: .agents/skills/project-io-change/SKILL.md

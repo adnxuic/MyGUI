@@ -30,6 +30,7 @@ from mygui import status_messages
 from mygui.widgets.fig_control_window.component_editors import (
     ColorbarInput,
     InAxesInput,
+    ReferenceMarksInput,
 )
 
 from mygui.resources import load_qss_resource
@@ -290,6 +291,62 @@ class PyColorbarDialog(QDialog):
         super().accept()
 
 
+class PyReferenceMarksDialog(QDialog):
+    """Collect Controller-free values for Reflection Positions."""
+
+    ICON_PATH = icon_path("element_images/reference_marks.svg")
+
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("reference_marks_dialog")
+        self.setWindowTitle(dialog_name or "Reflection Positions")
+        self.setWindowIcon(QIcon(self.ICON_PATH))
+        self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+        defaults = (
+            canvas.component_creation_defaults()
+            if canvas is not None
+            else resolve_component_creation_defaults("default")
+        )
+        color_library = getattr(figure_window, "color_library", None)
+        if color_library is None:
+            raise ValueError("The application ColorLibrary is unavailable.")
+        layout = QVBoxLayout(self)
+        self.input = ReferenceMarksInput(
+            color_library=color_library,
+            defaults=defaults.reference_marks,
+            parent=self,
+        )
+        layout.addWidget(self.input)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self):
+        """Validate and create Reflection Positions without closing on error."""
+
+        canvas = getattr(self.figure_window, "current_canva", None)
+        if canvas is None or not canvas.has_current_axes:
+            status_messages.show_warning(
+                "Select an Axes before creating Reflection Positions."
+            )
+            return
+        try:
+            canvas.add_reference_marks(
+                self.input.positions(),
+                self.input.properties(),
+            )
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return
+        super().accept()
+
+
 @dataclass(frozen=True, slots=True)
 class ElementActionSpec:
     """Declare one Elements action and its resolved icon."""
@@ -310,5 +367,9 @@ element_action_specs = {
     "Colorbar": ElementActionSpec(
         PyColorbarDialog,
         PyColorbarDialog.ICON_PATH,
+    ),
+    "Reflection Positions": ElementActionSpec(
+        PyReferenceMarksDialog,
+        PyReferenceMarksDialog.ICON_PATH,
     ),
 }

@@ -11,8 +11,9 @@ from tests.axes_helpers import create_regular_axes
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+from matplotlib.collections import LineCollection
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from mygui import status_messages
 from mygui.database import ColumnRef, ColumnType, TableChangeSet
@@ -23,9 +24,15 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
 )
-from mygui.figuremodify.components.serialization import validate_v10_figure
+from mygui.figuremodify.components.serialization import (
+    validate_v10_figure,
+    validate_v12_figure,
+)
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+    PyReferenceMarksDialog,
+)
 from main import MainWindow
 
 
@@ -360,6 +367,184 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             ],
             ylim,
         )
+
+    def test_reference_marks_create_empty_single_and_large_as_one_collection(self):
+        axes = self.canvas.current_axes
+        original_ylim = axes.get_ylim()
+        axes_controller = self.canvas.current_axes_controller
+        original_cycle = axes_controller.state.properties["color_cycle"]
+        for suffix, positions in (
+            ("empty", []),
+            ("single", [15.2]),
+            ("large", [float(index) / 10 for index in range(1001)]),
+        ):
+            with self.subTest(suffix=suffix):
+                before = tuple(axes.collections)
+                component_id = f"reference-{suffix}"
+                artist = self.canvas.add_reference_marks(
+                    positions,
+                    {"label": suffix},
+                    object_id=component_id,
+                    announce=False,
+                )
+                self.assertIsInstance(artist, LineCollection)
+                self.assertEqual(len(axes.collections), len(before) + 1)
+                self.assertIs(axes.collections[-1], artist)
+                self.assertEqual(len(artist.get_segments()), len(positions))
+                self.assertIs(
+                    self.canvas.component_registry.resolve_target(component_id),
+                    artist,
+                )
+                state = self.canvas.component_registry.get(component_id).state
+                self.assertEqual(state.data["positions"], positions)
+                self.assertEqual(
+                    state.selector,
+                    {"object_id": component_id},
+                )
+                self.assertIs(artist.get_transform(), axes.get_xaxis_transform())
+                self.assertEqual(axes.get_ylim(), original_ylim)
+
+        self.assertEqual(
+            axes_controller.state.properties["color_cycle"],
+            original_cycle,
+        )
+
+        validate_v12_figure(
+            self.canvas.component_snapshot(),
+            self._available_refs(),
+            self.canvas.project_id,
+            self.canvas.project_name,
+        )
+
+    def test_reference_marks_geometry_and_style_edit_keep_artist_identity(self):
+        axes = self.canvas.current_axes
+        artist = self.canvas.add_reference_marks(
+            [15.2, 15.2, 22.9],
+            object_id="reference-edit",
+            announce=False,
+        )
+        controller = self.canvas.component_registry.get("reference-edit")
+        identity = id(artist)
+        original_ylim = axes.get_ylim()
+
+        change = self.canvas.reference_marks_service.apply_properties(
+            controller,
+            {
+                "baseline": 0.2,
+                "height": 0.3,
+                "color": "#123456",
+                "linewidth": 2.5,
+                "linestyle": "--",
+                "alpha": 0.4,
+                "zorder": 7.0,
+                "clip_on": False,
+            },
+        )
+        self.assertTrue(change.ok, change.message)
+        self.assertEqual(id(controller.resolve_target()), identity)
+        self.assertEqual(axes.get_ylim(), original_ylim)
+        for segment in artist.get_segments():
+            np.testing.assert_allclose(segment[:, 1], [0.2, 0.5])
+        self.assertAlmostEqual(float(artist.get_linewidths()[0]), 2.5)
+        self.assertAlmostEqual(float(artist.get_alpha()), 0.4)
+        self.assertEqual(artist.get_zorder(), 7.0)
+        self.assertFalse(artist.get_clip_on())
+
+        axes.set_xlim(100.0, 200.0)
+        axes.set_ylim(-500.0, 500.0)
+        self.canvas.fig.canvas.draw()
+        self.assertEqual(id(controller.resolve_target()), identity)
+        for segment in artist.get_segments():
+            np.testing.assert_allclose(segment[:, 1], [0.2, 0.5])
+
+    def test_reference_marks_registration_rolls_back_on_render_failure(self):
+        axes = self.canvas.current_axes
+        before_collections = tuple(axes.collections)
+        before_ids = {
+            controller.component_id
+            for controller in self.canvas.component_registry
+        }
+        before_selection = self.canvas.current_component_id
+
+        with mock.patch.object(
+            self.canvas.fig.canvas,
+            "draw",
+            side_effect=RuntimeError("simulated reference render failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "simulated"):
+                self.canvas.add_reference_marks(
+                    [15.2],
+                    object_id="reference-failure",
+                    announce=False,
+                )
+
+        self.assertEqual(tuple(axes.collections), before_collections)
+        self.assertEqual(
+            {
+                controller.component_id
+                for controller in self.canvas.component_registry
+            },
+            before_ids,
+        )
+        self.assertNotIn("reference-failure", self.canvas.component_registry)
+        self.assertEqual(self.canvas.current_component_id, before_selection)
+
+    def test_reference_marks_edit_render_failure_restores_state_and_segments(self):
+        artist = self.canvas.add_reference_marks(
+            [15.2, 22.9],
+            object_id="reference-edit-failure",
+            announce=False,
+        )
+        controller = self.canvas.component_registry.get(
+            "reference-edit-failure"
+        )
+        before = controller.state
+        before_segments = [segment.copy() for segment in artist.get_segments()]
+        with mock.patch.object(
+            self.canvas.fig.canvas,
+            "draw",
+            side_effect=RuntimeError("simulated edit render failure"),
+        ):
+            change = self.canvas.reference_marks_service.update_positions(
+                controller,
+                [1.0, 2.0, 3.0],
+            )
+
+        self.assertEqual(change.status, ChangeStatus.REJECTED)
+        self.assertEqual(controller.state, before)
+        self.assertIs(controller.resolve_target(), artist)
+        self.assertEqual(
+            [segment.tolist() for segment in artist.get_segments()],
+            [segment.tolist() for segment in before_segments],
+        )
+
+    def test_reference_marks_creation_dialog_uses_typed_input_and_canvas_path(self):
+        dialog = PyReferenceMarksDialog(
+            "Reflection Positions",
+            self.window.figure_window,
+        )
+        try:
+            dialog.input.label_input.setText("YBCO")
+            dialog.input.positions_input.setText("15.2, 15.2 22.9")
+            dialog.input.baseline_input.setValue(0.12)
+            dialog.input.height_input.setValue(0.04)
+            dialog.input.linewidth_input.setValue(1.4)
+            dialog.accept()
+
+            self.assertEqual(dialog.result(), QDialog.Accepted)
+            controllers = self.canvas.component_registry.query(
+                kind=ComponentKind.REFERENCE_MARKS,
+                role=ComponentRole.REFLECTION_POSITIONS,
+            )
+            self.assertEqual(len(controllers), 1)
+            state = controllers[0].state
+            self.assertEqual(state.data["positions"], [15.2, 15.2, 22.9])
+            self.assertEqual(state.properties["label"], "YBCO")
+            self.assertEqual(state.properties["baseline"], 0.12)
+            self.assertEqual(state.properties["height"], 0.04)
+            self.assertEqual(state.properties["linewidth"], 1.4)
+        finally:
+            dialog.close()
 
     def test_data_refresh_updates_only_the_affected_axes_inspector(self):
         line_pair, _valid_pair = self._set_source_data()

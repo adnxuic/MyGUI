@@ -22,6 +22,7 @@ from .controllers import (
     InterpolationController,
     LegendController,
     LineController,
+    ReferenceMarksController,
     ScatterController,
     SpineController,
     TextController,
@@ -35,6 +36,7 @@ from .controllers import (
     create_controller,
     decode_in_axes_image,
     normalize_linestyle,
+    normalize_reference_positions,
     validate_controller_contracts,
 )
 from .matplotlib_removal import (
@@ -124,6 +126,7 @@ __all__ = [
     "InterpolationController",
     "LegendController",
     "LineController",
+    "ReferenceMarksController",
     "MessageLevel",
     "PropertySpec",
     "RestorePhase",
@@ -145,6 +148,7 @@ __all__ = [
     "create_controller",
     "decode_in_axes_image",
     "normalize_linestyle",
+    "normalize_reference_positions",
     "validate_controller_contracts",
     "register_figure_components",
 ]

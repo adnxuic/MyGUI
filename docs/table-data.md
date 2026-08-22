@@ -68,3 +68,33 @@ Deleting a referenced column, or converting it to a non-chart type, displays the
 ## Excel import
 
 The import preview lets users include Sheets, use or ignore the first row as headers, edit target names, and override detected types. Imported formulas use cached workbook values and are never evaluated. New Sheets receive unique names and never overwrite existing data.
+
+## FullProf PRF import
+
+Supported v1 input is a FullProf `.prf` file selected from the **Main Plot +
+Residual** layout dialog. The validated import adds two uniquely named Sheets
+to the current Figure's existing Table project; it does not create or use a
+second project.
+
+`<source> Profile` contains Number columns:
+
+| Column | Imported value |
+| --- | --- |
+| `2Theta` | Profile 2θ coordinate in file order |
+| `Yobs` | Observed intensity |
+| `Ycal` | FullProf calculated intensity |
+| `Yobs-Ycal (PRF)` | Original FullProf difference column, including any display offset |
+| `Residual` | Recomputed `Yobs - Ycal` used by the lower plot |
+| `Backg` | Imported background; v1 does not plot it automatically |
+
+`<source> Reflections` contains Number columns `2Theta`, `h`, `k`, and `l`.
+Reflection order, exact duplicates, and nearby Kα1/Kα2 positions are preserved.
+The existing Reflection Positions component stores the imported numeric
+positions through its normal component contract.
+
+Both complete Sheets are published atomically by one **Import XRD Refinement
+Data** command. Existing case-insensitive sheet-name uniqueness rules add a
+numeric suffix on repeated imports instead of overwriting data. The Plot and
+Scatter components retain stable `ColumnRef` records to the Profile columns.
+Project save/open stores the numeric Table snapshot and component state, so it
+does not retain or reread the original `.prf` path.

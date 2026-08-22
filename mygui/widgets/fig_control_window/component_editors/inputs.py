@@ -51,6 +51,7 @@ from .common import (
     FocusAwareDoubleSpinBox,
     FocusAwareSpinBox,
     LineStyleEditor,
+    parse_number_sequence,
 )
 
 
@@ -120,6 +121,81 @@ class ColorbarInput(QFrame):
             "shrink": float(self.shrink_input.value()),
             "aspect": float(self.aspect_input.value()),
             "pad": float(self.pad_input.value()),
+        }
+
+
+class ReferenceMarksInput(QFrame):
+    """Controller-free typed input for Reflection Positions creation."""
+
+    def __init__(
+        self,
+        *,
+        color_library: ColorLibrary,
+        defaults,
+        parent=None,
+    ):
+        super().__init__(parent)
+        if color_library is None:
+            raise ValueError(
+                "ReferenceMarksInput requires the application ColorLibrary."
+            )
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.label_input = QLineEdit(self)
+        layout.addRow("Label:", self.label_input)
+
+        self.positions_input = QLineEdit(self)
+        self.positions_input.setPlaceholderText(
+            "Comma or space separated values, e.g. 15.1876, 15.2256"
+        )
+        layout.addRow("Positions:", self.positions_input)
+
+        self.baseline_input = FocusAwareDoubleSpinBox(self)
+        self.baseline_input.setRange(0.0, 1.0)
+        self.baseline_input.setDecimals(4)
+        self.baseline_input.setSingleStep(0.005)
+        self.baseline_input.setValue(0.08)
+        layout.addRow("Baseline:", self.baseline_input)
+
+        self.height_input = FocusAwareDoubleSpinBox(self)
+        self.height_input.setRange(0.000000001, 1.0)
+        self.height_input.setDecimals(9)
+        self.height_input.setSingleStep(0.005)
+        self.height_input.setValue(0.025)
+        layout.addRow("Height:", self.height_input)
+
+        self.color_input = ColorChoiceWidget(
+            defaults.color,
+            color_library=color_library,
+            parent=self,
+        )
+        layout.addRow("Color:", self.color_input)
+
+        self.linewidth_input = FocusAwareDoubleSpinBox(self)
+        self.linewidth_input.setRange(0.0, 1000.0)
+        self.linewidth_input.setDecimals(3)
+        self.linewidth_input.setSingleStep(0.1)
+        self.linewidth_input.setValue(float(defaults.linewidth))
+        layout.addRow("Line width:", self.linewidth_input)
+
+    def positions(self) -> list[float]:
+        """Return the typed ordered numeric sequence."""
+
+        return [
+            float(value)
+            for value in parse_number_sequence(self.positions_input.text())
+        ]
+
+    def properties(self) -> dict[str, object]:
+        """Return the Controller-free creation property patch."""
+
+        return {
+            "label": self.label_input.text(),
+            "baseline": float(self.baseline_input.value()),
+            "height": float(self.height_input.value()),
+            "color": self.color_input.color(),
+            "linewidth": float(self.linewidth_input.value()),
         }
 
 

@@ -52,6 +52,10 @@ class StyleCreationDefaultsTests(unittest.TestCase):
             "bilinear",
         )
         self.assertAlmostEqual(poster.scatter.size, 125.44)
+        self.assertEqual(classic.reference_marks.color, "#000000")
+        self.assertEqual(classic.reference_marks.linewidth, 0.5)
+        self.assertEqual(dark.reference_marks.color, "#FFFFFF")
+        self.assertEqual(dark.reference_marks.linewidth, 0.8)
 
     def test_style_palette_identity_is_deterministic_and_tagged(self):
         first = resolve_component_creation_defaults("ggplot")

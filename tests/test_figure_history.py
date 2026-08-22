@@ -541,6 +541,92 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertFalse(self.stack.canRedo())
 
+    def test_reference_marks_create_edit_delete_undo_redo_and_dirty_state(self):
+        self._create_axes_baseline()
+        self.canvas.add_reference_marks(
+            [15.2, 22.9],
+            {"label": "YBCO"},
+            object_id="history-reference-marks",
+            announce=False,
+        )
+        self.assertEqual(self.stack.count(), 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reference-history.mygui.json"
+            save_project_snapshot(path, self.window.figure_window)
+            self.assertFalse(
+                self.window.figure_window.is_canvas_dirty(self.canvas)
+            )
+
+            controller = self.canvas.component_registry.get(
+                "history-reference-marks"
+            )
+            original_artist = controller.resolve_target()
+            self.assertTrue(
+                self.canvas.editor_context.perform(
+                    "Change Reflection Positions Data",
+                    lambda: self.canvas.reference_marks_service.update_positions(
+                        controller,
+                        [22.9, 15.2, 15.2],
+                    ),
+                ).ok
+            )
+            self.assertTrue(
+                self.window.figure_window.is_canvas_dirty(self.canvas)
+            )
+            self.assertEqual(self.stack.count(), 2)
+            self.stack.undo()
+            self.assertEqual(controller.state.data["positions"], [15.2, 22.9])
+            self.assertFalse(
+                self.window.figure_window.is_canvas_dirty(self.canvas)
+            )
+            self.stack.redo()
+            self.assertEqual(
+                controller.state.data["positions"],
+                [22.9, 15.2, 15.2],
+            )
+            self.assertTrue(
+                self.window.figure_window.is_canvas_dirty(self.canvas)
+            )
+
+        self.assertTrue(
+            self.canvas.editor_context.perform(
+                "Change Reflection Positions Style",
+                lambda: self.canvas.reference_marks_service.apply_properties(
+                    controller,
+                    {"baseline": 0.2, "height": 0.3, "color": "#123456"},
+                ),
+            ).ok
+        )
+        edited = deepcopy(controller.state)
+        self.assertIs(controller.resolve_target(), original_artist)
+        self.canvas.select_component(controller.component_id)
+        self.assertTrue(
+            self.canvas.delete_component_group(
+                (controller.component_id,),
+                "Reflection Positions",
+            )
+        )
+        post_delete_selection = self.canvas.current_component_id
+        self.assertNotIn(controller.component_id, self.canvas.component_registry)
+        self.assertNotIn(original_artist, self.canvas.current_axes.collections)
+
+        self.stack.undo()
+        restored = self.canvas.component_registry.get(
+            "history-reference-marks"
+        )
+        self.assertEqual(restored.state, edited)
+        self.assertEqual(
+            self.canvas.current_component_id,
+            "history-reference-marks",
+        )
+        self.assertEqual(len(restored.resolve_target().get_segments()), 3)
+        self.stack.redo()
+        self.assertNotIn(
+            "history-reference-marks",
+            self.canvas.component_registry,
+        )
+        self.assertEqual(self.canvas.current_component_id, post_delete_selection)
+
     def test_all_dynamic_materializers_replay_one_project_timeline(self):
         self._create_axes_baseline()
         sheet = (
@@ -611,6 +697,12 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             color="#445566",
             label="line",
             object_id="history-generic-line",
+        )
+        self.canvas.add_reference_marks(
+            [15.2, 15.2, 22.9],
+            {"label": "YBCO"},
+            object_id="history-reference-marks",
+            announce=False,
         )
         self.canvas.add_interpolate_curve(
             valid_pair.x,
@@ -685,7 +777,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         )
         final = deepcopy(self.canvas.component_snapshot())
         command_count = self.stack.count()
-        self.assertEqual(command_count, 11)
+        self.assertEqual(command_count, 12)
 
         while self.stack.canUndo():
             self.stack.undo()
@@ -700,6 +792,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             "history-colorbar",
             "history-function",
             "history-generic-line",
+            "history-reference-marks",
             "history-interpolation",
             "history-fit",
             "history-axes-text",
@@ -1133,7 +1226,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             path = Path(directory) / "history-runtime-only.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             raw = load_project_file(path)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 11)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 12)
             self.assertEqual(
                 set(raw["figure"]),
                 {"root_component_id", "components"},

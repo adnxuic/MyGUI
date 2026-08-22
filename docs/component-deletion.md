@@ -4,7 +4,7 @@ All physical Figure-component deletion uses the Canvas-owned
 `DeletionCoordinator`. Tree single/batch actions, Axes deletion, Inspector
 commands, and table-data dependency cascades submit stable IDs through the same
 two-phase workflow. Deletion state is runtime-only and does not change schema
-v11.
+v12.
 
 ## Runtime values
 
@@ -34,7 +34,7 @@ Preparation validates the deletion policy and exact `DeletionHandler`, rejects
 leaf handlers with registered children, computes the complete closure and
 survivor effects, prepares the fallback Inspector, and reversibly detaches Axes
 Panels. The Registry stages artist removal, survivor state, Locator unbinding,
-the complete Components-tree projection, and a schema-v11 snapshot. Only a
+the complete Components-tree projection, and a schema-v12 snapshot. Only a
 fully valid candidate publishes cleanup, one Registry event batch, one redraw,
 the prepared selection, and one Message Bar result.
 
@@ -65,6 +65,6 @@ parent palette cursor.
 User-initiated Figure deletion is recorded as one project Figure command after
 `DeletionCoordinator` commits. Undo rematerializes removable roots and their
 fixed semantic descendants with the same IDs, restores survivor order,
-palette bookkeeping, and selection, then validates the complete schema-v11
+palette bookkeeping, and selection, then validates the complete schema-v12
 tree. Table dependency cascades remain inside their originating Table command
 and are recording-suspended so they do not create a second Figure command.

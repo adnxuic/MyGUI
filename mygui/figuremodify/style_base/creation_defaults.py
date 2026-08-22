@@ -61,6 +61,14 @@ class InAxesCreationDefaults:
 
 
 @dataclass(frozen=True, slots=True)
+class ReferenceMarksCreationDefaults:
+    """Style-derived defaults for auxiliary reflection-position marks."""
+
+    color: str
+    linewidth: float
+
+
+@dataclass(frozen=True, slots=True)
 class ComponentCreationDefaults:
     """Effective defaults and chart palette for one Figure style."""
 
@@ -69,6 +77,7 @@ class ComponentCreationDefaults:
     scatter: ScatterCreationDefaults
     text: TextCreationDefaults
     in_axes: InAxesCreationDefaults
+    reference_marks: ReferenceMarksCreationDefaults
     chart_palette: PaletteDefinition
 
 
@@ -128,6 +137,7 @@ def resolve_component_creation_defaults(
         line, = line_axes.plot([], [])
         scatter = scatter_axes.scatter([], [])
         text = text_axes.text(0.0, 0.0, "")
+        reference_tick = text_axes.xaxis.get_major_ticks()[0].tick1line
         inset = text_axes.inset_axes((0.55, 0.55, 0.35, 0.35))
         indicator, _connectors = text_axes.indicate_inset_zoom(inset)
 
@@ -189,6 +199,10 @@ def resolve_component_creation_defaults(
                     in {"nearest", "bilinear", "bicubic"}
                     else "bilinear"
                 ),
+            ),
+            reference_marks=ReferenceMarksCreationDefaults(
+                color=normalize_color(reference_tick.get_color()),
+                linewidth=float(reference_tick.get_markeredgewidth()),
             ),
             chart_palette=_style_palette(style_name, cycle_colors),
         )

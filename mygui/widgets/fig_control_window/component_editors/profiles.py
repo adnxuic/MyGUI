@@ -33,6 +33,7 @@ from .sections import (
     PaletteSection,
     PropertySection,
     RawXYDataSection,
+    ReferenceMarksDataSection,
     ScatterAppearanceSection,
     ScatterMappingSection,
     TextContentSection,
@@ -73,6 +74,32 @@ def _colorbar_properties(*keys: str):
 
 def _colorbar_source(controller, context, parent):
     return ColorbarSourceSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
+
+
+def _reference_marks_properties(*keys: str):
+    def factory(controller, context, parent):
+        return PropertySection(
+            controller,
+            context=context,
+            property_keys=keys,
+            apply_properties=lambda properties: (
+                context.reference_marks.apply_properties(
+                    controller,
+                    properties,
+                )
+            ),
+            parent=parent,
+        )
+
+    return factory
+
+
+def _reference_marks_data(controller, context, parent):
+    return ReferenceMarksDataSection(
         controller,
         context=context,
         parent=parent,
@@ -806,6 +833,54 @@ COLORBAR_PROFILE = EditorProfile(
 )
 
 
+REFERENCE_MARKS_PROFILE = EditorProfile(
+    "reflection_positions",
+    "Reflection Positions",
+    (
+        SectionSpec(
+            "general",
+            "General",
+            _reference_marks_properties("label", "visible"),
+            property_keys=("label", "visible"),
+        ),
+        SectionSpec(
+            "position",
+            "Position",
+            _reference_marks_properties("baseline", "height"),
+            property_keys=("baseline", "height"),
+        ),
+        SectionSpec(
+            "line",
+            "Line",
+            _reference_marks_properties(
+                "color", "linewidth", "linestyle", "alpha"
+            ),
+            property_keys=("color", "linewidth", "linestyle", "alpha"),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _reference_marks_properties("zorder", "clip_on"),
+            collapsed=True,
+            property_keys=("zorder", "clip_on"),
+        ),
+        SectionSpec(
+            "data",
+            "Data",
+            _reference_marks_data,
+            data_keys=ReferenceMarksDataSection.DATA_KEYS,
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Reflection Positions",
+        preview=lambda state: str(state.properties.get("label", "")),
+        sort_bucket=50,
+        delete_label="Reflection Positions",
+    ),
+)
+
+
 def _text_sections(*, free: bool) -> tuple[SectionSpec, ...]:
     position_keys = tuple(
         key
@@ -1257,6 +1332,11 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.COLORBAR,
         COLORBAR_PROFILE,
         role=ComponentRole.COLORBAR,
+    )
+    editor_registry.register_profile(
+        ComponentKind.REFERENCE_MARKS,
+        REFERENCE_MARKS_PROFILE,
+        role=ComponentRole.REFLECTION_POSITIONS,
     )
     editor_registry.register_profile(
         ComponentKind.TEXT,

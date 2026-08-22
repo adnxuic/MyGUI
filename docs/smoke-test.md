@@ -201,6 +201,69 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
 7. Save and reopen the project. Confirm existing component properties, Figure
    style, active palette source, and next color position are restored.
 
+## Reference Marks
+
+1. With no selected Axes, choose Elements > `Reflection Positions`. Confirm
+   creation is intercepted with one warning and no Component or collection is
+   left behind.
+2. Select an ordinary Axes, enter `15.2, 15.2, 22.9`, label it `YBCO`, and
+   create it. Confirm one `Reflection Positions — YBCO` node appears in the
+   Components tree and one Inspector opens.
+3. Change Baseline, Height, Color, Line width, Line style, Alpha, Z order, and
+   Clip on. Confirm the same collection updates, the marks remain at normalized
+   Axes Y positions when Y limits change, and X zoom/pan moves or clips them
+   with the data coordinates.
+4. Replace Positions with an empty value and apply. Confirm the component and
+   Inspector remain and no marks draw. Restore the duplicate sequence and
+   confirm input order and duplicates remain.
+5. Enter malformed or non-finite positions and geometry where
+   `baseline + height > 1`. Confirm the input, Controller state, collection,
+   and tree preview return to their last valid values with one red result.
+6. Save, close, and reopen the project. Confirm the stable ID, exact ordered
+   positions, appearance, and one collection restore. Undo/Redo data and style
+   edits and confirm clean/dirty state follows the latest saved fingerprint.
+7. Delete the component from the tree, Undo, and Redo. Confirm the tree node,
+   Inspector, collection, selection, and stable state disappear and return
+   atomically with one result per action.
+
+## FullProf XRD Refinement Import
+
+Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.
+
+1. Open or create a project and select **Main Plot + Residual**.
+2. Leave **Import XRD refinement result** off, create the layout, and confirm
+   the ordinary 2 × 1, 3:1, shared-X layout still works without new Sheets.
+3. Open **Main Plot + Residual** again, select the **XRD Refinement** tab, and
+   enable the import checkbox.
+4. Browse for `YBCO.prf`. Confirm the filter reads `FullProf PRF (*.prf)` and
+   the preview shows YBCO, χ² `2.3177`, 3,803 profile points, 338 reflections,
+   and the 2θ range.
+5. Select a nonexistent or malformed `.prf` and confirm inline validation
+   disables **Create**. Restore the valid fixture.
+6. Toggle the Observed, Calculated, Reflection positions, and Residual legend
+   checkboxes, then create the result.
+7. In the Table Explorer, confirm `<source> Profile` contains `2Theta`, `Yobs`,
+   `Ycal`, `Yobs-Ycal (PRF)`, `Residual`, and `Backg`; confirm `<source>
+   Reflections` contains `2Theta`, `h`, `k`, and `l` with duplicate positions
+   preserved.
+8. Confirm the Main Axes contains one Observed Scatter, one Calculated Data
+   Plot, and one editable Reflection Positions component. Confirm Backg is not
+   plotted and no extra vertical-line artists exist.
+9. Confirm the lower Axes contains one Residual Data Plot whose first value is
+   `Yobs - Ycal`, not the offset `Yobs-Ycal (PRF)` value.
+10. Change the X limits and confirm both Axes move together. Change either Y
+    limit and confirm reflection marks keep their normalized Axes height.
+11. Confirm each selected Main legend entry appears, each excluded entry is
+    absent, the lower legend contains only Residual when selected, and an empty
+    selection hides its corresponding legend.
+12. Save the project and close it. Temporarily move or rename `YBCO.prf`, then
+    reopen the project and confirm both imported Sheets, all four components,
+    the shared layout, and the legends remain complete without a file prompt.
+13. In a fresh import, Undo once and confirm only the Figure setup disappears
+    while both Sheets remain. Undo again and confirm both imported Sheets are
+    removed. Redo twice and confirm the Sheets return before the data-backed
+    Figure components.
+
 ## Optional Local Integrations
 
 These checks depend on local system setup and should not block baseline GUI maintenance.

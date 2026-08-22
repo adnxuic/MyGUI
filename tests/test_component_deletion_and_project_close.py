@@ -752,6 +752,76 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             [],
         )
 
+    def test_reference_marks_leaf_delete_rolls_back_then_commits_cleanly(self):
+        component_id = "delete-reference-marks"
+        artist = self.canvas.add_reference_marks(
+            [15.2, 15.2, 22.9],
+            {"label": "YBCO"},
+            object_id=component_id,
+            announce=False,
+        )
+        registry = self.canvas.component_registry
+        controller = registry.get(component_id)
+        editor = self.canvas.component_editor_manager.editor(component_id)
+        self.assertIsNotNone(editor)
+        self.canvas.select_component(component_id)
+        before = project_snapshot(
+            self.window.figure_window,
+            canvas=self.canvas,
+        )
+        before_collections = tuple(self.canvas.current_axes.collections)
+        messages = []
+        status_messages.set_status_handler(
+            lambda text, level: messages.append((text, level))
+        )
+
+        with mock.patch.object(
+            controller,
+            "commit_remove",
+            side_effect=RuntimeError("injected Reference Marks deletion failure"),
+        ):
+            self.assertFalse(
+                self.canvas.delete_component_group(
+                    (component_id,),
+                    "Reflection Positions",
+                )
+            )
+
+        self.assertIn(component_id, registry)
+        self.assertIs(registry.get(component_id), controller)
+        self.assertIs(controller.resolve_target(), artist)
+        self.assertEqual(
+            tuple(self.canvas.current_axes.collections),
+            before_collections,
+        )
+        self.assertIs(
+            self.canvas.component_editor_manager.editor(component_id),
+            editor,
+        )
+        self.assertEqual(
+            project_snapshot(self.window.figure_window, canvas=self.canvas),
+            before,
+        )
+        self.assertEqual(self.canvas.current_component_id, component_id)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "error")
+
+        messages.clear()
+        self.assertTrue(
+            self.canvas.delete_component_group(
+                (component_id,),
+                "Reflection Positions",
+            )
+        )
+        self.app.processEvents()
+        self.assertNotIn(component_id, registry)
+        self.assertNotIn(artist, self.canvas.current_axes.collections)
+        self.assertIsNone(
+            self.canvas.component_editor_manager.editor(component_id)
+        )
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], "success")
+
     def test_fixed_semantic_components_never_expose_physical_delete(self):
         fixed_roles = {
             ComponentRole.TITLE,
@@ -1057,7 +1127,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v11_figure",
+                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v12_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))

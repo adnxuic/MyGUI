@@ -59,6 +59,7 @@ from .inputs import (
     InterpolationOptionsInput,
     LineAppearanceInput,
     MultiSeriesDataReferenceInput,
+    ReferenceMarksInput,
     ScatterMappingInput,
 )
 from .profiles import register_production_profiles
@@ -71,6 +72,7 @@ from .sections import (
     LineAppearanceSection,
     PaletteSection,
     PropertySection,
+    ReferenceMarksDataSection,
     ScatterAppearanceSection,
     TextContentSection,
     TextPositionSection,
@@ -122,6 +124,7 @@ __all__ = [
     "InterpolationOptionsInput",
     "LineAppearanceInput",
     "MultiSeriesDataReferenceInput",
+    "ReferenceMarksInput",
     "ScatterMappingInput",
     "register_production_profiles",
     "AxesLayoutSection",
@@ -129,6 +132,7 @@ __all__ = [
     "DataReferenceSection",
     "ImageInAxesSourceSection",
     "PropertySection",
+    "ReferenceMarksDataSection",
     "LineAppearanceSection",
     "ScatterAppearanceSection",
     "TextContentSection",

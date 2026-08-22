@@ -26,6 +26,9 @@ class ResourceLimits:
     max_excel_uncompressed_bytes: int = 512 * _MIB
     max_excel_sheets: int = 256
     max_excel_cells: int = 2_000_000
+    max_prf_bytes: int = 64 * _MIB
+    max_prf_points: int = 1_000_000
+    max_prf_reflections: int = 1_000_000
     max_external_input_bytes: int = 16 * _MIB
     max_external_output_bytes: int = 8 * _MIB
 
@@ -50,6 +53,9 @@ _HARD_CAPS = ResourceLimits(
     max_excel_uncompressed_bytes=1024 * _MIB,
     max_excel_sheets=1024,
     max_excel_cells=10_000_000,
+    max_prf_bytes=256 * _MIB,
+    max_prf_points=5_000_000,
+    max_prf_reflections=5_000_000,
     max_external_input_bytes=64 * _MIB,
     max_external_output_bytes=32 * _MIB,
 )

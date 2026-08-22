@@ -6,6 +6,7 @@ import base64
 from copy import deepcopy
 from io import BytesIO
 import math
+from numbers import Real
 from pathlib import Path
 from typing import Any
 import warnings
@@ -14,7 +15,7 @@ import numpy as np
 from matplotlib import colors as mcolors
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
-from matplotlib.collections import PathCollection
+from matplotlib.collections import LineCollection, PathCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
@@ -490,6 +491,36 @@ def normalize_linestyle(value: Any) -> str:
         raise ComponentValidationError(
             f"Invalid Matplotlib line style: {value!r}."
         )
+    return normalized
+
+
+def normalize_reference_positions(value: Any) -> list[float]:
+    """Normalize an ordered finite reflection-position sequence."""
+
+    if isinstance(value, np.ndarray):
+        if value.ndim != 1:
+            raise ComponentValidationError(
+                "Reflection positions must be one-dimensional."
+            )
+        values = value.tolist()
+    elif isinstance(value, (list, tuple)):
+        values = list(value)
+    else:
+        raise ComponentValidationError(
+            "Reflection positions must be a numeric sequence."
+        )
+    normalized: list[float] = []
+    for index, item in enumerate(values):
+        if isinstance(item, bool) or not isinstance(item, Real):
+            raise ComponentValidationError(
+                f"Reflection position {index} must be a number."
+            )
+        number = float(item)
+        if not math.isfinite(number):
+            raise ComponentValidationError(
+                f"Reflection position {index} must be finite."
+            )
+        normalized.append(number)
     return normalized
 
 
@@ -3613,6 +3644,247 @@ class CollectionController(ComponentController[Any]):
     CAPABILITIES = frozenset({"collection"})
 
 
+class ReferenceMarksController(CollectionController):
+    """Coordinate one persisted reflection set and one LineCollection."""
+
+    KIND = ComponentKind.REFERENCE_MARKS
+    ROLES = frozenset({ComponentRole.REFLECTION_POSITIONS})
+    RESTORE_PHASE = RestorePhase.DYNAMIC
+    DELETION_POLICY = DeletionPolicy.REMOVE
+    PROPERTY_SPECS = (
+        PropertySpec("label", str, "", editor=EditorKind.TEXT),
+        PropertySpec("visible", bool, True, editor=EditorKind.BOOL),
+        PropertySpec(
+            "baseline",
+            float,
+            0.08,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.005,
+            decimals=4,
+        ),
+        PropertySpec(
+            "height",
+            float,
+            0.025,
+            validator=lambda value: value > 0.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.005,
+            decimals=9,
+        ),
+        PropertySpec(
+            "color",
+            str,
+            "#000000",
+            editor=EditorKind.COLOR,
+            normalizer=_normalize_color,
+        ),
+        PropertySpec(
+            "linewidth",
+            float,
+            0.8,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            step=0.1,
+            decimals=3,
+        ),
+        PropertySpec(
+            "linestyle",
+            str,
+            "-",
+            editor=EditorKind.LINE_STYLE,
+            normalizer=normalize_linestyle,
+        ),
+        PropertySpec(
+            "alpha",
+            float,
+            1.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=3,
+        ),
+        PropertySpec("zorder", float, 2.0, editor=EditorKind.NUMBER),
+        PropertySpec("clip_on", bool, True, editor=EditorKind.BOOL),
+    )
+    CAPABILITIES = CollectionController.CAPABILITIES | frozenset(
+        {"reference_marks", "reflection_positions", "data"}
+    )
+    DELETE_IMPACTS = UpdateImpact.REDRAW
+
+    def __init__(self, state: ComponentState, **kwargs: Any) -> None:
+        if set(state.data) == {"positions"}:
+            state = state.clone(
+                data={
+                    "positions": normalize_reference_positions(
+                        state.data["positions"]
+                    )
+                }
+            )
+        super().__init__(state, **kwargs)
+
+    @staticmethod
+    def segments_for(
+        positions: Any,
+        baseline: float,
+        height: float,
+    ) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+        """Build public LineCollection segments without sorting or deduping."""
+
+        values = normalize_reference_positions(positions)
+        start = float(baseline)
+        stop = start + float(height)
+        return [((position, start), (position, stop)) for position in values]
+
+    def resolve_target(self) -> LineCollection:
+        """Resolve and verify the exact Matplotlib target type."""
+
+        target = super().resolve_target()
+        if not isinstance(target, LineCollection):
+            raise ComponentValidationError(
+                "Reference Marks target must be a Matplotlib LineCollection."
+            )
+        return target
+
+    def set_property(self, key: str, value: Any) -> ComponentChange:
+        """Route state-owned geometry/style fields through one full mutation."""
+
+        if key in {"baseline", "height", "linestyle"}:
+            return self.apply_mutation(
+                ComponentMutation(
+                    self.component_id,
+                    properties={key: value},
+                    data=self._state.data,
+                )
+            )
+        return super().set_property(key, value)
+
+    def _validate_candidate(self, state: ComponentState) -> None:
+        if state.selector != {"object_id": state.id}:
+            raise ComponentValidationError(
+                "Reference Marks selector requires only its stable object_id."
+            )
+        baseline = float(state.properties["baseline"])
+        height = float(state.properties["height"])
+        if baseline + height > 1.0:
+            raise ComponentValidationError(
+                "Reference Marks baseline plus height must not exceed 1."
+            )
+
+    def _validate_data(self, state: ComponentState) -> None:
+        if set(state.data) != {"positions"}:
+            raise ComponentValidationError(
+                "Reference Marks data requires only positions."
+            )
+        normalize_reference_positions(state.data["positions"])
+
+    def _read_property(
+        self,
+        target: LineCollection,
+        spec: PropertySpec,
+    ) -> Any:
+        if spec.key in {"baseline", "height", "linestyle"}:
+            return deepcopy(self._state.properties.get(spec.key, spec.default))
+        if spec.key == "color":
+            colors = target.get_colors()
+            if len(colors):
+                saved = self._state.properties.get("color")
+                if saved is not None:
+                    try:
+                        if np.allclose(
+                            mcolors.to_rgba(saved)[:3],
+                            tuple(colors[0])[:3],
+                        ):
+                            return _normalize_color(saved)
+                    except (TypeError, ValueError):
+                        pass
+                return mcolors.to_hex(tuple(colors[0]), keep_alpha=False)
+            return str(self._state.properties.get("color", "#000000"))
+        if spec.key == "linewidth":
+            widths = target.get_linewidths()
+            return float(widths[0]) if len(widths) else 0.0
+        return super()._read_property(target, spec)
+
+    def _write_property(
+        self,
+        target: LineCollection,
+        spec: PropertySpec,
+        value: Any,
+    ) -> None:
+        if spec.key in {"baseline", "height"}:
+            geometry = deepcopy(self._state.properties)
+            geometry[spec.key] = float(value)
+            target.set_segments(
+                self.segments_for(
+                    self._state.data["positions"],
+                    geometry["baseline"],
+                    geometry["height"],
+                )
+            )
+            return
+        if spec.key == "color":
+            target.set_color(value)
+            return
+        if spec.key == "linewidth":
+            target.set_linewidth(float(value))
+            return
+        if spec.key == "linestyle":
+            target.set_linestyle(value)
+            return
+        super()._write_property(target, spec, value)
+
+    def _apply_data(self, target: LineCollection, state: ComponentState) -> None:
+        target.set_segments(
+            self.segments_for(
+                state.data["positions"],
+                state.properties["baseline"],
+                state.properties["height"],
+            )
+        )
+
+    def _capture_runtime_data(self, target: LineCollection) -> Any:
+        return tuple(
+            tuple(tuple(float(value) for value in point) for point in segment)
+            for segment in target.get_segments()
+        )
+
+    def _restore_runtime_data(
+        self,
+        target: LineCollection,
+        runtime_data: Any,
+    ) -> None:
+        target.set_segments(runtime_data)
+
+    def _restore_transaction_snapshot(
+        self,
+        snapshot: tuple[ComponentState, Any, dict[str, Any]],
+    ) -> None:
+        """Restore state-owned geometry before replaying target properties."""
+
+        self._state = snapshot[0].clone()
+        super()._restore_transaction_snapshot(snapshot)
+
+    def _is_empty(
+        self,
+        target: LineCollection,
+        state: ComponentState,
+    ) -> bool:
+        del target
+        return not state.data["positions"]
+
+    def _data_impacts(
+        self,
+        before: ComponentState | None,
+        after: ComponentState,
+    ) -> UpdateImpact:
+        del before, after
+        return UpdateImpact.REDRAW
+
+
 class ScatterController(CollectionController):
     """Coordinate state changes for scatter components."""
 
@@ -4517,6 +4789,10 @@ CONTROLLER_TYPES: dict[
         ComponentRole.INTERPOLATION,
     ): InterpolationController,
     (ComponentKind.SCATTER, ComponentRole.SCATTER): ScatterController,
+    (
+        ComponentKind.REFERENCE_MARKS,
+        ComponentRole.REFLECTION_POSITIONS,
+    ): ReferenceMarksController,
     (ComponentKind.COLORBAR, ComponentRole.COLORBAR): ColorbarController,
     (
         ComponentKind.IN_AXES,

@@ -2,8 +2,9 @@
 
 ## Project and component state
 
-- Project files save exact integer schema v11 and migrate strictly valid v10
-  files. Historical v4-v9 files require an external conversion step.
+- Project files save exact integer schema v12, migrate strictly valid v11
+  files, and migrate strictly valid v10 files through v11. Historical v4-v9
+  files require an external conversion step.
 - The Components tree does not provide drag reparenting or ordering, inline
   rename, visibility controls, or canvas highlighting. Selection and expansion
   state last only for the current application session.

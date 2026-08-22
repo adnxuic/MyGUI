@@ -902,6 +902,11 @@ class PySubTable(QFrame):
         plus = QWidget()
         self.tabWidget.addTab(plus, "+")
 
+    def sync_sheets_from_repository(self) -> None:
+        """Rebuild the sheet projection from authoritative Repository state."""
+
+        self._build_tabs()
+
     def _dispose_tabs(self):
         while self.tabWidget.count():
             widget = self.tabWidget.widget(0)

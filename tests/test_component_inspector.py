@@ -7,6 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QApplication, QWidget
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
 from mygui import tex_config
@@ -26,6 +27,7 @@ from mygui.figuremodify.component_services import (
     FitService,
     FunctionCurveService,
     InterpolationService,
+    ReferenceMarksService,
     TextRenderService,
 )
 from mygui.figuremodify.components import (
@@ -38,6 +40,7 @@ from mygui.figuremodify.components import (
     FunctionCurveController,
     InterpolationController,
     LineController,
+    ReferenceMarksController,
     register_figure_components,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
@@ -71,6 +74,7 @@ from mygui.widgets.fig_control_window.component_editors import (
 from mygui.widgets.fig_control_window.component_editors.profiles import (
     LEGEND_PROFILE,
     LINE_PROFILES,
+    REFERENCE_MARKS_PROFILE,
     SEMANTIC_TEXT_PROFILE,
     TEXT_PROFILE,
 )
@@ -101,6 +105,7 @@ def _context(
         interpolation=interpolation,
         fitting=FitService(repository, registry),
         text_rendering=TextRenderService(registry),
+        reference_marks=ReferenceMarksService(registry),
     )
 
 
@@ -254,6 +259,92 @@ class ComponentInspectorTests(unittest.TestCase):
             ),
             ("data", "actions", "result", "range", "appearance"),
         )
+
+    def test_reference_marks_exact_profile_data_edit_sync_and_rejection(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        registry = register_figure_components(figure)
+        axes_controller = registry.find_one(
+            kind=ComponentKind.AXES,
+            role=ComponentRole.AXES,
+        )
+        component_id = "inspector-reference-marks"
+        artist = LineCollection(
+            [],
+            transform=axes.get_xaxis_transform(),
+        )
+        axes.add_collection(artist, autolim=False)
+        controller = ReferenceMarksController(
+            ComponentState(
+                id=component_id,
+                kind=ComponentKind.REFERENCE_MARKS,
+                role=ComponentRole.REFLECTION_POSITIONS,
+                parent_id=axes_controller.component_id,
+                order=max(
+                    child.state.order
+                    for child in registry.children(axes_controller.component_id)
+                ) + 1,
+                selector={"object_id": component_id},
+                properties=ReferenceMarksController.default_properties(),
+                data={"positions": [15.2, 22.9]},
+            ),
+            target=artist,
+        )
+        self.assertTrue(controller.apply_state(controller.state).ok)
+        registry.register(controller, target=artist)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        inspector = context.editor_manager.create(controller, context=context)
+        try:
+            self.assertIs(
+                context.editor_manager.editor(component_id),
+                inspector,
+            )
+            self.assertEqual(
+                tuple(section.key for section in REFERENCE_MARKS_PROFILE.sections),
+                ("general", "position", "line", "advanced", "data"),
+            )
+            self.assertEqual(
+                {
+                    key
+                    for section in REFERENCE_MARKS_PROFILE.sections
+                    for key in section.property_keys
+                },
+                set(ReferenceMarksController.default_properties()),
+            )
+            self.assertEqual(REFERENCE_MARKS_PROFILE.placement, EditorPlacement.ELEMENT)
+            self.assertEqual(
+                REFERENCE_MARKS_PROFILE.tree.label,
+                "Reflection Positions",
+            )
+
+            data = inspector.section("data")
+            data.positions_input.setText("22.9, 15.2, 15.2")
+            self.assertTrue(data.apply_positions())
+            self.assertEqual(
+                controller.state.data["positions"],
+                [22.9, 15.2, 15.2],
+            )
+            self.assertEqual(len(artist.get_segments()), 3)
+
+            self.assertTrue(
+                context.reference_marks.update_positions(
+                    controller,
+                    [],
+                ).ok
+            )
+            self.assertEqual(data.positions_input.text(), "")
+
+            with patch("mygui.status_messages.show_error") as show_error:
+                data.positions_input.setText("15.2 nan")
+                self.assertFalse(data.apply_positions())
+                show_error.assert_called_once()
+            self.assertEqual(controller.state.data, {"positions": []})
+            self.assertEqual(data.positions_input.text(), "")
+            self.assertEqual(len(artist.get_segments()), 0)
+        finally:
+            inspector.close()
+            context.editor_manager.close()
 
     def test_profile_registry_builds_inspector_and_updates_snapshot(self):
         figure = Figure()

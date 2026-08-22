@@ -1,7 +1,7 @@
 # Resource and Process Limits
 
 MyGUI applies centralized budgets before materializing untrusted project,
-image, Text, Excel, expression, and external-process payloads. Overrides are
+image, Text, Excel, FullProf PRF, expression, and external-process payloads. Overrides are
 read from positive-integer `MYGUI_*` environment variables and cannot exceed
 the built-in hard caps.
 
@@ -38,6 +38,9 @@ resource loading.
 | `MYGUI_MAX_EXCEL_UNCOMPRESSED_BYTES` | 512 MiB | 1 GiB | Excel ZIP expansion |
 | `MYGUI_MAX_EXCEL_SHEETS` | 256 | 1,024 | Excel worksheets |
 | `MYGUI_MAX_EXCEL_CELLS` | 2,000,000 | 10,000,000 | Materialized cells |
+| `MYGUI_MAX_PRF_BYTES` | 64 MiB | 256 MiB | FullProf PRF source bytes |
+| `MYGUI_MAX_PRF_POINTS` | 1,000,000 | 5,000,000 | FullProf profile points |
+| `MYGUI_MAX_PRF_REFLECTIONS` | 1,000,000 | 5,000,000 | FullProf reflection records |
 | `MYGUI_MAX_EXTERNAL_INPUT_BYTES` | 16 MiB | 64 MiB | Child-process stdin |
 | `MYGUI_MAX_EXTERNAL_OUTPUT_BYTES` | 8 MiB | 32 MiB | Each captured output stream |
 

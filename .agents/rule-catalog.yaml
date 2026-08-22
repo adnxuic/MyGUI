@@ -11,7 +11,7 @@ rules:
   - {id: CORE-REGISTRATION-ATOMICITY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_component_services, tests.test_component_runtime_integration]}
   - {id: CORE-DELETION-COORDINATOR, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_component_deletion_and_project_close]}
   - {id: CORE-PROJECT-HISTORY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_figure_history]}
-  - {id: CORE-PERSISTENCE-V11, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_colorbar_component]}
+  - {id: CORE-PERSISTENCE-V12, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_colorbar_component]}
   - {id: CORE-COLORBAR-AUXILIARY-AXES, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_colorbar_component]}
   - {id: ARCH-PRIVATE-CONTAINER-ACCESS, source: .agents/architecture/inspector.md, enforcement: [mygui.architecture]}
   - {id: ARCH-UI-ARTIST-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}

@@ -73,6 +73,15 @@ class PyTable(QFrame):
             return None
         return self._subtables.get(self._current_project_id)
 
+    def sync_project_sheets(self, project_id: str) -> None:
+        """Refresh one project's sheet tabs from authoritative Table state."""
+
+        try:
+            subtable = self._subtables[str(project_id)]
+        except KeyError as exc:
+            raise KeyError(f"Unknown project table id: {project_id}") from exc
+        subtable.sync_sheets_from_repository()
+
     def create_project_table(self, table_name: str, first_sheet_name: str = "Sheet1",
                              switch: bool = True, *,
                              publish: bool = True) -> PySubTable:

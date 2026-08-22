@@ -16,6 +16,7 @@ rewriting existing artists.
 | Interpolation | implicit line style, line width/marker settings, chart color |
 | Text | font family, font size, implicit text color/weight/style |
 | In-Axes | child-Axes background/border, indicator line, image interpolation |
+| Reference Marks | X major-tick color and tick-line width; does not consume the chart color sequence |
 
 The resolver creates temporary Matplotlib Line, Scatter, Text, child-Axes,
 and inset-indicator artists
@@ -77,8 +78,10 @@ palette. A Figure style change alone does not recolor existing components.
   properties.
 - In-Axes Components store their resolved background, frame, indicator, and
   display properties without consuming the Axes chart-color cursor.
+- Reference Marks stores its resolved tick-derived color and line width and
+  does not consume the Axes chart-color cursor.
 
-These values use the existing schema-v11 component tree. Opening a project
+These values use the existing schema-v12 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
 

@@ -134,7 +134,7 @@ readable value such as `Linear`, `Automatic`, `Scalar`, `sans-serif · 10 pt`,
 locator/formatter, scale, font, text box, marked points, Scatter color/size
 mapping, and Zoom connectors.
 
-Both control families validate through the same closed schema-v11 value
+Both control families validate through the same closed schema-v12 value
 normalizer and submit one complete value to one Controller/Service
 transaction. A cancelled dialog changes nothing, and a rejected change
 restores the prior summary, control state, and Controller value together with
@@ -156,7 +156,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v11.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v12.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -166,7 +166,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v11
+state, artists, Locator bindings, a complete tree projection, and schema-v12
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -212,4 +212,4 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v11. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope` and Colorbar `source_component_id` are business state; profile and widget state remain UI-only.
+The project format uses schema v12. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, and Reference Marks `positions` are business state; profile and widget state remain UI-only.

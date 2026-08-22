@@ -12,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 from PIL import Image
+from matplotlib.collections import LineCollection
 
 from mygui.database import ColumnRef
 from mygui.database.interpolate_func import interpolate_dict
@@ -89,6 +90,18 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         )
         canvas.add_curve("x", 0, 3, "-", "green", "curve")
         canvas.add_component_line([0, 1], [2, 3], "-", "cyan", "line")
+        canvas.add_reference_marks(
+            [15.2, 15.2, 22.9],
+            {
+                "label": "YBCO",
+                "baseline": 0.12,
+                "height": 0.04,
+                "color": "#123456",
+                "linewidth": 1.4,
+            },
+            object_id="roundtrip-reference-marks",
+            announce=False,
+        )
         linear_method = list(interpolate_dict)[2]
         canvas.add_interpolate_curve(
             valid_pair.x, valid_pair.y, x_ref, y_ref, linear_method, samples=64, label="interpolate"
@@ -149,6 +162,24 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 if controller.state.role in data_roles
             }
             self.assertEqual(restored_ids, object_ids)
+            reference = restored.component_registry.get(
+                "roundtrip-reference-marks"
+            )
+            self.assertEqual(
+                reference.state.data["positions"],
+                [15.2, 15.2, 22.9],
+            )
+            reference_target = reference.resolve_target()
+            self.assertIsInstance(reference_target, LineCollection)
+            self.assertEqual(len(reference_target.get_segments()), 3)
+            self.assertEqual(
+                sum(
+                    target is reference_target
+                    for axes in restored.fig.axes
+                    for target in axes.collections
+                ),
+                1,
+            )
             expected_dynamic_keys = set(validate_controller_contracts())
             self.assertEqual(
                 {
@@ -189,7 +220,10 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                     recursive=True,
                 )
             ]
-            self.assertEqual(restored_order, [0, 1, 2, 3, 4, 5])
+            self.assertEqual(
+                restored_order,
+                [0, 1, 2, 3, 4, 5, reference.state.order],
+            )
             self.assertEqual(
                 len(
                     restored.component_registry.query(

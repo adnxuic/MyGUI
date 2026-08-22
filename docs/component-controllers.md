@@ -44,7 +44,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v11.
+  serialized into `ComponentState` or schema v12.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -133,10 +133,11 @@ subtree.
 | `LegendController` | Legend | tagged location/anchor, layout/spacing, entry/title fonts, frame styling, draggable policy, layering and export configuration |
 | `LineController` | Line and all curve roles | label/color, tagged line pattern/marker/markevery, draw/fill style, cap/join/gap, antialiasing, layering and safe export fields |
 | `ScatterController` | Scatter | uniform face/edge styling, marker/line/hatch, tagged color/size mapping and norm, non-finite policy, layering and safe export fields |
+| `ReferenceMarksController` | Reflection Positions | ordered finite positions, Axes-relative baseline/height, uniform line appearance, visibility, layering, and clipping |
 | `ColorbarController` | Colorbar | visibility/label, constructor-sensitive placement, extend/spacing/edges, tagged locator/formatter, minor ticks/tick side, fonts, and outline appearance |
 
-The exact schema-v11 ownership matrix and tagged-value formats are maintained
-in [`component-properties-v11.md`](component-properties-v11.md). Colorbar
+The exact schema-v12 ownership matrix and tagged-value formats are maintained
+in [`component-properties-v12.md`](component-properties-v12.md). Colorbar
 controls and defaults are listed in
 [`colorbar-component.md`](colorbar-component.md).
 Axes do not persist scales, Axis does not persist inversion or side visibility,
@@ -151,6 +152,8 @@ Role data is validated by the Controller as well as by project IO:
 - `function_curve`: a non-empty, safe expression using `x`, plus finite `x_start` and `x_stop`;
 - `data_plot` and `scatter`: complete `x_ref` and `y_ref` column references
   plus the persisted X/Y `preprocess` expressions;
+- `reflection_positions`: exactly one ordered finite `positions` sequence;
+  empty and duplicate values remain valid;
 - `interpolation`: references and preprocessing expressions, a registered
   method, integer `k` from 1 through 5, `samples` from 2 through 100000,
   Boolean `lam_auto`, and a non-negative finite optional `lam`;
@@ -170,6 +173,8 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 - `ColorbarService`: source resolution, transactional creation/reconstruction,
   source refresh, and lifecycle coordination without copying Scatter mapping
   state;
+- `ReferenceMarksService`: transactional one-collection creation, verified
+  geometry/style edits, and complete ordered-position replacement;
 - `InterpolationService`: validated interpolation configuration and refresh;
 - `FitService`: persistent fit results, manual-refit generations, and display-range updates;
 - `TextRenderService`: synchronous render verification with rollback and glyph warnings;
@@ -258,7 +263,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend strict schema-v11 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
+9. Extend strict schema-v12 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

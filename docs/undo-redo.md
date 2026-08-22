@@ -58,7 +58,7 @@ its dependent charts still occupies one chronological slot.
 
 ## Save, dirty state, and project lifetime
 
-History is runtime-only and is never written to schema-v11 project JSON. Saving
+History is runtime-only and is never written to schema-v12 project JSON. Saving
 does not clear the current session's timeline. Opening or restoring a project
 starts with empty Undo/Redo actions.
 

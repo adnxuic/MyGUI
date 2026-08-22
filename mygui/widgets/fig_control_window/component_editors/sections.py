@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
@@ -38,6 +39,8 @@ from .common import (
     DebouncedTextBinding,
     FocusAwareDoubleSpinBox,
     FocusAwareSpinBox,
+    format_number_sequence,
+    parse_number_sequence,
 )
 from .context import perform_editor_action
 from .inputs import DataReferenceInput
@@ -232,6 +235,72 @@ class RawXYDataSection(QWidget, EditorSection):
 
         try:
             self.apply_button.clicked.disconnect(self.apply_data)
+        except (RuntimeError, TypeError):
+            pass
+
+
+class ReferenceMarksDataSection(QWidget, EditorSection):
+    """Edit the authoritative ordered Reflection Positions sequence."""
+
+    DATA_KEYS = ("positions",)
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.positions_input = QLineEdit(self)
+        self.positions_input.setPlaceholderText(
+            "Comma or space separated reflection positions"
+        )
+        self.apply_button = QPushButton("Apply positions", self)
+        layout.addWidget(self.positions_input)
+        layout.addWidget(self.apply_button)
+        self.apply_button.clicked.connect(self.apply_positions)
+        self.sync_from_controller()
+
+    def apply_positions(self) -> bool:
+        """Submit one complete sequence through ReferenceMarksService."""
+
+        try:
+            positions = parse_number_sequence(self.positions_input.text())
+            service = self.context.reference_marks
+            if service is None:
+                raise RuntimeError("Reference Marks service is unavailable.")
+            result = perform_editor_action(
+                self.context,
+                "Change Reflection Positions Data",
+                lambda: service.update_positions(
+                    self.controller,
+                    positions,
+                ),
+            )
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            self.sync_from_controller()
+            return False
+        if not self.context.messages.present(
+            result,
+            success="Reflection positions updated.",
+        ):
+            self.sync_from_controller()
+            return False
+        return True
+
+    def sync_from_controller(self) -> None:
+        """Refresh from committed ComponentState data."""
+
+        positions = self.controller.read_state().data.get("positions", [])
+        blocker = QSignalBlocker(self.positions_input)
+        self.positions_input.setText(format_number_sequence(positions))
+        del blocker
+
+    def dispose(self) -> None:
+        """Disconnect the local submit callback idempotently."""
+
+        try:
+            self.apply_button.clicked.disconnect(self.apply_positions)
         except (RuntimeError, TypeError):
             pass
 

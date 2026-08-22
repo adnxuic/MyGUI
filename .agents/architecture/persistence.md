@@ -6,11 +6,12 @@ restart.
 
 ## Schema authority
 
-MyGUI saves and validates exact integer schema version 11. Component business
-state is the schema-v11 tree; profile selection, Section expansion, QWidget
+MyGUI saves and validates exact integer schema version 12. Component business
+state is the schema-v12 tree; profile selection, Section expansion, QWidget
 state, callbacks, typed tree projection keys, and other UI-only data are
-excluded. Strictly valid schema-v10 files migrate in memory to v11 before any
-Table or Figure state is published; v4-v9 remain unsupported.
+excluded. Strictly valid schema-v11 files migrate in memory to v12; strictly
+valid schema-v10 files migrate through v11 to v12 before any Table or Figure
+state is published; v4-v9 remain unsupported.
 Closed composite contracts reject unknown keys, non-finite values, invalid
 kind/parameter combinations, callables, Matplotlib objects, and runtime state.
 
@@ -58,7 +59,7 @@ Replay is recording-suspended and uses Controllers, domain Services,
 `DeletionCoordinator`, `AxesLayoutService`, and the declared component
 materializers. Structural replay restores original IDs and dependency order.
 After coalesced Matplotlib updates flush, replay performs one authoritative
-reconciliation pass before validating the Registry tree and schema-v11
+reconciliation pass before validating the Registry tree and schema-v12
 snapshot. A replay failure compensates toward the previous proven state,
 emits one error, and clears the uncertain history cursor. Project restore,
 table-dependency refresh, and command replay must never create nested commands.
@@ -71,6 +72,6 @@ load/save fingerprint, so undoing exactly to that state becomes clean.
 ## Project documentation
 
 Persisted changes update `docs/project-files.md`, the relevant parameter page,
-and `docs/component-properties-v11.md` (or its successor) in the same change.
+and `docs/component-properties-v12.md` (or its successor) in the same change.
 Keep migration plans and future formats out of user documentation until they
 are current behavior.

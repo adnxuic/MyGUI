@@ -189,6 +189,35 @@ class ComponentTreeTests(unittest.TestCase):
             semantic_ids,
         )
 
+    def test_reference_marks_tree_label_selection_and_element_placement(self):
+        component_id = "tree-reference-marks"
+        self.canvas.add_reference_marks(
+            [15.2, 22.9],
+            {"label": "YBCO"},
+            object_id=component_id,
+            announce=False,
+        )
+        self.app.processEvents()
+        model = self.window.component_tree_host.model
+        index = model.index_for_component(component_id)
+        self.assertTrue(index.isValid())
+        self.assertEqual(
+            index.data(Qt.DisplayRole),
+            "Reflection Positions — YBCO",
+        )
+        self.assertEqual(
+            model.parent(index).data(COMPONENT_ID_ROLE),
+            self.canvas.current_axes_component_id,
+        )
+        self.assertTrue(self.canvas.select_component(component_id))
+        self.assertEqual(
+            self.window.component_tree_host.tree.selected_component_id(),
+            component_id,
+        )
+        self.assertIsNotNone(
+            self.canvas.component_editor_manager.editor(component_id)
+        )
+
     def test_real_id_cannot_collide_with_a_legacy_virtual_group_string(self):
         axes_id = self.canvas.current_axes_component_id
         component_id = f"@ui-group:{axes_id}:axes-components"

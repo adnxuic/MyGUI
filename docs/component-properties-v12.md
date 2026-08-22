@@ -1,11 +1,11 @@
-# Component Properties (schema v11)
+# Component Properties (schema v12)
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
 properties are edited only through Controllers or domain Services, and every
 property/data key is exposed exactly once or explicitly hidden by its profile.
 
-Schema v11 retains the exact eight-field `ComponentState` record:
+Schema v12 retains the exact eight-field `ComponentState` record:
 
 ```text
 id, kind, role, parent_id, order, selector, properties, data
@@ -26,19 +26,22 @@ selection, and other runtime projection state are never serialized.
 | Legend | tagged location/anchor, layout/entry scope, fonts, marker/point settings, spacing, frame, dragging, layering/export fields |
 | Line roles | label/visibility/color, tagged line/marker/markevery, draw/fill style, cap/join/gap, layering/export fields, plus role data |
 | Scatter | uniform appearance, tagged marker/line, authoritative `ScatterColorMapSpec` and `ScatterSizeMapSpec`, mapping references, layering/export fields |
+| Reference Marks | ordered finite reflection positions plus label, visibility, Axes-relative baseline/height, line appearance, alpha, z-order, and clipping |
 | Colorbar | placement, label/ticks/fonts/outline and advanced display properties; stable source ID only, never source cmap/norm/clim/data |
 | Zoom/Image Inset | child-Axes placement/appearance and role-specific indicator or embedded-image data |
 
 Single-owner rules prevent duplicate state: Axis owns scale; ordered Axes
 limits own inversion; Tick/Label groups own their sides and label padding;
 Axes owns grid layering; Scatter owns Colorbar colormap, norm, limits, and
-scalar data. Colorbar orientation is derived from `location` and is not a
-second property.
+scalar data. Reference Marks owns one ordered `positions` sequence and one
+`LineCollection`; duplicate positions are meaningful and are never deduplicated.
 
-The complete Colorbar field matrix, controls, defaults, and pinned Matplotlib
-links are in [Colorbar Component](colorbar-component.md). Chart fields are in
-[Chart Component Parameters](chart-component-parameters.md), and Figure/Axes
-fields are in [Axes and Figure Component Parameters](axes-component-parameters.md).
+The complete Reference Marks field matrix, controls, defaults, and pinned
+Matplotlib links are in [Reference Marks Component](reference-marks-component.md).
+Colorbar fields are in [Colorbar Component](colorbar-component.md). Chart fields
+are in [Chart Component Parameters](chart-component-parameters.md), and
+Figure/Axes fields are in
+[Axes and Figure Component Parameters](axes-component-parameters.md).
 
 ## Closed tagged values
 
@@ -57,16 +60,18 @@ Fixed formatters require a fixed locator with the same number of locations.
 Arbitrary callables, `FuncFormatter`, `FuncNorm`, Matplotlib objects, NumPy
 arrays, and QWidget instances are rejected from project state.
 
-## Schema v11 and migration
+## Schema v12 and migration
 
-Saving writes exact integer `schema_version: 11`. The v11 validator accepts
-Colorbar records only when the source is a scalar-mapped `scatter/scatter` in
-the same owner Axes and no other Colorbar uses that source.
+Saving writes exact integer `schema_version: 12`. The v12 validator adds the
+`reference_marks/reflection_positions` record while retaining the exact
+eight-field record shape used by v11.
 
-Loading exact integer v10 first runs the strict v10 validator. A valid v10
-component tree migrates without component rewrites because v10 cannot contain
-Colorbar; only the root schema version changes to 11, followed by complete v11
-validation. Malformed v10 is rejected before migration. Versions v4-v9,
+Loading exact integer v11 first runs the strict v11 validator, changes only the
+root schema version, and then validates the complete v12 graph. Exact integer
+v10 is validated as v10 and migrates through v11 to v12. Because Reference
+Marks did not exist in either predecessor, v10 and v11 explicitly reject its
+kind/role. Existing component records and stable IDs are not rewritten.
+Malformed predecessors are rejected before migration. Versions v4-v9,
 booleans, floats, strings, and unknown versions remain unsupported.
 
 See [Project Files](project-files.md) for the file graph and restore order, and

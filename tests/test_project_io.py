@@ -316,12 +316,19 @@ class ProjectIoTests(unittest.TestCase):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         valid = json.loads(self.path.read_text(encoding="utf-8"))
-        self.assertEqual(load_project_file(self.path)["schema_version"], 11)
+        self.assertEqual(load_project_file(self.path)["schema_version"], 12)
         migratable = deepcopy(valid)
         migratable["schema_version"] = 10
         self.path.write_text(json.dumps(migratable), encoding="utf-8")
-        self.assertEqual(load_project_file(self.path)["schema_version"], 11)
-        for version in (3, 4, 5, 6, 7, 8, 9, 10.0, "10", "11", True, None):
+        self.assertEqual(load_project_file(self.path)["schema_version"], 12)
+        predecessor = deepcopy(valid)
+        predecessor["schema_version"] = 11
+        self.path.write_text(json.dumps(predecessor), encoding="utf-8")
+        self.assertEqual(load_project_file(self.path)["schema_version"], 12)
+        for version in (
+            3, 4, 5, 6, 7, 8, 9, 13, 10.0, 11.0, 12.0,
+            "10", "11", "12", True, None,
+        ):
             with self.subTest(version=version):
                 candidate = dict(valid)
                 candidate["schema_version"] = version

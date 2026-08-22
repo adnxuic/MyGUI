@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 from matplotlib.figure import Figure
+from matplotlib.collections import LineCollection
 from matplotlib.ticker import AutoLocator
 
 from mygui.figuremodify.components import (
@@ -28,6 +29,7 @@ from mygui.figuremodify.components import (
     GridController,
     LegendController,
     PropertySpec,
+    ReferenceMarksController,
     ScatterController,
     SpineController,
     TickGroupController,
@@ -401,6 +403,135 @@ class ComponentControllerContractTests(unittest.TestCase):
         self.assertEqual(
             self.line_controller.snapshot().properties["color"], previous
         )
+
+
+class ReferenceMarksControllerTests(unittest.TestCase):
+    def setUp(self):
+        self.figure = Figure()
+        self.axes = self.figure.subplots()
+        self.artist = LineCollection(
+            [],
+            transform=self.axes.get_xaxis_transform(),
+        )
+        self.axes.add_collection(self.artist, autolim=False)
+        self.component_state = state(
+            "reference-marks-1",
+            ComponentKind.REFERENCE_MARKS,
+            ComponentRole.REFLECTION_POSITIONS,
+            "axes-1",
+            selector={"object_id": "reference-marks-1"},
+            properties=ReferenceMarksController.default_properties(),
+            data={"positions": [15.2, 15.2, 22.9]},
+        )
+        self.controller = ReferenceMarksController(
+            self.component_state,
+            target=self.artist,
+        )
+        self.assertTrue(self.controller.apply_state(self.component_state).ok)
+
+    def test_positions_preserve_order_duplicates_and_empty_data(self):
+        self.assertEqual(
+            self.controller.snapshot().data["positions"],
+            [15.2, 15.2, 22.9],
+        )
+        self.assertEqual(len(self.artist.get_segments()), 3)
+        first_segment = self.artist.get_segments()[0]
+        self.assertEqual(first_segment[:, 0].tolist(), [15.2, 15.2])
+        self.assertAlmostEqual(first_segment[0, 1], 0.08)
+        self.assertAlmostEqual(first_segment[1, 1], 0.105)
+
+        change = self.controller.apply_state(
+            self.controller.state.clone(data={"positions": []})
+        )
+        self.assertEqual(change.status, ChangeStatus.EMPTY)
+        self.assertEqual(self.controller.snapshot().data, {"positions": []})
+        self.assertEqual(len(self.artist.get_segments()), 0)
+
+    def test_tiny_positive_height_is_valid_and_geometry_bounds_are_strict(self):
+        self.assertTrue(self.controller.set_property("height", 1e-9).ok)
+        self.assertEqual(
+            self.controller.snapshot().properties["height"],
+            1e-9,
+        )
+        self.assertEqual(
+            self.controller.set_property("height", 0.0).status,
+            ChangeStatus.REJECTED,
+        )
+        self.assertTrue(self.controller.set_property("baseline", 0.9).ok)
+        self.assertTrue(self.controller.set_property("height", 0.1).ok)
+        self.assertEqual(
+            self.controller.set_property("height", 0.1001).status,
+            ChangeStatus.REJECTED,
+        )
+
+    def test_malformed_nonfinite_and_unknown_data_are_rejected_atomically(self):
+        before = self.controller.snapshot()
+        before_segments = [item.copy() for item in self.artist.get_segments()]
+        invalid_values = (
+            "15.2, 22.9",
+            [15.2, True],
+            [15.2, float("nan")],
+            [15.2, float("inf")],
+            [[15.2]],
+        )
+        for positions in invalid_values:
+            with self.subTest(positions=positions):
+                change = self.controller.apply_state(
+                    before.clone(data={"positions": positions})
+                )
+                self.assertEqual(change.status, ChangeStatus.REJECTED)
+                self.assertEqual(self.controller.snapshot(), before)
+                self.assertEqual(
+                    [item.tolist() for item in self.artist.get_segments()],
+                    [item.tolist() for item in before_segments],
+                )
+
+        change = self.controller.apply_state(
+            before.clone(data={"positions": [], "unknown": 1})
+        )
+        self.assertEqual(change.status, ChangeStatus.REJECTED)
+        self.assertEqual(self.controller.snapshot(), before)
+
+    def test_selector_properties_and_target_type_are_exact(self):
+        with self.assertRaises(ComponentValidationError):
+            ReferenceMarksController(
+                self.component_state.clone(
+                    selector={"object_id": "reference-marks-1", "index": 0}
+                ),
+                target=self.artist,
+            )
+        with self.assertRaises(ComponentValidationError):
+            ReferenceMarksController(
+                self.component_state.clone(
+                    properties={
+                        **self.component_state.properties,
+                        "unknown": True,
+                    }
+                ),
+                target=self.artist,
+            )
+
+        wrong_target = ReferenceMarksController(
+            self.component_state,
+            target=self.axes.plot([0.0], [0.0])[0],
+        )
+        with self.assertRaises(ComponentValidationError):
+            wrong_target.snapshot()
+
+    def test_arbitrary_external_line_collection_is_not_discovered(self):
+        figure = Figure()
+        axes = figure.subplots()
+        external = LineCollection([((1.0, 0.0), (1.0, 1.0))])
+        external.set_gid("external-line-collection")
+        axes.add_collection(external)
+
+        registry = register_figure_components(figure)
+
+        self.assertEqual(
+            registry.query(kind=ComponentKind.REFERENCE_MARKS),
+            [],
+        )
+        self.assertNotIn("external-line-collection", registry)
 
 
 class SemanticControllerTests(unittest.TestCase):

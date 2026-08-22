@@ -36,6 +36,7 @@ from mygui.figuremodify.component_services import (
     FitService,
     FunctionCurveService,
     InterpolationService,
+    ReferenceMarksService,
     TextRenderService,
 )
 from mygui.figuremodify.history import FigureHistoryService
@@ -63,6 +64,7 @@ from mygui.figuremodify.components import (
     ImageInAxesController,
     LineController,
     ObserverFailure,
+    ReferenceMarksController,
     ScatterController,
     TextController,
     UpdateImpact,
@@ -73,8 +75,8 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v11_figure,
-    validate_v11_figure,
+    normalize_v12_figure,
+    validate_v12_figure,
 )
 from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
@@ -353,6 +355,9 @@ class PyFigureCanvas(QWidget):
             self.component_registry,
         )
         self.colorbar_service = ColorbarService(self.component_registry)
+        self.reference_marks_service = ReferenceMarksService(
+            self.component_registry
+        )
         self.chart_data_service.colorbar_service = self.colorbar_service
         self.interpolation_service = InterpolationService(
             self.repository,
@@ -409,6 +414,7 @@ class PyFigureCanvas(QWidget):
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
             colorbars=self.colorbar_service,
+            reference_marks=self.reference_marks_service,
             in_axes=self.in_axes_service,
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
@@ -1550,6 +1556,7 @@ class PyFigureCanvas(QWidget):
         final_cycle: dict[str, Any] | None,
         commit_cycle: bool,
         color_transitions: tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
+        record_recent: bool = True,
     ) -> ChartBatchCreationResult:
         axes_id = self.current_axes_component_id
         axes_controller = self.current_axes_controller
@@ -1584,7 +1591,8 @@ class PyFigureCanvas(QWidget):
         self._select_created_component(controllers[-1])
         self.redraw()
         colors = tuple(series.color for series in prepared)
-        self.color_library.record_recent_many(colors)
+        if record_recent:
+            self.color_library.record_recent_many(colors)
         return ChartBatchCreationResult(
             component_ids=tuple(
                 controller.component_id for controller in controllers
@@ -1862,6 +1870,7 @@ class PyFigureCanvas(QWidget):
         linewidth: float | None,
         preprocess: DataPreprocessSpec | dict[str, Any] | None,
         color_selection: ColorSelection,
+        record_recent: bool = True,
     ) -> ChartBatchCreationResult:
         """Atomically create one Plot component for every selected Y column."""
 
@@ -1886,6 +1895,7 @@ class PyFigureCanvas(QWidget):
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
             color_transitions=transitions,
+            record_recent=record_recent,
         )
 
     # Add scatter plot
@@ -1963,6 +1973,7 @@ class PyFigureCanvas(QWidget):
         size_ref: ColumnRef | None = None,
         color_mapping: dict[str, Any] | None = None,
         size_mapping: dict[str, Any] | None = None,
+        record_recent: bool = True,
     ) -> ChartBatchCreationResult:
         """Atomically create one Scatter component for every selected Y."""
 
@@ -2005,6 +2016,7 @@ class PyFigureCanvas(QWidget):
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
             color_transitions=transitions,
+            record_recent=record_recent,
         )
 
     # Add fit curve
@@ -2569,6 +2581,77 @@ class PyFigureCanvas(QWidget):
             status_messages.show_success("Colorbar created.")
         return runtime
 
+    @_history_command("Create Reflection Positions")
+    def add_reference_marks(
+        self,
+        positions,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        component_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one Reflection Positions component atomically."""
+
+        owner_axes_id = self.current_axes_component_id
+        owner_axes = self.current_axes
+        if owner_axes_id is None or owner_axes is None:
+            raise ValueError(
+                "Select an Axes before creating Reflection Positions."
+            )
+        component_id = object_id or new_id()
+        controller = None
+        runtime = None
+        with self.component_registry.registration_transaction() as transaction:
+            runtime, normalized_positions, normalized = (
+                self.reference_marks_service.create_runtime(
+                    owner_axes_id,
+                    positions,
+                    properties,
+                )
+            )
+            transaction.on_rollback(
+                lambda target=runtime: (
+                    self.reference_marks_service.destroy_runtime(target)
+                )
+            )
+            state = ComponentState(
+                id=component_id,
+                kind=ComponentKind.REFERENCE_MARKS,
+                role=ComponentRole.REFLECTION_POSITIONS,
+                parent_id=owner_axes_id,
+                order=(
+                    self._next_child_order(owner_axes_id)
+                    if component_order is None
+                    else int(component_order)
+                ),
+                selector={"object_id": component_id},
+                properties=normalized,
+                data={"positions": normalized_positions},
+            )
+            controller = ReferenceMarksController(state, target=runtime)
+            initialized = controller.apply_state(controller.state)
+            if not initialized.ok:
+                raise ValueError(
+                    initialized.message
+                    or "Could not initialize Reflection Positions."
+                )
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=runtime)
+            runtime.set_gid(component_id)
+            self._prepare_created_component(controller, transaction)
+            self.component_registry.request_update(
+                owner_axes,
+                UpdateImpact.REDRAW,
+            )
+            if self.fig.canvas is not None:
+                self.fig.canvas.draw()
+
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
+            status_messages.show_success("Reflection Positions created.")
+        return runtime
+
     def save(self, filename, dpi=None):
         """Save the current figure through the selected destination."""
 
@@ -2634,6 +2717,19 @@ class PyFigureCanvas(QWidget):
                 self._materialize_colorbar,
                 expected_phases[
                     (ComponentKind.COLORBAR, ComponentRole.COLORBAR)
+                ],
+            ),
+            ComponentMaterializer(
+                (
+                    ComponentKind.REFERENCE_MARKS,
+                    ComponentRole.REFLECTION_POSITIONS,
+                ),
+                self._materialize_reference_marks,
+                expected_phases[
+                    (
+                        ComponentKind.REFERENCE_MARKS,
+                        ComponentRole.REFLECTION_POSITIONS,
+                    )
                 ],
             ),
             ComponentMaterializer(
@@ -2827,6 +2923,22 @@ class PyFigureCanvas(QWidget):
             raise ValueError("Colorbar source component is unavailable.")
         self.add_colorbar(
             source_id,
+            state.properties,
+            object_id=state.id,
+            component_order=state.order,
+            announce=False,
+        )
+
+    def _materialize_reference_marks(self, state, _transaction) -> None:
+        if (
+            state.kind is not ComponentKind.REFERENCE_MARKS
+            or state.role is not ComponentRole.REFLECTION_POSITIONS
+        ):
+            raise ValueError(
+                "Reference Marks materializer requires Reflection Positions."
+            )
+        self.add_reference_marks(
+            state.data["positions"],
             state.properties,
             object_id=state.id,
             component_order=state.order,
@@ -3099,7 +3211,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v11 component tree."""
+        """Materialize and apply a validated schema-v12 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -3132,7 +3244,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v11_figure(source)
+        source = normalize_v12_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3164,7 +3276,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all schema-v11 states after their Matplotlib targets exist."""
+        """Apply all schema-v12 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return
@@ -3313,7 +3425,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v11 component tree used by persistence."""
+        """Return the canonical schema-v12 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3333,10 +3445,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v11_figure(snapshot)
+        return normalize_v12_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v11 Figure tree."""
+        """Validate and return the current complete schema-v12 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3345,7 +3457,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v11_figure(
+        validate_v12_figure(
             snapshot,
             available_refs,
             self.project_id,
