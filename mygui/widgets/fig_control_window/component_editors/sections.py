@@ -320,16 +320,27 @@ class AxesLimitsSection(QWidget, EditorSection):
 
         def apply(properties):
             key, value = next(iter(properties.items()))
-            dimension = "x" if key.startswith("x") else "y"
+            dimension = {
+                "xlim": "x",
+                "ylim": "y",
+                "autoscalex_on": "x",
+                "autoscaley_on": "y",
+            }[key]
             kwargs = (
                 {"limits": value}
                 if key in {"xlim", "ylim"}
                 else {"autoscale": value}
             )
-            return context.axes_layout.apply_linked_axis(
-                controller.component_id,
-                dimension,
-                **kwargs,
+            return perform_editor_action(
+                context,
+                f"Change Axes {key}",
+                lambda: context.axes_layout.apply_linked_axis(
+                    controller.component_id,
+                    dimension,
+                    **kwargs,
+                ),
+                merge_key=("property", controller.component_id, key),
+                scan_all=True,
             )
 
         self.properties = PropertySection(
@@ -1466,7 +1477,7 @@ class LegendLocationSection(QWidget, EditorSection):
                 text = (
                     str(location["value"])
                     if location["kind"] == "preset"
-                    else "best"
+                    else self.PRESETS[int(location["value"])]
                 )
                 if text not in self.PRESETS:
                     text = "best"

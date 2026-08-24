@@ -234,10 +234,10 @@ def create_semantic_children(
             selector=selector or {},
             properties=properties,
         )
-        controller = controller_type(state)
-        registry.register(controller, target=target)
+        controller = controller_type(state, target=target)
         if target is not None:
             controller.sync_from_target(strict=True)
+        registry.register(controller, target=target)
         created.append(component_id)
         order += 1
         return component_id
@@ -248,6 +248,7 @@ def create_semantic_children(
         ComponentRole.X_AXIS,
         "axis/x",
         {"axis": "x"},
+        target=axes.xaxis,
     )
     y_axis_id = add(
         YAxisController,
@@ -255,6 +256,7 @@ def create_semantic_children(
         ComponentRole.Y_AXIS,
         "axis/y",
         {"axis": "y"},
+        target=axes.yaxis,
     )
     axis_ids = {"x": x_axis_id, "y": y_axis_id}
 
@@ -265,9 +267,11 @@ def create_semantic_children(
             ComponentRole.SPINE,
             f"spine/{side}",
             {"name": side},
+            target=axes.spines[side],
         )
 
     for axis_name in ("x", "y"):
+        axis_target = axes.xaxis if axis_name == "x" else axes.yaxis
         for level in ("major", "minor"):
             tick_role = (
                 ComponentRole.MAJOR_TICK
@@ -286,6 +290,7 @@ def create_semantic_children(
                 tick_role,
                 f"axis/{axis_name}/tick/{level}",
                 selector,
+                target=axis_target,
                 parent_id=axis_ids[axis_name],
             )
             add(
@@ -294,6 +299,7 @@ def create_semantic_children(
                 label_role,
                 f"axis/{axis_name}/tick/{level}/label",
                 selector,
+                target=axis_target,
                 parent_id=tick_id,
             )
             add(
@@ -302,6 +308,7 @@ def create_semantic_children(
                 ComponentRole.GRID,
                 f"axis/{axis_name}/grid/{level}",
                 selector,
+                target=axis_target,
                 parent_id=axis_ids[axis_name],
             )
 

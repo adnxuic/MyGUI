@@ -85,7 +85,7 @@ palette. A Figure style change alone does not recolor existing components.
 - Reference Lines and Reference Bands reuse those resolved Reference Marks
   defaults and do not consume the Axes chart-color cursor.
 
-These values use the existing schema-v13 component tree. Opening a project
+These values use the existing schema-v14 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
 

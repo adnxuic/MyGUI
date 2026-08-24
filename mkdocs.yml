@@ -85,7 +85,8 @@ nav:
       - Component Inspector Architecture: component-inspector.md
       - Atomic Component Deletion: component-deletion.md
       - Component Extension Template: component-extension-template.md
-      - Component Properties (schema v13): component-properties-v13.md
+      - Component Properties (schema v14): component-properties-v14.md
+      - Legacy schema v13 migration properties: component-properties-v13.md
       - Legacy schema v12 migration properties: component-properties-v12.md
       - Legacy schema v10 migration properties: component-properties-v10.md
   - Maintenance & QA:

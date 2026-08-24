@@ -122,6 +122,26 @@ def _optional_text(value: Any) -> str | None:
     return str(value)
 
 
+def _primary_font_family(value: Any) -> str:
+    """Return one non-empty primary family from Matplotlib-compatible input."""
+
+    if isinstance(value, str):
+        if value.strip():
+            return value
+        raise ComponentValidationError("Font family cannot be empty.")
+    if isinstance(value, (tuple, list)):
+        if not value:
+            raise ComponentValidationError("Font family list cannot be empty.")
+        if not all(isinstance(item, str) and item.strip() for item in value):
+            raise ComponentValidationError(
+                "Font family list entries must be non-empty strings."
+            )
+        return value[0]
+    raise ComponentValidationError(
+        "Font family must be a string or a non-empty string sequence."
+    )
+
+
 def _url_sequence(value: Any) -> tuple[str | None, ...]:
     if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):
         raise ComponentValidationError("URLs must be an array.")
@@ -945,6 +965,11 @@ class AxesController(ContainerController):
             bool,
             True,
             editor="check",
+            impact=(
+                UpdateImpact.RELIM
+                | UpdateImpact.AUTOSCALE
+                | UpdateImpact.REDRAW
+            ),
             getter="get_autoscalex_on",
             setter="set_autoscalex_on",
         ),
@@ -953,6 +978,11 @@ class AxesController(ContainerController):
             bool,
             True,
             editor="check",
+            impact=(
+                UpdateImpact.RELIM
+                | UpdateImpact.AUTOSCALE
+                | UpdateImpact.REDRAW
+            ),
             getter="get_autoscaley_on",
             setter="set_autoscaley_on",
         ),
@@ -1081,6 +1111,19 @@ class AxesController(ContainerController):
             self._color_cycle = deepcopy(value)
             return
         super()._write_property(target, spec, value)
+
+    def _replacement_impacts(
+        self,
+        impacts: UpdateImpact,
+        state: ComponentState,
+    ) -> UpdateImpact:
+        # A complete Axes state carries authoritative limits.  Applying xlim
+        # and ylim temporarily disables Matplotlib autoscaling before the
+        # persisted flags are restored; relim/autoscale here would overwrite
+        # those explicit limits.  Property-only mutations retain the normal
+        # immediate autoscale impact.
+        del state
+        return impacts & ~(UpdateImpact.RELIM | UpdateImpact.AUTOSCALE)
 
     def _restore_transaction_snapshot(self, snapshot) -> None:
         super()._restore_transaction_snapshot(snapshot)
@@ -1283,6 +1326,7 @@ class AxisController(AxisComponentController):
                 locator,
                 self._state.properties.get(spec.key),
                 minor=minor,
+                scale=self._state.properties.get("scale") if minor else None,
             )
         if spec.key in {"major_formatter", "minor_formatter"}:
             minor = spec.key.startswith("minor")
@@ -1603,6 +1647,12 @@ class TickGroupController(AxisComponentController):
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
         ticks = self._ticks(target)
         if not ticks:
+            if _level(self._state) == "minor":
+                pending = getattr(target, "_minor_tick_kw", {})
+                if spec.key == "primary_visible":
+                    return bool(pending.get("tick1On", spec.default))
+                if spec.key == "secondary_visible":
+                    return bool(pending.get("tick2On", spec.default))
             return deepcopy(self._state.properties.get(spec.key, spec.default))
         tick = ticks[0]
         line = tick.tick1line
@@ -1691,9 +1741,10 @@ class TickLabelGroupController(AxisComponentController):
         PropertySpec("rotation", float, 0.0, editor="double_spin"),
         PropertySpec(
             "fontfamily",
-            (str, tuple, list),
+            str,
             "sans-serif",
             editor="font",
+            normalizer=_primary_font_family,
         ),
         PropertySpec(
             "pad",
@@ -1747,6 +1798,12 @@ class TickLabelGroupController(AxisComponentController):
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
         ticks = self._ticks(target)
         if not ticks:
+            if _level(self._state) == "minor":
+                pending = getattr(target, "_minor_tick_kw", {})
+                if spec.key == "primary_visible":
+                    return bool(pending.get("label1On", spec.default))
+                if spec.key == "secondary_visible":
+                    return bool(pending.get("label2On", spec.default))
             return deepcopy(self._state.properties.get(spec.key, spec.default))
         if spec.key == "primary_visible":
             return any(tick.label1.get_visible() for tick in ticks)
@@ -1760,7 +1817,7 @@ class TickLabelGroupController(AxisComponentController):
         if spec.key == "rotation":
             return float(label.get_rotation())
         if spec.key == "fontfamily":
-            return list(label.get_fontfamily())
+            return _primary_font_family(label.get_fontfamily())
         if spec.key == "pad":
             return float(ticks[0].get_pad())
         if spec.key == "bbox":
@@ -1912,6 +1969,9 @@ class GridController(AxisComponentController):
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
         lines = self._gridlines(target)
         if not lines:
+            if _level(self._state) == "minor" and spec.key == "visible":
+                pending = getattr(target, "_minor_tick_kw", {})
+                return bool(pending.get("gridOn", spec.default))
             return deepcopy(self._state.properties.get(spec.key, spec.default))
         line = lines[0]
         if spec.key == "visible":
@@ -2189,14 +2249,11 @@ class AxisLabelController(TextController):
                 raise ComponentValidationError(
                     "Axis label has no parent Axis target."
                 )
-            # Axis draw recomputes an automatic label coordinate from renderer
-            # extents. Once a persisted position is restored or edited, retain the
-            # existing transform but explicitly disable that automatic pass so
-            # the persisted value remains stable across save/open/draw cycles.
+            # Omitting transform deliberately selects Axes.transAxes, matching
+            # Matplotlib's public Axis.set_label_coords coordinate contract.
             parent.set_label_coords(
                 float(value[0]),
                 float(value[1]),
-                transform=target.get_transform(),
             )
             return
         super()._write_property(target, spec, value)

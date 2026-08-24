@@ -29,6 +29,9 @@ from mygui.figuremodify.components import (
     UpdateImpact,
 )
 from mygui.figuremodify.components.base import _refresh_legend
+from mygui.figuremodify.components.property_values import (
+    default_minor_locator_for_scale,
+)
 
 
 _UNSET = object()
@@ -405,8 +408,10 @@ class AxesLayoutService:
             target.set_facecolor("none")
         elif view.facecolor is not None:
             target.set_facecolor(view.facecolor)
-        if view.x_minor_grid or view.y_minor_grid:
-            target.minorticks_on()
+        if not right_y and view.x_minor_grid:
+            target.xaxis.minorticks_on()
+        if view.y_minor_grid:
+            target.yaxis.minorticks_on()
         if not right_y:
             target.grid(view.x_major_grid, axis="x", which="major")
             target.grid(view.x_minor_grid, axis="x", which="minor")
@@ -751,6 +756,104 @@ class AxesLayoutService:
                 key=lambda controller: int(controller.state.selector["index"]),
             )
         )
+
+    def apply_minor_component_properties(
+        self,
+        controller,
+        properties: dict[str, Any],
+    ):
+        """Apply one minor semantic edit with any required Axis locator."""
+
+        if self.registry.get(controller.component_id) is not controller:
+            raise ValueError("Minor component is not owned by this Figure.")
+        if controller.state.kind not in {
+            ComponentKind.TICK_GROUP,
+            ComponentKind.TICK_LABEL_GROUP,
+            ComponentKind.GRID,
+        }:
+            raise ValueError("Minor edits require a Tick, Tick Label, or Grid.")
+        patch = dict(properties)
+        mutations: list[ComponentMutation] = []
+        state = controller.state
+        enabling = False
+        if state.selector.get("level") == "minor":
+            if state.kind is ComponentKind.GRID:
+                enabling = patch.get("visible") is True
+            else:
+                enabling = any(
+                    patch.get(key) is True
+                    for key in ("primary_visible", "secondary_visible")
+                )
+        if enabling:
+            axis = self.registry.ancestor(
+                controller.component_id,
+                kind=ComponentKind.AXIS,
+                include_self=False,
+            )
+            if axis is None:
+                raise ValueError("Minor component has no owning Axis.")
+            locator = axis.state.properties["minor_locator"]
+            if locator.get("kind") == "null":
+                mutations.append(
+                    ComponentMutation(
+                        axis.component_id,
+                        properties={
+                            "minor_locator": default_minor_locator_for_scale(
+                                axis.state.properties["scale"]
+                            )
+                        },
+                    )
+                )
+        mutations.append(
+            ComponentMutation(controller.component_id, properties=patch)
+        )
+        return self.registry.apply_transaction(mutations)
+
+    @staticmethod
+    def repair_legacy_minor_locator_states(
+        states: Iterable[ComponentState],
+    ) -> tuple[ComponentState, ...]:
+        """Repair explicit pre-fix minor intent without enabling default ticks."""
+
+        values = tuple(states)
+        children: dict[str | None, list[ComponentState]] = {}
+        for state in values:
+            children.setdefault(state.parent_id, []).append(state)
+        replacements: dict[str, ComponentState] = {}
+        for axis in values:
+            if axis.kind is not ComponentKind.AXIS:
+                continue
+            locator = axis.properties.get("minor_locator", {})
+            if locator.get("kind") != "null":
+                continue
+            explicit_intent = False
+            for child in children.get(axis.id, ()):  # Tick/Grid children.
+                if child.selector.get("level") != "minor":
+                    continue
+                if (
+                    child.kind is ComponentKind.GRID
+                    and child.properties.get("visible") is True
+                ) or (
+                    child.kind is ComponentKind.TICK_GROUP
+                    and child.properties.get("secondary_visible") is True
+                ):
+                    explicit_intent = True
+                if child.kind is ComponentKind.TICK_GROUP:
+                    explicit_intent = explicit_intent or any(
+                        label.kind is ComponentKind.TICK_LABEL_GROUP
+                        and label.properties.get("secondary_visible") is True
+                        for label in children.get(child.id, ())
+                    )
+                if explicit_intent:
+                    break
+            if not explicit_intent:
+                continue
+            properties = deepcopy(axis.properties)
+            properties["minor_locator"] = default_minor_locator_for_scale(
+                properties["scale"]
+            )
+            replacements[axis.id] = axis.clone(properties=properties)
+        return tuple(replacements.get(state.id, state) for state in values)
 
     def linked_axes(self, axes_id: str, dimension: str) -> tuple[AxesController, ...]:
         axes = self.registry.get(axes_id)

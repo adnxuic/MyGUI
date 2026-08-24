@@ -145,7 +145,7 @@ def apply_update_impacts(
     if isinstance(subject, Axes):
         if UpdateImpact.RELIM in impacts:
             subject.relim()
-        if UpdateImpact.AUTOSCALE in impacts:
+        if UpdateImpact.AUTOSCALE in impacts and subject.has_data():
             subject.autoscale_view()
         if UpdateImpact.LEGEND in impacts:
             _refresh_legend(subject)
@@ -578,6 +578,7 @@ class ComponentController(Generic[T]):
                 except Exception:
                     pass
             self._state = candidate.clone(properties=actual)
+            impacts = self._replacement_impacts(impacts, self._state)
         except Exception as exc:
             if target is not None:
                 for spec, previous in reversed(applied):
@@ -897,6 +898,16 @@ class ComponentController(Generic[T]):
         after: ComponentState,
     ) -> UpdateImpact:
         return UpdateImpact.NONE
+
+    def _replacement_impacts(
+        self,
+        impacts: UpdateImpact,
+        state: ComponentState,
+    ) -> UpdateImpact:
+        """Filter side effects for a complete authoritative state replacement."""
+
+        del state
+        return impacts
 
     def _delete_target(self, target: T) -> None:
         remove = getattr(target, "remove", None)

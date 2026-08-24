@@ -1127,7 +1127,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v13_figure",
+                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v14_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))

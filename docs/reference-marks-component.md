@@ -44,7 +44,7 @@ a legend entry.
 
 ## Project record
 
-Schema v13 stores the component as
+Schema v14 stores the component as
 `kind: "reference_marks"`, `role: "reflection_positions"`, with
 `selector: {"object_id": component_id}`. Its parent is an ordinary Axes. The
 `data` object contains exactly `positions`; the `properties` object contains

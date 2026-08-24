@@ -10,7 +10,7 @@ Matplotlib text remain available when no compatible TeX installation exists.
 | --- | --- | --- |
 | `enabled` | Application runtime | Whether TeX rendering is currently available for effective use |
 | `preamble` | Application runtime | Shared `text.latex.preamble` content validated before activation |
-| `usetex` | Text component, schema v13 | User-requested render mode for that Text component |
+| `usetex` | Text component, schema v14 | User-requested render mode for that Text component |
 | effective `usetex` | Text artist runtime | Requested value combined with current TeX availability |
 | `MYGUI_TEX_TIMEOUT_SECONDS` | Process environment | Bounded render-probe timeout; default 15 seconds |
 
@@ -29,7 +29,7 @@ preamble changes through `TextRenderService.apply_tex_availability()`;
 Inspector Sections only synchronize their controls and never set Matplotlib
 artists directly. The service keeps a component's requested `usetex` value in
 Controller state while applying a safe runtime override when TeX is
-unavailable. The effective override is not added to schema v13.
+unavailable. The effective override is not added to schema v14.
 
 Re-enabling TeX probes rendering before publishing the effective state. A
 failed Figure refresh keeps its requested Text on the ordinary renderer while

@@ -44,7 +44,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v13.
+  serialized into `ComponentState` or schema v14.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -138,8 +138,8 @@ subtree.
 | `ReferenceBandController` | Reference Band | finite ordered bounds, vertical/horizontal orientation, Axes-fraction span, fill/border appearance, visibility, layering, and clipping |
 | `ColorbarController` | Colorbar | visibility/label, constructor-sensitive placement, extend/spacing/edges, tagged locator/formatter, minor ticks/tick side, fonts, and outline appearance |
 
-The exact schema-v13 ownership matrix and tagged-value formats are maintained
-in [`component-properties-v13.md`](component-properties-v13.md). Colorbar
+The exact schema-v14 ownership matrix and tagged-value formats are maintained
+in [`component-properties-v14.md`](component-properties-v14.md). Colorbar
 controls and defaults are listed in
 [`colorbar-component.md`](colorbar-component.md).
 Axes do not persist scales, Axis does not persist inversion or side visibility,
@@ -270,7 +270,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend strict schema-v13 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
+9. Extend strict schema-v14 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

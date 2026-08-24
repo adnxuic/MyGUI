@@ -24,6 +24,12 @@ Core. It does not redefine application architecture or Scanner rules.
 
 For long-running asynchronous work:
 
+- Do not end the session while a command, test batch, gate, worker, or other
+  launched process is still running. Keep the session alive and continue
+  waiting until the process completes; report it as complete only after its
+  terminal completion state, exit code, and required output or artifacts are
+  available. Do not treat periodic progress updates or the absence of failure
+  output as completion.
 - Empty `write_stdin` polls MUST use `yield_time_ms >= 180000`;
   prefer `300000` when intermediate output is not needed.
 - `functions.wait` MUST use `yield_time_ms >= 180000`.

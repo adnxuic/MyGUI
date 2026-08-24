@@ -250,7 +250,7 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    guide belongs to the selected Axes and uses that Axes' blended transform.
    Delete multiple Reference Lines together, then Undo/Redo; repeat by deleting
    their owning Axes and confirm the full subtree restores with stable IDs.
-7. Save, close, and reopen the schema-v13 project. Confirm orientation,
+7. Save, close, and reopen the schema-v14 project. Confirm orientation,
    position/bounds, spans, appearance, stable IDs, order, empty `data`, one
    runtime collection per guide, selection/Inspector behavior, and clean/dirty
    fingerprints survive the round trip. Close the project and confirm no

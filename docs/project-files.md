@@ -1,10 +1,10 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 13. One file contains one
+MyGUI project files use strict JSON schema version 14. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v13, strictly validated integer v12 for direct
-in-memory migration, integer v11 through v12, and integer v10 through v11 and
-v12. Schema v4-v9, non-integer values, and unknown versions are rejected before
+The loader accepts exact integer v14, strictly validated integer v13 for direct
+in-memory migration, integer v12 through v13, integer v11 through v12/v13, and
+integer v10 through every intervening version. Schema v4-v9, non-integer values, and unknown versions are rejected before
 application state is published.
 
 ## Root structure
@@ -12,7 +12,7 @@ application state is published.
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 13,
+  "schema_version": 14,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -23,7 +23,7 @@ application state is published.
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `13`.
+- Newly saved `schema_version` is always the integer `14`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -106,6 +106,11 @@ Each `axes/axes` child stores:
 
 Axes position is derived from its Figure layout rather than persisted as an independently editable property. Each X/Y Axis owns its tagged scale, locator, and formatter configuration. Ordered Axes limits are the sole inversion authority.
 
+Each Tick Label Group persists `fontfamily` as one non-empty primary-family
+string. X/Y Label `position` values use normalized `Axes.transAxes`
+coordinates, so their placement scales with the Axes instead of the canvas
+pixel coordinate system.
+
 Every Axes contains fixed semantic children:
 
 - one X Axis and one Y Axis;
@@ -117,11 +122,19 @@ Every Axes contains fixed semantic children:
 
 Tick, Tick Label, Grid, and Legend targets may be recreated by Matplotlib. Their selectors identify the semantic group rather than a transient artist instance.
 
+Minor visibility and the owning Axis locator are restored together. For
+schema-v13 files produced before this behavior was enforced, loading silently
+installs the scale-appropriate minor locator only when the file contains an
+explicit non-default request: a visible Minor Grid or visible secondary Minor
+Ticks/Tick Labels. Default primary visibility alone does not enable minor
+ticks. This compatibility repair changes neither the schema version nor the
+component wire shape.
+
 ## Artist properties and role data
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v13)](component-properties-v13.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v14)](component-properties-v14.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -201,22 +214,24 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v13.
+snapshot only and does not change schema v14.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v13 save/open round trip. Strict v12 input is
-validated with the v12 graph, deep-copied, advanced to v13, and validated again
-without rewriting component or Table records. Strict v11 input migrates through
-v12 to v13. Strict v10 input migrates through v11 and v12 to v13. v10 cannot
+unchanged across every schema-v14 save/open round trip. Strict v13 input is
+validated completely, deep-copied, and advanced to v14. Tick Label
+`fontfamily` string values remain unchanged; non-empty string lists become only
+their first string. No other component or Table field is rewritten. Strict v12
+input migrates through v13 to v14, strict v11 through v12/v13, and strict v10
+through every intervening version. v10 cannot
 contain Colorbar; v10/v11 cannot contain Reference Marks; and v10-v12 cannot
 contain Reference Guides. Malformed predecessors and versions v4 through v9
 are rejected before Table or Figure state is published.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
-Colorbar after its source, with Legend restored from the v13 tree. Reference
+Colorbar after its source, with Legend restored from the v14 tree. Reference
 Marks and Reference Guides are materialized as collections in the dynamic
 component phase. Zoom mirrors receive one final batch refresh
 after their sources exist. Restore does not
@@ -243,7 +258,7 @@ Before Table or Figure application state changes, the loader validates:
   keys, finite ordered positions, and normalized baseline/height geometry;
 - Reference Guide ownership by an ordinary Axes, exact selector/property keys,
   empty data, finite values/bounds, orientation, and normalized spans;
-- property/data JSON types, finite numbers, normalized colors, and unique chart order values;
+- property/data JSON types, finite numbers, normalized colors, unique chart order values, and one non-empty string `fontfamily` for every Tick Label Group;
 - data references, compatible column types, preprocessing expressions,
   interpolation methods, and fitting engines.
 
@@ -260,11 +275,11 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v13.
+are not added to schema v14.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v13 project stays clean through those UI-only interactions, and a
+schema-v14 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export

@@ -78,8 +78,8 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v13_figure,
-    validate_v13_figure,
+    normalize_v14_figure,
+    validate_v14_figure,
 )
 from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
@@ -3394,7 +3394,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v13 component tree."""
+        """Materialize and apply a validated schema-v14 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -3427,7 +3427,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v13_figure(source)
+        source = normalize_v14_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3459,7 +3459,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all schema-v13 states after their Matplotlib targets exist."""
+        """Apply all schema-v14 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return
@@ -3467,6 +3467,9 @@ class PyFigureCanvas(QWidget):
             ComponentState.from_dict(raw_state)
             for raw_state in component_tree.get("components", [])
         ]
+        states = list(
+            self.axes_layout_service.repair_legacy_minor_locator_states(states)
+        )
         source_by_id = {state.id: state for state in states}
         runtime_ids = {
             controller.component_id
@@ -3608,7 +3611,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v13 component tree used by persistence."""
+        """Return the canonical schema-v14 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3628,10 +3631,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v13_figure(snapshot)
+        return normalize_v14_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v13 Figure tree."""
+        """Validate and return the current complete schema-v14 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3640,7 +3643,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v13_figure(
+        validate_v14_figure(
             snapshot,
             available_refs,
             self.project_id,

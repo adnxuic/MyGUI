@@ -28,13 +28,17 @@ def perform_editor_action(
     operation: Callable[[], object],
     *,
     merge_key: tuple[object, ...] | None = None,
+    scan_all: bool = False,
 ):
     """Use Figure history when a complete production context provides it."""
 
     perform = getattr(context, "perform", None)
     if not callable(perform):
         return operation()
-    return perform(text, operation, merge_key=merge_key)
+    kwargs = {"merge_key": merge_key}
+    if scan_all:
+        kwargs["scan_all"] = True
+    return perform(text, operation, **kwargs)
 
 
 class MessagePresenter:
@@ -494,10 +498,16 @@ class EditorContext:
         operation: Callable[[], object],
         *,
         merge_key: tuple[object, ...] | None = None,
+        scan_all: bool = False,
     ):
         """Run one explicit editor intent through optional Figure history."""
 
         history = self.history
         if history is None:
             return operation()
-        return history.perform(text, operation, merge_key=merge_key)
+        return history.perform(
+            text,
+            operation,
+            merge_key=merge_key,
+            scan_all=scan_all,
+        )

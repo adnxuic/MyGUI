@@ -82,7 +82,7 @@ Deleting a right-Y Axes leaves its primary Axes in place and resets a merged pri
 
 ## Project records
 
-Schema v13 stores geometry under the Figure root in `data.layouts`. Each layout contains:
+Schema v14 stores geometry under the Figure root in `data.layouts`. Each layout contains:
 
 - stable `id`;
 - `nrows`, `ncols`;

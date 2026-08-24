@@ -66,7 +66,7 @@ IDs.
 
 ## Project records
 
-Schema v13 stores both components with `kind: "reference_guide"` and an
+Schema v14 stores both components with `kind: "reference_guide"` and an
 ordinary `axes/axes` parent. Reference Line uses `role: "reference_line"`;
 Reference Band uses `role: "reference_band"`. Both use exactly
 `selector: {"object_id": component_id}` and an empty `data` object. Unknown

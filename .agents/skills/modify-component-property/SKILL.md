@@ -6,7 +6,7 @@ description: Add, expose, rename, or change a MyGUI component property and its C
 # Modify Component Property
 
 Read the routed component, Inspector, and persistence pages. Preserve
-`CORE-COMPONENT-STATE`, `CORE-EDITOR-PROFILES`, and `CORE-PERSISTENCE-V13`.
+`CORE-COMPONENT-STATE`, `CORE-EDITOR-PROFILES`, and `CORE-PERSISTENCE-V14`.
 
 Determine first whether the property is runtime-only or persisted; any new or
 renamed persisted key requires `schema-migration`. Define normalization and

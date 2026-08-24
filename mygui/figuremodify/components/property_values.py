@@ -214,6 +214,54 @@ def default_scale_for_name(name: str) -> dict[str, Any]:
         raise ComponentValidationError(f"Unsupported scale kind {name!r}.") from exc
 
 
+def default_minor_locator_for_scale(value: Any) -> dict[str, Any]:
+    """Return Matplotlib 3.9's scale-appropriate default minor locator."""
+
+    scale = normalize_scale(value)
+    kind = scale["kind"]
+    params = scale["params"]
+    if kind == "linear":
+        locator = {"kind": "auto_minor", "params": {"n": None}}
+    elif kind == "log":
+        locator = {
+            "kind": "log",
+            "params": {
+                "base": params["base"],
+                "subs": params["subs"],
+                "numticks": None,
+            },
+        }
+    elif kind == "symlog":
+        locator = {
+            "kind": "symlog",
+            "params": {
+                "transform": {
+                    "base": params["base"],
+                    "linthresh": params["linthresh"],
+                    "linscale": params["linscale"],
+                },
+                "subs": params["subs"],
+            },
+        }
+    elif kind == "asinh":
+        locator = {
+            "kind": "asinh",
+            "params": {
+                "linear_width": params["linear_width"],
+                "numticks": 11,
+                "symthresh": 0.2,
+                "base": params["base"],
+                "subs": params["subs"],
+            },
+        }
+    else:
+        locator = {
+            "kind": "logit",
+            "params": {"minor": True, "nbins": "auto"},
+        }
+    return normalize_locator(locator)
+
+
 def apply_scale(axes: Any, axis_name: str, value: Any) -> None:
     spec = normalize_scale(value)
     setter = axes.set_xscale if axis_name == "x" else axes.set_yscale
@@ -296,7 +344,10 @@ def normalize_locator(value: Any) -> dict[str, Any]:
         result["base"] = _positive(result["base"], "Asinh base")
         result["subs"] = _finite_sequence(result["subs"], "Asinh subs", minimum_length=1)
     elif kind == "logit":
-        result = {"minor": bool(result["minor"]), "nbins": int(_positive(result["nbins"], "Logit nbins"))}
+        nbins = result["nbins"]
+        if nbins != "auto":
+            nbins = int(_positive(nbins, "Logit nbins"))
+        result = {"minor": bool(result["minor"]), "nbins": nbins}
     return {"kind": kind, "params": result}
 
 
@@ -345,7 +396,13 @@ _LOCATOR_CLASSES = {
 }
 
 
-def locator_from_axis(locator: ticker.Locator, previous: Any, *, minor: bool) -> dict[str, Any]:
+def locator_from_axis(
+    locator: ticker.Locator,
+    previous: Any,
+    *,
+    minor: bool,
+    scale: Any = None,
+) -> dict[str, Any]:
     """Return a stable locator spec, retaining explicit parameters when valid."""
 
     try:
@@ -357,7 +414,17 @@ def locator_from_axis(locator: ticker.Locator, previous: Any, *, minor: bool) ->
     if isinstance(locator, ticker.NullLocator):
         return normalize_locator(DEFAULT_MINOR_LOCATOR)
     if isinstance(locator, ticker.AutoMinorLocator):
-        return normalize_locator({"kind": "auto_minor", "params": {"n": getattr(locator, "ndivs", None)}})
+        divisions = getattr(locator, "ndivs", None)
+        if divisions == "auto":
+            divisions = None
+        return normalize_locator(
+            {"kind": "auto_minor", "params": {"n": divisions}}
+        )
+    if minor and scale is not None:
+        default = default_minor_locator_for_scale(scale)
+        expected = _LOCATOR_CLASSES[default["kind"]]
+        if isinstance(locator, expected):
+            return default
     if isinstance(locator, ticker.FixedLocator):
         return normalize_locator({"kind": "fixed", "params": {"locations": list(np.asarray(locator.locs, dtype=float)), "nbins": getattr(locator, "nbins", None)}})
     if isinstance(locator, ticker.LinearLocator):

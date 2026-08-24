@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,7 +28,11 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.components.serialization import (
     validate_v10_figure,
 )
-from mygui.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.project_io import (
+    load_project_file,
+    restore_project_snapshot,
+    save_project_snapshot,
+)
 from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
     AxesLayoutInput,
     axes_layout_presets,
@@ -133,6 +138,329 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             finally:
                 restored.close()
                 self.app.processEvents()
+
+    def test_shared_axes_reenable_autoscale_and_sync_limits(self):
+        ids = self.canvas.create_axes_layout(
+            AxesLayoutSpec(
+                2,
+                1,
+                (
+                    AxesCellSpec(0, 0),
+                    AxesCellSpec(1, 0),
+                ),
+                share_x=ShareMode.ALL,
+            )
+        )
+        controllers = [self.canvas.component_registry.get(item) for item in ids]
+        for controller in controllers:
+            controller.resolve_target().plot([0.0, 20.0], [0.0, 1.0])
+        disabled = self.canvas.axes_layout_service.apply_linked_axis(
+            ids[0],
+            "x",
+            limits=(0.0, 10.0),
+            autoscale=False,
+        )
+        self.assertTrue(disabled.ok)
+
+        enabled = self.canvas.axes_layout_service.apply_linked_axis(
+            ids[0],
+            "x",
+            autoscale=True,
+        )
+
+        self.assertTrue(enabled.ok)
+        for controller in controllers:
+            target = controller.resolve_target()
+            self.assertTrue(controller.state.properties["autoscalex_on"])
+            self.assertAlmostEqual(target.get_xlim()[0], -1.0)
+            self.assertAlmostEqual(target.get_xlim()[1], 21.0)
+            self.assertEqual(
+                tuple(controller.state.properties["xlim"]),
+                tuple(target.get_xlim()),
+            )
+
+    def test_minor_visibility_service_enables_locator_and_preserves_custom_one(self):
+        axes_id, = create_regular_axes(self.canvas)
+        axes = self.canvas.component_registry.resolve_target(axes_id)
+        x_axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        y_axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.Y_AXIS,
+        )
+
+        def minor(kind):
+            return self.canvas.component_registry.find_one(
+                parent_id=(
+                    x_axis.component_id
+                    if kind is not ComponentKind.TICK_LABEL_GROUP
+                    else tick.component_id
+                ),
+                kind=kind,
+                selector={"axis": "x", "level": "minor"},
+                recursive=False,
+            )
+
+        grid = minor(ComponentKind.GRID)
+        tick = minor(ComponentKind.TICK_GROUP)
+        label = minor(ComponentKind.TICK_LABEL_GROUP)
+
+        result = self.canvas.axes_layout_service.apply_minor_component_properties(
+            grid,
+            {"visible": True},
+        )
+        self.assertTrue(result.ok)
+        self.assertEqual(x_axis.state.properties["minor_locator"]["kind"], "auto_minor")
+        self.assertEqual(y_axis.state.properties["minor_locator"]["kind"], "null")
+        self.assertTrue(grid.state.properties["visible"])
+        self.assertTrue(axes.xaxis.get_minor_ticks())
+        self.assertTrue(
+            all(tick.gridline.get_visible() for tick in axes.xaxis.get_minor_ticks())
+        )
+
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_minor_component_properties(
+                grid,
+                {"visible": False},
+            ).ok
+        )
+        self.assertEqual(x_axis.state.properties["minor_locator"]["kind"], "auto_minor")
+        self.assertTrue(x_axis.set_property("minor_locator", {"kind": "null", "params": {}}).ok)
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_minor_component_properties(
+                tick,
+                {"secondary_visible": True},
+            ).ok
+        )
+        self.assertTrue(any(item.tick2line.get_visible() for item in axes.xaxis.get_minor_ticks()))
+
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_minor_component_properties(
+                tick,
+                {"secondary_visible": False},
+            ).ok
+        )
+        self.assertTrue(x_axis.set_property("minor_locator", {"kind": "null", "params": {}}).ok)
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_minor_component_properties(
+                label,
+                {"secondary_visible": True},
+            ).ok
+        )
+        self.assertTrue(any(item.label2.get_visible() for item in axes.xaxis.get_minor_ticks()))
+
+        custom = {
+            "kind": "fixed",
+            "params": {"locations": [0.25, 0.75], "nbins": None},
+        }
+        self.assertTrue(x_axis.set_property("minor_locator", custom).ok)
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_minor_component_properties(
+                grid,
+                {"visible": True},
+            ).ok
+        )
+        self.assertEqual(x_axis.state.properties["minor_locator"], custom)
+
+        y_grid = self.canvas.component_registry.find_one(
+            parent_id=y_axis.component_id,
+            kind=ComponentKind.GRID,
+            selector={"axis": "y", "level": "minor"},
+        )
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_minor_component_properties(
+                y_grid,
+                {"visible": True},
+            ).ok
+        )
+        self.assertEqual(y_axis.state.properties["minor_locator"]["kind"], "auto_minor")
+        self.assertTrue(any(item.gridline.get_visible() for item in axes.yaxis.get_minor_ticks()))
+
+    def test_minor_visibility_transaction_rolls_back_locator_and_tick_state(self):
+        axes_id, = create_regular_axes(self.canvas)
+        axes = self.canvas.component_registry.resolve_target(axes_id)
+        axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        grid = self.canvas.component_registry.find_one(
+            parent_id=axis.component_id,
+            kind=ComponentKind.GRID,
+            selector={"axis": "x", "level": "minor"},
+        )
+        original_write = grid._write_property
+        failed = False
+
+        def fail_once(target, spec, value):
+            nonlocal failed
+            if spec.key == "visible" and value is True and not failed:
+                failed = True
+                raise RuntimeError("injected minor visibility failure")
+            return original_write(target, spec, value)
+
+        with mock.patch.object(grid, "_write_property", side_effect=fail_once):
+            result = self.canvas.axes_layout_service.apply_minor_component_properties(
+                grid,
+                {"visible": True},
+            )
+
+        self.assertFalse(result.ok)
+        self.assertIn("injected minor visibility failure", result.message)
+        self.assertEqual(axis.state.properties["minor_locator"]["kind"], "null")
+        self.assertFalse(grid.state.properties["visible"])
+        self.assertFalse(axes.xaxis._minor_tick_kw["gridOn"])
+        self.assertEqual(axes.xaxis.get_minor_ticks(), [])
+
+    def test_minor_grid_creation_state_and_save_open_save_are_consistent(self):
+        spec = AxesLayoutSpec(
+            1,
+            1,
+            (
+                AxesCellSpec(
+                    0,
+                    0,
+                    primary=AxesViewSpec(x_minor_grid=True),
+                ),
+            ),
+        )
+        axes_id, = self.canvas.create_axes_layout(spec)
+        axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        grid = self.canvas.component_registry.find_one(
+            parent_id=axis.component_id,
+            kind=ComponentKind.GRID,
+            selector={"axis": "x", "level": "minor"},
+        )
+        snapshot = self.canvas.component_snapshot()
+        saved_axis = next(item for item in snapshot["components"] if item["id"] == axis.component_id)
+        saved_grid = next(item for item in snapshot["components"] if item["id"] == grid.component_id)
+        self.assertEqual(axis.state.properties["minor_locator"]["kind"], "auto_minor")
+        self.assertTrue(grid.state.properties["visible"])
+        self.assertEqual(saved_axis["properties"], axis.state.properties)
+        self.assertEqual(
+            saved_grid["properties"]["visible"],
+            grid.state.properties["visible"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            first_path = Path(directory) / "minor-grid.mygui.json"
+            second_path = Path(directory) / "minor-grid-resaved.mygui.json"
+            save_project_snapshot(first_path, self.window.figure_window)
+            restored = MainWindow()
+            try:
+                restore_project_snapshot(first_path, restored.table, restored.figure_window)
+                canvas = restored.figure_window.current_canva
+                restored_axis = canvas.component_registry.get(axis.component_id)
+                restored_grid = canvas.component_registry.get(grid.component_id)
+                restored_axes = canvas.component_registry.resolve_target(axes_id)
+                self.assertEqual(restored_axis.state.properties["minor_locator"]["kind"], "auto_minor")
+                self.assertTrue(restored_grid.state.properties["visible"])
+                self.assertTrue(
+                    any(item.gridline.get_visible() for item in restored_axes.xaxis.get_minor_ticks())
+                )
+                save_project_snapshot(second_path, restored.figure_window)
+                second = load_project_file(second_path)
+                second_axis = next(
+                    item for item in second["figure"]["components"]
+                    if item["id"] == axis.component_id
+                )
+                second_grid = next(
+                    item for item in second["figure"]["components"]
+                    if item["id"] == grid.component_id
+                )
+                self.assertEqual(second_axis["properties"]["minor_locator"], restored_axis.state.properties["minor_locator"])
+                self.assertTrue(second_grid["properties"]["visible"])
+            finally:
+                restored.close()
+                self.app.processEvents()
+
+    def test_legacy_minor_grid_is_repaired_but_default_primary_intent_is_not(self):
+        axes_id, = create_regular_axes(self.canvas)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy-minor-grid.mygui.json"
+            snapshot = save_project_snapshot(path, self.window.figure_window)
+            components = snapshot["figure"]["components"]
+            axis = next(
+                item for item in components
+                if item["parent_id"] == axes_id
+                and item["role"] == ComponentRole.X_AXIS.value
+            )
+            grid = next(
+                item for item in components
+                if item["parent_id"] == axis["id"]
+                and item["kind"] == ComponentKind.GRID.value
+                and item["selector"].get("level") == "minor"
+            )
+            grid["properties"]["visible"] = True
+            axis["properties"]["minor_locator"] = {"kind": "null", "params": {}}
+            path.write_text(json.dumps(snapshot), encoding="utf-8")
+
+            restored = MainWindow()
+            try:
+                restore_project_snapshot(path, restored.table, restored.figure_window)
+                canvas = restored.figure_window.current_canva
+                repaired_axis = canvas.component_registry.get(axis["id"])
+                repaired_grid = canvas.component_registry.get(grid["id"])
+                axes = canvas.component_registry.resolve_target(axes_id)
+                self.assertNotEqual(repaired_axis.state.properties["minor_locator"]["kind"], "null")
+                self.assertTrue(repaired_grid.state.properties["visible"])
+                self.assertTrue(any(item.gridline.get_visible() for item in axes.xaxis.get_minor_ticks()))
+                self.assertFalse(restored.figure_window.is_canvas_dirty(canvas))
+            finally:
+                restored.close()
+                self.app.processEvents()
+
+        states = tuple(self.canvas.component_registry.states())
+        unchanged = self.canvas.axes_layout_service.repair_legacy_minor_locator_states(states)
+        default_axis = next(state for state in unchanged if state.id == axis["id"])
+        self.assertEqual(default_axis.properties["minor_locator"]["kind"], "null")
+
+    def test_legacy_secondary_minor_intent_repairs_locator(self):
+        axes_id, = create_regular_axes(self.canvas)
+        states = tuple(self.canvas.component_registry.states())
+        axis = next(
+            state for state in states
+            if state.parent_id == axes_id and state.role is ComponentRole.X_AXIS
+        )
+        tick = next(
+            state for state in states
+            if state.parent_id == axis.id
+            and state.kind is ComponentKind.TICK_GROUP
+            and state.selector.get("level") == "minor"
+        )
+        label = next(
+            state for state in states
+            if state.parent_id == tick.id
+            and state.kind is ComponentKind.TICK_LABEL_GROUP
+        )
+        for intended in (tick, label):
+            with self.subTest(kind=intended.kind.value):
+                properties = dict(intended.properties)
+                properties["secondary_visible"] = True
+                source = tuple(
+                    state.clone(properties=properties)
+                    if state.id == intended.id
+                    else state
+                    for state in states
+                )
+                repaired = (
+                    self.canvas.axes_layout_service.repair_legacy_minor_locator_states(
+                        source
+                    )
+                )
+                repaired_axis = next(state for state in repaired if state.id == axis.id)
+                self.assertNotEqual(
+                    repaired_axis.properties["minor_locator"]["kind"],
+                    "null",
+                )
 
     def test_twin_legend_and_directional_delete_contract(self):
         ids = self.canvas.create_axes_layout(

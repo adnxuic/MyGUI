@@ -44,8 +44,8 @@ Plus the shared export parameters above.
 | --- | --- | --- | --- |
 | X limits (xlim) | Range editor | The X data range (min, max). | 0.0 to 1.0 |
 | Y limits (ylim) | Range editor | The Y data range (min, max). | 0.0 to 1.0 |
-| Autoscale X (autoscalex_on) | Checkbox | Automatically fits the X range to the data. | On |
-| Autoscale Y (autoscaley_on) | Checkbox | Automatically fits the Y range to the data. | On |
+| Autoscale X (autoscalex_on) | Checkbox | Automatically fits the X range to the data. Re-enabling it immediately recalculates the data limits and fits the current data. | On |
+| Autoscale Y (autoscaley_on) | Checkbox | Automatically fits the Y range to the data. Re-enabling it immediately recalculates the data limits and fits the current data. | On |
 
 ### Appearance
 
@@ -88,9 +88,9 @@ The X Axis and Y Axis components expose the same controls; the Y Axis adds Offse
 | --- | --- | --- | --- |
 | Visible (visible) | Checkbox | Shows or hides the axis, its ticks, and its tick labels. | On |
 | Scale (scale) | Structured dialog | The coordinate scale: linear, log (base, subs, nonpositive clip or mask), symlog (base, linthresh, linscale, subs), logit (nonpositive, one_half, use_overline), or asinh (linear_width, base, subs). See the [scales explainer](https://matplotlib.org/3.9.0/users/explain/axes/axes_scales.html). | linear |
-| Major locator (major_locator) | Structured dialog | Where major ticks are placed: auto, auto_minor (n), max_n (nbins, steps, integer, symmetric, prune, min_n_ticks), multiple (base, offset), linear (numticks), fixed (locations, nbins), log (base, subs, numticks), symlog (transform, subs), asinh, logit (minor, nbins), or null. See the [ticker API](https://matplotlib.org/3.9.0/api/ticker_api.html). | auto |
+| Major locator (major_locator) | Structured dialog | Where major ticks are placed: auto, auto_minor (n), max_n (nbins, steps, integer, symmetric, prune, min_n_ticks), multiple (base, offset), linear (numticks), fixed (locations, nbins), log (base, subs, numticks), symlog (transform, subs), asinh, logit (minor, automatic or numeric nbins), or null. See the [ticker API](https://matplotlib.org/3.9.0/api/ticker_api.html). | auto |
 | Major formatter (major_formatter) | Structured dialog | How major tick labels are written: scalar (use_offset, use_math_text, use_locale, scientific, powerlimits), engineering, percent, str_method (format using only x and pos), fixed (labels), log, log_exponent, log_mathtext, log_sci, logit, or null. See the [ticker API](https://matplotlib.org/3.9.0/api/ticker_api.html). | scalar |
-| Minor locator (minor_locator) | Structured dialog | Where minor ticks are placed; same kinds as the major locator. | null |
+| Minor locator (minor_locator) | Structured dialog | Where minor ticks are placed; same kinds as the major locator. Enabling a Minor Grid, Tick, or Tick Label while this is null installs and persists the Matplotlib 3.9 default for the current scale. Existing custom locators are retained. | null |
 | Minor formatter (minor_formatter) | Structured dialog | How minor tick labels are written; same kinds as the major formatter. | null |
 | Label position (label_position) | Dropdown | The side the tick labels occupy: bottom or top for X, left or right for Y. | bottom / left |
 | Remove overlapping (remove_overlapping_locs) | Checkbox | Automatically hides overlapping tick labels. | On |
@@ -138,6 +138,10 @@ Plus the shared export parameters above.
 
 One Tick Group component exists per axis level: X Major, X Minor, Y Major, and Y Minor Ticks. Each side of an Axes has primary and secondary tick sets.
 
+Enabling either side of a Minor Tick group automatically activates the
+scale-appropriate minor locator when the Axis locator is currently null.
+Hiding the ticks does not remove or replace that locator.
+
 ### Properties
 
 | Parameter | Control | Meaning | Default |
@@ -162,6 +166,9 @@ Plus the shared export parameters above.
 
 One Tick Label Group component exists per axis level: X Major, X Minor, Y Major, and Y Minor Tick Labels.
 
+Minor Tick Label visibility uses the same automatic-locator behavior as Minor
+Ticks. A configured custom locator remains authoritative.
+
 ### Properties
 
 | Parameter | Control | Meaning | Default |
@@ -171,7 +178,7 @@ One Tick Label Group component exists per axis level: X Major, X Minor, Y Major,
 | Color (color) | Color picker | The label text color. | #000000 |
 | Font size (fontsize) | Number | The label font size in points. | 10.0 |
 | Rotation (rotation) | Number | The label angle in degrees. | 0.0 |
-| Font family (fontfamily) | Font dropdown | The label font family. See the [fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | sans-serif |
+| Font family (fontfamily) | Font dropdown | The primary label font family. Runtime input may use a Matplotlib font-family sequence, but the Controller and schema v14 persist exactly its first family as one non-empty string. See the [fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | sans-serif |
 | Pad (pad) | Number | The distance between the labels and the ticks, in points. | 3.5 |
 | Font weight (fontweight) | Named/number editor | The label stroke thickness. | normal |
 | Font style (fontstyle) | Dropdown | normal, italic, or oblique. | normal |
@@ -203,6 +210,10 @@ Plus the shared export parameters above.
 
 One Grid component exists per axis level: X Major, X Minor, Y Major, and Y Minor Grid. Its layer is owned by the Axes axisbelow setting.
 
+Enabling a Minor Grid activates and persists the scale-appropriate minor
+locator when necessary. X and Y activation are independent, and hiding the
+grid does not clear the locator.
+
 ### Properties
 
 | Parameter | Control | Meaning | Default |
@@ -228,7 +239,7 @@ Plus the shared export parameters above.
 
 ## Title and Axis Labels
 
-Title, X Label, and Y Label are fixed semantic Text components. They share the Inspector sections documented in [Text Element](text-element.md) (Content, Typography, Rotation and alignment, Rendering, Advanced); their Position section omits the coordinate system choice because each role uses its fixed coordinate space.
+Title, X Label, and Y Label are fixed semantic Text components. They share the Inspector sections documented in [Text Element](text-element.md) (Content, Typography, Rotation and alignment, Rendering, Advanced); their Position section omits the coordinate system choice because each role uses its fixed coordinate space. X/Y Label `position` is always interpreted through `Axes.transAxes`: `(0.5, -0.1)` means centered horizontally and one tenth of the Axes height below the Axes, and retains that relative placement after drawing, resizing, and reopening the project.
 
 ## Generic Line raw data
 

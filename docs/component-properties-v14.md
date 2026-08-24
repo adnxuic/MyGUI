@@ -1,14 +1,11 @@
-# Component Properties (schema v13)
-
-Schema v13 is retained as the strict immediate migration source for current
-[schema v14](component-properties-v14.md) files. New saves no longer emit v13.
+# Component Properties (schema v14)
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
 properties are edited only through Controllers or domain Services, and every
 property/data key is exposed exactly once or explicitly hidden by its profile.
 
-Schema v13 retains the exact eight-field `ComponentState` record:
+Schema v14 retains the exact eight-field `ComponentState` record:
 
 ```text
 id, kind, role, parent_id, order, selector, properties, data
@@ -24,7 +21,7 @@ selection, and other runtime projection state are never serialized.
 | Figure | name/style, size/DPI, face/edge/frame, linewidth/alpha, tagged layout engine, layout records |
 | Axes | ordered limits/autoscale, aspect/box geometry, margins, adjustable/anchor, visibility/frame/layering, palette, layout/export fields |
 | X/Y Axis | tagged scale, major/minor locator and formatter, label/offset placement, offset text style, overlap policy |
-| Spine, Tick, Tick Label, Grid | Their explicit visibility, geometry, line/text appearance, layering, clipping, raster, and export contracts |
+| Spine, Tick, Tick Label, Grid | Their explicit visibility, geometry, line/text appearance, layering, clipping, raster, and export contracts; each Tick Label `fontfamily` is one non-empty primary-family string |
 | Text | content/position, safe typography, alignment/rotation, bbox/wrap/math/TeX, coordinate system, layering/export fields |
 | Legend | tagged location/anchor, layout/entry scope, fonts, marker/point settings, spacing, frame, dragging, layering/export fields |
 | Line roles | label/visibility/color, tagged line/marker/markevery, draw/fill style, cap/join/gap, layering/export fields, plus role data |
@@ -46,7 +43,7 @@ Minor Tick, Tick Label, and Grid visibility remains owned by those semantic
 components. When visible minor output is requested and the owning Axis has a
 null minor locator, one Controller transaction installs the Matplotlib 3.9
 scale default in the Axis `minor_locator` and applies the visibility change.
-This coordination changes no schema-v13 field or record shape.
+This coordination changes no schema-v14 field or record shape.
 
 The exact Reference Guide field matrices, controls, defaults, transforms, and
 pinned Matplotlib links are in [Reference Guides](reference-guides-component.md).
@@ -73,32 +70,31 @@ uses editable JSON. The supported families are:
 Fixed formatters require a fixed locator with the same number of locations.
 The Logit locator `nbins` value accepts either a positive integer or `auto`;
 runtime automatic `AutoMinorLocator` subdivisions serialize canonically as a
-null `n` parameter.
-Arbitrary callables, `FuncFormatter`, `FuncNorm`, Matplotlib objects, NumPy
-arrays, and QWidget instances are rejected from project state.
+null `n` parameter. Arbitrary callables, `FuncFormatter`, `FuncNorm`,
+Matplotlib objects, NumPy arrays, and QWidget instances are rejected from
+project state.
 
-## Schema v13 predecessor contract
+## Schema v14 and migration
 
-Saving writes exact integer `schema_version: 13`. The v13 validator adds the
-`reference_guide/reference_line` and `reference_guide/reference_band` records
-while retaining the exact eight-field record shape used by v12.
+Saving writes exact integer `schema_version: 14`. Schema v14 requires every
+`tick_label_group.properties.fontfamily` value to be a non-empty string. A v14
+file containing a list, an empty string, `null`, or another type is rejected at
+that exact field path.
 
-Loading exact integer v12 first runs the strict v12 validator, deep-copies the
-validated snapshot, changes only the root schema version to 13, and then runs
-the strict v13 validator. Exact integer v11 migrates through v12 to v13. Exact
-integer v10 migrates through v11 and v12 to v13. Reference Guides did not exist
-in any predecessor, so v10, v11, and v12 explicitly reject their kind/roles.
-Existing component IDs, order, selectors, properties, data, table IDs, and
-table values are not rewritten. Reference Marks remain valid from v12 onward.
-Malformed predecessors are rejected before migration. Versions v4-v9,
+Loading exact integer v13 first runs the strict v13 root, Table, component-graph,
+and property validator. The validated snapshot is deep-copied. Existing
+non-empty string font families remain unchanged; a non-empty string list is
+replaced only by its first item. Empty lists and lists containing a non-string
+or empty member are rejected. The root version then advances to 14 and the
+complete v14 snapshot is validated before any Table or Figure is published.
+
+Exact integer v12 migrates through v13 to v14, v11 migrates through v12 and
+v13, and v10 migrates through every intervening version. Component IDs,
+hierarchy, order, selectors, data, Table state, and every property other than
+the v13 Tick Label font representation remain unchanged. Versions v4-v9,
 booleans, floats, strings, and unknown versions remain unsupported.
-
-Current loading then validates the complete v13 snapshot, deep-copies it,
-canonicalizes Tick Label `fontfamily` from a non-empty string list to its first
-string, changes the root version to 14, and strictly validates schema v14 before
-publication. Non-empty v13 string values remain unchanged; invalid or empty
-font lists are rejected.
 
 See [Project Files](project-files.md) for the file graph and restore order, and
 [Component Controllers](component-controllers.md) for runtime mutation and
-rollback contracts.
+rollback contracts. [Component Properties (schema v13)](component-properties-v13.md)
+documents the immediate migration source.

@@ -56,6 +56,35 @@ def _properties(*keys: str):
     return factory
 
 
+def _minor_properties(*keys: str):
+    def factory(controller, context, parent):
+        apply_properties = None
+        if controller.state.selector.get("level") == "minor":
+            def apply_properties(properties):
+                key = next(iter(properties))
+                role = controller.state.kind.value.replace("_", " ").title()
+                label = key.replace("_", " ").title()
+                return perform_editor_action(
+                    context,
+                    f"Change {role} {label}",
+                    lambda: context.axes_layout.apply_minor_component_properties(
+                        controller,
+                        properties,
+                    ),
+                    merge_key=("property", controller.component_id, key),
+                )
+
+        return PropertySection(
+            controller,
+            context=context,
+            property_keys=keys or None,
+            apply_properties=apply_properties,
+            parent=parent,
+        )
+
+    return factory
+
+
 def _colorbar_properties(*keys: str):
     def factory(controller, context, parent):
         return PropertySection(
@@ -216,22 +245,32 @@ def _axis_properties_for(keys):
 def _axis_properties(controller, context, parent, *, keys=None):
     def apply(properties):
         key, value = next(iter(properties.items()))
-        if key != "scale":
-            from mygui.figuremodify.components import ComponentMutation
+        def operation():
+            if key != "scale":
+                from mygui.figuremodify.components import ComponentMutation
 
-            return context.registry.apply_transaction(
-                (
-                    ComponentMutation(
-                        controller.component_id,
-                        properties={key: value},
-                    ),
+                return context.registry.apply_transaction(
+                    (
+                        ComponentMutation(
+                            controller.component_id,
+                            properties={key: value},
+                        ),
+                    )
                 )
+            dimension = str(controller.state.selector["axis"])
+            return context.axes_layout.apply_linked_axis(
+                controller.state.parent_id,
+                dimension,
+                scale=value,
             )
-        dimension = str(controller.state.selector["axis"])
-        return context.axes_layout.apply_linked_axis(
-            controller.state.parent_id,
-            dimension,
-            scale=value,
+
+        axis_name = str(controller.state.selector["axis"]).upper()
+        return perform_editor_action(
+            context,
+            f"Change {axis_name} Axis {key}",
+            operation,
+            merge_key=("property", controller.component_id, key),
+            scan_all=key == "scale",
         )
 
     return PropertySection(
@@ -1449,16 +1488,19 @@ def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile
     )
     core_keys = _controller_property_keys(kind, role, advanced=False)
     advanced_keys = _controller_property_keys(kind, role, advanced=True)
-    core_factory = (
-        _axis_properties_for(core_keys)
-        if kind is ComponentKind.AXIS
-        else _properties(*core_keys)
-    )
-    advanced_factory = (
-        _axis_properties_for(advanced_keys)
-        if kind is ComponentKind.AXIS
-        else _properties(*advanced_keys)
-    )
+    if kind is ComponentKind.AXIS:
+        core_factory = _axis_properties_for(core_keys)
+        advanced_factory = _axis_properties_for(advanced_keys)
+    elif kind in {
+        ComponentKind.TICK_GROUP,
+        ComponentKind.TICK_LABEL_GROUP,
+        ComponentKind.GRID,
+    }:
+        core_factory = _minor_properties(*core_keys)
+        advanced_factory = _minor_properties(*advanced_keys)
+    else:
+        core_factory = _properties(*core_keys)
+        advanced_factory = _properties(*advanced_keys)
     sections = [
         SectionSpec(
             "properties",

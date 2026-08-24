@@ -26,7 +26,7 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     validate_v10_figure,
-    validate_v13_figure,
+    validate_v14_figure,
 )
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
@@ -409,7 +409,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             original_cycle,
         )
 
-        validate_v13_figure(
+        validate_v14_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,
@@ -662,12 +662,42 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
         status_messages.show_warning("stale message")
         events.clear()
 
+        axes = self.canvas.component_registry.resolve_target(
+            self.canvas.current_axes_component_id
+        )
+        x_axis_visible = axes.xaxis.get_visible()
+        top_spine_visible = axes.spines["top"].get_visible()
+        tick_visibility = [
+            (
+                tick.tick1line.get_visible(),
+                tick.tick2line.get_visible(),
+                tick.label1.get_visible(),
+                tick.label2.get_visible(),
+            )
+            for tick in axes.xaxis.get_major_ticks()
+        ]
+
         result = self.canvas.axes_commands.set_spine_visible(
             self.canvas.current_axes_component_id,
             "bottom",
             False,
         )
         self.assertTrue(result.ok)
+        self.assertFalse(axes.spines["bottom"].get_visible())
+        self.assertEqual(axes.xaxis.get_visible(), x_axis_visible)
+        self.assertEqual(axes.spines["top"].get_visible(), top_spine_visible)
+        self.assertEqual(
+            [
+                (
+                    tick.tick1line.get_visible(),
+                    tick.tick2line.get_visible(),
+                    tick.label1.get_visible(),
+                    tick.label2.get_visible(),
+                )
+                for tick in axes.xaxis.get_major_ticks()
+            ],
+            tick_visibility,
+        )
         self.app.processEvents()
         self.assertEqual(
             events,

@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v13 Figure trees."""
+"""Normalize and validate strict schema-v10 through v14 Figure trees."""
 
 from __future__ import annotations
 
@@ -132,7 +132,13 @@ def normalize_v12_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v13_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v13 Figure component tree."""
+    """Normalize a predecessor schema-v13 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v14_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v14 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -176,7 +182,12 @@ def _state_from_raw(raw: Any, path: str) -> ComponentState:
     return state
 
 
-def _validate_controller_contract(state: ComponentState, path: str) -> None:
+def _validate_controller_contract(
+    state: ComponentState,
+    path: str,
+    *,
+    schema_version: int,
+) -> None:
     if (
         state.kind is ComponentKind.LINE
         and state.role is ComponentRole.LINE
@@ -197,6 +208,34 @@ def _validate_controller_contract(state: ComponentState, path: str) -> None:
                     f"Invalid project field {path}.data.y[{index}]: "
                     "expected number."
                 )
+    if state.kind is ComponentKind.TICK_LABEL_GROUP:
+        font_path = f"{path}.properties.fontfamily"
+        fontfamily = state.properties.get("fontfamily")
+        if schema_version >= 14:
+            if not isinstance(fontfamily, str) or not fontfamily.strip():
+                raise ValueError(
+                    f"Invalid project field {font_path}: expected non-empty string."
+                )
+        elif isinstance(fontfamily, str):
+            if not fontfamily.strip():
+                raise ValueError(
+                    f"Invalid project field {font_path}: expected non-empty string."
+                )
+        elif isinstance(fontfamily, list):
+            if not fontfamily:
+                raise ValueError(
+                    f"Invalid project field {font_path}: font list must not be empty."
+                )
+            for index, item in enumerate(fontfamily):
+                if not isinstance(item, str) or not item.strip():
+                    raise ValueError(
+                        "Invalid project field "
+                        f"{font_path}[{index}]: expected non-empty string."
+                    )
+        else:
+            raise ValueError(
+                f"Invalid project field {font_path}: expected string or string array."
+            )
     try:
         for key in _COLOR_PROPERTIES.intersection(state.properties):
             value = state.properties[key]
@@ -657,7 +696,11 @@ def _validate_figure(
                 f"Unknown parent component at {path}.parent_id: {state.parent_id}"
             )
         _validate_parent(state, parent, path)
-        _validate_controller_contract(state, path)
+        _validate_controller_contract(
+            state,
+            path,
+            schema_version=schema_version,
+        )
         _validate_data_references(state, path, project_id, available_refs)
         if state.parent_id is not None:
             children.setdefault(state.parent_id, []).append(state)
@@ -804,7 +847,7 @@ def validate_v13_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v13 Figure component tree."""
+    """Validate one predecessor schema-v13 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -812,4 +855,21 @@ def validate_v13_figure(
         project_id,
         project_name,
         schema_version=13,
+    )
+
+
+def validate_v14_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v14 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=14,
     )

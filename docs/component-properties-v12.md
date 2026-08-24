@@ -1,7 +1,7 @@
 # Legacy Component Properties (schema v12)
 
 This page documents the strict v12 migration-source contract. New projects use
-[Component Properties (schema v13)](component-properties-v13.md). MyGUI
+[Component Properties (schema v14)](component-properties-v14.md). MyGUI
 targets Matplotlib 3.9.0. Every v12 production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
 properties are edited only through Controllers or domain Services, and every
@@ -76,7 +76,9 @@ Marks did not exist in either predecessor, v10 and v11 explicitly reject its
 kind/role. Existing component records and stable IDs are not rewritten.
 Malformed predecessors are rejected before migration. Current MyGUI then
 deep-copies the strictly validated v12 snapshot, changes only its root version
-to v13, and strictly validates v13 without rewriting component or Table state.
+to v13, strictly validates v13, and then applies the v13-to-v14 Tick Label
+font-family migration before validating v14. Other component and Table state
+is not rewritten.
 Reference Guides are therefore not valid in v12. Versions v4-v9, booleans,
 floats, strings, and unknown versions remain unsupported.
 

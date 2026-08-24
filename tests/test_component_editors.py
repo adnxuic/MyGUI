@@ -891,6 +891,23 @@ class ComponentEditorTests(unittest.TestCase):
             for editor in editors:
                 editor.close()
 
+    def test_logit_locator_editor_roundtrips_automatic_bin_count(self):
+        value = {
+            "kind": "logit",
+            "params": {"minor": True, "nbins": "auto"},
+        }
+        editor = AxisLocatorEditor(value)
+        try:
+            dialog = editor._dialog()
+            try:
+                self.assertEqual(dialog.kind_input.currentData(), "logit")
+                dialog._validate_and_accept()
+                self.assertEqual(dialog.value(), value)
+            finally:
+                dialog.close()
+        finally:
+            editor.close()
+
     def test_rejected_structured_value_restores_summary_and_value(self):
         controller = _FakeController()
         controller.state["properties"] = {
@@ -1039,6 +1056,94 @@ class ComponentEditorTests(unittest.TestCase):
         try:
             color = editor.section("appearance").editor("color")
             self.assertIs(color.color_library, library)
+        finally:
+            editor.close()
+            context.editor_manager.close()
+
+    def test_tick_label_font_combobox_syncs_from_string_state(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        axes.plot([0.0, 1.0], [0.0, 1.0])
+        registry = register_figure_components(figure)
+        controller = next(
+            item
+            for item in registry
+            if item.state.kind is ComponentKind.TICK_LABEL_GROUP
+            and item.state.selector == {"axis": "x", "level": "major"}
+        )
+        context = _editor_context(
+            registry,
+            TableRepository(),
+            ColorLibrary(),
+        )
+        editor = context.editor_manager.create(controller, context=context)
+        try:
+            section = editor.section("properties")
+            font = section.editor("fontfamily")
+            family = font.currentFont().family()
+            self.assertTrue(controller.set_property("fontfamily", [family]).ok)
+
+            section.sync_from_controller()
+
+            self.assertIsInstance(
+                controller.state.properties["fontfamily"],
+                str,
+            )
+            self.assertEqual(
+                controller.state.properties["fontfamily"],
+                family,
+            )
+            self.assertEqual(font.currentFont().family(), family)
+            self.assertTrue(
+                all(
+                    tick.label1.get_fontfamily()[0] == family
+                    for tick in axes.xaxis.get_major_ticks()
+                )
+            )
+        finally:
+            editor.close()
+            context.editor_manager.close()
+
+    def test_legend_numeric_locations_sync_to_all_presets_without_submit(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        axes.plot([0.0, 1.0], [0.0, 1.0], label="line")
+        axes.legend(loc=0)
+        registry = register_figure_components(figure)
+        controller = next(
+            item
+            for item in registry
+            if item.state.role is ComponentRole.LEGEND
+        )
+        context = _editor_context(
+            registry,
+            TableRepository(),
+            ColorLibrary(),
+        )
+        editor = context.editor_manager.create(controller, context=context)
+        section = editor.section("layout")
+        try:
+            for code, preset in enumerate(section.PRESETS):
+                with self.subTest(code=code, preset=preset):
+                    self.assertTrue(
+                        controller.set_property(
+                            "location",
+                            {"kind": "code", "value": code},
+                        ).ok
+                    )
+                    with patch.object(
+                        controller,
+                        "set_property",
+                        wraps=controller.set_property,
+                    ) as setter:
+                        section.sync_from_controller()
+                    setter.assert_not_called()
+                    self.assertEqual(
+                        section.legend_position_combobox.currentText(),
+                        preset,
+                    )
         finally:
             editor.close()
             context.editor_manager.close()

@@ -1,4 +1,4 @@
-"""Validate, migrate, save, and load strict schema-v13 project snapshots."""
+"""Validate, migrate, save, and load strict schema-v14 project snapshots."""
 
 from __future__ import annotations
 
@@ -13,20 +13,22 @@ from typing import Any
 
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.components.serialization import (
-    normalize_v13_figure,
+    normalize_v14_figure,
     validate_v10_figure,
     validate_v11_figure,
     validate_v12_figure,
     validate_v13_figure,
+    validate_v14_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 13
-PREVIOUS_PROJECT_SCHEMA_VERSION = 12
-LEGACY_PROJECT_SCHEMA_VERSION = 11
-MIGRATABLE_PROJECT_SCHEMA_VERSION = 10
+PROJECT_SCHEMA_VERSION = 14
+SCHEMA_V13_VERSION = 13
+SCHEMA_V12_VERSION = 12
+SCHEMA_V11_VERSION = 11
+SCHEMA_V10_VERSION = 10
 LOGGER = logging.getLogger(__name__)
 
 
@@ -180,12 +182,12 @@ def _validate_project_snapshot_version(
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
-    """Validate one exact current schema-v13 project snapshot."""
+    """Validate one exact current schema-v14 project snapshot."""
 
     _validate_project_snapshot_version(
         snapshot,
         version=PROJECT_SCHEMA_VERSION,
-        figure_validator=validate_v13_figure,
+        figure_validator=validate_v14_figure,
     )
 
 
@@ -194,16 +196,16 @@ def migrate_v10_to_v11(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     _validate_project_snapshot_version(
         snapshot,
-        version=MIGRATABLE_PROJECT_SCHEMA_VERSION,
+        version=SCHEMA_V10_VERSION,
         figure_validator=validate_v10_figure,
     )
     migrated = deepcopy(snapshot)
-    migrated["schema_version"] = LEGACY_PROJECT_SCHEMA_VERSION
+    migrated["schema_version"] = SCHEMA_V11_VERSION
     # The eight-field component tree is unchanged. Schema v10 cannot contain
     # Colorbar records, so no component-level rewrite is needed.
     _validate_project_snapshot_version(
         migrated,
-        version=LEGACY_PROJECT_SCHEMA_VERSION,
+        version=SCHEMA_V11_VERSION,
         figure_validator=validate_v11_figure,
     )
     return migrated
@@ -214,16 +216,16 @@ def migrate_v11_to_v12(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     _validate_project_snapshot_version(
         snapshot,
-        version=LEGACY_PROJECT_SCHEMA_VERSION,
+        version=SCHEMA_V11_VERSION,
         figure_validator=validate_v11_figure,
     )
     migrated = deepcopy(snapshot)
-    migrated["schema_version"] = PREVIOUS_PROJECT_SCHEMA_VERSION
+    migrated["schema_version"] = SCHEMA_V12_VERSION
     # Reference Marks is a new v12 record. Existing v11 records retain their
     # exact eight-field wire shape and stable IDs.
     _validate_project_snapshot_version(
         migrated,
-        version=PREVIOUS_PROJECT_SCHEMA_VERSION,
+        version=SCHEMA_V12_VERSION,
         figure_validator=validate_v12_figure,
     )
     return migrated
@@ -234,13 +236,45 @@ def migrate_v12_to_v13(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     _validate_project_snapshot_version(
         snapshot,
-        version=PREVIOUS_PROJECT_SCHEMA_VERSION,
+        version=SCHEMA_V12_VERSION,
         figure_validator=validate_v12_figure,
     )
     migrated = deepcopy(snapshot)
-    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
+    migrated["schema_version"] = SCHEMA_V13_VERSION
     # Reference Guides are new v13 records. Existing v12 records retain their
     # exact eight-field wire shape, IDs, order, selectors, properties, and data.
+    _validate_project_snapshot_version(
+        migrated,
+        version=SCHEMA_V13_VERSION,
+        figure_validator=validate_v13_figure,
+    )
+    return migrated
+
+
+def migrate_v13_to_v14(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Strictly migrate Tick Label font families from schema v13 to v14."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=SCHEMA_V13_VERSION,
+        figure_validator=validate_v13_figure,
+    )
+    migrated = deepcopy(snapshot)
+    for index, component in enumerate(migrated["figure"]["components"]):
+        if component["kind"] != "tick_label_group":
+            continue
+        fontfamily = component["properties"]["fontfamily"]
+        if isinstance(fontfamily, list):
+            component["properties"]["fontfamily"] = fontfamily[0]
+        elif not isinstance(fontfamily, str):
+            # The predecessor validator normally catches this. Keep the
+            # migration boundary explicit if its contract changes later.
+            raise ValueError(
+                "Invalid project field "
+                f"figure.components[{index}].properties.fontfamily: "
+                "expected string or non-empty string array."
+            )
+    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
     validate_project_snapshot(migrated)
     return migrated
 
@@ -255,7 +289,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v13_figure(canvas.component_snapshot())
+    figure = normalize_v14_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -319,19 +353,25 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
             f"Unsupported project schema version {version!r}; schema versions "
             "must use exact integers."
         )
-    if version == MIGRATABLE_PROJECT_SCHEMA_VERSION:
-        return migrate_v12_to_v13(
-            migrate_v11_to_v12(migrate_v10_to_v11(snapshot))
+    if version == SCHEMA_V10_VERSION:
+        return migrate_v13_to_v14(
+            migrate_v12_to_v13(
+                migrate_v11_to_v12(migrate_v10_to_v11(snapshot))
+            )
         )
-    if version == LEGACY_PROJECT_SCHEMA_VERSION:
-        return migrate_v12_to_v13(migrate_v11_to_v12(snapshot))
-    if version == PREVIOUS_PROJECT_SCHEMA_VERSION:
-        return migrate_v12_to_v13(snapshot)
+    if version == SCHEMA_V11_VERSION:
+        return migrate_v13_to_v14(
+            migrate_v12_to_v13(migrate_v11_to_v12(snapshot))
+        )
+    if version == SCHEMA_V12_VERSION:
+        return migrate_v13_to_v14(migrate_v12_to_v13(snapshot))
+    if version == SCHEMA_V13_VERSION:
+        return migrate_v13_to_v14(snapshot)
     if version != PROJECT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported project schema version {version!r}; only schema "
-            f"v{PROJECT_SCHEMA_VERSION}, strict v12 migration, chained "
-            "strict v11 migration, and chained strict v10 migration are supported."
+            f"v{PROJECT_SCHEMA_VERSION}, strict v13 migration, and chained "
+            "strict v10-v12 migration are supported."
         )
     validate_project_snapshot(snapshot)
     return snapshot

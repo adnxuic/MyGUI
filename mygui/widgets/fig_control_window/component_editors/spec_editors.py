@@ -1,4 +1,4 @@
-"""Structured dialog editors for the closed schema-v13 value contracts."""
+"""Structured dialog editors for the closed schema-v14 value contracts."""
 
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ _LOCATOR_FIELDS = {
     ),
     "logit": (
         _Field("minor", "Minor ticks", "bool", False),
-        _Field("nbins", "Number of bins", "int", 10),
+        _Field("nbins", "Number of bins", "auto_int", "auto"),
     ),
     "null": (),
 }

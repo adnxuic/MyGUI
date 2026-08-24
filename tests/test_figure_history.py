@@ -26,6 +26,12 @@ from mygui import status_messages
 from mygui.database import ColumnRef, TableChangeSet, TableMutationCommand
 from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.components import ComponentKind, ComponentRole
+from mygui.figuremodify.axes_layout import (
+    AxesCellSpec,
+    AxesLayoutSpec,
+    ShareMode,
+)
+from mygui.figuremodify.components.property_values import default_scale_for_name
 from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
     ZoomInAxesCreateSpec,
@@ -156,6 +162,158 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         self.assertEqual(
             controller.state.properties["facecolor"], "#445566"
         )
+
+    def test_minor_grid_inspector_records_locator_and_visibility_as_one_command(self):
+        axes_id = self._create_axes_baseline()
+        axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        grid = self.canvas.component_registry.find_one(
+            parent_id=axis.component_id,
+            kind=ComponentKind.GRID,
+            selector={"axis": "x", "level": "minor"},
+        )
+        axes = self.canvas.component_registry.resolve_target(axes_id)
+        inspector = self.canvas.create_component_editor(grid.component_id)
+        visible = inspector.section("properties").editor("visible")
+
+        visible.setChecked(True)
+
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(axis.state.properties["minor_locator"]["kind"], "auto_minor")
+        self.assertTrue(grid.state.properties["visible"])
+        self.assertTrue(any(item.gridline.get_visible() for item in axes.xaxis.get_minor_ticks()))
+
+        self.stack.undo()
+        self.assertEqual(axis.state.properties["minor_locator"]["kind"], "null")
+        self.assertFalse(grid.state.properties["visible"])
+        self.assertEqual(axes.xaxis.get_minor_ticks(), [])
+
+        self.stack.redo()
+        self.assertEqual(axis.state.properties["minor_locator"]["kind"], "auto_minor")
+        self.assertTrue(grid.state.properties["visible"])
+        self.assertTrue(any(item.gridline.get_visible() for item in axes.xaxis.get_minor_ticks()))
+
+    def test_axes_limits_inspector_routes_all_fields_and_records_shared_history(self):
+        axes_ids = self.canvas.create_axes_layout(
+            AxesLayoutSpec(
+                2,
+                1,
+                (
+                    AxesCellSpec(0, 0),
+                    AxesCellSpec(1, 0),
+                ),
+                share_x=ShareMode.ALL,
+                share_y=ShareMode.ALL,
+            )
+        )
+        controllers = [
+            self.canvas.component_registry.get(component_id)
+            for component_id in axes_ids
+        ]
+        inspector = self.canvas.create_component_editor(axes_ids[0])
+        limits = inspector.section("limits").properties
+        cases = (
+            ("autoscalex_on", False),
+            ("autoscaley_on", False),
+            ("xlim", (2.0, 8.0)),
+            ("ylim", (-3.0, 7.0)),
+        )
+
+        for key, value in cases:
+            with self.subTest(key=key):
+                before = [
+                    deepcopy(controller.state.properties[key])
+                    for controller in controllers
+                ]
+                self.stack.clear()
+
+                self.assertTrue(limits.apply_property(key, value))
+
+                self.assertEqual(self.stack.count(), 1)
+                self.assertEqual(self.stack.undoText(), f"Change Axes {key}")
+                after = [
+                    deepcopy(controller.state.properties[key])
+                    for controller in controllers
+                ]
+                expected = list(value) if key.endswith("lim") else value
+                self.assertEqual(after, [expected, expected])
+
+                self.stack.undo()
+                self.assertEqual(
+                    [controller.state.properties[key] for controller in controllers],
+                    before,
+                )
+                self.stack.redo()
+                self.assertEqual(
+                    [controller.state.properties[key] for controller in controllers],
+                    after,
+                )
+
+                self.stack.clear()
+                self.assertTrue(limits.apply_property(key, value))
+                self.assertEqual(self.stack.count(), 0)
+
+    def test_axis_inspector_records_direct_and_linked_scale_properties(self):
+        axes_id = self._create_axes_baseline()
+        axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        inspector = self.canvas.create_component_editor(axis.component_id)
+        properties = inspector.section("properties")
+
+        before_zorder = axis.state.properties["zorder"]
+        self.assertTrue(properties.apply_property("zorder", 3.5))
+        self.assertTrue(properties.apply_property("zorder", 4.5))
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(self.stack.undoText(), "Change X Axis zorder")
+        self.assertEqual(axis.state.properties["zorder"], 4.5)
+        self.stack.undo()
+        self.assertEqual(axis.state.properties["zorder"], before_zorder)
+        self.stack.redo()
+        self.assertEqual(axis.state.properties["zorder"], 4.5)
+
+        self.assertTrue(
+            self.canvas.axes_layout_service.apply_linked_axis(
+                axes_id,
+                "x",
+                limits=(1.0, 10.0),
+                autoscale=False,
+            ).ok
+        )
+        self.stack.clear()
+        log_scale = default_scale_for_name("log")
+        self.assertTrue(properties.apply_property("scale", log_scale))
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(self.stack.undoText(), "Change X Axis scale")
+        self.assertEqual(axis.state.properties["scale"], log_scale)
+        self.assertEqual(axis.resolve_target().get_scale(), "log")
+        self.stack.undo()
+        self.assertEqual(axis.resolve_target().get_scale(), "linear")
+        self.stack.redo()
+        self.assertEqual(axis.resolve_target().get_scale(), "log")
+
+        self.stack.clear()
+        self.assertTrue(properties.apply_property("scale", log_scale))
+        self.assertEqual(self.stack.count(), 0)
+
+        errors = []
+        status_messages.set_status_handler(
+            lambda text, level: errors.append((text, level))
+        )
+        self.assertFalse(
+            properties.apply_property(
+                "scale",
+                {"kind": "unsupported", "params": {}},
+            )
+        )
+        self.assertEqual(self.stack.count(), 0)
+        self.assertEqual(len([item for item in errors if item[1] == "error"]), 1)
+        self.assertEqual(axis.resolve_target().get_scale(), "log")
 
     def test_text_content_inspector_edit_enters_history_and_replays_service(self):
         controller, inspector = self._create_text_inspector()
@@ -1226,7 +1384,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             path = Path(directory) / "history-runtime-only.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             raw = load_project_file(path)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 13)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 14)
             self.assertEqual(
                 set(raw["figure"]),
                 {"root_component_id", "components"},

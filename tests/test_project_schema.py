@@ -22,7 +22,7 @@ from mygui.project_io import (
 from main import MainWindow
 
 
-class ProjectSchemaV13Tests(unittest.TestCase):
+class ProjectSchemaV14Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -113,7 +113,7 @@ class ProjectSchemaV13Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     validate_project_snapshot(candidate)
 
-    def test_schema_v13_reference_marks_exact_contract_and_rejections(self):
+    def test_schema_v14_reference_marks_exact_contract_and_rejections(self):
         self.canvas.add_reference_marks(
             [15.2, 15.2, 22.9],
             {
@@ -126,7 +126,7 @@ class ProjectSchemaV13Tests(unittest.TestCase):
             announce=False,
         )
         valid = self.snapshot()
-        self.assertEqual(valid["schema_version"], 13)
+        self.assertEqual(valid["schema_version"], 14)
         component = self.component(valid, "reflection_positions")
         self.assertEqual(
             set(component),
@@ -192,7 +192,7 @@ class ProjectSchemaV13Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_project_snapshot(candidate)
 
-    def test_schema_v13_reference_guides_exact_contract_and_rejections(self):
+    def test_schema_v14_reference_guides_exact_contract_and_rejections(self):
         self.canvas.add_reference_line(
             {
                 "label": "threshold",
@@ -217,7 +217,7 @@ class ProjectSchemaV13Tests(unittest.TestCase):
             announce=False,
         )
         valid = self.snapshot()
-        self.assertEqual(valid["schema_version"], 13)
+        self.assertEqual(valid["schema_version"], 14)
         line = self.component(valid, "reference_line")
         band = self.component(valid, "reference_band")
         self.assertEqual(line["kind"], "reference_guide")
@@ -274,7 +274,7 @@ class ProjectSchemaV13Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_project_snapshot(candidate)
 
-    def test_schema_v10_v11_and_v12_migrate_to_v13_without_rewriting_components(self):
+    def test_schema_v10_v11_and_v12_migrate_to_v14_without_rewriting_components(self):
         current = self.snapshot()
         original_components = deepcopy(current["figure"]["components"])
         with tempfile.TemporaryDirectory() as directory:
@@ -286,17 +286,86 @@ class ProjectSchemaV13Tests(unittest.TestCase):
                     path = root / f"schema-v{source_version}.mygui.json"
                     path.write_text(json.dumps(source), encoding="utf-8")
                     migrated = load_project_file(path)
-                    self.assertEqual(migrated["schema_version"], 13)
+                    self.assertEqual(migrated["schema_version"], 14)
                     self.assertEqual(
                         migrated["figure"]["components"],
                         original_components,
                     )
 
-    def test_only_exact_integer_v10_through_v13_are_accepted(self):
+    def test_schema_v13_tick_label_fontfamilies_migrate_to_strings_only(self):
+        predecessor = self.snapshot()
+        predecessor["schema_version"] = 13
+        expected = deepcopy(predecessor)
+        expected["schema_version"] = 14
+        for component in predecessor["figure"]["components"]:
+            if component["kind"] != "tick_label_group":
+                continue
+            family = component["properties"]["fontfamily"]
+            component["properties"]["fontfamily"] = [family, "sans-serif"]
+        for component in expected["figure"]["components"]:
+            if component["kind"] == "tick_label_group":
+                component["properties"]["fontfamily"] = str(
+                    component["properties"]["fontfamily"]
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "schema-v13-fontfamily.json"
+            path.write_text(json.dumps(predecessor), encoding="utf-8")
+            migrated = load_project_file(path)
+
+        self.assertEqual(migrated, expected)
+        self.assertTrue(
+            all(
+                isinstance(component["properties"]["fontfamily"], str)
+                for component in migrated["figure"]["components"]
+                if component["kind"] == "tick_label_group"
+            )
+        )
+
+    def test_schema_v13_rejects_invalid_tick_label_font_lists(self):
+        current = self.snapshot()
+        tick_label = next(
+            component
+            for component in current["figure"]["components"]
+            if component["kind"] == "tick_label_group"
+        )
+        component_index = current["figure"]["components"].index(tick_label)
+        for value in ([], ["DejaVu Sans", 3], [""], None):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                candidate = deepcopy(current)
+                candidate["schema_version"] = 13
+                candidate["figure"]["components"][component_index]["properties"][
+                    "fontfamily"
+                ] = value
+                path = Path(directory) / "invalid-v13-fontfamily.json"
+                path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "fontfamily"):
+                    load_project_file(path)
+
+    def test_schema_v14_requires_nonempty_tick_label_font_string(self):
+        current = self.snapshot()
+        tick_label = next(
+            component
+            for component in current["figure"]["components"]
+            if component["kind"] == "tick_label_group"
+        )
+        for value in (["DejaVu Sans"], "", None, 3):
+            with self.subTest(value=value):
+                candidate = deepcopy(current)
+                candidate_tick = next(
+                    component
+                    for component in candidate["figure"]["components"]
+                    if component["id"] == tick_label["id"]
+                )
+                candidate_tick["properties"]["fontfamily"] = value
+                with self.assertRaisesRegex(ValueError, "fontfamily"):
+                    validate_project_snapshot(candidate)
+
+    def test_only_exact_integer_v10_through_v14_are_accepted(self):
         current = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in (4, 9, 14, True, 13.0, "13"):
+            for version in (4, 9, 15, True, 14.0, "14"):
                 with self.subTest(version=version):
                     candidate = deepcopy(current)
                     candidate["schema_version"] = version
@@ -305,7 +374,7 @@ class ProjectSchemaV13Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 13)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 14)
 
     def test_validation_rejects_invalid_graph_and_component_state(self):
         valid = self.snapshot()

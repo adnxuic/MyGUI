@@ -5,9 +5,9 @@ description: Design and implement a deliberate MyGUI project schema version chan
 
 # Schema Migration
 
-Read the routed persistence and testing pages. `CORE-PERSISTENCE-V13` means the
-current saver emits exact integer v13, while the loader accepts v13, strictly
-validated v12 migration input, and strictly validated v11/v10 input through
+Read the routed persistence and testing pages. `CORE-PERSISTENCE-V14` means the
+current saver emits exact integer v14, while the loader accepts v14, strictly
+validated v13 migration input, and strictly validated v12/v11/v10 input through
 every intervening version; do not extend predecessor schemas or restore
 retired v4-v9 compatibility.
 

@@ -48,7 +48,7 @@ The Interpolation Inspector section exposes the same parameters and recomputes t
 
 ## Project Files
 
-Interpolation records are saved as schema-v13 `line/interpolation` components.
+Interpolation records are saved as schema-v14 `line/interpolation` components.
 Each record has a stable `object_id`, `x_ref`, `y_ref`, and `preprocess`, plus
 these interpolation parameters:
 

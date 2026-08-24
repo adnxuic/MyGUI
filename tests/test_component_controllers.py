@@ -11,7 +11,14 @@ matplotlib.use("Agg")
 
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
-from matplotlib.ticker import AutoLocator
+from matplotlib.ticker import (
+    AsinhLocator,
+    AutoLocator,
+    AutoMinorLocator,
+    LogitLocator,
+    LogLocator,
+    SymmetricalLogLocator,
+)
 
 from mygui.figuremodify.components import (
     CONTROLLER_TYPES,
@@ -37,6 +44,13 @@ from mygui.figuremodify.components import (
     UpdateImpact,
     create_controller,
     register_figure_components,
+)
+from mygui.figuremodify.components.property_values import (
+    DEFAULT_MINOR_LOCATOR,
+    build_locator,
+    default_minor_locator_for_scale,
+    default_scale_for_name,
+    locator_from_axis,
 )
 
 
@@ -146,6 +160,38 @@ class ComponentModelTests(unittest.TestCase):
         self.assertEqual(spec.metadata()["editor"], "bool")
         with self.assertRaisesRegex(ComponentValidationError, "unknown editor"):
             PropertySpec("color", str, "black", editor="colro")
+
+    def test_scale_defaults_produce_roundtrippable_minor_locators(self):
+        expected_types = {
+            "linear": AutoMinorLocator,
+            "log": LogLocator,
+            "symlog": SymmetricalLogLocator,
+            "asinh": AsinhLocator,
+            "logit": LogitLocator,
+        }
+        for scale_name, locator_type in expected_types.items():
+            with self.subTest(scale=scale_name):
+                scale = default_scale_for_name(scale_name)
+                spec = default_minor_locator_for_scale(scale)
+                locator = build_locator(spec)
+                self.assertIsInstance(locator, locator_type)
+                if isinstance(locator, AutoMinorLocator):
+                    locator.ndivs = "auto"
+                self.assertEqual(
+                    locator_from_axis(
+                        locator,
+                        DEFAULT_MINOR_LOCATOR,
+                        minor=True,
+                        scale=scale,
+                    ),
+                    spec,
+                )
+        self.assertEqual(
+            default_minor_locator_for_scale(
+                default_scale_for_name("logit")
+            )["params"]["nbins"],
+            "auto",
+        )
 
     def test_controller_mapping_covers_every_controlled_kind_and_role(self):
         expected = {
@@ -331,6 +377,63 @@ class ComponentControllerContractTests(unittest.TestCase):
             tuple(axes_controller.state.properties["ylim"]),
             tuple(self.axes.get_ylim()),
         )
+
+    def test_reenabling_autoscale_relimits_and_syncs_axes_state(self):
+        controller = self.registry.get(self.axes_id)
+        expected_impact = (
+            UpdateImpact.RELIM
+            | UpdateImpact.AUTOSCALE
+            | UpdateImpact.REDRAW
+        )
+        self.assertEqual(
+            controller.property_specs()["autoscalex_on"].impact,
+            expected_impact,
+        )
+        self.assertEqual(
+            controller.property_specs()["autoscaley_on"].impact,
+            expected_impact,
+        )
+        self.assertTrue(controller.set_property("autoscalex_on", False).ok)
+        self.assertTrue(controller.set_property("autoscaley_on", False).ok)
+        self.assertTrue(controller.set_property("xlim", (0.0, 10.0)).ok)
+        self.assertTrue(controller.set_property("ylim", (0.0, 10.0)).ok)
+        self.line.set_data([0.0, 20.0], [0.0, 20.0])
+
+        x_change = controller.set_property("autoscalex_on", True)
+        self.assertTrue(x_change.ok)
+        self.assertEqual(x_change.impacts, expected_impact)
+        self.assertAlmostEqual(self.axes.get_xlim()[0], -1.0)
+        self.assertAlmostEqual(self.axes.get_xlim()[1], 21.0)
+        self.assertEqual(tuple(controller.state.properties["xlim"]), (-1.0, 21.0))
+        self.assertEqual(tuple(self.axes.get_ylim()), (0.0, 10.0))
+
+        y_change = controller.set_property("autoscaley_on", True)
+        self.assertTrue(y_change.ok)
+        self.assertEqual(y_change.impacts, expected_impact)
+        self.assertAlmostEqual(self.axes.get_ylim()[0], -1.0)
+        self.assertAlmostEqual(self.axes.get_ylim()[1], 21.0)
+        self.assertEqual(tuple(controller.state.properties["ylim"]), (-1.0, 21.0))
+
+    def test_complete_axes_state_preserves_explicit_limits_with_autoscale_on(self):
+        controller = self.registry.get(self.axes_id)
+        desired = controller.state.clone(
+            properties={
+                **controller.state.properties,
+                "xlim": (2.0, 4.0),
+                "ylim": (3.0, 5.0),
+                "autoscalex_on": True,
+                "autoscaley_on": True,
+            }
+        )
+
+        change = controller.apply_state(desired)
+
+        self.assertTrue(change.ok)
+        self.assertEqual(tuple(self.axes.get_xlim()), (2.0, 4.0))
+        self.assertEqual(tuple(self.axes.get_ylim()), (3.0, 5.0))
+        self.assertTrue(self.axes.get_autoscalex_on())
+        self.assertTrue(self.axes.get_autoscaley_on())
+        self.assertEqual(change.impacts & UpdateImpact.AUTOSCALE, UpdateImpact.NONE)
 
     def test_scatter_marker_and_size_are_persistent_properties(self):
         marker_change = self.scatter_controller.set_property("marker", "^")
@@ -561,6 +664,48 @@ class SemanticControllerTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         return matches[0]
 
+    def test_minor_visibility_roundtrips_through_pending_tick_parameters(self):
+        figure = Figure()
+        axes = figure.subplots()
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=False,
+        )
+
+        def one(controller_type):
+            return next(
+                controller
+                for controller in registry.query()
+                if isinstance(controller, controller_type)
+                and controller.state.selector
+                == {"axis": "x", "level": "minor"}
+            )
+
+        ticks = one(TickGroupController)
+        labels = one(TickLabelGroupController)
+        grid = one(GridController)
+        self.assertEqual(axes.xaxis.get_minor_ticks(), [])
+
+        self.assertTrue(ticks.set_property("primary_visible", False).ok)
+        self.assertFalse(ticks.state.properties["primary_visible"])
+        self.assertFalse(axes.xaxis._minor_tick_kw["tick1On"])
+        self.assertTrue(ticks.set_property("primary_visible", True).ok)
+        self.assertTrue(ticks.state.properties["primary_visible"])
+        self.assertTrue(axes.xaxis._minor_tick_kw["tick1On"])
+
+        self.assertTrue(labels.set_property("primary_visible", False).ok)
+        self.assertFalse(labels.state.properties["primary_visible"])
+        self.assertFalse(axes.xaxis._minor_tick_kw["label1On"])
+        self.assertTrue(labels.set_property("primary_visible", True).ok)
+        self.assertTrue(labels.state.properties["primary_visible"])
+        self.assertTrue(axes.xaxis._minor_tick_kw["label1On"])
+
+        self.assertTrue(grid.set_property("visible", True).ok)
+        self.assertTrue(grid.state.properties["visible"])
+        self.assertTrue(axes.xaxis._minor_tick_kw["gridOn"])
+        self.assertEqual(axes.xaxis.get_minor_ticks(), [])
+
     def test_tick_label_and_grid_styles_survive_tick_recreation(self):
         ticks = self._one(TickGroupController, axis="x", level="major")
         labels = self._one(
@@ -588,6 +733,56 @@ class SemanticControllerTests(unittest.TestCase):
                 for tick in recreated
                 if tick.gridline.get_visible()
             )
+        )
+
+    def test_tick_label_fontfamily_is_one_string_in_state_and_artist(self):
+        labels = self._one(
+            TickLabelGroupController,
+            axis="x",
+            level="major",
+        )
+
+        result = labels.set_property(
+            "fontfamily",
+            ["DejaVu Sans", "sans-serif"],
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(labels.state.properties["fontfamily"], "DejaVu Sans")
+        self.assertEqual(
+            labels.read_state().properties["fontfamily"],
+            "DejaVu Sans",
+        )
+        self.assertTrue(
+            all(
+                tick.label1.get_fontfamily()[0] == "DejaVu Sans"
+                for tick in self.axes.xaxis.get_major_ticks()
+            )
+        )
+
+    def test_axis_label_position_uses_axes_coordinates_after_resize(self):
+        label = next(
+            controller
+            for controller in self.registry.query(role=ComponentRole.X_LABEL)
+        )
+
+        self.assertTrue(label.set_property("position", (0.5, -0.1)).ok)
+        target = label.resolve_target()
+        self.assertEqual(target.get_position(), (0.5, -0.1))
+        self.assertIs(target.get_transform(), self.axes.transAxes)
+
+        self.figure.canvas.draw()
+        before = target.get_transform().transform(target.get_position())
+        self.figure.set_size_inches(8.0, 6.0)
+        self.figure.canvas.draw()
+        after = target.get_transform().transform(target.get_position())
+
+        self.assertIs(target.get_transform(), self.axes.transAxes)
+        self.assertEqual(target.get_position(), (0.5, -0.1))
+        self.assertNotEqual(tuple(before), tuple(after))
+        self.assertEqual(
+            tuple(after),
+            tuple(self.axes.transAxes.transform((0.5, -0.1))),
         )
 
     def test_spine_axes_and_text_controllers_apply_real_artist_state(self):

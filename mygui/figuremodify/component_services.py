@@ -1616,26 +1616,15 @@ class AxesCommandService:
     ) -> ComponentBatchChange:
         """Set spine visible."""
 
-        axis_name = "y" if side in {"left", "right"} else "x"
-        axis_role = ComponentRole.X_AXIS if axis_name == "x" else ComponentRole.Y_AXIS
         spine = self.semantic(
             axes_id,
             kind=ComponentKind.SPINE,
             selector={"name": side},
         )
-        axis = self.semantic(
-            axes_id,
-            kind=ComponentKind.AXIS,
-            role=axis_role,
-        )
         return self.registry.apply_transaction(
             (
                 ComponentMutation(
                     spine.component_id,
-                    properties={"visible": bool(visible)},
-                ),
-                ComponentMutation(
-                    axis.component_id,
                     properties={"visible": bool(visible)},
                 ),
             )

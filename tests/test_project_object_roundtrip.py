@@ -17,6 +17,7 @@ from matplotlib.collections import LineCollection
 from mygui.database import ColumnRef
 from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.components import (
+    ComponentKind,
     ComponentRole,
     validate_controller_contracts,
 )
@@ -44,6 +45,71 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         self.window.close()
         self.app.processEvents()
         self.directory.cleanup()
+
+    def test_tick_font_and_axis_label_axes_coordinates_roundtrip(self):
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="AxisState",
+        )
+        canvas = self.window.figure_window.current_canva
+        axes_id, = create_regular_axes(canvas)
+        x_axis = canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+        )
+        tick_labels = canvas.component_registry.find_one(
+            kind=ComponentKind.TICK_LABEL_GROUP,
+            selector={"axis": "x", "level": "major"},
+        )
+        x_label = canvas.component_registry.find_one(
+            parent_id=x_axis.component_id,
+            role=ComponentRole.X_LABEL,
+        )
+        self.assertTrue(
+            tick_labels.set_property("fontfamily", ["DejaVu Sans"]).ok
+        )
+        self.assertTrue(x_label.set_property("position", (0.4, -0.12)).ok)
+
+        save_project_snapshot(self.path, self.window.figure_window)
+        loaded = MainWindow()
+        try:
+            restore_project_snapshot(
+                self.path,
+                loaded.table,
+                loaded.figure_window,
+            )
+            restored = loaded.figure_window.current_canva
+            restored_ticks = restored.component_registry.get(
+                tick_labels.component_id
+            )
+            restored_label = restored.component_registry.get(
+                x_label.component_id
+            )
+            target = restored_label.resolve_target()
+            axes = restored.component_registry.resolve_target(axes_id)
+
+            self.assertEqual(
+                restored_ticks.state.properties["fontfamily"],
+                "DejaVu Sans",
+            )
+            self.assertEqual(
+                restored_ticks.resolve_target().get_major_ticks()[0]
+                .label1.get_fontfamily()[0],
+                "DejaVu Sans",
+            )
+            self.assertEqual(target.get_position(), (0.4, -0.12))
+            self.assertIs(target.get_transform(), axes.transAxes)
+            restored.fig.set_size_inches(7.0, 5.0)
+            restored.fig.canvas.draw()
+            self.assertIs(target.get_transform(), axes.transAxes)
+            self.assertEqual(target.get_position(), (0.4, -0.12))
+        finally:
+            loaded.close()
+            self.app.processEvents()
 
     def test_data_components_and_text_roundtrip_with_stable_ids(self):
         self.window.figure_window.add_figure(
