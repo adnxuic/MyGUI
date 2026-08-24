@@ -212,4 +212,4 @@ Creation dialogs reuse input-only widgets and still call the existing canvas cre
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v15. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, Reference Marks `positions` plus nullable `position_ref`, Axes `y_lower_reserve`, and Reference Guide geometry are business state; profile and widget state remain UI-only.
+The project format uses schema v15. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, Reference Marks `positions` plus nullable `position_ref` and tagged `placement`, Axes `y_lower_reserve`, and Reference Guide geometry are business state; profile and widget state remain UI-only.

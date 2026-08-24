@@ -276,12 +276,17 @@ def _validate_controller_contract(
                         "Reference Marks data requires only positions."
                     )
                 candidate = candidate.clone(
-                    data={**candidate.data, "position_ref": None}
+                    data={
+                        **candidate.data,
+                        "position_ref": None,
+                        "placement": {"kind": "fixed"},
+                    }
                 )
         elif state.kind is ComponentKind.REFERENCE_MARKS:
-            if set(state.data) != {"positions", "position_ref"}:
+            if set(state.data) != {"positions", "position_ref", "placement"}:
                 raise ComponentValidationError(
-                    "Reference Marks data requires positions and position_ref."
+                    "Reference Marks data requires positions, position_ref, "
+                    "and placement."
                 )
         actual = set(state.properties)
         if actual != expected:
@@ -466,6 +471,24 @@ def _validate_data_references(
                 available_refs,
                 x_axis=False,
             )
+        placement = state.data.get("placement")
+        if isinstance(placement, dict) and placement.get("kind") == "between_table_ranges":
+            _validate_reference(
+                placement.get("lower_ref"),
+                f"{path}.data.placement.lower_ref",
+                project_id,
+                available_refs,
+                x_axis=False,
+            )
+            upper_refs = placement.get("upper_refs") or ()
+            for index, item in enumerate(upper_refs):
+                _validate_reference(
+                    item,
+                    f"{path}.data.placement.upper_refs[{index}]",
+                    project_id,
+                    available_refs,
+                    x_axis=False,
+                )
         return
     if state.role not in _DATA_ROLES:
         return

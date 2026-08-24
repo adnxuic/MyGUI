@@ -53,7 +53,7 @@ Every project tab contains one matplotlib navigation toolbar above its canvas:
 | Pan | Toggles pan/zoom mode: dragging with the left button pans, dragging with the right button zooms. |
 | Zoom | Toggles zoom-to-rectangle mode: drag a rectangle to zoom into it. |
 | Subplots | Opens the subplot configuration dialog, whose sliders set the Figure margins (left, right, bottom, top) and the horizontal and vertical spacing between Axes. |
-| Save | Opens the image save dialog (PNG by default). |
+| Save | Opens the shared Figure export window for the canvas that owns the toolbar. |
 | Undo / Redo | Steps through committed Table and Figure commands for this project. |
 | Canvas Window | Moves the same live canvas into a maximized, non-modal window. Closing that window returns the canvas to its project tab. |
 
@@ -78,7 +78,7 @@ Matplotlib's default key bindings are active while the canvas has focus:
 | right arrow / v | Forward: next view. |
 | p | Toggle pan/zoom mode. |
 | o | Toggle zoom-to-rectangle mode. |
-| s / Ctrl+S | Save the figure as an image. |
+| s / Ctrl+S | Open the shared Figure export window. |
 | g | Cycles the major grid visibility of the Axes under the pointer. |
 | G | Cycles the major and minor grid visibility of the Axes under the pointer. |
 | k / L | Toggles the X-axis scale of the Axes under the pointer between linear and log. |

@@ -71,8 +71,8 @@ The import preview lets users include Sheets, use or ignore the first row as hea
 
 ## FullProf PRF import
 
-Supported v1 input is a FullProf `.prf` file selected from the **Main Plot +
-Residual** layout dialog. The validated import adds two uniquely named Sheets
+Supported v1 input is a FullProf `.prf` file selected from the **Single Axes**
+or **Main Plot + Residual** layout dialog. The validated import adds two uniquely named Sheets
 to the current Figure's existing Table project; it does not create or use a
 second project.
 
@@ -84,14 +84,19 @@ second project.
 | `Yobs` | Observed intensity |
 | `Ycal` | FullProf calculated intensity |
 | `Yobs-Ycal (PRF)` | Original FullProf difference column, including any display offset |
-| `Residual` | Recomputed `Yobs - Ycal` used by the lower plot |
+| `Residual` | Recomputed `Yobs - Ycal` used by Main Plot + Residual |
 | `Backg` | Imported background; v1 does not plot it automatically |
 
 `<source> Reflections` contains Number columns `2Theta`, `h`, `k`, and `l`.
 Reflection order, exact duplicates, and nearby Kα1/Kα2 positions are preserved.
 The existing Reflection Positions component stores `positions: []` and binds
 `position_ref` to the imported `<source> Reflections/2Theta` Number column
-instead of copying PRF numeric values.
+instead of copying PRF numeric values. Main Plot + Residual and Single without
+residual keep `placement: {"kind": "fixed"}`. Single with residual stores
+`placement: {"kind": "between_table_ranges"}` using `Yobs-Ycal (PRF)` as the
+lower range and `Yobs` plus `Ycal` as the upper ranges. The Single residual
+Plot binds `y_ref` to `Yobs-Ycal (PRF)`; the Main + Residual lower Plot binds
+`y_ref` to the recomputed `Residual` column.
 
 Both complete Sheets are published atomically by one **Import XRD Refinement
 Data** command. Existing case-insensitive sheet-name uniqueness rules add a

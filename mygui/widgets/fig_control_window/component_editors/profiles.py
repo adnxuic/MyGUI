@@ -34,6 +34,7 @@ from .sections import (
     PropertySection,
     RawXYDataSection,
     ReferenceMarksDataSection,
+    ReferenceMarksPositionSection,
     ScatterAppearanceSection,
     ScatterMappingSection,
     TextContentSection,
@@ -125,6 +126,21 @@ def _reference_marks_properties(*keys: str):
         )
 
     return factory
+
+
+def _reference_marks_position(controller, context, parent):
+    return ReferenceMarksPositionSection(
+        controller,
+        context=context,
+        property_keys=("baseline", "height"),
+        apply_properties=lambda properties: (
+            context.reference_marks.apply_properties(
+                controller,
+                properties,
+            )
+        ),
+        parent=parent,
+    )
 
 
 def _reference_marks_data(controller, context, parent):
@@ -973,7 +989,7 @@ REFERENCE_MARKS_PROFILE = EditorProfile(
         SectionSpec(
             "position",
             "Position",
-            _reference_marks_properties("baseline", "height"),
+            _reference_marks_position,
             property_keys=("baseline", "height"),
         ),
         SectionSpec(

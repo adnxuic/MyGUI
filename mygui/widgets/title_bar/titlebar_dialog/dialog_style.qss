@@ -3,7 +3,8 @@ QDialog#fit_dialog,
 QDialog#interpolation_dialog,
 QDialog#style_dialog,
 QDialog#layout_dialog,
-QDialog#text_dialog
+QDialog#text_dialog,
+QDialog#figure_export_dialog
 {
     background-color: {{COLOR_SURFACE}};
     color: {{COLOR_TEXT_PRIMARY}};
@@ -58,4 +59,14 @@ QPushButton:disabled
     color: {{COLOR_BORDER_STRONG}};
     background-color: {{COLOR_SURFACE_ALT}};
     border-color: {{COLOR_BORDER}};
+}
+
+QLabel#export_error_label
+{
+    color: {{COLOR_ERROR}};
+}
+
+QLabel#export_hint_label
+{
+    color: {{COLOR_TEXT_MUTED}};
 }

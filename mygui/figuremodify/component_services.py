@@ -72,10 +72,14 @@ from mygui.figuremodify.components import (
     TextController,
     UpdateImpact,
     XYData,
-    normalize_position_ref,
-    normalize_reference_positions,
+    normalize_reference_marks_data,
+    reflection_placement_is_automatic,
 )
-from mygui.figuremodify.reference_marks_data import merged_reference_positions
+from mygui.figuremodify.reference_marks_data import (
+    between_table_range_extrema,
+    merged_reference_positions,
+)
+from mygui.figuremodify.y_axis_reserve import apply_y_lower_reserve
 from mygui.figuremodify.components.property_values import (
     legend_anchor_value,
     legend_location_value,
@@ -164,13 +168,83 @@ class ReferenceMarksService:
             position_ref,
         )
 
+    @staticmethod
+    def _data_y_to_axes_fraction(owner: Axes, value: float) -> float:
+        transformed = np.asarray(
+            owner.transLimits.transform([(0.0, float(value))]),
+            dtype=float,
+        ).reshape(-1, 2)
+        fraction = float(transformed[0, 1])
+        if not np.isfinite(fraction):
+            raise ComponentValidationError(
+                "Automatic Reflection placement could not convert data values "
+                "to Axes coordinates."
+            )
+        return fraction
+
+    def _ensure_owner_autoscale(self, owner: Axes, owner_axes_id: str) -> None:
+        if not owner.get_autoscaley_on() or not owner.has_data():
+            return
+        owner.relim()
+        # Matplotlib 3.9 Axes.relim() ignores Collections. Scatter offsets must
+        # be folded back into dataLim so Observed Yobs participates in autoscale
+        # before automatic Reflection placement.
+        for controller in self.registry.query(kind=ComponentKind.SCATTER):
+            if controller.state.parent_id != str(owner_axes_id):
+                continue
+            collection = controller.resolve_target()
+            if collection is None:
+                continue
+            offsets = collection.get_offsets()
+            if len(offsets) == 0:
+                continue
+            owner.update_datalim(collection.get_datalim(owner.transData))
+        owner.autoscale_view()
+        apply_y_lower_reserve(owner)
+
+    def compute_automatic_baseline(
+        self,
+        owner_axes_id: str,
+        placement: Any,
+        height: float,
+    ) -> float:
+        """Return the Axes-fraction baseline centered in the table-range gap."""
+
+        owner = self._owner_axes(owner_axes_id)
+        self._ensure_owner_autoscale(owner, owner_axes_id)
+        lower_top_data, upper_bottom_data = between_table_range_extrema(
+            self.repository,
+            self.project_id,
+            placement,
+        )
+        lower_top = self._data_y_to_axes_fraction(owner, lower_top_data)
+        upper_bottom = self._data_y_to_axes_fraction(owner, upper_bottom_data)
+        gap = upper_bottom - lower_top
+        mark_height = float(height)
+        if not np.isfinite(mark_height) or mark_height <= 0.0:
+            raise ComponentValidationError(
+                "Reflection height must be a positive finite number."
+            )
+        if gap + 1e-12 < mark_height:
+            raise ComponentValidationError(
+                "The gap between the residual and the main intensities is too "
+                "small for the current Reflection height."
+            )
+        baseline = (lower_top + upper_bottom) / 2.0 - mark_height / 2.0
+        if baseline < -1e-12 or baseline + mark_height > 1.0 + 1e-12:
+            raise ComponentValidationError(
+                "Automatic Reflection placement does not fit inside the Axes."
+            )
+        return float(max(0.0, min(baseline, 1.0 - mark_height)))
+
     def preflight(
         self,
         owner_axes_id: str,
         positions: Any,
         properties: dict[str, Any] | None = None,
         position_ref: Any = None,
-    ) -> tuple[list[float], dict[str, str] | None, dict[str, Any], list[float]]:
+        placement: Any = None,
+    ) -> tuple[list[float], dict[str, str] | None, dict[str, Any], list[float], dict[str, Any]]:
         """Validate a complete candidate before creating runtime state."""
 
         self._owner_axes(owner_axes_id)
@@ -185,9 +259,20 @@ class ReferenceMarksService:
         normalized.update(
             {key: specs[key].normalize(value) for key, value in requested.items()}
         )
-        normalized_positions = normalize_reference_positions(positions)
-        normalized_ref = normalize_position_ref(position_ref)
-        merged = self._merged_positions(normalized_positions, normalized_ref)
+        data = normalize_reference_marks_data(
+            {
+                "positions": positions,
+                "position_ref": position_ref,
+                "placement": placement,
+            }
+        )
+        if reflection_placement_is_automatic(data["placement"]):
+            normalized["baseline"] = self.compute_automatic_baseline(
+                owner_axes_id,
+                data["placement"],
+                normalized["height"],
+            )
+        merged = self._merged_positions(data["positions"], data["position_ref"])
         candidate = ComponentState(
             id="reference-marks-preflight",
             kind=ComponentKind.REFERENCE_MARKS,
@@ -196,13 +281,16 @@ class ReferenceMarksService:
             order=0,
             selector={"object_id": "reference-marks-preflight"},
             properties=normalized,
-            data={
-                "positions": normalized_positions,
-                "position_ref": normalized_ref,
-            },
+            data=data,
         )
         ReferenceMarksController(candidate)
-        return normalized_positions, normalized_ref, normalized, merged
+        return (
+            data["positions"],
+            data["position_ref"],
+            normalized,
+            merged,
+            data["placement"],
+        )
 
     def create_runtime(
         self,
@@ -210,14 +298,28 @@ class ReferenceMarksService:
         positions: Any,
         properties: dict[str, Any] | None = None,
         position_ref: Any = None,
-    ) -> tuple[LineCollection, list[float], dict[str, str] | None, dict[str, Any]]:
+        placement: Any = None,
+    ) -> tuple[
+        LineCollection,
+        list[float],
+        dict[str, str] | None,
+        dict[str, Any],
+        dict[str, Any],
+    ]:
         """Create exactly one staged LineCollection with a blended transform."""
 
-        normalized_positions, normalized_ref, normalized, merged = self.preflight(
+        (
+            normalized_positions,
+            normalized_ref,
+            normalized,
+            merged,
+            normalized_placement,
+        ) = self.preflight(
             owner_axes_id,
             positions,
             properties,
             position_ref,
+            placement,
         )
         owner = self._owner_axes(owner_axes_id)
         runtime = LineCollection(
@@ -245,7 +347,13 @@ class ReferenceMarksService:
         except Exception:
             self.destroy_runtime(runtime)
             raise
-        return runtime, normalized_positions, normalized_ref, normalized
+        return (
+            runtime,
+            normalized_positions,
+            normalized_ref,
+            normalized,
+            normalized_placement,
+        )
 
     @staticmethod
     def destroy_runtime(runtime: LineCollection) -> None:
@@ -277,11 +385,30 @@ class ReferenceMarksService:
             component,
             ReferenceMarksController,
         )
+        patch = dict(properties)
+        try:
+            if reflection_placement_is_automatic(
+                controller.state.data.get("placement")
+            ):
+                if "baseline" in patch:
+                    return _rejected(
+                        controller,
+                        "Automatic Reflection baseline is read-only. Convert to "
+                        "fixed position to edit it.",
+                    )
+                if "height" in patch:
+                    patch["baseline"] = self.compute_automatic_baseline(
+                        controller.state.parent_id,
+                        controller.state.data.get("placement"),
+                        patch["height"],
+                    )
+        except Exception as exc:
+            return _rejected(controller, str(exc))
         batch = self.registry.apply_transaction(
             (
                 ComponentMutation(
                     controller.component_id,
-                    properties=dict(properties),
+                    properties=patch,
                 ),
             ),
             verifier=lambda: self._verify_render(controller),
@@ -298,8 +425,9 @@ class ReferenceMarksService:
         component,
         positions: Any,
         position_ref: Any,
+        placement: Any = None,
     ) -> ComponentChange:
-        """Replace persisted positions and the nullable Number-column ref."""
+        """Replace persisted positions, column ref, and placement."""
 
         controller = _controller(
             self.registry,
@@ -307,25 +435,43 @@ class ReferenceMarksService:
             ReferenceMarksController,
         )
         try:
-            normalized_positions = normalize_reference_positions(positions)
-            normalized_ref = normalize_position_ref(position_ref)
-            merged = self._merged_positions(normalized_positions, normalized_ref)
+            data = normalize_reference_marks_data(
+                {
+                    "positions": positions,
+                    "position_ref": position_ref,
+                    "placement": (
+                        controller.state.data.get("placement")
+                        if placement is None
+                        else placement
+                    ),
+                }
+            )
+            properties = dict(controller.state.properties)
+            if reflection_placement_is_automatic(data["placement"]):
+                properties["baseline"] = self.compute_automatic_baseline(
+                    controller.state.parent_id,
+                    data["placement"],
+                    properties["height"],
+                )
+            merged = self._merged_positions(data["positions"], data["position_ref"])
             runtime_data = ReferenceMarksController.segments_for(
                 merged,
-                controller.state.properties["baseline"],
-                controller.state.properties["height"],
+                properties["baseline"],
+                properties["height"],
             )
         except Exception as exc:
             return _rejected(controller, str(exc))
+        mutation_kwargs: dict[str, Any] = {
+            "data": data,
+            "runtime_data": runtime_data,
+        }
+        if properties["baseline"] != controller.state.properties["baseline"]:
+            mutation_kwargs["properties"] = {"baseline": properties["baseline"]}
         batch = self.registry.apply_transaction(
             (
                 ComponentMutation(
                     controller.component_id,
-                    data={
-                        "positions": normalized_positions,
-                        "position_ref": normalized_ref,
-                    },
-                    runtime_data=runtime_data,
+                    **mutation_kwargs,
                 ),
             ),
             verifier=lambda: self._verify_render(controller),
@@ -355,6 +501,38 @@ class ReferenceMarksService:
             controller.state.data.get("position_ref"),
         )
 
+    def convert_to_fixed_placement(self, component) -> ComponentChange:
+        """Atomically store the current baseline and height as fixed placement."""
+
+        controller = _controller(
+            self.registry,
+            component,
+            ReferenceMarksController,
+        )
+        try:
+            data = normalize_reference_marks_data(
+                {
+                    **controller.state.data,
+                    "placement": {"kind": "fixed"},
+                }
+            )
+        except Exception as exc:
+            return _rejected(controller, str(exc))
+        if data == controller.state.data:
+            return ComponentChange(
+                controller.component_id,
+                None,
+                controller.state,
+                controller.state,
+                ChangeStatus.NOOP,
+            )
+        return self.update_data(
+            controller,
+            data["positions"],
+            data["position_ref"],
+            data["placement"],
+        )
+
     def refresh(
         self,
         component,
@@ -368,22 +546,32 @@ class ReferenceMarksService:
         )
         data = controller.state.data
         try:
+            properties = dict(controller.state.properties)
+            if reflection_placement_is_automatic(data.get("placement")):
+                properties["baseline"] = self.compute_automatic_baseline(
+                    controller.state.parent_id,
+                    data.get("placement"),
+                    properties["height"],
+                )
             merged = self._merged_positions(
                 data.get("positions", []),
                 data.get("position_ref"),
             )
             runtime_data = ReferenceMarksController.segments_for(
                 merged,
-                controller.state.properties["baseline"],
-                controller.state.properties["height"],
+                properties["baseline"],
+                properties["height"],
             )
         except Exception as exc:
             return _rejected(controller, str(exc))
+        mutation_kwargs: dict[str, Any] = {"runtime_data": runtime_data}
+        if properties["baseline"] != controller.state.properties["baseline"]:
+            mutation_kwargs["properties"] = {"baseline": properties["baseline"]}
         batch = self.registry.apply_transaction(
             (
                 ComponentMutation(
                     controller.component_id,
-                    runtime_data=runtime_data,
+                    **mutation_kwargs,
                 ),
             ),
             verifier=lambda: self._verify_render(controller),
@@ -394,6 +582,29 @@ class ReferenceMarksService:
                 batch.message or "Reference Marks render verification failed.",
             )
         return batch.changes[0]
+
+    @staticmethod
+    def _placement_refs(data: dict[str, Any]) -> set[ColumnRef]:
+        refs: set[ColumnRef] = set()
+        raw = data.get("position_ref")
+        if raw is not None:
+            try:
+                refs.add(_column_ref(raw))
+            except (TypeError, ValueError):
+                pass
+        placement = data.get("placement") or {}
+        if placement.get("kind") != "between_table_ranges":
+            return refs
+        try:
+            refs.add(_column_ref(placement.get("lower_ref")))
+        except (TypeError, ValueError):
+            pass
+        for item in placement.get("upper_refs") or ():
+            try:
+                refs.add(_column_ref(item))
+            except (TypeError, ValueError):
+                continue
+        return refs
 
     def refresh_affected(
         self,
@@ -409,15 +620,9 @@ class ReferenceMarksService:
             ):
                 if not isinstance(controller, ReferenceMarksController):
                     continue
-                raw = controller.state.data.get("position_ref")
-                if raw is None:
-                    continue
-                try:
-                    ref = _column_ref(raw)
-                except Exception as exc:
-                    results.append(_rejected(controller, str(exc)))
-                    continue
-                if ref not in changed:
+                if not self._placement_refs(controller.state.data).intersection(
+                    changed
+                ):
                     continue
                 results.append(self.refresh(controller))
         return results
@@ -3280,6 +3485,20 @@ class ComponentDependencyService:
             try:
                 refs.add(_column_ref(state.data[key]))
             except (KeyError, ValueError, TypeError):
+                continue
+        placement = state.data.get("placement")
+        if not isinstance(placement, dict):
+            return refs
+        if placement.get("kind") != "between_table_ranges":
+            return refs
+        try:
+            refs.add(_column_ref(placement.get("lower_ref")))
+        except (TypeError, ValueError):
+            pass
+        for item in placement.get("upper_refs") or ():
+            try:
+                refs.add(_column_ref(item))
+            except (TypeError, ValueError):
                 continue
         return refs
 

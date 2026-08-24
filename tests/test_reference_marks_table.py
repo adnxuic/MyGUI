@@ -200,18 +200,32 @@ class ReferenceMarksControllerDataShapeTests(unittest.TestCase):
                 order=0,
                 selector={"object_id": "shape-marks"},
                 properties=ReferenceMarksController.default_properties(),
-                data={"positions": [2.0], "position_ref": None},
+                data={
+                    "positions": [2.0],
+                    "position_ref": None,
+                    "placement": {"kind": "fixed"},
+                },
             ),
             target=artist,
         )
         self.assertTrue(controller.apply_state(controller.state).ok)
         change = controller.apply_state(
-            controller.state.clone(data={"positions": [], "position_ref": None})
+            controller.state.clone(
+                data={
+                    "positions": [],
+                    "position_ref": None,
+                    "placement": {"kind": "fixed"},
+                }
+            )
         )
         self.assertEqual(change.status, ChangeStatus.EMPTY)
         self.assertEqual(
             controller.snapshot().data,
-            {"positions": [], "position_ref": None},
+            {
+                "positions": [],
+                "position_ref": None,
+                "placement": {"kind": "fixed"},
+            },
         )
 
 

@@ -28,6 +28,7 @@ from mygui.xrd_refinement import (
     XrdRefinementLegendSelection,
     XrdReflectionAppearance,
     XrdScatterAppearance,
+    validate_prf_residual_display_gap,
 )
 from mygui.widgets.fig_control_window.component_editors.common import (
     ScatterStyleEditor,
@@ -52,12 +53,16 @@ class XrdRefinementInput(QWidget):
     def __init__(
         self,
         *,
+        layout_mode: str = "main_residual",
         reflection_legend_supported: bool = True,
         color_library=None,
         style_defaults=None,
         parent=None,
     ) -> None:
         super().__init__(parent)
+        if layout_mode not in {"single", "main_residual"}:
+            raise ValueError("XRD input layout_mode must be single or main_residual.")
+        self._layout_mode = layout_mode
         self._parsed_result: FullProfPrfResult | None = None
         self._parsed_file = ""
         self._appearance = XrdAppearanceConfig()
@@ -103,7 +108,16 @@ class XrdRefinementInput(QWidget):
             summary_layout.addRow(label, value)
         contents_layout.addWidget(summary_group)
 
-        main_legend = QGroupBox("Main legend", self.contents)
+        self.draw_residual_checkbox = QCheckBox("Draw residual", self.contents)
+        self.draw_residual_checkbox.setObjectName("xrd_refinement_draw_residual")
+        self.draw_residual_checkbox.setChecked(True)
+        if self._layout_mode == "single":
+            contents_layout.addWidget(self.draw_residual_checkbox)
+        else:
+            self.draw_residual_checkbox.setVisible(False)
+
+        legend_title = "Legend" if self._layout_mode == "single" else "Main legend"
+        main_legend = QGroupBox(legend_title, self.contents)
         main_layout = QVBoxLayout(main_legend)
         self.observed_legend = QCheckBox("Observed", main_legend)
         self.calculated_legend = QCheckBox("Calculated", main_legend)
@@ -111,8 +125,9 @@ class XrdRefinementInput(QWidget):
             "Reflection positions",
             main_legend,
         )
-        self.observed_legend.setChecked(True)
-        self.calculated_legend.setChecked(True)
+        single = self._layout_mode == "single"
+        self.observed_legend.setChecked(not single)
+        self.calculated_legend.setChecked(not single)
         self.reflection_legend.setChecked(False)
         main_layout.addWidget(self.observed_legend)
         main_layout.addWidget(self.calculated_legend)
@@ -122,14 +137,19 @@ class XrdRefinementInput(QWidget):
             self.reflection_legend.setChecked(False)
             self.reflection_legend.setEnabled(False)
             self.reflection_legend.setVisible(False)
+        self.residual_legend = QCheckBox("Residual", main_legend)
+        self.residual_legend.setChecked(False)
+        if single:
+            main_layout.addWidget(self.residual_legend)
         contents_layout.addWidget(main_legend)
 
         residual_legend = QGroupBox("Residual legend", self.contents)
         residual_layout = QVBoxLayout(residual_legend)
-        self.residual_legend = QCheckBox("Residual", residual_legend)
-        self.residual_legend.setChecked(False)
-        residual_layout.addWidget(self.residual_legend)
-        contents_layout.addWidget(residual_legend)
+        if not single:
+            residual_layout.addWidget(self.residual_legend)
+            contents_layout.addWidget(residual_legend)
+        else:
+            residual_legend.setVisible(False)
 
         property_group = QGroupBox("Component properties", self.contents)
         property_layout = QHBoxLayout(property_group)
@@ -168,6 +188,7 @@ class XrdRefinementInput(QWidget):
         self.browse_button.clicked.connect(self.browse)
         self.file_input.textChanged.connect(self._file_changed)
         self.file_input.editingFinished.connect(self.parse_selected_file)
+        self.draw_residual_checkbox.toggled.connect(self._draw_residual_toggled)
         for checkbox in (
             self.observed_legend,
             self.calculated_legend,
@@ -176,6 +197,7 @@ class XrdRefinementInput(QWidget):
         ):
             checkbox.toggled.connect(self.refresh_validation)
         self._import_toggled(False)
+        self._sync_residual_controls()
 
     @staticmethod
     def _path_key(value: str) -> str:
@@ -204,8 +226,22 @@ class XrdRefinementInput(QWidget):
         self.reflection_count_value.setText(str(len(result.reflections)))
         self.range_value.setText(f"{min(profile.two_theta):g} – {max(profile.two_theta):g}°")
 
+    def _sync_residual_controls(self) -> None:
+        enabled = self._layout_mode != "single" or self.draw_residual_checkbox.isChecked()
+        if not enabled:
+            self.residual_legend.setChecked(False)
+        self.residual_legend.setEnabled(enabled)
+        self.residual_property_button.setEnabled(
+            self.import_checkbox.isChecked() and enabled
+        )
+
+    def _draw_residual_toggled(self, _enabled: bool) -> None:
+        self._sync_residual_controls()
+        self.refresh_validation()
+
     def _import_toggled(self, enabled: bool) -> None:
         self.contents.setEnabled(bool(enabled))
+        self._sync_residual_controls()
         if enabled and self.file_input.text().strip() and self._parsed_result is None:
             self.parse_selected_file()
             return
@@ -280,6 +316,15 @@ class XrdRefinementInput(QWidget):
             valid, message = False, "The selected FullProf .prf file is not valid."
         else:
             valid, message = True, ""
+            if (
+                self._layout_mode == "single"
+                and self.draw_residual_checkbox.isChecked()
+                and self._parsed_result is not None
+            ):
+                try:
+                    validate_prf_residual_display_gap(self._parsed_result)
+                except ValueError as exc:
+                    valid, message = False, str(exc)
         self.validation_label.setText(message)
         self.validation_label.setVisible(not valid)
         self.validity_changed.emit(valid, message)
@@ -308,6 +353,11 @@ class XrdRefinementInput(QWidget):
                 residual=self.residual_legend.isChecked(),
             ),
             appearance=self._appearance,
+            draw_single_residual=(
+                True
+                if self._layout_mode != "single"
+                else self.draw_residual_checkbox.isChecked()
+            ),
         )
 
     def _edit_observed_appearance(self) -> None:
@@ -411,14 +461,18 @@ class XrdRefinementInput(QWidget):
         if defaults is None:
             return
         current = self._appearance.reflection
+        automatic_baseline = (
+            self._layout_mode == "single" and self.draw_residual_checkbox.isChecked()
+        )
         dialog = QDialog(self)
         dialog.setWindowTitle("Reflection Positions")
         layout = QVBoxLayout(dialog)
         editor = ReferenceMarksInput(
             color_library=self._color_library,
             defaults=defaults.reference_marks,
-            max_baseline_plus_height=0.1,
+            max_baseline_plus_height=None if automatic_baseline else 0.1,
             appearance_only=True,
+            automatic_baseline=automatic_baseline,
             parent=dialog,
         )
         editor.label_input.setText(current.label)

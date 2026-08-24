@@ -144,7 +144,7 @@ Role-specific `data` fields are:
 | `function_curve` | `expression`, `x_start`, `x_stop` |
 | `data_plot` | `x_ref`, `y_ref`, `preprocess` |
 | `scatter` | `x_ref`, `y_ref`, optional `color_ref`, optional `size_ref`, `preprocess` |
-| `reflection_positions` | ordered finite manual `positions` plus nullable Number-column `position_ref`; empty cells are skipped, duplicates remain valid |
+| `reflection_positions` | ordered finite manual `positions`, nullable Number-column `position_ref`, and tagged `placement`; empty cells are skipped, duplicates remain valid |
 | `reference_line` | exactly `{}`; constant geometry is owned by `properties` |
 | `reference_band` | exactly `{}`; constant geometry is owned by `properties` |
 | `colorbar` | `source_component_id` |
@@ -167,10 +167,15 @@ remain owned only by the Scatter. See [Colorbar Component](colorbar-component.md
 
 A `reference_marks/reflection_positions` record is a removable child of an
 ordinary Axes. Its selector contains only the stable component object ID, and
-its data contains exactly `positions` (manual finite numbers) and nullable
-`position_ref` (a current-project Number column). Effective X coordinates
+its data contains exactly `positions` (manual finite numbers), nullable
+`position_ref` (a current-project Number column), and tagged `placement`.
+`placement` is either `{"kind": "fixed"}` or
+`{"kind": "between_table_ranges", "lower_ref": ColumnRef, "upper_refs": [ColumnRef, ColumnRef]}`.
+Effective X coordinates
 merge the manual sequence first, then the column values in row order, skipping
-empty cells. One `LineCollection` renders the merged positions using data X
+empty cells. Automatic placement recomputes the Axes-fraction baseline after
+ordinary autoscale so the marks sit between the lower and upper Table ranges.
+One `LineCollection` renders the merged positions using data X
 coordinates and normalized Axes Y coordinates. The ten exact
 appearance/geometry properties and validation rules are documented in
 [Reference Marks Component](reference-marks-component.md).
@@ -286,6 +291,6 @@ save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export
 
-- 导出当前图片... (File menu) saves the current Figure canvas as a PNG, PDF, or SVG image. The canvas toolbar Save button opens the same image save dialog.
+- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v15.
 - 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
 - PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

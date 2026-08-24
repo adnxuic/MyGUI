@@ -67,7 +67,7 @@ class PyTitleBar(QFrame):
             self.stacklayout_bottom,
             figure_window=figure_window,
         )
-        self.menu_bar = MenuBar(table, figure_window)
+        self.menu_bar = MenuBar(table, figure_window, settings=getattr(parent, "settings", None))
         self.stacklayout_top.addWidget(self.selector_menu_bar)
         self.stacklayout_top.addWidget(self.menu_bar)
 

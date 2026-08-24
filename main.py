@@ -169,6 +169,9 @@ class MainWindow(QMainWindow):
         self.figure_window.projectCloseRequested.connect(
             self.close_project_from_tab
         )
+        self.figure_window.figureExportRequested.connect(
+            self.title_bar.menu_bar.export_canvas
+        )
         self.central_widget_layout.addWidget(self.title_bar, stretch=0)
 
         self.left_column = PyLeftColumn()

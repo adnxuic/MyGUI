@@ -133,7 +133,7 @@ subtree.
 | `LegendController` | Legend | tagged location/anchor, layout/spacing, entry/title fonts, frame styling, draggable policy, layering and export configuration |
 | `LineController` | Line and all curve roles | label/color, tagged line pattern/marker/markevery, draw/fill style, cap/join/gap, antialiasing, layering and safe export fields |
 | `ScatterController` | Scatter | uniform face/edge styling, marker/line/hatch, tagged color/size mapping and norm, non-finite policy, layering and safe export fields |
-| `ReferenceMarksController` | Reflection Positions | ordered finite positions, Axes-relative baseline/height, uniform line appearance, visibility, layering, and clipping |
+| `ReferenceMarksController` | Reflection Positions | ordered finite positions, optional Table `position_ref`, tagged `placement`, Axes-relative baseline/height, uniform line appearance, visibility, layering, and clipping |
 | `ReferenceLineController` | Reference Line | finite constant value, vertical/horizontal orientation, Axes-fraction span, uniform line appearance, visibility, layering, and clipping |
 | `ReferenceBandController` | Reference Band | finite ordered bounds, vertical/horizontal orientation, Axes-fraction span, fill/border appearance, visibility, layering, and clipping |
 | `ColorbarController` | Colorbar | visibility/label, constructor-sensitive placement, extend/spacing/edges, tagged locator/formatter, minor ticks/tick side, fonts, and outline appearance |

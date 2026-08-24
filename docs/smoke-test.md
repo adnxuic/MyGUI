@@ -40,7 +40,7 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
     clear all projects, and exit the application with a window open; confirm no
     orphan Canvas window or taskbar entry remains.
 
-For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 480 pixels at every display scale. Save and reopen the project and confirm its recorded DPI remains 100.
+For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 480 pixels at every display scale. Save and reopen the project and confirm its recorded DPI remains 100. The Figure export window is documented in [Figure Export](figure-export.md).
 
 ## Core Workflow
 
@@ -149,7 +149,7 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
 ## Keyboard Shortcuts
 
 1. In the table, select several cells, press Ctrl+C, move the selection, and press Ctrl+V. Confirm the pasted TSV block lands as one undo command, then press Delete and confirm the cleared cells become missing values.
-2. Focus a project canvas and press p; drag with the left button to pan and the right button to zoom. Press o and drag a rectangle to zoom. Press h to reset the view, and press s to open the image save dialog.
+2. Focus a project canvas and press p; drag with the left button to pan and the right button to zoom. Press o and drag a rectangle to zoom. Press h to reset the view, and press s to open the shared Figure export window. From File → 导出当前图片... and from the toolbar Save button, confirm both open the same window for that canvas. Export PNG, JPEG, TIFF, WebP, PDF, and SVG; confirm overwrite asks before replacing a file; Cancel and declined overwrite leave the original bytes unchanged. Exercise Tight contents, transparency, and a custom background. Confirm a TeX render failure reports one red result and keeps the window open. On a high-DPI display, confirm a 6.4 × 4.8 inch, 100 DPI PNG is still 640 × 480.
 3. Open the Plot creation dialog, open the Y dropdown, move the highlight with the arrow keys, and press Space. Confirm the highlighted column toggles without closing the dropdown, and the Create button count follows.
 
 See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the complete lists.
@@ -280,7 +280,36 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
 
 Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.
 
-1. Open or create a project and select **Main Plot + Residual**.
+### Single Axes
+
+1. Open or create a project and select **Single Axes**. Confirm the **XRD
+   Refinement** tab is present. Leave import off, create the layout, and
+   confirm the ordinary one-Axes Figure is created without new Sheets.
+2. Open **Single Axes** again, enable **Import XRD refinement result**, and
+   confirm **Draw residual** is visible and on. Confirm the four legend
+   checkboxes default off.
+3. Browse for `YBCO.prf`. Confirm the preview and **Create** enable. Open
+   **Reflection Positions…** and confirm **Baseline: Automatic** is disabled.
+4. Create with Draw residual on. Confirm one Axes, Observed Scatter, Calculated
+   Plot, Residual Plot bound to `Yobs-Ycal (PRF)`, Reflection Positions, and a
+   Chi² Text at Axes `(0.04, 0.96)`. Confirm `y_lower_reserve=0.0` and that
+   Reflection sits between the residual maximum and the lowest observed or
+   calculated intensity without overlapping either.
+5. Open the four XRD property buttons; Residual is enabled while Draw residual
+   is on. Edit a Table Yobs or residual cell and confirm Reflection recenters
+   after autoscale.
+6. Repeat creation with Draw residual off. Confirm Residual Plot is omitted,
+   Residual legend and property button are disabled, `y_lower_reserve=0.1`, and
+   Reflection uses `baseline=0.0375` / `height=0.025`. Confirm Chi² Text
+   remains.
+7. Save, close, temporarily move `YBCO.prf`, and reopen. Confirm the Table,
+   four or three data components, Chi² Text, and placement restore without a
+   file prompt.
+
+### Main Plot + Residual
+
+1. Open or create a project and select **Main Plot + Residual**. Confirm the
+   XRD tab is present and **Draw residual** is hidden.
 2. Leave **Import XRD refinement result** off, create the layout, and confirm
    the ordinary 2 × 1, 3:1, shared-X layout still works without new Sheets.
 3. Open **Main Plot + Residual** again, select the **XRD Refinement** tab, and
@@ -298,10 +327,10 @@ Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.
    preserved.
 8. Confirm the Main Axes contains one Observed Scatter, one Calculated Data
    Plot, and one editable Reflection Positions component whose data is an empty
-   manual sequence plus the Reflections/`2Theta` column. Confirm the main Y
-   range keeps ordinary autoscale content in the upper 90% and the reflection
-   marks sit in the lower 10% band. Confirm Backg is not plotted and no extra
-   vertical-line artists exist.
+   manual sequence plus the Reflections/`2Theta` column and `placement.kind`
+   `fixed`. Confirm the main Y range keeps ordinary autoscale content in the
+   upper 90% and the reflection marks sit in the lower 10% band. Confirm Backg
+   is not plotted and no extra vertical-line artists exist.
 9. Confirm the lower Axes contains one Residual Data Plot whose first value is
    `Yobs - Ycal`, not the offset `Yobs-Ycal (PRF)` value, and that Residual
    Axes Y reserve stays at `0`.

@@ -138,6 +138,7 @@ class PyFigureWindow(QFrame):
 
     requestStyleSelector = Signal()
     projectCloseRequested = Signal(int)
+    figureExportRequested = Signal(object)
 
     def __init__(
         self,
@@ -259,6 +260,7 @@ class PyFigureWindow(QFrame):
                 color_library=self.color_library,
                 component_tree=component_tree,
             )
+            canva.exportRequested.connect(self.figureExportRequested)
             figure_inspector = self.figure_inspector_host.add_figure_inspector(
                 canva.component_registry.get(canva.root_component_id),
                 canva.editor_context,

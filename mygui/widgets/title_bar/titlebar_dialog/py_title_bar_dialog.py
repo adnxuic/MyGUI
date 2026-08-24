@@ -183,10 +183,11 @@ class PyLayoutDialog(QDialog):
                 canvas.axes_layout_service.constrained_layout_enabled()
             )
         self.xrd_input: XrdRefinementInput | None = None
-        if self.layout_id is None and self.preset_key == "main_residual":
+        if self.layout_id is None and self.preset_key in {"single", "main_residual"}:
             if self.input.tabs is None:
-                raise RuntimeError("Main + Residual layout tabs are unavailable.")
+                raise RuntimeError("Layout tabs are unavailable for XRD import.")
             self.xrd_input = XrdRefinementInput(
+                layout_mode=self.preset_key,
                 reflection_legend_supported=True,
                 color_library=figure_window.color_library,
                 style_defaults=(

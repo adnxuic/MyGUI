@@ -26,7 +26,7 @@ selection, and other runtime projection state are never serialized.
 | Legend | tagged location/anchor, layout/entry scope, fonts, marker/point settings, spacing, frame, dragging, layering/export fields |
 | Line roles | label/visibility/color, tagged line/marker/markevery, draw/fill style, cap/join/gap, layering/export fields, plus role data |
 | Scatter | uniform appearance, tagged marker/line, authoritative `ScatterColorMapSpec` and `ScatterSizeMapSpec`, mapping references, layering/export fields |
-| Reference Marks | manual finite reflection positions, optional Number-column `position_ref`, plus label, visibility, Axes-relative baseline/height, line appearance, alpha, z-order, and clipping |
+| Reference Marks | manual finite reflection positions, optional Number-column `position_ref`, tagged `placement`, plus label, visibility, Axes-relative baseline/height, line appearance, alpha, z-order, and clipping |
 | Reference Line | constant orientation/value, Axes-fraction span, line appearance, visibility, label, z-order, and clipping; data is exactly `{}` |
 | Reference Band | constant orientation/lower/upper bounds, Axes-fraction span, fill/border appearance, visibility, label, z-order, and clipping; data is exactly `{}` |
 | Colorbar | placement, label/ticks/fonts/outline and advanced display properties; stable source ID only, never source cmap/norm/clim/data |
@@ -36,7 +36,7 @@ Single-owner rules prevent duplicate state: Axis owns scale; ordered Axes
 limits own inversion; Axes owns `y_lower_reserve`; Tick/Label groups own their
 sides and label padding; Axes owns grid layering; Scatter owns Colorbar
 colormap, norm, limits, and scalar data. Reference Marks owns the merged
-`positions` + `position_ref` data and one `LineCollection`; Reference Guides
+`positions` + `position_ref` + tagged `placement` data and one `LineCollection`; Reference Guides
 own their complete constant geometry in `properties` and keep `data` empty.
 Runtime Artists are never authoritative.
 
@@ -81,14 +81,17 @@ Saving writes exact integer `schema_version: 15`. Schema v15 requires:
 
 - every Axes `properties.y_lower_reserve` to be a finite number
   `0 <= value < 0.9`;
-- every Reference Marks `data` object to contain exactly `positions` and a
-  nullable `position_ref` Number-column reference in the current project.
+- every Reference Marks `data` object to contain exactly `positions`, a
+  nullable `position_ref` Number-column reference in the current project, and
+  tagged `placement` (`{"kind": "fixed"}` or
+  `{"kind": "between_table_ranges", "lower_ref": ColumnRef, "upper_refs": [ColumnRef, ColumnRef]}`).
 
 Loading exact integer v14 first runs the independent strict v14 root, Table,
 component-graph, and property validator, including the v14 Reference Marks
 `positions`-only data contract and Axes property set without
 `y_lower_reserve`. The validated snapshot is deep-copied. Every Reference
-Marks record receives `position_ref: null`, and every Axes record receives
+Marks record receives `position_ref: null` and `placement: {"kind": "fixed"}`,
+and every Axes record receives
 `y_lower_reserve: 0.0`. Old projects are not inferred as XRD plots; IDs,
 order, hierarchy, ranges, and rendering stay unchanged. The root version then
 advances to 15 and the complete v15 snapshot is validated before any Table or

@@ -137,6 +137,7 @@ class ReferenceMarksInput(QFrame):
         project_id: str | None = None,
         max_baseline_plus_height: float | None = None,
         appearance_only: bool = False,
+        automatic_baseline: bool = False,
     ):
         super().__init__(parent)
         if color_library is None:
@@ -146,6 +147,7 @@ class ReferenceMarksInput(QFrame):
         self.repository = repository
         self.project_id = project_id
         self.max_baseline_plus_height = max_baseline_plus_height
+        self.automatic_baseline = bool(automatic_baseline)
         layout = QFormLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -174,7 +176,12 @@ class ReferenceMarksInput(QFrame):
         self.baseline_input.setDecimals(4)
         self.baseline_input.setSingleStep(0.005)
         self.baseline_input.setValue(0.08)
-        layout.addRow("Baseline:", self.baseline_input)
+        if self.automatic_baseline:
+            self.baseline_input.setEnabled(False)
+            layout.addRow("Baseline:", QLabel("Automatic", self))
+            self.baseline_input.hide()
+        else:
+            layout.addRow("Baseline:", self.baseline_input)
 
         self.height_input = FocusAwareDoubleSpinBox(self)
         self.height_input.setRange(0.000000001, 1.0)
@@ -237,7 +244,7 @@ class ReferenceMarksInput(QFrame):
     def validate_geometry(self) -> None:
         """Reject XRD pre-creation geometry that leaves the reserved band."""
 
-        if self.max_baseline_plus_height is None:
+        if self.automatic_baseline or self.max_baseline_plus_height is None:
             return
         total = float(self.baseline_input.value()) + float(self.height_input.value())
         if total > float(self.max_baseline_plus_height) + 1e-12:

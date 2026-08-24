@@ -22,4 +22,5 @@ def as_schema_v14(snapshot: dict[str, Any]) -> dict[str, Any]:
             data = component.get("data")
             if isinstance(data, dict):
                 data.pop("position_ref", None)
+                data.pop("placement", None)
     return payload

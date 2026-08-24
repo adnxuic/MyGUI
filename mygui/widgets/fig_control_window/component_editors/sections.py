@@ -242,7 +242,7 @@ class RawXYDataSection(QWidget, EditorSection):
 class ReferenceMarksDataSection(QWidget, EditorSection):
     """Edit the authoritative ordered Reflection Positions sequence."""
 
-    DATA_KEYS = ("positions", "position_ref")
+    DATA_KEYS = ("positions", "position_ref", "placement")
 
     def __init__(self, controller, *, context, parent=None):
         super().__init__(parent)
@@ -257,10 +257,16 @@ class ReferenceMarksDataSection(QWidget, EditorSection):
         )
         self.position_ref_input = QComboBox(self)
         self.apply_button = QPushButton("Apply data", self)
+        self.placement_label = QLabel(self)
+        self.placement_label.setWordWrap(True)
+        self.convert_button = QPushButton("Convert to fixed position", self)
         layout.addWidget(self.positions_input)
         layout.addWidget(self.position_ref_input)
         layout.addWidget(self.apply_button)
+        layout.addWidget(self.placement_label)
+        layout.addWidget(self.convert_button)
         self.apply_button.clicked.connect(self.apply_data)
+        self.convert_button.clicked.connect(self.convert_to_fixed)
         self.sync_from_controller()
 
     def _project_id(self) -> str | None:
@@ -335,12 +341,70 @@ class ReferenceMarksDataSection(QWidget, EditorSection):
         self.positions_input.setText(format_number_sequence(positions))
         del blocker
         self._populate_refs(current)
+        self._sync_placement(data)
+
+    def _ref_text(self, raw) -> str:
+        if raw is None:
+            return "(none)"
+        try:
+            ref = raw if isinstance(raw, ColumnRef) else ColumnRef.from_dict(raw)
+        except (TypeError, ValueError):
+            return "(invalid)"
+        if self._project_id() is None:
+            return str(ref.column_id)
+        return self.repository.ref_label(ref)
+
+    def _sync_placement(self, data: dict) -> None:
+        placement = data.get("placement") or {"kind": "fixed"}
+        automatic = placement.get("kind") == "between_table_ranges"
+        if not automatic:
+            self.placement_label.setText("Placement: fixed Axes baseline.")
+            self.convert_button.setEnabled(False)
+            return
+        lower = self._ref_text(placement.get("lower_ref"))
+        upper_refs = placement.get("upper_refs") or ()
+        upper = ", ".join(self._ref_text(item) for item in upper_refs)
+        self.placement_label.setText(
+            "Automatic placement sources:\n"
+            f"Lower range: {lower}\n"
+            f"Upper ranges: {upper}"
+        )
+        self.convert_button.setEnabled(True)
+
+    def convert_to_fixed(self) -> bool:
+        """Store the current baseline and height as a fixed placement."""
+
+        try:
+            service = self.context.reference_marks
+            if service is None:
+                raise RuntimeError("Reference Marks service is unavailable.")
+            result = perform_editor_action(
+                self.context,
+                "Convert Reflection Positions to Fixed",
+                lambda: service.convert_to_fixed_placement(self.controller),
+            )
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            self.sync_from_controller()
+            return False
+        if not self.context.messages.present(
+            result,
+            success="Reflection placement converted to fixed.",
+        ):
+            self.sync_from_controller()
+            return False
+        self.sync_from_controller()
+        return True
 
     def dispose(self) -> None:
         """Disconnect the local submit callback idempotently."""
 
         try:
             self.apply_button.clicked.disconnect(self.apply_data)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self.convert_button.clicked.disconnect(self.convert_to_fixed)
         except (RuntimeError, TypeError):
             pass
 
@@ -679,6 +743,18 @@ class PropertySection(ComponentEditorBase, EditorSection):
 
         for binding in self._text_bindings.values():
             binding.cancel()
+
+
+class ReferenceMarksPositionSection(PropertySection):
+    """Keep automatic Reflection baseline visible but not editable."""
+
+    def sync_from_controller(self) -> None:
+        super().sync_from_controller()
+        placement = self.controller.state.data.get("placement") or {}
+        automatic = placement.get("kind") == "between_table_ranges"
+        editor = self._editors.get("baseline")
+        if editor is not None:
+            editor.setEnabled(not automatic)
 
 
 class ColorbarSourceSection(QWidget, EditorSection):

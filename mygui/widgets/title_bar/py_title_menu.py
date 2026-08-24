@@ -1,6 +1,6 @@
 """Build file, chart, layout, and element menus for the title bar."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -18,6 +18,7 @@ from mygui.widgets.table.py_table import PyTable
 from mygui.widgets.title_bar.py_title_button import MenuButton, SelectMenuButton
 from mygui.widgets.title_bar.py_action_gallery import ResponsiveActionGallery
 from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
+from mygui.widgets.title_bar.titlebar_dialog.figure_export_dialog import FigureExportDialog
 from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
     axes_layout_presets,
     normalized_layout_icon,
@@ -127,11 +128,12 @@ def load_text_into_table(file_name: str, table: PyTable, figure_window=None, par
 class MenuBar(QFrame):
     """Provide the menu bar title-bar menu."""
 
-    def __init__(self, table: PyTable, figure_window=None):
+    def __init__(self, table: PyTable, figure_window=None, settings: QSettings | None = None):
         super().__init__()
 
         self.table = table
         self.figure_window = figure_window
+        self.settings = settings
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
@@ -211,21 +213,38 @@ class MenuBar(QFrame):
         self.file_menu.addAction(file_export_data_action)
 
     def export_current_figure(self):
-        """Export current figure."""
+        """Export the current Figure tab through the shared export window."""
 
-        if self.figure_window is None or self.figure_window.current_canva is None:
-            QMessageBox.warning(self, "导出当前图片", "Please select a figure canvas first.")
+        canvas = None
+        if self.figure_window is not None:
+            canvas = self.figure_window.current_canva
+        self.export_canvas(canvas)
+
+    def export_canvas(self, explicit_canvas=None):
+        """Open the export window for one explicit Canvas."""
+
+        canvas = explicit_canvas
+        if canvas is None:
+            QMessageBox.warning(
+                self, "导出当前图片", "Please select a figure canvas first."
+            )
             return
-
-        file_name, _ = QFileDialog.getSaveFileName(
-            self, "导出当前图片", "", "PNG Image (*.png);;PDF File (*.pdf);;SVG File (*.svg)")
-        if not file_name:
+        color_library = getattr(canvas, "color_library", None)
+        if color_library is None and self.figure_window is not None:
+            color_library = getattr(self.figure_window, "color_library", None)
+        if color_library is None:
+            QMessageBox.warning(
+                self, "导出当前图片", "The shared color library is unavailable."
+            )
             return
-
-        try:
-            self.figure_window.current_canva.save(file_name)
-        except Exception as exc:
-            QMessageBox.warning(self, "导出当前图片", str(exc))
+        dialog = FigureExportDialog(
+            context=canvas.export_context(),
+            color_library=color_library,
+            settings=self.settings,
+            export_callable=canvas.export_figure,
+            parent=self.window(),
+        )
+        dialog.exec()
 
     def export_data(self):
         """Export data."""

@@ -39,7 +39,10 @@ from .controllers import (
     decode_in_axes_image,
     normalize_linestyle,
     normalize_position_ref,
+    normalize_reference_marks_data,
     normalize_reference_positions,
+    normalize_reflection_placement,
+    reflection_placement_is_automatic,
     validate_controller_contracts,
 )
 from .matplotlib_removal import (
@@ -154,7 +157,10 @@ __all__ = [
     "decode_in_axes_image",
     "normalize_linestyle",
     "normalize_position_ref",
+    "normalize_reference_marks_data",
     "normalize_reference_positions",
+    "normalize_reflection_placement",
+    "reflection_placement_is_automatic",
     "validate_controller_contracts",
     "register_figure_components",
 ]

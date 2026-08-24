@@ -100,6 +100,12 @@ from mygui.figuremodify.in_axes import (
 
 from mygui import tex_config
 from mygui import status_messages
+from mygui.figure_export import (
+    FigureExportContext,
+    FigureExportRequest,
+    compatible_export_request,
+    publish_export_file,
+)
 from mygui.database import (
     ColumnRef,
     ColumnType,
@@ -220,6 +226,10 @@ class _ProjectNavigationToolbar(NavigationToolbar):
             dialog.accepted.connect(self._project_history.end_interaction)
         dialog.rejected.connect(self._project_history.cancel_interaction)
         return result
+
+    def save_figure(self, *args):
+        figure_canvas = self.parent()
+        figure_canvas.exportRequested.emit(figure_canvas)
 
     def press_pan(self, event):
         started = self._project_history.begin_interaction("Pan Figure View")
@@ -371,6 +381,7 @@ class PyFigureCanvas(QWidget):
     """Provide the py figure canvas Qt widget."""
 
     componentSelectionChanged = Signal(str)
+    exportRequested = Signal(object)
 
     def __init__(
         self,
@@ -2867,6 +2878,7 @@ class PyFigureCanvas(QWidget):
         component_order: int | None = None,
         announce: bool = True,
         position_ref=None,
+        placement=None,
     ):
         """Create and publish one Reflection Positions component atomically."""
 
@@ -2880,12 +2892,19 @@ class PyFigureCanvas(QWidget):
         controller = None
         runtime = None
         with self.component_registry.registration_transaction() as transaction:
-            runtime, normalized_positions, normalized_ref, normalized = (
+            (
+                runtime,
+                normalized_positions,
+                normalized_ref,
+                normalized,
+                normalized_placement,
+            ) = (
                 self.reference_marks_service.create_runtime(
                     owner_axes_id,
                     positions,
                     properties,
                     position_ref,
+                    placement,
                 )
             )
             transaction.on_rollback(
@@ -2908,6 +2927,7 @@ class PyFigureCanvas(QWidget):
                 data={
                     "positions": normalized_positions,
                     "position_ref": normalized_ref,
+                    "placement": normalized_placement,
                 },
             )
             controller = ReferenceMarksController(state, target=runtime)
@@ -3054,15 +3074,42 @@ class PyFigureCanvas(QWidget):
             status_messages.show_success(f"{label} created.")
         return runtime
 
+    def export_context(self) -> FigureExportContext:
+        """Return the export summary. Callers must not read canvas.fig."""
+
+        size_inches = self.fig.get_size_inches()
+        return FigureExportContext(
+            project_name=self.project_name,
+            document_dpi=float(self.document_dpi),
+            width_inches=float(size_inches[0]),
+            height_inches=float(size_inches[1]),
+        )
+
+    def export_figure(self, request: FigureExportRequest) -> None:
+        """Write one validated Figure.savefig request through an atomic publish."""
+
+        if not isinstance(request, FigureExportRequest):
+            raise TypeError("export_figure requires a FigureExportRequest.")
+        kwargs = request.savefig_kwargs()
+
+        def write(temporary_path) -> None:
+            with matplotlib_style_context(self.component_style):
+                self.fig.savefig(temporary_path, **kwargs)
+
+        try:
+            publish_export_file(request.path, write)
+        finally:
+            # print_figure may leave display-space Text positions from the
+            # export DPI; restore the on-screen Figure without changing state.
+            self.redraw()
+
     def save(self, filename, dpi=None):
         """Save the current figure through the selected destination."""
 
-        if dpi is None:
-            save_dpi = self.document_dpi
-        else:
-            save_dpi = dpi
-        with matplotlib_style_context(self.component_style):
-            self.fig.savefig(filename, dpi=save_dpi)
+        save_dpi = self.document_dpi if dpi is None else dpi
+        self.export_figure(
+            compatible_export_request(filename, dpi=float(save_dpi))
+        )
 
     def dependent_records(self, refs: set[ColumnRef]) -> ComponentDependencySnapshot:
         """Return Controller snapshots for table-deletion undo."""
@@ -3372,6 +3419,7 @@ class PyFigureCanvas(QWidget):
             component_order=state.order,
             announce=False,
             position_ref=state.data.get("position_ref"),
+            placement=state.data.get("placement"),
         )
 
     def _materialize_reference_line(self, state, _transaction) -> None:

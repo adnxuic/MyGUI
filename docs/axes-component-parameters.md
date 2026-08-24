@@ -46,7 +46,7 @@ Plus the shared export parameters above.
 | Y limits (ylim) | Range editor | The Y data range (min, max). | 0.0 to 1.0 |
 | Autoscale X (autoscalex_on) | Checkbox | Automatically fits the X range to the data. Re-enabling it immediately recalculates the data limits and fits the current data. | On |
 | Autoscale Y (autoscaley_on) | Checkbox | Automatically fits the Y range to the data. Re-enabling it immediately recalculates the data limits and fits the current data, then reapplies any lower-Y visual reserve. | On |
-| Lower Y reserve (y_lower_reserve) | Number | Extra visual space added below the ordinary autoscale interval, as a fraction of the final Axes height. After each ordinary Y autoscale the interval expands toward the visual bottom in axis-transform space by `S × r / (1-r)`, so autoscale content occupies the upper `1-r` of the Axes. The expansion is not accumulated across repeated autoscales. Manual Y limits are used unchanged while autoscale is off. Ordinary Axes default to `0`; XRD main plots use `0.1`. | Finite `0 <= r < 0.9`; default `0.0` |
+| Lower Y reserve (y_lower_reserve) | Number | Extra visual space added below the ordinary autoscale interval, as a fraction of the final Axes height. After each ordinary Y autoscale the interval expands toward the visual bottom in axis-transform space by `S × r / (1-r)`, so autoscale content occupies the upper `1-r` of the Axes. The expansion is not accumulated across repeated autoscales. Manual Y limits are used unchanged while autoscale is off. Ordinary Axes default to `0`; XRD Main Plot + Residual and Single without residual use `0.1`; Single with residual overlay uses `0.0`. | Finite `0 <= r < 0.9`; default `0.0` |
 
 ### Appearance
 

@@ -30,7 +30,7 @@ MyGUI targets [Matplotlib 3.9](https://matplotlib.org/3.9.0/); parameter pages l
 - **Working with Data** — [Table Data](table-data.md), [Data Preprocessing](data-preprocessing.md), [Text Data Import](text-data-import.md), [Excel Import](excel-import.md).
 - **Creating Charts** — [Axes Layout Templates](axes-layouts.md), [Multi-Series Chart Creation](multi-series-charts.md), [Function Curve](function-curve.md), [Interpolation](interpolation.md), [Fitting](fitting.md), [In-Axes Elements](in-axes.md), [Text Element](text-element.md), [Color Picker](color-picker.md).
 - **Editing Components** — [Components Tree](components-tree.md), [Chart Component Parameters](chart-component-parameters.md), [Axes and Figure Component Parameters](axes-component-parameters.md).
-- **Projects and Appearance** — [Project Files](project-files.md), [Style Creation Defaults](style-creation-defaults.md).
+- **Projects and Appearance** — [Project Files](project-files.md), [Figure Export](figure-export.md), [Style Creation Defaults](style-creation-defaults.md).
 - **Integrations and Configuration** — [TeX Rendering Integration](tex-integration.md), [Resource and Process Limits](resource-limits.md).
 - **Developer Reference** — [Component Controllers](component-controllers.md), [Component Inspector Architecture](component-inspector.md), [Atomic Component Deletion](component-deletion.md), [Component Extension Template](component-extension-template.md), [Component Properties (schema v15)](component-properties-v15.md).
 - **Maintenance & QA** — [Manual Smoke Test](smoke-test.md), [Documentation Site](documentation-site.md).

@@ -287,7 +287,11 @@ class ComponentInspectorTests(unittest.TestCase):
                 ) + 1,
                 selector={"object_id": component_id},
                 properties=ReferenceMarksController.default_properties(),
-                data={"positions": [15.2, 22.9], "position_ref": None},
+                data={
+                    "positions": [15.2, 22.9],
+                    "position_ref": None,
+                    "placement": {"kind": "fixed"},
+                },
             ),
             target=artist,
         )
@@ -342,7 +346,11 @@ class ComponentInspectorTests(unittest.TestCase):
                 show_error.assert_called_once()
             self.assertEqual(
                 controller.state.data,
-                {"positions": [], "position_ref": None},
+                {
+                    "positions": [],
+                    "position_ref": None,
+                    "placement": {"kind": "fixed"},
+                },
             )
             self.assertEqual(data.positions_input.text(), "")
             self.assertEqual(len(artist.get_segments()), 0)

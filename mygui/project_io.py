@@ -292,7 +292,7 @@ def migrate_v13_to_v14(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def migrate_v14_to_v15(snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Add position_ref and y_lower_reserve defaults from schema v14 to v15."""
+    """Add position_ref, placement, and y_lower_reserve defaults from schema v14 to v15."""
 
     validate_v14_project_snapshot(snapshot)
     migrated = deepcopy(snapshot)
@@ -301,6 +301,7 @@ def migrate_v14_to_v15(snapshot: dict[str, Any]) -> dict[str, Any]:
         if kind == "reference_marks":
             data = component.setdefault("data", {})
             data.setdefault("position_ref", None)
+            data.setdefault("placement", {"kind": "fixed"})
         elif kind == "axes":
             properties = component.setdefault("properties", {})
             properties.setdefault("y_lower_reserve", 0.0)

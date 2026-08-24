@@ -524,7 +524,11 @@ class ReferenceMarksControllerTests(unittest.TestCase):
             "axes-1",
             selector={"object_id": "reference-marks-1"},
             properties=ReferenceMarksController.default_properties(),
-            data={"positions": [15.2, 15.2, 22.9], "position_ref": None},
+            data={
+                "positions": [15.2, 15.2, 22.9],
+                "position_ref": None,
+                "placement": {"kind": "fixed"},
+            },
         )
         self.controller = ReferenceMarksController(
             self.component_state,
@@ -544,12 +548,22 @@ class ReferenceMarksControllerTests(unittest.TestCase):
         self.assertAlmostEqual(first_segment[1, 1], 0.105)
 
         change = self.controller.apply_state(
-            self.controller.state.clone(data={"positions": [], "position_ref": None})
+            self.controller.state.clone(
+                data={
+                    "positions": [],
+                    "position_ref": None,
+                    "placement": {"kind": "fixed"},
+                }
+            )
         )
         self.assertEqual(change.status, ChangeStatus.EMPTY)
         self.assertEqual(
             self.controller.snapshot().data,
-            {"positions": [], "position_ref": None},
+            {
+                "positions": [],
+                "position_ref": None,
+                "placement": {"kind": "fixed"},
+            },
         )
         self.assertEqual(len(self.artist.get_segments()), 0)
 

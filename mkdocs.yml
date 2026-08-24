@@ -76,6 +76,7 @@ nav:
       - Axes and Figure Component Parameters: axes-component-parameters.md
   - Projects and Appearance:
       - Project Files: project-files.md
+      - Figure Export: figure-export.md
       - Style Creation Defaults: style-creation-defaults.md
   - Integrations and Configuration:
       - TeX Rendering Integration: tex-integration.md

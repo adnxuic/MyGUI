@@ -573,6 +573,101 @@ def normalize_position_ref(value: Any) -> dict[str, str] | None:
         ) from exc
 
 
+FIXED_REFLECTION_PLACEMENT = {"kind": "fixed"}
+REFERENCE_MARKS_DATA_KEYS = frozenset({"positions", "position_ref", "placement"})
+
+
+def _required_position_ref(value: Any, *, field: str) -> dict[str, str]:
+    normalized = normalize_position_ref(value)
+    if normalized is None:
+        raise ComponentValidationError(
+            f"Reflection placement {field} must be a column reference."
+        )
+    return normalized
+
+
+def normalize_reflection_placement(value: Any) -> dict[str, Any]:
+    """Normalize the closed tagged Reflection Positions placement contract."""
+
+    if value is None:
+        return dict(FIXED_REFLECTION_PLACEMENT)
+    if not isinstance(value, dict):
+        raise ComponentValidationError(
+            "Reflection placement must be a tagged object."
+        )
+    kind = value.get("kind")
+    if kind == "fixed":
+        if set(value) != {"kind"}:
+            raise ComponentValidationError(
+                "Fixed Reflection placement may only contain kind."
+            )
+        return dict(FIXED_REFLECTION_PLACEMENT)
+    if kind == "between_table_ranges":
+        if set(value) != {"kind", "lower_ref", "upper_refs"}:
+            raise ComponentValidationError(
+                "between_table_ranges placement requires kind, lower_ref, "
+                "and upper_refs."
+            )
+        upper_refs = value.get("upper_refs")
+        if not isinstance(upper_refs, (list, tuple)) or len(upper_refs) != 2:
+            raise ComponentValidationError(
+                "between_table_ranges upper_refs must contain exactly two "
+                "column references."
+            )
+        return {
+            "kind": "between_table_ranges",
+            "lower_ref": _required_position_ref(
+                value.get("lower_ref"),
+                field="lower_ref",
+            ),
+            "upper_refs": [
+                _required_position_ref(item, field=f"upper_refs[{index}]")
+                for index, item in enumerate(upper_refs)
+            ],
+        }
+    raise ComponentValidationError(
+        "Reflection placement kind must be 'fixed' or 'between_table_ranges'."
+    )
+
+
+def complete_reference_marks_data(data: Any) -> dict[str, Any]:
+    """Fill v15 defaults then normalize the closed Reflection Positions data."""
+
+    if not isinstance(data, dict):
+        raise ComponentValidationError(
+            "Reference Marks data must be a mapping."
+        )
+    payload = dict(data)
+    payload.setdefault("position_ref", None)
+    payload.setdefault("placement", dict(FIXED_REFLECTION_PLACEMENT))
+    return normalize_reference_marks_data(payload)
+
+
+def normalize_reference_marks_data(data: Any) -> dict[str, Any]:
+    """Normalize the closed schema-v15 Reflection Positions data object."""
+
+    if not isinstance(data, dict):
+        raise ComponentValidationError(
+            "Reference Marks data must be a mapping."
+        )
+    if set(data) != REFERENCE_MARKS_DATA_KEYS:
+        raise ComponentValidationError(
+            "Reference Marks data requires positions, position_ref, and "
+            "placement."
+        )
+    return {
+        "positions": normalize_reference_positions(data["positions"]),
+        "position_ref": normalize_position_ref(data.get("position_ref")),
+        "placement": normalize_reflection_placement(data.get("placement")),
+    }
+
+
+def reflection_placement_is_automatic(value: Any) -> bool:
+    """Return whether baseline is owned by between-table-range placement."""
+
+    return normalize_reflection_placement(value)["kind"] == "between_table_ranges"
+
+
 def _y_lower_reserve_value(value: Any) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
@@ -3834,27 +3929,7 @@ class ReferenceMarksController(CollectionController):
     DELETE_IMPACTS = UpdateImpact.REDRAW
 
     def __init__(self, state: ComponentState, **kwargs: Any) -> None:
-        keys = set(state.data)
-        if keys == {"positions"}:
-            state = state.clone(
-                data={
-                    "positions": normalize_reference_positions(
-                        state.data["positions"]
-                    ),
-                    "position_ref": None,
-                }
-            )
-        elif keys == {"positions", "position_ref"}:
-            state = state.clone(
-                data={
-                    "positions": normalize_reference_positions(
-                        state.data["positions"]
-                    ),
-                    "position_ref": normalize_position_ref(
-                        state.data.get("position_ref")
-                    ),
-                }
-            )
+        state = state.clone(data=complete_reference_marks_data(state.data))
         super().__init__(state, **kwargs)
         self._table_repository = None
         self._table_project_id = None
@@ -3891,6 +3966,23 @@ class ReferenceMarksController(CollectionController):
     def set_property(self, key: str, value: Any) -> ComponentChange:
         """Route state-owned geometry/style fields through one full mutation."""
 
+        if (
+            key == "baseline"
+            and reflection_placement_is_automatic(
+                self.state.data.get("placement")
+            )
+        ):
+            return ComponentChange(
+                self.component_id,
+                "baseline",
+                self.state,
+                self.state,
+                ChangeStatus.REJECTED,
+                message=(
+                    "Automatic Reflection baseline is read-only. Convert to "
+                    "fixed position to edit it."
+                ),
+            )
         if key in {"baseline", "height", "linestyle"}:
             return self.apply_mutation(
                 ComponentMutation(
@@ -3913,12 +4005,7 @@ class ReferenceMarksController(CollectionController):
             )
 
     def _validate_data(self, state: ComponentState) -> None:
-        if set(state.data) != {"positions", "position_ref"}:
-            raise ComponentValidationError(
-                "Reference Marks data requires positions and position_ref."
-            )
-        normalize_reference_positions(state.data["positions"])
-        normalize_position_ref(state.data.get("position_ref"))
+        normalize_reference_marks_data(state.data)
 
     def _properties_require_data_apply(self, property_patch: dict[str, Any]) -> bool:
         return bool({"baseline", "height"} & set(property_patch))

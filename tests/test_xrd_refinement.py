@@ -38,6 +38,7 @@ from mygui.xrd_refinement import (
     XrdRefinementLegendSelection,
     XrdReflectionAppearance,
     XrdScatterAppearance,
+    format_chi2_text,
     plan_xrd_table_import,
 )
 
@@ -58,6 +59,31 @@ SMALL_PRF = """Demo Chi2: 2.5 CELL: 1 2 3 90 90 120 SPGR: P 1 TEMP: 25
 
 def small_result(source_name="Demo"):
     return parse_fullprof_prf_text(SMALL_PRF, source_name=source_name)
+
+
+OVERLAP_PRF = """Overlap Chi2: 1.0 CELL: 1 2 3 90 90 120 SPGR: P 1 TEMP: 25
+1 3 1.54056 1.54439 0 0 0 0
+3 0 0
+2Theta Yobs Ycal Yobs-Ycal Backg Posr (hkl) K
+10 100 90 95 5
+11 95 96 94 5.5
+12 80 75 82 6
+15.1876 0 ( 0 0 2 )
+15.2256 0 ( 0 0 2 )
+15.2256 0 ( 1 0 1 )
+"""
+
+NO_CHI2_PRF = """NoChi CELL: 1 2 3 90 90 120 SPGR: P 1 TEMP: 25
+1 3 1.54056 1.54439 0 0 0 0
+3 0 0
+2Theta Yobs Ycal Yobs-Ycal Backg Posr (hkl) K
+10 100 90 -910 5
+11 95 96 -1001 5.5
+12 80 75 -995 6
+15.1876 0 ( 0 0 2 )
+15.2256 0 ( 0 0 2 )
+15.2256 0 ( 1 0 1 )
+"""
 
 
 def column_by_name(sheet, name):
@@ -100,6 +126,17 @@ class XrdWindowTestCase(unittest.TestCase):
             value.close()
             value.deleteLater()
 
+    def single_spec(self):
+        value = AxesLayoutInput(
+            color_library=self.window.figure_window.color_library,
+            preset_key="single",
+        )
+        try:
+            return value.spec()
+        finally:
+            value.close()
+            value.deleteLater()
+
     def execute(self, legend=None, result=None):
         request = XrdRefinementImportRequest(
             result or small_result(),
@@ -110,13 +147,35 @@ class XrdWindowTestCase(unittest.TestCase):
             table_view=self.window.table,
         ).execute(self.main_residual_spec(), request)
 
+    def execute_single(
+        self,
+        *,
+        legend=None,
+        result=None,
+        draw_residual=True,
+        appearance=None,
+    ):
+        kwargs = {
+            "legend": legend or XrdRefinementLegendSelection(False, False, False, False),
+            "draw_single_residual": draw_residual,
+        }
+        if appearance is not None:
+            kwargs["appearance"] = appearance
+        request = XrdRefinementImportRequest(
+            result or small_result(),
+            **kwargs,
+        )
+        return XrdRefinementImportService(
+            canvas=self.canvas,
+            table_view=self.window.table,
+        ).execute(self.single_spec(), request)
+
 
 class XrdRefinementDialogTests(XrdWindowTestCase):
-    def test_xrd_tab_exists_only_for_main_residual_creation(self):
+    def test_xrd_tab_exists_only_for_single_and_main_residual_creation(self):
         dialogs = []
         try:
             for preset_key in (
-                "single",
                 "horizontal_compare",
                 "vertical_stack",
                 "grid_2x2",
@@ -138,16 +197,21 @@ class XrdRefinementDialogTests(XrdWindowTestCase):
                     preset_key,
                 )
 
-            dialog = PyLayoutDialog(
-                figure_window=self.window.figure_window,
-                preset_key="main_residual",
-            )
-            dialogs.append(dialog)
-            self.assertIsInstance(dialog.xrd_input, XrdRefinementInput)
-            self.assertIn(
-                "XRD Refinement",
-                [dialog.input.tabs.tabText(index) for index in range(dialog.input.tabs.count())],
-            )
+            for preset_key in ("single", "main_residual"):
+                dialog = PyLayoutDialog(
+                    figure_window=self.window.figure_window,
+                    preset_key=preset_key,
+                )
+                dialogs.append(dialog)
+                self.assertIsInstance(dialog.xrd_input, XrdRefinementInput)
+                self.assertEqual(dialog.xrd_input._layout_mode, preset_key)
+                self.assertIn(
+                    "XRD Refinement",
+                    [
+                        dialog.input.tabs.tabText(index)
+                        for index in range(dialog.input.tabs.count())
+                    ],
+                )
         finally:
             for dialog in dialogs:
                 dialog.close()
@@ -181,7 +245,68 @@ class XrdRefinementDialogTests(XrdWindowTestCase):
             dialog.close()
             dialog.deleteLater()
 
-    def test_browse_parses_immediately_and_invalid_input_disables_create(self):
+    def test_checkbox_off_keeps_the_existing_single_layout_path(self):
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            preset_key="single",
+        )
+        original_sheets = tuple(self.canvas.repository.project(self.canvas.project_id).sheets)
+        try:
+            self.assertFalse(dialog.xrd_input.import_checkbox.isChecked())
+            self.assertIsNone(dialog.xrd_input.request())
+            dialog.accept()
+            self.assertEqual(
+                tuple(self.canvas.repository.project(self.canvas.project_id).sheets),
+                original_sheets,
+            )
+            self.assertEqual(
+                len(self.canvas.component_registry.query(kind=ComponentKind.AXES)),
+                1,
+            )
+            stack = self.canvas.repository.undo_stack(self.canvas.project_id)
+            self.assertEqual(stack.count(), 1)
+            self.assertEqual(stack.text(0), "Create Axes Layout")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_draw_residual_is_single_only_and_gates_residual_controls(self):
+        main = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            preset_key="main_residual",
+        )
+        single = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            preset_key="single",
+        )
+        try:
+            self.assertTrue(main.xrd_input.draw_residual_checkbox.isHidden())
+            self.assertFalse(single.xrd_input.draw_residual_checkbox.isHidden())
+            self.assertTrue(single.xrd_input.draw_residual_checkbox.isChecked())
+            self.assertFalse(single.xrd_input.observed_legend.isChecked())
+            self.assertFalse(single.xrd_input.calculated_legend.isChecked())
+            self.assertFalse(single.xrd_input.reflection_legend.isChecked())
+            self.assertFalse(single.xrd_input.residual_legend.isChecked())
+            xrd = single.xrd_input
+            xrd.import_checkbox.setChecked(True)
+            self.assertTrue(xrd.residual_legend.isEnabled())
+            self.assertTrue(xrd.residual_property_button.isEnabled())
+            xrd.residual_legend.setChecked(True)
+            xrd.draw_residual_checkbox.setChecked(False)
+            self.assertFalse(xrd.residual_legend.isEnabled())
+            self.assertFalse(xrd.residual_legend.isChecked())
+            self.assertFalse(xrd.residual_property_button.isEnabled())
+            self.assertTrue(xrd.set_file_path(FIXTURE))
+            request = xrd.request()
+            self.assertFalse(request.draw_single_residual)
+            self.assertFalse(request.legend.residual)
+            xrd.draw_residual_checkbox.setChecked(True)
+            self.assertTrue(xrd.request().draw_single_residual)
+        finally:
+            main.close()
+            single.close()
+            main.deleteLater()
+            single.deleteLater()
         dialog = PyLayoutDialog(
             figure_window=self.window.figure_window,
             preset_key="main_residual",
@@ -464,6 +589,7 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
             references.state.data["position_ref"],
             outcome.table.reflection_position_ref.to_dict(),
         )
+        self.assertEqual(references.state.data["placement"], {"kind": "fixed"})
         self.assertEqual(
             [float(segment[0][0]) for segment in references.resolve_target().get_segments()],
             [item.position for item in result.reflections],
@@ -835,6 +961,12 @@ class XrdRefinementRoundTripTests(XrdWindowTestCase):
                     ],
                     outcome.table.reflection_position_ref.to_dict(),
                 )
+                self.assertEqual(
+                    canvas.component_registry.get(outcome.reflection_positions_id).state.data[
+                        "placement"
+                    ],
+                    {"kind": "fixed"},
+                )
                 main_legend = main.get_legend()
                 self.assertEqual(
                     [text.get_text() for text in main_legend.get_texts()],
@@ -842,6 +974,209 @@ class XrdRefinementRoundTripTests(XrdWindowTestCase):
                 )
                 self.assertTrue(main_legend.get_visible())
                 self.assertFalse(residual_axes.get_legend().get_visible())
+            finally:
+                restored_window.close()
+                self.app.processEvents()
+
+
+class XrdSingleAxesTests(XrdWindowTestCase):
+    def test_single_residual_creates_one_axes_prf_difference_and_chi2(self):
+        result = small_result()
+        outcome = self.execute_single(result=result)
+        registry = self.canvas.component_registry
+        self.assertIsNone(outcome.residual_axes_id)
+        self.assertIsNotNone(outcome.residual_id)
+        self.assertIsNotNone(outcome.chi2_text_id)
+        self.assertEqual(len(registry.query(kind=ComponentKind.AXES)), 1)
+        self.assertEqual(len(registry.query(role=ComponentRole.DATA_PLOT)), 2)
+        self.assertEqual(len(registry.query(role=ComponentRole.SCATTER)), 1)
+        self.assertEqual(len(registry.query(role=ComponentRole.REFLECTION_POSITIONS)), 1)
+        residual = registry.get(outcome.residual_id)
+        references = registry.get(outcome.reflection_positions_id)
+        chi2 = registry.get(outcome.chi2_text_id)
+        self.assertEqual(residual.state.parent_id, outcome.main_axes_id)
+        self.assertEqual(
+            residual.state.data["y_ref"],
+            outcome.table.prf_difference_ref.to_dict(),
+        )
+        np.testing.assert_allclose(
+            residual.resolve_target().get_ydata(),
+            result.profile.prf_difference,
+        )
+        self.assertNotEqual(
+            residual.state.data["y_ref"],
+            outcome.table.residual_ref.to_dict(),
+        )
+        self.assertEqual(
+            references.state.data["placement"]["kind"],
+            "between_table_ranges",
+        )
+        self.assertEqual(
+            references.state.data["placement"]["lower_ref"],
+            outcome.table.prf_difference_ref.to_dict(),
+        )
+        self.assertEqual(
+            references.state.data["placement"]["upper_refs"],
+            [outcome.table.yobs_ref.to_dict(), outcome.table.ycal_ref.to_dict()],
+        )
+        self.assertEqual(chi2.state.properties["text"], "χ²: 2.5")
+        self.assertEqual(chi2.state.properties["coordinate_system"], "axes")
+        self.assertEqual(
+            tuple(chi2.state.properties["position"]),
+            (0.04, 0.96),
+        )
+        self.assertEqual(chi2.state.properties["horizontalalignment"], "left")
+        self.assertEqual(chi2.state.properties["verticalalignment"], "top")
+        self.assertEqual(chi2.state.parent_id, outcome.main_axes_id)
+        axes = registry.get(outcome.main_axes_id)
+        self.assertEqual(axes.state.properties["y_lower_reserve"], 0.0)
+        self._assert_reflection_between_residual_and_data(outcome)
+
+    def _assert_reflection_between_residual_and_data(self, outcome):
+        registry = self.canvas.component_registry
+        axes = registry.resolve_target(outcome.main_axes_id)
+        residual = registry.get(outcome.residual_id).resolve_target()
+        observed = registry.get(outcome.observed_id).resolve_target()
+        calculated = registry.get(outcome.calculated_id).resolve_target()
+        references = registry.get(outcome.reflection_positions_id)
+        lower_top = float(np.nanmax(np.asarray(residual.get_ydata(), dtype=float)))
+        upper_bottom = min(
+            float(np.nanmin(np.asarray(observed.get_offsets()[:, 1], dtype=float))),
+            float(np.nanmin(np.asarray(calculated.get_ydata(), dtype=float))),
+        )
+        lower_frac = float(axes.transLimits.transform((0.0, lower_top))[1])
+        upper_frac = float(axes.transLimits.transform((0.0, upper_bottom))[1])
+        baseline = float(references.state.properties["baseline"])
+        height = float(references.state.properties["height"])
+        self.assertGreaterEqual(baseline, lower_frac - 1e-9)
+        self.assertLessEqual(baseline + height, upper_frac + 1e-9)
+        self.assertAlmostEqual(height, 0.025)
+        self.assertAlmostEqual(
+            baseline + height / 2.0,
+            (lower_frac + upper_frac) / 2.0,
+            places=6,
+        )
+
+    def test_single_without_residual_uses_fixed_reserve_and_no_blue_line(self):
+        outcome = self.execute_single(draw_residual=False)
+        registry = self.canvas.component_registry
+        self.assertIsNone(outcome.residual_id)
+        self.assertIsNone(outcome.residual_axes_id)
+        self.assertEqual(len(registry.query(role=ComponentRole.DATA_PLOT)), 1)
+        references = registry.get(outcome.reflection_positions_id)
+        self.assertEqual(references.state.data["placement"], {"kind": "fixed"})
+        self.assertEqual(references.state.properties["baseline"], 0.0375)
+        self.assertEqual(references.state.properties["height"], 0.025)
+        self.assertEqual(
+            registry.get(outcome.main_axes_id).state.properties["y_lower_reserve"],
+            0.1,
+        )
+        self.assertAlmostEqual(
+            float(references.resolve_target().get_segments()[0][0][1]),
+            0.0375,
+        )
+        self.assertAlmostEqual(
+            float(references.resolve_target().get_segments()[0][1][1]),
+            0.0625,
+        )
+
+    def test_missing_chi2_uses_em_dash_and_overlap_is_rejected(self):
+        outcome = self.execute_single(
+            result=parse_fullprof_prf_text(NO_CHI2_PRF, source_name="NoChi"),
+        )
+        chi2 = self.canvas.component_registry.get(outcome.chi2_text_id)
+        self.assertEqual(chi2.state.properties["text"], format_chi2_text(None))
+        self.assertEqual(chi2.state.properties["text"], "χ²: —")
+        with self.assertRaisesRegex(ValueError, "display gap"):
+            self.execute_single(
+                result=parse_fullprof_prf_text(OVERLAP_PRF, source_name="Overlap"),
+            )
+
+    def test_table_update_recenters_automatic_reflection(self):
+        outcome = self.execute_single()
+        references = self.canvas.component_registry.get(outcome.reflection_positions_id)
+        before = float(references.state.properties["baseline"])
+        sheet = self.canvas.repository.sheet(
+            self.canvas.project_id,
+            outcome.table.yobs_ref.sheet_id,
+        )
+        column = sheet.column(outcome.table.yobs_ref.column_id)
+        frame = sheet.frame[column.id].copy()
+        frame.iloc[:] = 400.0
+        sheet.frame[column.id] = frame
+        changes = self.canvas.chart_data_service.refresh_affected(
+            {outcome.table.yobs_ref}
+        )
+        self.assertTrue(changes)
+        self.assertTrue(all(change.ok for change in changes))
+        refresh = self.canvas.reference_marks_service.refresh(references)
+        self.assertTrue(refresh.ok)
+        after = float(references.state.properties["baseline"])
+        self.assertNotEqual(before, after)
+        self._assert_reflection_between_residual_and_data(outcome)
+
+    def test_convert_to_fixed_freezes_automatic_baseline(self):
+        outcome = self.execute_single()
+        references = self.canvas.component_registry.get(
+            outcome.reflection_positions_id
+        )
+        before = float(references.state.properties["baseline"])
+        change = self.canvas.reference_marks_service.convert_to_fixed_placement(
+            references
+        )
+        self.assertTrue(change.ok)
+        self.assertEqual(references.state.data["placement"], {"kind": "fixed"})
+        self.assertEqual(references.state.properties["baseline"], before)
+        sheet = self.canvas.repository.sheet(
+            self.canvas.project_id,
+            outcome.table.yobs_ref.sheet_id,
+        )
+        column = sheet.column(outcome.table.yobs_ref.column_id)
+        frame = sheet.frame[column.id].copy()
+        frame.iloc[:] = 400.0
+        sheet.frame[column.id] = frame
+        self.canvas.chart_data_service.refresh_affected({outcome.table.yobs_ref})
+        refresh = self.canvas.reference_marks_service.refresh(references)
+        self.assertTrue(refresh.ok)
+        self.assertEqual(
+            float(references.state.properties["baseline"]),
+            before,
+        )
+
+    def test_single_roundtrip_survives_deleted_prf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Transient.prf"
+            project_path = root / "xrd-single.mygui.json"
+            source.write_text(SMALL_PRF, encoding="utf-8")
+            result = parse_fullprof_prf(source)
+            outcome = self.execute_single(result=result)
+            save_project_snapshot(project_path, self.window.figure_window)
+            source.unlink()
+            restored_window = MainWindow()
+            try:
+                restore_project_snapshot(
+                    project_path,
+                    restored_window.table,
+                    restored_window.figure_window,
+                )
+                canvas = restored_window.figure_window.current_canva
+                self.assertEqual(
+                    len(canvas.component_registry.query(kind=ComponentKind.AXES)),
+                    1,
+                )
+                restored = canvas.component_registry.get(outcome.reflection_positions_id)
+                self.assertEqual(
+                    restored.state.data["placement"]["kind"],
+                    "between_table_ranges",
+                )
+                chi2 = canvas.component_registry.get(outcome.chi2_text_id)
+                self.assertEqual(chi2.state.properties["text"], "χ²: 2.5")
+                residual = canvas.component_registry.get(outcome.residual_id)
+                np.testing.assert_allclose(
+                    residual.resolve_target().get_ydata(),
+                    result.profile.prf_difference,
+                )
             finally:
                 restored_window.close()
                 self.app.processEvents()

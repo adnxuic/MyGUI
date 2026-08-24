@@ -23,7 +23,7 @@ The dark command row offers the File menu:
 - 打开项目... opens a saved .mygui.json project file.
 - 保存项目... saves the current project to its project path, or asks for a path.
 - Project Save As... saves the current project under a new path.
-- 导出当前图片... exports the current Figure canvas as a PNG, PDF, or SVG image.
+- 导出当前图片... opens the shared Figure export window for PNG, JPEG, TIFF, WebP, PDF, or SVG. See [Figure Export](figure-export.md).
 - 导出数据... exports the current project's table data as a JSON snapshot.
 
 Save, open, restore, and export semantics are documented in [Project Files](project-files.md).
@@ -55,6 +55,8 @@ Workbench preferences are stored in the versioned workspaceLayout QSettings grou
 Window geometry is not stored because every application launch starts maximized. Missing, malformed, obsolete, or unusable layout values fall back to the first-run sizes. The Settings dialog's reset action clears this group and reapplies the defaults. Version-1 tableVisible is migrated to the Table page and the equivalent Explorer visibility.
 
 These settings are application preferences. They are not written to .mygui.json project files, and opening a project does not replace them.
+
+Successful Figure exports store the last directory, format, and export options in the separate versioned `figureExport` group. See [Figure Export](figure-export.md).
 
 ## Project tabs, closing, and exit
 

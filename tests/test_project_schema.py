@@ -165,7 +165,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
         )
         self.assertEqual(
             component["data"],
-            {"positions": [15.2, 15.2, 22.9], "position_ref": None},
+            {"positions": [15.2, 15.2, 22.9], "position_ref": None, "placement": {"kind": "fixed"}},
         )
         validate_project_snapshot(valid)
         predecessor_v14 = as_schema_v14(valid)

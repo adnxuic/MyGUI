@@ -55,7 +55,7 @@ EDITABLE_DATA_KEYS: dict[EditorKey, frozenset[str]] = {
     (
         ComponentKind.REFERENCE_MARKS,
         ComponentRole.REFLECTION_POSITIONS,
-    ): frozenset({"positions", "position_ref"}),
+    ): frozenset({"positions", "position_ref", "placement"}),
 }
 
 

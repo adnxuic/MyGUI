@@ -74,6 +74,7 @@ APPLICATION_TEST_MODULES = {
     "test_canvas_popout": (ISOLATION_GUI_MODULE, 8.0),
     "test_reference_marks_table": (ISOLATION_GUI_MODULE, 8.0),
     "test_figure_dpi": (ISOLATION_GUI_MODULE, 6.9),
+    "test_figure_export": (ISOLATION_GUI_MODULE, 12.0),
     "test_text_import": (ISOLATION_GUI_MODULE, 6.7),
     "test_excel_import": (ISOLATION_GUI_MODULE, 6.6),
     "test_optional_dependencies": (ISOLATION_GUI_MODULE, 4.1),
