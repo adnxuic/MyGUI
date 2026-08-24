@@ -161,7 +161,7 @@ class ComponentTreeTests(unittest.TestCase):
             self.assertEqual(actual_parent, state.parent_id)
 
         axes_id = self.canvas.current_axes_component_id
-        group = self._group_index(model, axes_id, "Axes Components")
+        group = self._group_index(model, axes_id, "Axes Structure")
         self.assertTrue(group.isValid())
         self.assertIsNone(group.data(COMPONENT_ID_ROLE))
         self.assertTrue(group.data(VIRTUAL_GROUP_ROLE))
@@ -178,13 +178,19 @@ class ComponentTreeTests(unittest.TestCase):
         }
         self.assertIn(
             self.canvas.component_registry.query(
-                role=ComponentRole.X_AXIS
+                role=ComponentRole.TITLE
             )[0].component_id,
             semantic_ids,
         )
         self.assertIn(
             self.canvas.component_registry.query(
                 role=ComponentRole.LEGEND
+            )[0].component_id,
+            semantic_ids,
+        )
+        self.assertNotIn(
+            self.canvas.component_registry.query(
+                role=ComponentRole.X_AXIS
             )[0].component_id,
             semantic_ids,
         )
@@ -233,7 +239,7 @@ class ComponentTreeTests(unittest.TestCase):
         model = self.window.component_tree_host.model
         component_index = model.index_for_component(component_id)
         semantic_group = self._group_index(
-            model, axes_id, "Axes Components"
+            model, axes_id, "Axes Structure"
         )
 
         self.assertTrue(component_index.isValid())
@@ -548,7 +554,7 @@ class ComponentTreeTests(unittest.TestCase):
         semantic_group = self._group_index(
             host.model,
             first_axes,
-            "Axes Components",
+            "Axes Structure",
         )
         semantic_group_id = semantic_group.data(NODE_KEY_ROLE)
         host.tree.setExpanded(
@@ -622,7 +628,7 @@ class ComponentTreeTests(unittest.TestCase):
         original_semantic = self._group_index(
             model,
             axes_id,
-            "Axes Components",
+            "Axes Structure",
         )
         original_group_ids = {
             original_dynamic.data(NODE_KEY_ROLE),
@@ -652,7 +658,7 @@ class ComponentTreeTests(unittest.TestCase):
                 semantic = self._group_index(
                     restored_model,
                     restored_axes_id,
-                    "Axes Components",
+                    "Axes Structure",
                 )
                 self.assertTrue(dynamic.isValid())
                 self.assertTrue(semantic.isValid())
@@ -1094,6 +1100,101 @@ class ComponentTreeTests(unittest.TestCase):
 
         self.assertIn("revalidate-a", self.canvas.component_registry)
         self.assertIn("revalidate-b", self.canvas.component_registry)
+
+    def test_axes_natural_hierarchy_and_labels(self):
+        model = self.window.component_tree_host.model
+        axes_id = self.canvas.current_axes_component_id
+        axes_index = model.index_for_component(axes_id)
+        self.assertTrue(axes_index.isValid())
+
+        # Children of Axes: Axes Structure group, X Axis, Y Axis
+        axes_child_labels = [
+            model.index(r, 0, axes_index).data(Qt.DisplayRole)
+            for r in range(model.rowCount(axes_index))
+        ]
+        self.assertEqual(
+            axes_child_labels,
+            ["Axes Structure", "X Axis", "Y Axis"],
+        )
+
+        # Inside Axes Structure: Spines, Title, Legend
+        structure_group = model.index(0, 0, axes_index)
+        self.assertEqual(structure_group.data(Qt.DisplayRole), "Axes Structure")
+        structure_labels = [
+            model.index(r, 0, structure_group).data(Qt.DisplayRole)
+            for r in range(model.rowCount(structure_group))
+        ]
+        self.assertEqual(
+            structure_labels,
+            [
+                "Left Spine",
+                "Right Spine",
+                "Top Spine",
+                "Bottom Spine",
+                "Title",
+                "Legend",
+            ],
+        )
+
+        # Under X Axis: 5 direct flat items
+        x_axis_index = model.index(1, 0, axes_index)
+        self.assertEqual(x_axis_index.data(Qt.DisplayRole), "X Axis")
+        x_child_labels = [
+            model.index(r, 0, x_axis_index).data(Qt.DisplayRole)
+            for r in range(model.rowCount(x_axis_index))
+        ]
+        self.assertEqual(
+            x_child_labels,
+            [
+                "X Major Ticks",
+                "X Minor Ticks",
+                "X Major Grid",
+                "X Minor Grid",
+                "X Label",
+            ],
+        )
+
+        # Under X Major Ticks: Tick Labels directly
+        x_major_ticks_index = model.index(0, 0, x_axis_index)
+        self.assertEqual(x_major_ticks_index.data(Qt.DisplayRole), "X Major Ticks")
+        self.assertEqual(model.rowCount(x_major_ticks_index), 1)
+        x_major_labels_index = model.index(0, 0, x_major_ticks_index)
+        self.assertEqual(x_major_labels_index.data(Qt.DisplayRole), "Tick Labels")
+        self.assertFalse(x_major_labels_index.data(VIRTUAL_GROUP_ROLE))
+
+        # Under X Minor Ticks: Tick Labels directly
+        x_minor_ticks_index = model.index(1, 0, x_axis_index)
+        self.assertEqual(x_minor_ticks_index.data(Qt.DisplayRole), "X Minor Ticks")
+        self.assertEqual(model.rowCount(x_minor_ticks_index), 1)
+        x_minor_labels_index = model.index(0, 0, x_minor_ticks_index)
+        self.assertEqual(x_minor_labels_index.data(Qt.DisplayRole), "Tick Labels")
+        self.assertFalse(x_minor_labels_index.data(VIRTUAL_GROUP_ROLE))
+
+        # Under Y Axis: 5 direct flat items
+        y_axis_index = model.index(2, 0, axes_index)
+        self.assertEqual(y_axis_index.data(Qt.DisplayRole), "Y Axis")
+        y_child_labels = [
+            model.index(r, 0, y_axis_index).data(Qt.DisplayRole)
+            for r in range(model.rowCount(y_axis_index))
+        ]
+        self.assertEqual(
+            y_child_labels,
+            [
+                "Y Major Ticks",
+                "Y Minor Ticks",
+                "Y Major Grid",
+                "Y Minor Grid",
+                "Y Label",
+            ],
+        )
+
+        # Under Y Major Ticks: Tick Labels directly
+        y_major_ticks_index = model.index(0, 0, y_axis_index)
+        self.assertEqual(y_major_ticks_index.data(Qt.DisplayRole), "Y Major Ticks")
+        self.assertEqual(model.rowCount(y_major_ticks_index), 1)
+        y_major_labels_index = model.index(0, 0, y_major_ticks_index)
+        self.assertEqual(y_major_labels_index.data(Qt.DisplayRole), "Tick Labels")
+        self.assertFalse(y_major_labels_index.data(VIRTUAL_GROUP_ROLE))
 
 
 if __name__ == "__main__":

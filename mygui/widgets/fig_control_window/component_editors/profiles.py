@@ -676,13 +676,11 @@ def _spine_label(state):
 
 
 def _tick_label(state):
+    if state.kind is ComponentKind.TICK_LABEL_GROUP:
+        return "Tick Labels"
     axis = str(state.selector.get("axis", "")).upper()
     level = str(state.selector.get("level", "")).title()
-    suffix = (
-        "Tick Labels"
-        if state.kind is ComponentKind.TICK_LABEL_GROUP
-        else "Ticks"
-    )
+    suffix = "Ticks"
     return " ".join(part for part in (axis, level, suffix) if part)
 
 
@@ -711,6 +709,8 @@ def _semantic_sort(state):
         return (0,)
     if state.kind is ComponentKind.LEGEND:
         return (1,)
+    if state.role in (ComponentRole.X_LABEL, ComponentRole.Y_LABEL):
+        return (0,)
     level = str(state.selector.get("level", ""))
     return ({"major": 0, "minor": 1}.get(level, state.order),)
 
@@ -1288,6 +1288,24 @@ IN_AXES_IMAGE_PROFILE = EditorProfile(
 )
 
 
+TITLE_PROFILE = EditorProfile(
+    "title",
+    "Title",
+    _text_sections(free=False),
+    placement=EditorPlacement.SEMANTIC,
+    tree=TreePresentationSpec(
+        "Title",
+        preview=_property_value("text"),
+        sort_bucket=20,
+        sort_key=_semantic_sort,
+        group_title="Axes Structure",
+        group_key="axes_structure",
+        group_order=-1,
+        always_group=True,
+    ),
+)
+
+
 SEMANTIC_TEXT_PROFILE = EditorProfile(
     "semantic_text",
     "Text",
@@ -1296,12 +1314,8 @@ SEMANTIC_TEXT_PROFILE = EditorProfile(
     tree=TreePresentationSpec(
         _semantic_text_label,
         preview=_property_value("text"),
-        sort_bucket=20,
+        sort_bucket=30,
         sort_key=_semantic_sort,
-        group_title="Axes Components",
-        group_key="axes_components",
-        group_order=-1,
-        always_group=True,
     ),
 )
 
@@ -1347,8 +1361,8 @@ LEGEND_PROFILE = EditorProfile(
         preview=_property_value("title"),
         sort_bucket=20,
         sort_key=_semantic_sort,
-        group_title="Axes Components",
-        group_key="axes_components",
+        group_title="Axes Structure",
+        group_key="axes_structure",
         group_order=-1,
         always_group=True,
     ),
@@ -1464,6 +1478,10 @@ def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile
             _spine_label,
             sort_bucket=10,
             sort_key=_semantic_sort,
+            group_title="Axes Structure",
+            group_key="axes_structure",
+            group_order=-1,
+            always_group=True,
         ),
         ComponentKind.TICK_GROUP: TreePresentationSpec(
             _tick_label,
@@ -1524,20 +1542,7 @@ def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile
         title,
         tuple(sections),
         placement=placement,
-        tree=(
-            presentations[kind]
-            if kind is ComponentKind.FIGURE
-            else TreePresentationSpec(
-                presentations[kind].label,
-                preview=presentations[kind].preview,
-                sort_bucket=presentations[kind].sort_bucket,
-                sort_key=presentations[kind].sort_key,
-                group_title="Axes Components",
-                group_key="axes_components",
-                group_order=-1,
-                always_group=True,
-            )
-        ),
+        tree=presentations[kind],
     )
 
 
@@ -1587,8 +1592,12 @@ def register_production_profiles(editor_registry) -> None:
         TEXT_PROFILE,
         role=ComponentRole.TEXT,
     )
+    editor_registry.register_profile(
+        ComponentKind.TEXT,
+        TITLE_PROFILE,
+        role=ComponentRole.TITLE,
+    )
     for role in (
-        ComponentRole.TITLE,
         ComponentRole.X_LABEL,
         ComponentRole.Y_LABEL,
     ):

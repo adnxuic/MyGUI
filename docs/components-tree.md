@@ -18,8 +18,13 @@ or click the active page button again to collapse the Explorer.
 Component nodes and their ancestry always come from `ComponentState.parent_id`.
 The presentation adds non-selectable, UI-only group nodes:
 
-- every Axes has an `Axes Components` group for its fixed direct children,
-  including X/Y Axis, Spines, Title, and Legend;
+- every Axes has an `Axes Structure` group for its fixed structural children
+  (Left/Right/Top/Bottom Spine, Title, Legend), while `X Axis` and `Y Axis`
+  are direct backbone children under the Axes alongside dynamic charts/curves;
+- under `X Axis` and `Y Axis`, fixed components (Major Ticks, Minor Ticks,
+  Major Grid, Minor Grid, Axis Label) are direct children without extra folders;
+- under Major and Minor Ticks, `Tick Labels` appears directly without intermediate
+  virtual folders;
 - two or more removable siblings with the same `kind` and role are collected
   under a plural role group such as `Function Curves`, `Plots`, `Scatters`,
   or `Texts`;
