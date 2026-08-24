@@ -55,6 +55,17 @@ Every project tab contains one matplotlib navigation toolbar above its canvas:
 | Subplots | Opens the subplot configuration dialog, whose sliders set the Figure margins (left, right, bottom, top) and the horizontal and vertical spacing between Axes. |
 | Save | Opens the image save dialog (PNG by default). |
 | Undo / Redo | Steps through committed Table and Figure commands for this project. |
+| Canvas Window | Moves the same live canvas into a maximized, non-modal window. Closing that window returns the canvas to its project tab. |
+
+The Canvas Window button is always the rightmost toolbar action. The separate
+window contains only the existing canvas viewport, keeps the project's fixed
+Figure size and document DPI, and shows scroll bars when the canvas exceeds the
+available screen area. Edits made in the main window appear in it immediately,
+because it hosts the one live canvas rather than a second Figure or Canvas.
+The window is closed with its system close button or with Esc, which returns
+the canvas, its scroll position, and the keyboard focus to the project tab.
+Esc works while the canvas itself holds the focus and is the only key this
+feature binds; the toolbar button has no shortcut.
 
 ### Keyboard shortcuts
 
@@ -72,6 +83,7 @@ Matplotlib's default key bindings are active while the canvas has focus:
 | G | Cycles the major and minor grid visibility of the Axes under the pointer. |
 | k / L | Toggles the X-axis scale of the Axes under the pointer between linear and log. |
 | l | Toggles the Y-axis scale of the Axes under the pointer between linear and log. |
+| Esc | Closes the Canvas Window and returns its canvas to the project tab. Has no effect on a canvas shown in its project tab. |
 
 The default Matplotlib bindings f and Ctrl+F (fullscreen) and Ctrl+W and q (close figure) are accepted by the default handler but have no effect on MyGUI's embedded project canvas.
 

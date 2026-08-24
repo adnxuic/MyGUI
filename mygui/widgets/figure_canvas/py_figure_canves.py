@@ -3,12 +3,19 @@
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import wraps
+from functools import partial, wraps
 from typing import Any, Optional
 from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
     QDialogButtonBox,
+    QLabel,
     QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -284,6 +291,82 @@ class _PreparedChartSeries:
     excluded_count: int
 
 
+class _CanvasPopoutWindow(QDialog):
+    """Temporarily host one Canvas scroll area in a top-level window."""
+
+    def __init__(self, owner: "PyFigureCanvas") -> None:
+        # Keep this native window parentless.  A QDialog whose QObject parent
+        # is the Canvas can become only a transient/owned window on Windows;
+        # with MyGUI's custom main window that leaves the dialog behind the
+        # owner even after raise_()/activateWindow().  PyFigureCanvas retains
+        # and closes this object explicitly, so QObject parenting is not
+        # needed for lifetime management.
+        super().__init__(None, Qt.Window)
+        self._owner = owner
+        self._content: QWidget | None = None
+        self._canvas_returned = False
+        self.setObjectName("figure_popout_window")
+        self.setWindowModality(Qt.NonModal)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        # Esc must close the window even while the Canvas holds the keyboard
+        # focus, and the Matplotlib canvas consumes key events without
+        # propagating them.  A window shortcut is resolved before the focus
+        # widget sees the key, unlike QDialog's own Esc handling.
+        self._close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        self._close_shortcut.setContext(Qt.WindowShortcut)
+        self._close_shortcut.activated.connect(self.close)
+
+    def attach_content(self, content: QWidget) -> None:
+        """Attach the unique live Canvas content widget."""
+
+        if self._content is not None:
+            raise RuntimeError("The Canvas popout already owns content.")
+        self._content = content
+        self.layout().addWidget(content)
+        # The project tab hid this widget explicitly when its QStackedWidget
+        # switched to the placeholder.  Reparenting preserves that flag, so
+        # without an explicit show the window stays empty and reports a
+        # 0 x 0 size hint.
+        content.setVisible(True)
+        self.layout().activate()
+
+    @property
+    def canvas_returned(self) -> bool:
+        """Return whether this window already handed its Canvas back."""
+
+        return self._canvas_returned
+
+    def release_content(self) -> QWidget | None:
+        """Detach and return the hosted content exactly once."""
+
+        content = self._content
+        self._canvas_returned = True
+        if content is None:
+            return None
+        self.layout().removeWidget(content)
+        self._content = None
+        return content
+
+    def closeEvent(self, event) -> None:
+        """Return the Canvas content before the top-level window closes."""
+
+        self._owner._restore_canvas_from_popout(self)
+        super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        """Return the Canvas on every QDialog result path.
+
+        ``QDialog.reject()`` hides the window without sending a close event,
+        which would otherwise leave the live Canvas inside an invisible window
+        while the project tab keeps showing its placeholder.
+        """
+
+        self._owner._restore_canvas_from_popout(self)
+        super().done(result)
+
+
 class PyFigureCanvas(QWidget):
     """Provide the py figure canvas Qt widget."""
 
@@ -316,6 +399,9 @@ class PyFigureCanvas(QWidget):
         self.style = style
         self.project_path = project_path
         self._disposed = False
+        self._canvas_popout_window: _CanvasPopoutWindow | None = None
+        self._canvas_focus_return: QWidget | None = None
+        self._canvas_scroll_return: tuple[int, int] | None = None
         self._tex_render_listener = None
         self._restoring_component_tree_now = False
         self._selection_repair_pending = False
@@ -485,6 +571,21 @@ class PyFigureCanvas(QWidget):
         self.scroArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # Set scroll bar visibility policy
         self.scroArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # Set scroll bar visibility policy
 
+        self._canvas_content_stack = QStackedWidget(self)
+        self._canvas_content_stack.setObjectName("figure_canvas_content_stack")
+        self._canvas_popout_placeholder = QLabel(
+            "Canvas is open in a separate window.",
+            self._canvas_content_stack,
+        )
+        self._canvas_popout_placeholder.setObjectName(
+            "figure_popout_placeholder"
+        )
+        self._canvas_popout_placeholder.setAlignment(Qt.AlignCenter)
+        self._canvas_popout_placeholder.setWordWrap(True)
+        self._canvas_content_stack.addWidget(self.scroArea)
+        self._canvas_content_stack.addWidget(self._canvas_popout_placeholder)
+        self._canvas_content_stack.setCurrentWidget(self.scroArea)
+
         layout = QVBoxLayout()
 
         toolbox = _ProjectNavigationToolbar(
@@ -503,8 +604,33 @@ class PyFigureCanvas(QWidget):
         toolbox.addAction(self.undo_action)
         toolbox.addAction(self.redo_action)
 
+        toolbar_spacer = QWidget(toolbox)
+        toolbar_spacer.setObjectName("figure_toolbar_spacer")
+        toolbar_spacer.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Preferred,
+        )
+        toolbox.addWidget(toolbar_spacer)
+        popout_description = "Open canvas in large window"
+        popout_icon = toolbox.style().standardIcon(
+            QStyle.SP_TitleBarMaxButton
+        )
+        self.popout_action = toolbox.addAction(
+            popout_icon,
+            "Open Canvas Window",
+        )
+        self.popout_action.setObjectName("figure_popout_action")
+        self.popout_action.setToolTip(popout_description)
+        self.popout_action.setStatusTip(popout_description)
+        self.popout_action.triggered.connect(self.open_canvas_window)
+        popout_button = toolbox.widgetForAction(self.popout_action)
+        if popout_button is not None:
+            popout_button.setObjectName("figure_popout_button")
+            popout_button.setAccessibleName(popout_description)
+            popout_button.setToolTip(popout_description)
+
         layout.addWidget(toolbox)
-        layout.addWidget(self.scroArea)
+        layout.addWidget(self._canvas_content_stack)
 
         self.setLayout(layout)
         self._tex_render_listener = self._tex_runtime_changed
@@ -515,6 +641,137 @@ class PyFigureCanvas(QWidget):
         """Return the authoritative repository project name."""
 
         return self.repository.project(self.project_id).name
+
+    def _canvas_window_title(self, project_name: str | None = None) -> str:
+        """Return the native title for this project's Canvas window."""
+
+        name = self.project_name if project_name is None else project_name
+        return f"{name} — Canvas"
+
+    def _canvas_scroll_position(self) -> tuple[int, int]:
+        """Return the current Canvas viewport scroll offsets."""
+
+        return (
+            self.scroArea.horizontalScrollBar().value(),
+            self.scroArea.verticalScrollBar().value(),
+        )
+
+    def _apply_canvas_scroll_position(
+        self,
+        position: tuple[int, int] | None,
+    ) -> None:
+        """Restore Canvas viewport scroll offsets when one was recorded."""
+
+        if position is None or self._disposed:
+            return
+        try:
+            self.scroArea.horizontalScrollBar().setValue(position[0])
+            self.scroArea.verticalScrollBar().setValue(position[1])
+        except RuntimeError:
+            # The project was released before the queued restore ran.
+            return
+
+    def open_canvas_window(self) -> None:
+        """Show the unique live Canvas in one maximized non-modal window."""
+
+        if self._disposed:
+            return
+        existing = self._canvas_popout_window
+        if existing is not None:
+            if existing.isMinimized() or not existing.isVisible():
+                existing.showMaximized()
+            existing.raise_()
+            existing.activateWindow()
+            self.canva.setFocus(Qt.OtherFocusReason)
+            return
+
+        focus_widget = QApplication.focusWidget()
+        if focus_widget is not None and (
+            focus_widget is self or self.isAncestorOf(focus_widget)
+        ):
+            self._canvas_focus_return = focus_widget
+        else:
+            self._canvas_focus_return = None
+
+        window = _CanvasPopoutWindow(self)
+        window.setWindowTitle(self._canvas_window_title())
+        self._canvas_popout_window = window
+        source_size = self._canvas_content_stack.size()
+        self._canvas_scroll_return = self._canvas_scroll_position()
+        try:
+            self._canvas_content_stack.setCurrentWidget(
+                self._canvas_popout_placeholder
+            )
+            self._canvas_content_stack.removeWidget(self.scroArea)
+            window.attach_content(self.scroArea)
+            # Seed the geometry the window returns to when the user restores
+            # it down from the initial maximized state.
+            window.resize(
+                max(640, source_size.width()),
+                max(480, source_size.height()),
+            )
+            window.showMaximized()
+            window.raise_()
+            window.activateWindow()
+            self.canva.setFocus(Qt.OtherFocusReason)
+        except Exception:
+            self._restore_canvas_from_popout(window)
+            window.hide()
+            raise
+
+    def _restore_canvas_from_popout(
+        self,
+        window: _CanvasPopoutWindow,
+    ) -> None:
+        """Restore the unique Canvas scroll area to its project tab."""
+
+        if window.canvas_returned:
+            return
+        content = window.release_content()
+        if (
+            content is None
+            and self._canvas_content_stack.indexOf(self.scroArea) < 0
+        ):
+            content = self.scroArea
+        scroll_return = self._canvas_scroll_return
+        self._canvas_scroll_return = None
+        if content is not None:
+            if content is not self.scroArea:
+                raise RuntimeError("The Canvas popout returned unknown content.")
+            if self._canvas_content_stack.indexOf(content) < 0:
+                self._canvas_content_stack.insertWidget(0, content)
+            self._canvas_content_stack.setCurrentWidget(content)
+            content.setVisible(True)
+            self._apply_canvas_scroll_position(scroll_return)
+            if scroll_return is not None:
+                # The viewport regains its tab geometry, and with it the scroll
+                # bars that define the offset ranges, only during the following
+                # layout pass; restore again once those ranges are final.
+                QTimer.singleShot(
+                    0,
+                    partial(self._apply_canvas_scroll_position, scroll_return),
+                )
+
+        if self._canvas_popout_window is window:
+            self._canvas_popout_window = None
+        if not self._disposed and self._canvas_focus_return is not None:
+            try:
+                self._canvas_focus_return.setFocus(Qt.OtherFocusReason)
+            except RuntimeError:
+                pass
+        self._canvas_focus_return = None
+        window.deleteLater()
+
+    def _close_canvas_window(self) -> None:
+        """Close and restore this project's Canvas popout idempotently."""
+
+        window = self._canvas_popout_window
+        if window is None:
+            return
+        window.close()
+        if self._canvas_popout_window is window:
+            self._restore_canvas_from_popout(window)
+            window.hide()
 
     @property
     def current_axes(self) -> Axes | None:
@@ -568,6 +825,10 @@ class PyFigureCanvas(QWidget):
                 self.project_id,
                 name,
             )
+            if self._canvas_popout_window is not None:
+                self._canvas_popout_window.setWindowTitle(
+                    self._canvas_window_title(name)
+                )
             return
         if key == "style":
             self.style = str(value)
@@ -1012,6 +1273,7 @@ class PyFigureCanvas(QWidget):
         if self._disposed:
             return
         self._disposed = True
+        self._close_canvas_window()
         if self._tex_render_listener is not None:
             tex_config.unregister_tex_render_listener(
                 self._tex_render_listener

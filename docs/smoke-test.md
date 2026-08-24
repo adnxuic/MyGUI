@@ -24,6 +24,21 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
 8. Switch repeatedly between the figure inspector, TeX, and MATLAB pages; confirm the main layout does not jump or grow.
 9. On available 100%, 125%, 150%, and 200% displays, confirm text/icons remain clear and menus/dialogs stay on the active screen.
 10. Move the window between monitors with different scaling and verify native maximize/restore, resize, and snap behavior.
+11. In a project with at least one chart, click the rightmost Canvas Window
+    toolbar button. Confirm a maximized, non-modal native window immediately
+    renders the canvas content and contains only that viewport, while the
+    original tab shows its placeholder. Pan or zoom in the separate window and
+    edit a Component from the main window; confirm every edit appears there at
+    once and neither view changes the document size or DPI. Click the button
+    again and confirm no duplicate window is created. Close the window with its
+    system close button, reopen it, and close it again with Esc; confirm both
+    paths return the canvas, its scroll position, and the focus to the project
+    tab.
+12. Open Canvas Windows for two projects, switch tabs, and move the windows
+    between monitors. Confirm both stay usable and independently maximized.
+    Rename one project and confirm its window title updates. Close one project,
+    clear all projects, and exit the application with a window open; confirm no
+    orphan Canvas window or taskbar entry remains.
 
 For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 480 pixels at every display scale. Save and reopen the project and confirm its recorded DPI remains 100.
 

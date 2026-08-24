@@ -20,6 +20,13 @@ QFrame#figure_empty_state QLabel#empty_state_detail
     color: {{COLOR_TEXT_MUTED}};
 }
 
+QLabel#figure_popout_placeholder
+{
+    background-color: {{COLOR_CONTENT_BACKGROUND}};
+    color: {{COLOR_TEXT_MUTED}};
+    padding: {{SPACE_LG}}px;
+}
+
 QFrame#figure_empty_state QPushButton#empty_state_primary_button
 {
     min-height: 32px;
