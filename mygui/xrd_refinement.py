@@ -25,8 +25,8 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentMutation,
     ComponentRole,
-    normalize_reference_positions,
 )
+from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui.fullprof_prf import FullProfPrfResult
 
 
@@ -55,17 +55,61 @@ class XrdRefinementLegendSelection:
 
 
 @dataclass(frozen=True, slots=True)
+class XrdScatterAppearance:
+    """Observed scatter style chosen before XRD figure publication."""
+
+    color: str = "#D62728"
+    edgecolor: str = "#D62728"
+    marker: str = "o"
+    size: float = 1.0
+    linewidth: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class XrdPlotAppearance:
+    """Calculated or residual plot style chosen before publication."""
+
+    color: str
+    linewidth: float
+    linestyle: str = "-"
+
+
+@dataclass(frozen=True, slots=True)
+class XrdReflectionAppearance:
+    """Reflection Positions style chosen before XRD figure publication."""
+
+    label: str = ""
+    baseline: float = 0.0375
+    height: float = 0.025
+    color: str | None = None
+    linewidth: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class XrdAppearanceConfig:
+    """Non-persisted four-component appearance for one XRD import."""
+
+    observed: XrdScatterAppearance = XrdScatterAppearance()
+    calculated: XrdPlotAppearance = XrdPlotAppearance("#000000", 0.5)
+    residual: XrdPlotAppearance = XrdPlotAppearance("#0000FF", 0.2)
+    reflection: XrdReflectionAppearance = XrdReflectionAppearance()
+
+
+@dataclass(frozen=True, slots=True)
 class XrdRefinementImportRequest:
     """Controller-free, non-persisted request for one validated PRF result."""
 
     result: FullProfPrfResult
     legend: XrdRefinementLegendSelection = XrdRefinementLegendSelection()
+    appearance: XrdAppearanceConfig = XrdAppearanceConfig()
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, FullProfPrfResult):
             raise TypeError("XRD refinement import requires a parsed PRF result.")
         if not isinstance(self.legend, XrdRefinementLegendSelection):
             raise TypeError("XRD refinement import requires typed legend selections.")
+        if not isinstance(self.appearance, XrdAppearanceConfig):
+            raise TypeError("XRD refinement import requires typed appearance config.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +122,7 @@ class XrdTableImportPlan:
     yobs_ref: ColumnRef
     ycal_ref: ColumnRef
     residual_ref: ColumnRef
+    reflection_position_ref: ColumnRef
 
     @property
     def sheet_ids(self) -> tuple[str, str]:
@@ -171,6 +216,10 @@ def plan_xrd_table_import(
         column.name: ColumnRef(project.id, profile_sheet.id, column.id)
         for column in profile_sheet.columns
     }
+    reflection_refs = {
+        column.name: ColumnRef(project.id, reflection_sheet.id, column.id)
+        for column in reflection_sheet.columns
+    }
     return XrdTableImportPlan(
         profile_sheet=profile_sheet,
         reflection_sheet=reflection_sheet,
@@ -178,6 +227,7 @@ def plan_xrd_table_import(
         yobs_ref=refs["Yobs"],
         ycal_ref=refs["Ycal"],
         residual_ref=refs["Residual"],
+        reflection_position_ref=reflection_refs["2Theta"],
     )
 
 
@@ -354,8 +404,21 @@ class XrdRefinementImportService:
         before_ledger = canvas.color_consumption_ledger.history_snapshot()
         defaults = canvas.component_creation_defaults()
         preprocess = DataPreprocessSpec()
-        reflection_positions = normalize_reference_positions(
-            [item.position for item in request.result.reflections]
+        appearance = request.appearance
+        observed_style = appearance.observed
+        calculated_style = appearance.calculated
+        residual_style = appearance.residual
+        reflection_style = appearance.reflection
+        reflection_label = reflection_style.label
+        if request.legend.reflection_positions:
+            reflection_label = reflection_label or "Reflection positions"
+        else:
+            reflection_label = ""
+        reflection_color = reflection_style.color or defaults.reference_marks.color
+        reflection_width = (
+            defaults.reference_marks.linewidth
+            if reflection_style.linewidth is None
+            else reflection_style.linewidth
         )
 
         try:
@@ -367,67 +430,105 @@ class XrdRefinementImportService:
                 observed = canvas.add_scatters(
                     plan.two_theta_ref,
                     (plan.yobs_ref,),
-                    size=defaults.scatter.size,
-                    marker=defaults.scatter.marker,
+                    size=observed_style.size,
+                    marker=observed_style.marker,
                     preprocess=preprocess,
-                    color_selection=canvas.creation_color_cycle().peek(),
+                    color_selection=ColorSelection(observed_style.color),
                     record_recent=False,
                 )
                 calculated = canvas.add_plots(
                     plan.two_theta_ref,
                     (plan.ycal_ref,),
-                    style="-",
+                    style=calculated_style.linestyle,
                     size=defaults.line.markersize,
-                    linewidth=defaults.line.linewidth,
+                    linewidth=calculated_style.linewidth,
                     preprocess=preprocess,
-                    color_selection=canvas.creation_color_cycle().peek(),
+                    color_selection=ColorSelection(calculated_style.color),
                     record_recent=False,
                 )
                 reflection_id = new_id()
                 canvas.add_reference_marks(
-                    reflection_positions,
+                    [],
                     {
-                        "label": (
-                            "Reflection positions" if request.legend.reflection_positions else ""
-                        ),
-                        "color": defaults.reference_marks.color,
-                        "linewidth": defaults.reference_marks.linewidth,
+                        "label": reflection_label,
+                        "baseline": reflection_style.baseline,
+                        "height": reflection_style.height,
+                        "color": reflection_color,
+                        "linewidth": reflection_width,
                     },
                     object_id=reflection_id,
                     announce=False,
+                    position_ref=plan.reflection_position_ref.to_dict(),
                 )
 
                 canvas.update_current_axes(residual_id)
                 residual = canvas.add_plots(
                     plan.two_theta_ref,
                     (plan.residual_ref,),
-                    style="-",
+                    style=residual_style.linestyle,
                     size=defaults.line.markersize,
-                    linewidth=defaults.line.linewidth,
+                    linewidth=residual_style.linewidth,
                     preprocess=preprocess,
-                    color_selection=canvas.creation_color_cycle().peek(),
+                    color_selection=ColorSelection(residual_style.color),
                     record_recent=False,
                 )
 
-                label_result = canvas.component_registry.apply_transaction(
+                style_result = canvas.component_registry.apply_transaction(
                     (
                         ComponentMutation(
+                            main_id,
+                            properties={"y_lower_reserve": 0.1},
+                        ),
+                        ComponentMutation(
                             observed.component_ids[0],
-                            properties={"label": "Observed" if request.legend.observed else ""},
+                            properties={
+                                "label": "Observed" if request.legend.observed else "",
+                                "color": observed_style.color,
+                                "edgecolor": observed_style.edgecolor,
+                                "size": observed_style.size,
+                                "linewidth": observed_style.linewidth,
+                                "marker": {
+                                    "kind": "symbol",
+                                    "value": observed_style.marker,
+                                },
+                                "linestyle": {"kind": "preset", "value": "None"},
+                            },
                         ),
                         ComponentMutation(
                             calculated.component_ids[0],
                             properties={
-                                "label": ("Calculated" if request.legend.calculated else "")
+                                "label": (
+                                    "Calculated" if request.legend.calculated else ""
+                                ),
+                                "color": calculated_style.color,
+                                "linewidth": calculated_style.linewidth,
+                                "linestyle": {
+                                    "kind": "preset",
+                                    "value": calculated_style.linestyle,
+                                },
+                                "marker": {"kind": "symbol", "value": "None"},
+                                "drawstyle": "default",
+                                "gapcolor": None,
                             },
                         ),
                         ComponentMutation(
                             residual.component_ids[0],
-                            properties={"label": "Residual" if request.legend.residual else ""},
+                            properties={
+                                "label": "Residual" if request.legend.residual else "",
+                                "color": residual_style.color,
+                                "linewidth": residual_style.linewidth,
+                                "linestyle": {
+                                    "kind": "preset",
+                                    "value": residual_style.linestyle,
+                                },
+                                "marker": {"kind": "symbol", "value": "None"},
+                                "drawstyle": "default",
+                                "gapcolor": None,
+                            },
                         ),
                     )
                 )
-                self._require_change(label_result, "Could not configure XRD labels.")
+                self._require_change(style_result, "Could not configure XRD styles.")
                 self._set_axes_labels(main_id, residual_id)
                 self._configure_legends(
                     main_id,
@@ -506,11 +607,15 @@ class XrdRefinementImportService:
 __all__ = [
     "FIGURE_COMMAND_TEXT",
     "TABLE_COMMAND_TEXT",
+    "XrdAppearanceConfig",
+    "XrdPlotAppearance",
     "XrdPlotCreationError",
+    "XrdReflectionAppearance",
     "XrdRefinementImportOutcome",
     "XrdRefinementImportRequest",
     "XrdRefinementImportService",
     "XrdRefinementLegendSelection",
+    "XrdScatterAppearance",
     "XrdTableImportPlan",
     "plan_xrd_table_import",
 ]

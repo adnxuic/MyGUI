@@ -85,8 +85,8 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v14_figure,
-    validate_v14_figure,
+    normalize_v15_figure,
+    validate_v15_figure,
 )
 from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
@@ -445,7 +445,9 @@ class PyFigureCanvas(QWidget):
         )
         self.colorbar_service = ColorbarService(self.component_registry)
         self.reference_marks_service = ReferenceMarksService(
-            self.component_registry
+            self.component_registry,
+            self.repository,
+            self.project_id,
         )
         self.reference_guide_service = ReferenceGuideService(
             self.component_registry
@@ -512,6 +514,7 @@ class PyFigureCanvas(QWidget):
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
             history=self.figure_history,
+            project_id=self.project_id,
         )
         self.root_component_id = self._component_id("figure")
         source_root = self._source_component_state(self.root_component_id)
@@ -1323,6 +1326,11 @@ class PyFigureCanvas(QWidget):
         with self.figure_history.suspend_recording():
             results = self.chart_data_service.refresh_affected(
                 changes.changed_columns
+            )
+            results.extend(
+                self.reference_marks_service.refresh_affected(
+                    changes.changed_columns
+                )
             )
             pending_fits = self.fit_service.mark_sources_changed(
                 changes.changed_columns
@@ -2859,6 +2867,7 @@ class PyFigureCanvas(QWidget):
         object_id: str | None = None,
         component_order: int | None = None,
         announce: bool = True,
+        position_ref=None,
     ):
         """Create and publish one Reflection Positions component atomically."""
 
@@ -2872,11 +2881,12 @@ class PyFigureCanvas(QWidget):
         controller = None
         runtime = None
         with self.component_registry.registration_transaction() as transaction:
-            runtime, normalized_positions, normalized = (
+            runtime, normalized_positions, normalized_ref, normalized = (
                 self.reference_marks_service.create_runtime(
                     owner_axes_id,
                     positions,
                     properties,
+                    position_ref,
                 )
             )
             transaction.on_rollback(
@@ -2896,9 +2906,13 @@ class PyFigureCanvas(QWidget):
                 ),
                 selector={"object_id": component_id},
                 properties=normalized,
-                data={"positions": normalized_positions},
+                data={
+                    "positions": normalized_positions,
+                    "position_ref": normalized_ref,
+                },
             )
             controller = ReferenceMarksController(state, target=runtime)
+            controller.bind_table(self.repository, self.project_id)
             initialized = controller.apply_state(controller.state)
             if not initialized.ok:
                 raise ValueError(
@@ -3358,6 +3372,7 @@ class PyFigureCanvas(QWidget):
             object_id=state.id,
             component_order=state.order,
             announce=False,
+            position_ref=state.data.get("position_ref"),
         )
 
     def _materialize_reference_line(self, state, _transaction) -> None:
@@ -3656,7 +3671,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v14 component tree."""
+        """Materialize and apply a validated schema-v15 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -3689,7 +3704,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v14_figure(source)
+        source = normalize_v15_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3873,7 +3888,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v14 component tree used by persistence."""
+        """Return the canonical schema-v15 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3893,10 +3908,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v14_figure(snapshot)
+        return normalize_v15_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v14 Figure tree."""
+        """Validate and return the current complete schema-v15 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3905,7 +3920,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v14_figure(
+        validate_v15_figure(
             snapshot,
             available_refs,
             self.project_id,

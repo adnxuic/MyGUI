@@ -485,6 +485,7 @@ class EditorContext:
     dependency_service: object | None = None
     delete_command: Callable[..., bool] | None = None
     history: object | None = None
+    project_id: str | None = None
 
     @property
     def repository(self):

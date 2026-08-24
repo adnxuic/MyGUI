@@ -1,8 +1,8 @@
 # Legacy Component Properties (schema v10 migration input)
 
 This page records the closed property contracts accepted by the strict v10
-migration validator. New projects save schema v14; see
-[Component Properties (schema v14)](component-properties-v14.md). Schema v10
+migration validator. New projects save schema v15; see
+[Component Properties (schema v15)](component-properties-v15.md). Schema v10
 cannot contain Colorbar Components.
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,

@@ -26,7 +26,7 @@ from mygui.figuremodify.components import (
     ComponentValidationError,
 )
 from mygui.figuremodify.components.serialization import (
-    validate_v10_figure,
+    validate_v15_figure,
 )
 from mygui.project_io import (
     load_project_file,
@@ -111,7 +111,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             self.assertFalse(state.properties["autoscalex_on"])
 
         snapshot = self.canvas.component_snapshot()
-        validate_v10_figure(
+        validate_v15_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -498,7 +498,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             recursive=False,
         )
         self.assertEqual(legend_controller.state.properties["entry_scope"], "axes")
-        validate_v10_figure(
+        validate_v15_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

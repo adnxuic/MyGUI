@@ -32,7 +32,7 @@ from mygui.figuremodify.components import (
     ReferenceLineController,
     RestorePhase,
 )
-from mygui.figuremodify.components.serialization import validate_v14_figure
+from mygui.figuremodify.components.serialization import validate_v15_figure
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
@@ -799,7 +799,7 @@ class ReferenceGuideRuntimeTests(unittest.TestCase):
             self.window.figure_window,
             canvas=self.canvas,
         )
-        self.assertEqual(before_save["schema_version"], 14)
+        self.assertEqual(before_save["schema_version"], PROJECT_SCHEMA_VERSION)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "reference-guides.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
@@ -862,13 +862,13 @@ class ReferenceGuideRuntimeTests(unittest.TestCase):
         ):
             self.assertIn(component_id, self.canvas.component_registry)
 
-        validate_v14_figure(
+        validate_v15_figure(
             self.canvas.component_snapshot(),
             {},
             self.canvas.project_id,
             self.canvas.project_name,
         )
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 14)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 15)
 
 
 if __name__ == "__main__":

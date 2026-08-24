@@ -1,7 +1,7 @@
 # Legacy Component Properties (schema v12)
 
 This page documents the strict v12 migration-source contract. New projects use
-[Component Properties (schema v14)](component-properties-v14.md). MyGUI
+[Component Properties (schema v15)](component-properties-v15.md). MyGUI
 targets Matplotlib 3.9.0. Every v12 production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
 properties are edited only through Controllers or domain Services, and every

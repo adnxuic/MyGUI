@@ -31,7 +31,7 @@ from mygui.database.interpolate_func import (
     SMOOTHING_SPLINE_METHOD,
     interpolate_dict,
 )
-from mygui.database import DataPreprocessSpec
+from mygui.database import ColumnRef, DataPreprocessSpec
 from mygui.database.fit_result import (
     normalize_fit_options_for_storage,
     normalize_fit_result_for_storage,
@@ -41,6 +41,11 @@ from mygui.resource_limits import load_resource_limits
 from mygui.figuremodify.matplotlib_adapter import (
     available_style_names,
     copy_colormap,
+)
+from mygui.figuremodify.reference_marks_data import merged_reference_positions
+from mygui.figuremodify.y_axis_reserve import (
+    read_y_lower_reserve,
+    write_y_lower_reserve,
 )
 
 from .base import ComponentController
@@ -544,6 +549,37 @@ def normalize_reference_positions(value: Any) -> list[float]:
     return normalized
 
 
+def normalize_position_ref(value: Any) -> dict[str, str] | None:
+    """Normalize a nullable Number-column reference for Reflection Positions."""
+
+    if value is None:
+        return None
+    if isinstance(value, ColumnRef):
+        value = value.to_dict()
+    if not isinstance(value, dict):
+        raise ComponentValidationError(
+            "Reflection position_ref must be null or a column reference."
+        )
+    if set(value) != {"project_id", "sheet_id", "column_id"}:
+        raise ComponentValidationError(
+            "Reflection position_ref requires only project_id, sheet_id, "
+            "and column_id."
+        )
+    try:
+        return ColumnRef.from_dict(value).to_dict()
+    except (TypeError, ValueError) as exc:
+        raise ComponentValidationError(
+            "Reflection position_ref is not a valid column reference."
+        ) from exc
+
+
+def _y_lower_reserve_value(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    number = float(value)
+    return math.isfinite(number) and 0.0 <= number < 0.9
+
+
 def _figure_style(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ComponentValidationError(
@@ -985,6 +1021,24 @@ class AxesController(ContainerController):
             ),
             getter="get_autoscaley_on",
             setter="set_autoscaley_on",
+        ),
+        PropertySpec(
+            "y_lower_reserve",
+            float,
+            0.0,
+            editor="double_spin",
+            minimum=0.0,
+            maximum=0.8999,
+            step=0.01,
+            decimals=4,
+            validator=_y_lower_reserve_value,
+            getter=read_y_lower_reserve,
+            setter=write_y_lower_reserve,
+            impact=(
+                UpdateImpact.RELIM
+                | UpdateImpact.AUTOSCALE
+                | UpdateImpact.REDRAW
+            ),
         ),
         PropertySpec(
             "color_cycle",
@@ -3769,20 +3823,47 @@ class ReferenceMarksController(CollectionController):
         PropertySpec("clip_on", bool, True, editor=EditorKind.BOOL),
     )
     CAPABILITIES = CollectionController.CAPABILITIES | frozenset(
-        {"reference_marks", "reflection_positions", "data"}
+        {
+            "reference_marks",
+            "reflection_positions",
+            "data",
+            "data_reference",
+            "auto_refresh",
+        }
     )
     DELETE_IMPACTS = UpdateImpact.REDRAW
 
     def __init__(self, state: ComponentState, **kwargs: Any) -> None:
-        if set(state.data) == {"positions"}:
+        keys = set(state.data)
+        if keys == {"positions"}:
             state = state.clone(
                 data={
                     "positions": normalize_reference_positions(
                         state.data["positions"]
-                    )
+                    ),
+                    "position_ref": None,
+                }
+            )
+        elif keys == {"positions", "position_ref"}:
+            state = state.clone(
+                data={
+                    "positions": normalize_reference_positions(
+                        state.data["positions"]
+                    ),
+                    "position_ref": normalize_position_ref(
+                        state.data.get("position_ref")
+                    ),
                 }
             )
         super().__init__(state, **kwargs)
+        self._table_repository = None
+        self._table_project_id = None
+
+    def bind_table(self, repository, project_id) -> None:
+        """Attach the shared TableRepository used to resolve position_ref."""
+
+        self._table_repository = repository
+        self._table_project_id = str(project_id) if project_id else None
 
     @staticmethod
     def segments_for(
@@ -3815,7 +3896,6 @@ class ReferenceMarksController(CollectionController):
                 ComponentMutation(
                     self.component_id,
                     properties={key: value},
-                    data=self._state.data,
                 )
             )
         return super().set_property(key, value)
@@ -3833,11 +3913,15 @@ class ReferenceMarksController(CollectionController):
             )
 
     def _validate_data(self, state: ComponentState) -> None:
-        if set(state.data) != {"positions"}:
+        if set(state.data) != {"positions", "position_ref"}:
             raise ComponentValidationError(
-                "Reference Marks data requires only positions."
+                "Reference Marks data requires positions and position_ref."
             )
         normalize_reference_positions(state.data["positions"])
+        normalize_position_ref(state.data.get("position_ref"))
+
+    def _properties_require_data_apply(self, property_patch: dict[str, Any]) -> bool:
+        return bool({"baseline", "height"} & set(property_patch))
 
     def _read_property(
         self,
@@ -3875,9 +3959,13 @@ class ReferenceMarksController(CollectionController):
         if spec.key in {"baseline", "height"}:
             geometry = deepcopy(self._state.properties)
             geometry[spec.key] = float(value)
+            xs = [
+                float(segment[0][0])
+                for segment in target.get_segments()
+            ]
             target.set_segments(
                 self.segments_for(
-                    self._state.data["positions"],
+                    xs,
                     geometry["baseline"],
                     geometry["height"],
                 )
@@ -3895,9 +3983,15 @@ class ReferenceMarksController(CollectionController):
         super()._write_property(target, spec, value)
 
     def _apply_data(self, target: LineCollection, state: ComponentState) -> None:
+        merged = merged_reference_positions(
+            getattr(self, "_table_repository", None),
+            getattr(self, "_table_project_id", None),
+            state.data["positions"],
+            state.data.get("position_ref"),
+        )
         target.set_segments(
             self.segments_for(
-                state.data["positions"],
+                merged,
                 state.properties["baseline"],
                 state.properties["height"],
             )
@@ -3916,6 +4010,44 @@ class ReferenceMarksController(CollectionController):
     ) -> None:
         target.set_segments(runtime_data)
 
+    def _validate_runtime_data(
+        self,
+        target: LineCollection,
+        runtime_data: Any,
+        state: ComponentState,
+    ) -> None:
+        del target, state
+        if runtime_data is None:
+            raise ComponentValidationError(
+                "Reference Marks runtime data must be a segment sequence."
+            )
+
+    def _apply_runtime_data(
+        self,
+        target: LineCollection,
+        runtime_data: Any,
+        state: ComponentState,
+    ) -> None:
+        self._validate_runtime_data(target, runtime_data, state)
+        target.set_segments(runtime_data)
+
+    def _runtime_data_impacts(
+        self,
+        runtime_data: Any,
+        state: ComponentState,
+    ) -> UpdateImpact:
+        del runtime_data, state
+        return UpdateImpact.REDRAW
+
+    def _runtime_data_is_empty(
+        self,
+        target: LineCollection,
+        runtime_data: Any,
+        state: ComponentState,
+    ) -> bool:
+        del target, state
+        return not runtime_data
+
     def _restore_transaction_snapshot(
         self,
         snapshot: tuple[ComponentState, Any, dict[str, Any]],
@@ -3931,7 +4063,10 @@ class ReferenceMarksController(CollectionController):
         state: ComponentState,
     ) -> bool:
         del target
-        return not state.data["positions"]
+        return (
+            not state.data["positions"]
+            and state.data.get("position_ref") is None
+        )
 
     def _data_impacts(
         self,

@@ -26,6 +26,7 @@ from mygui.figuremodify.components import ComponentRole
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from main import MainWindow
+from tests.schema_helpers import as_schema_v14
 
 
 class ProjectIoTests(unittest.TestCase):
@@ -316,26 +317,29 @@ class ProjectIoTests(unittest.TestCase):
         self.build_project()
         save_project_snapshot(self.path, self.window.figure_window)
         valid = json.loads(self.path.read_text(encoding="utf-8"))
-        self.assertEqual(load_project_file(self.path)["schema_version"], 14)
-        migratable = deepcopy(valid)
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
+        migratable = as_schema_v14(valid)
         migratable["schema_version"] = 10
         self.path.write_text(json.dumps(migratable), encoding="utf-8")
-        self.assertEqual(load_project_file(self.path)["schema_version"], 14)
-        predecessor = deepcopy(valid)
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
+        predecessor = as_schema_v14(valid)
         predecessor["schema_version"] = 11
         self.path.write_text(json.dumps(predecessor), encoding="utf-8")
-        self.assertEqual(load_project_file(self.path)["schema_version"], 14)
-        schema_v12 = deepcopy(valid)
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
+        schema_v12 = as_schema_v14(valid)
         schema_v12["schema_version"] = 12
         self.path.write_text(json.dumps(schema_v12), encoding="utf-8")
-        self.assertEqual(load_project_file(self.path)["schema_version"], 14)
-        schema_v13 = deepcopy(valid)
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
+        schema_v13 = as_schema_v14(valid)
         schema_v13["schema_version"] = 13
         self.path.write_text(json.dumps(schema_v13), encoding="utf-8")
-        self.assertEqual(load_project_file(self.path)["schema_version"], 14)
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
+        schema_v14 = as_schema_v14(valid)
+        self.path.write_text(json.dumps(schema_v14), encoding="utf-8")
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
         for version in (
-            3, 4, 5, 6, 7, 8, 9, 15, 10.0, 11.0, 12.0, 13.0, 14.0,
-            "10", "11", "12", "13", "14", True, None,
+            3, 4, 5, 6, 7, 8, 9, 16, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+            "10", "11", "12", "13", "14", "15", True, None,
         ):
             with self.subTest(version=version):
                 candidate = dict(valid)

@@ -8,7 +8,7 @@ MyGUI is a PySide6 + matplotlib desktop GUI for working with tabular data and cr
 - Component-based Figure editing: a searchable Components tree and one unified Inspector.
 - Constant Reference Lines and Reference Bands with data-coordinate positions and normalized Axes spans.
 - Atomic component creation and deletion backed by project transactions.
-- Strict schema v14 project files with validated v13 migration, chained v12/v11/v10 migration, and save/open round trips.
+- Strict schema v15 project files with validated v14 migration, chained v13/v12/v11/v10 migration, and save/open round trips.
 - Optional TeX rendering and MATLAB curve fitting that do not block the base GUI.
 
 ## Quick start
@@ -32,5 +32,5 @@ MyGUI targets [Matplotlib 3.9](https://matplotlib.org/3.9.0/); parameter pages l
 - **Editing Components** — [Components Tree](components-tree.md), [Chart Component Parameters](chart-component-parameters.md), [Axes and Figure Component Parameters](axes-component-parameters.md).
 - **Projects and Appearance** — [Project Files](project-files.md), [Style Creation Defaults](style-creation-defaults.md).
 - **Integrations and Configuration** — [TeX Rendering Integration](tex-integration.md), [Resource and Process Limits](resource-limits.md).
-- **Developer Reference** — [Component Controllers](component-controllers.md), [Component Inspector Architecture](component-inspector.md), [Atomic Component Deletion](component-deletion.md), [Component Extension Template](component-extension-template.md), [Component Properties (schema v14)](component-properties-v14.md).
+- **Developer Reference** — [Component Controllers](component-controllers.md), [Component Inspector Architecture](component-inspector.md), [Atomic Component Deletion](component-deletion.md), [Component Extension Template](component-extension-template.md), [Component Properties (schema v15)](component-properties-v15.md).
 - **Maintenance & QA** — [Manual Smoke Test](smoke-test.md), [Documentation Site](documentation-site.md).

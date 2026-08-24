@@ -29,6 +29,7 @@ from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
     PreprocessedPair,
+    TableRepository,
     resolve_preprocessed_pair,
 )
 from mygui.database.interpolate_func import interpolate_curve
@@ -71,8 +72,10 @@ from mygui.figuremodify.components import (
     TextController,
     UpdateImpact,
     XYData,
+    normalize_position_ref,
     normalize_reference_positions,
 )
+from mygui.figuremodify.reference_marks_data import merged_reference_positions
 from mygui.figuremodify.components.property_values import (
     legend_anchor_value,
     legend_location_value,
@@ -130,8 +133,15 @@ def _warning(message: str) -> ComponentNotice:
 class ReferenceMarksService:
     """Create and edit one reflection set through one LineCollection."""
 
-    def __init__(self, registry: ComponentRegistry) -> None:
+    def __init__(
+        self,
+        registry: ComponentRegistry,
+        repository: TableRepository | None = None,
+        project_id: str | None = None,
+    ) -> None:
         self.registry = registry
+        self.repository = repository
+        self.project_id = project_id
 
     def _owner_axes(self, owner_axes_id: str) -> Axes:
         controller = self.registry.get(str(owner_axes_id))
@@ -146,12 +156,21 @@ class ReferenceMarksService:
             )
         return target
 
+    def _merged_positions(self, positions: Any, position_ref: Any) -> list[float]:
+        return merged_reference_positions(
+            self.repository,
+            self.project_id,
+            positions,
+            position_ref,
+        )
+
     def preflight(
         self,
         owner_axes_id: str,
         positions: Any,
         properties: dict[str, Any] | None = None,
-    ) -> tuple[list[float], dict[str, Any]]:
+        position_ref: Any = None,
+    ) -> tuple[list[float], dict[str, str] | None, dict[str, Any], list[float]]:
         """Validate a complete candidate before creating runtime state."""
 
         self._owner_axes(owner_axes_id)
@@ -167,6 +186,8 @@ class ReferenceMarksService:
             {key: specs[key].normalize(value) for key, value in requested.items()}
         )
         normalized_positions = normalize_reference_positions(positions)
+        normalized_ref = normalize_position_ref(position_ref)
+        merged = self._merged_positions(normalized_positions, normalized_ref)
         candidate = ComponentState(
             id="reference-marks-preflight",
             kind=ComponentKind.REFERENCE_MARKS,
@@ -175,28 +196,33 @@ class ReferenceMarksService:
             order=0,
             selector={"object_id": "reference-marks-preflight"},
             properties=normalized,
-            data={"positions": normalized_positions},
+            data={
+                "positions": normalized_positions,
+                "position_ref": normalized_ref,
+            },
         )
         ReferenceMarksController(candidate)
-        return normalized_positions, normalized
+        return normalized_positions, normalized_ref, normalized, merged
 
     def create_runtime(
         self,
         owner_axes_id: str,
         positions: Any,
         properties: dict[str, Any] | None = None,
-    ) -> tuple[LineCollection, list[float], dict[str, Any]]:
+        position_ref: Any = None,
+    ) -> tuple[LineCollection, list[float], dict[str, str] | None, dict[str, Any]]:
         """Create exactly one staged LineCollection with a blended transform."""
 
-        normalized_positions, normalized = self.preflight(
+        normalized_positions, normalized_ref, normalized, merged = self.preflight(
             owner_axes_id,
             positions,
             properties,
+            position_ref,
         )
         owner = self._owner_axes(owner_axes_id)
         runtime = LineCollection(
             ReferenceMarksController.segments_for(
-                normalized_positions,
+                merged,
                 normalized["baseline"],
                 normalized["height"],
             ),
@@ -219,7 +245,7 @@ class ReferenceMarksService:
         except Exception:
             self.destroy_runtime(runtime)
             raise
-        return runtime, normalized_positions, normalized
+        return runtime, normalized_positions, normalized_ref, normalized
 
     @staticmethod
     def destroy_runtime(runtime: LineCollection) -> None:
@@ -256,7 +282,50 @@ class ReferenceMarksService:
                 ComponentMutation(
                     controller.component_id,
                     properties=dict(properties),
-                    data=controller.state.data,
+                ),
+            ),
+            verifier=lambda: self._verify_render(controller),
+        )
+        if not batch.committed or not batch.changes:
+            return _rejected(
+                controller,
+                batch.message or "Reference Marks render verification failed.",
+            )
+        return batch.changes[0]
+
+    def update_data(
+        self,
+        component,
+        positions: Any,
+        position_ref: Any,
+    ) -> ComponentChange:
+        """Replace persisted positions and the nullable Number-column ref."""
+
+        controller = _controller(
+            self.registry,
+            component,
+            ReferenceMarksController,
+        )
+        try:
+            normalized_positions = normalize_reference_positions(positions)
+            normalized_ref = normalize_position_ref(position_ref)
+            merged = self._merged_positions(normalized_positions, normalized_ref)
+            runtime_data = ReferenceMarksController.segments_for(
+                merged,
+                controller.state.properties["baseline"],
+                controller.state.properties["height"],
+            )
+        except Exception as exc:
+            return _rejected(controller, str(exc))
+        batch = self.registry.apply_transaction(
+            (
+                ComponentMutation(
+                    controller.component_id,
+                    data={
+                        "positions": normalized_positions,
+                        "position_ref": normalized_ref,
+                    },
+                    runtime_data=runtime_data,
                 ),
             ),
             verifier=lambda: self._verify_render(controller),
@@ -280,15 +349,41 @@ class ReferenceMarksService:
             component,
             ReferenceMarksController,
         )
+        return self.update_data(
+            controller,
+            positions,
+            controller.state.data.get("position_ref"),
+        )
+
+    def refresh(
+        self,
+        component,
+    ) -> ComponentChange:
+        """Rebuild segments from persisted positions plus the live column."""
+
+        controller = _controller(
+            self.registry,
+            component,
+            ReferenceMarksController,
+        )
+        data = controller.state.data
         try:
-            normalized = normalize_reference_positions(positions)
+            merged = self._merged_positions(
+                data.get("positions", []),
+                data.get("position_ref"),
+            )
+            runtime_data = ReferenceMarksController.segments_for(
+                merged,
+                controller.state.properties["baseline"],
+                controller.state.properties["height"],
+            )
         except Exception as exc:
             return _rejected(controller, str(exc))
         batch = self.registry.apply_transaction(
             (
                 ComponentMutation(
                     controller.component_id,
-                    data={"positions": normalized},
+                    runtime_data=runtime_data,
                 ),
             ),
             verifier=lambda: self._verify_render(controller),
@@ -299,6 +394,33 @@ class ReferenceMarksService:
                 batch.message or "Reference Marks render verification failed.",
             )
         return batch.changes[0]
+
+    def refresh_affected(
+        self,
+        changed_columns: Iterable[ColumnRef],
+    ) -> list[ComponentChange]:
+        """Refresh Reflection Positions bound to changed Number columns."""
+
+        changed = set(changed_columns)
+        results: list[ComponentChange] = []
+        with self.registry.batch_updates():
+            for controller in self.registry.query(
+                capabilities={"data_reference"}
+            ):
+                if not isinstance(controller, ReferenceMarksController):
+                    continue
+                raw = controller.state.data.get("position_ref")
+                if raw is None:
+                    continue
+                try:
+                    ref = _column_ref(raw)
+                except Exception as exc:
+                    results.append(_rejected(controller, str(exc)))
+                    continue
+                if ref not in changed:
+                    continue
+                results.append(self.refresh(controller))
+        return results
 
 
 class ReferenceGuideService:
@@ -2280,6 +2402,8 @@ class ChartDataService:
             for controller in self.registry.query(
                 capabilities={"data_reference", "auto_refresh"}
             ):
+                if isinstance(controller, ReferenceMarksController):
+                    continue
                 try:
                     refs = set(self.refs_for(controller))
                     if isinstance(controller, ScatterController):
@@ -3152,7 +3276,7 @@ class ComponentDependencyService:
     @staticmethod
     def _refs(state: ComponentState) -> set[ColumnRef]:
         refs: set[ColumnRef] = set()
-        for key in ("x_ref", "y_ref", "color_ref", "size_ref"):
+        for key in ("x_ref", "y_ref", "color_ref", "size_ref", "position_ref"):
             try:
                 refs.add(_column_ref(state.data[key]))
             except (KeyError, ValueError, TypeError):

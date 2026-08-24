@@ -7,7 +7,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 - `mkdocs.yml` at the repository root is the only site configuration. Its `docs_dir` is `docs/` and its `nav` groups the existing feature documents; document content stays in the Markdown files.
 - `docs/index.md` is the site landing page. Creating Charts includes the
   Reference Guides and Reference Marks feature pages, and Developer Reference
-  links the current schema-v14 property contract plus the legacy v13, v12, and
+  links the current schema-v15 property contract plus the legacy v14, v13, v12, and
   v10 migration references.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.
 

@@ -231,13 +231,18 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
 4. Replace Positions with an empty value and apply. Confirm the component and
    Inspector remain and no marks draw. Restore the duplicate sequence and
    confirm input order and duplicates remain.
-5. Enter malformed or non-finite positions and geometry where
+5. Choose a Number column in the Table column selector, apply, and confirm the
+   marks append those values after the manual positions. Edit the column and
+   confirm the marks refresh without a new Undo command. Delete that column,
+   confirm the component is removed after the dependency prompt, then Undo and
+   confirm the original ID, reference, and selection return.
+6. Enter malformed or non-finite positions and geometry where
    `baseline + height > 1`. Confirm the input, Controller state, collection,
    and tree preview return to their last valid values with one red result.
-6. Save, close, and reopen the project. Confirm the stable ID, exact ordered
-   positions, appearance, and one collection restore. Undo/Redo data and style
+7. Save, close, and reopen the project. Confirm the stable ID, exact ordered
+   positions, optional column reference, appearance, and one collection restore. Undo/Redo data and style
    edits and confirm clean/dirty state follows the latest saved fingerprint.
-7. Delete the component from the tree, Undo, and Redo. Confirm the tree node,
+8. Delete the component from the tree, Undo, and Redo. Confirm the tree node,
    Inspector, collection, selection, and stable state disappear and return
    atomically with one result per action.
 
@@ -265,7 +270,7 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    guide belongs to the selected Axes and uses that Axes' blended transform.
    Delete multiple Reference Lines together, then Undo/Redo; repeat by deleting
    their owning Axes and confirm the full subtree restores with stable IDs.
-7. Save, close, and reopen the schema-v14 project. Confirm orientation,
+7. Save, close, and reopen the schema-v15 project. Confirm orientation,
    position/bounds, spans, appearance, stable IDs, order, empty `data`, one
    runtime collection per guide, selection/Inspector behavior, and clean/dirty
    fingerprints survive the round trip. Close the project and confirm no
@@ -292,19 +297,26 @@ Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.
    Reflections` contains `2Theta`, `h`, `k`, and `l` with duplicate positions
    preserved.
 8. Confirm the Main Axes contains one Observed Scatter, one Calculated Data
-   Plot, and one editable Reflection Positions component. Confirm Backg is not
-   plotted and no extra vertical-line artists exist.
+   Plot, and one editable Reflection Positions component whose data is an empty
+   manual sequence plus the Reflections/`2Theta` column. Confirm the main Y
+   range keeps ordinary autoscale content in the upper 90% and the reflection
+   marks sit in the lower 10% band. Confirm Backg is not plotted and no extra
+   vertical-line artists exist.
 9. Confirm the lower Axes contains one Residual Data Plot whose first value is
-   `Yobs - Ycal`, not the offset `Yobs-Ycal (PRF)` value.
-10. Change the X limits and confirm both Axes move together. Change either Y
+   `Yobs - Ycal`, not the offset `Yobs-Ycal (PRF)` value, and that Residual
+   Axes Y reserve stays at `0`.
+10. Open the four XRD property buttons, confirm the default styles, Cancel
+    without changing the request, then override colors/sizes and create.
+11. Change the X limits and confirm both Axes move together. Change either Y
     limit and confirm reflection marks keep their normalized Axes height.
-11. Confirm each selected Main legend entry appears, each excluded entry is
+12. Confirm each selected Main legend entry appears, each excluded entry is
     absent, the lower legend contains only Residual when selected, and an empty
     selection hides its corresponding legend.
-12. Save the project and close it. Temporarily move or rename `YBCO.prf`, then
+13. Save the project and close it. Temporarily move or rename `YBCO.prf`, then
     reopen the project and confirm both imported Sheets, all four components,
-    the shared layout, and the legends remain complete without a file prompt.
-13. In a fresh import, Undo once and confirm only the Figure setup disappears
+    the shared layout, Axes `y_lower_reserve`, and the legends remain complete
+    without a file prompt.
+14. In a fresh import, Undo once and confirm only the Figure setup disappears
     while both Sheets remain. Undo again and confirm both imported Sheets are
     removed. Redo twice and confirm the Sheets return before the data-backed
     Figure components.

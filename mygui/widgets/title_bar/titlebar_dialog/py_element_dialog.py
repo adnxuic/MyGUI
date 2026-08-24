@@ -317,6 +317,8 @@ class PyReferenceMarksDialog(QDialog):
         self.input = ReferenceMarksInput(
             color_library=color_library,
             defaults=defaults.reference_marks,
+            repository=getattr(canvas, "repository", None),
+            project_id=getattr(canvas, "project_id", None),
             parent=self,
         )
         layout.addWidget(self.input)
@@ -339,9 +341,11 @@ class PyReferenceMarksDialog(QDialog):
             )
             return
         try:
+            self.input.validate_geometry()
             canvas.add_reference_marks(
                 self.input.positions(),
                 self.input.properties(),
+                position_ref=self.input.position_ref(),
             )
         except Exception as exc:
             status_messages.show_error(str(exc))

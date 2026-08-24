@@ -1,7 +1,8 @@
 # Component Properties (schema v13)
 
-Schema v13 is retained as the strict immediate migration source for current
-[schema v14](component-properties-v14.md) files. New saves no longer emit v13.
+Schema v13 is retained as a strict chained migration source for current
+[schema v15](component-properties-v15.md) files. Valid v13 snapshots migrate
+through v14. New saves no longer emit v13.
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent

@@ -31,10 +31,14 @@ from mygui.widgets.title_bar.titlebar_dialog.xrd_refinement_input import (
 from mygui.xrd_refinement import (
     FIGURE_COMMAND_TEXT,
     TABLE_COMMAND_TEXT,
+    XrdAppearanceConfig,
+    XrdPlotAppearance,
     XrdPlotCreationError,
     XrdRefinementImportRequest,
     XrdRefinementImportService,
     XrdRefinementLegendSelection,
+    XrdReflectionAppearance,
+    XrdScatterAppearance,
     plan_xrd_table_import,
 )
 
@@ -249,6 +253,37 @@ class XrdRefinementDialogTests(XrdWindowTestCase):
             before_history,
         )
 
+    def test_property_buttons_disable_with_import_and_cancel_keeps_request(self):
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            preset_key="main_residual",
+        )
+        try:
+            xrd = dialog.xrd_input
+            self.assertFalse(xrd.observed_property_button.isEnabled())
+            self.assertFalse(xrd.calculated_property_button.isEnabled())
+            self.assertFalse(xrd.reflection_property_button.isEnabled())
+            self.assertFalse(xrd.residual_property_button.isEnabled())
+            xrd.import_checkbox.setChecked(True)
+            self.assertTrue(xrd.observed_property_button.isEnabled())
+            self.assertEqual(xrd._appearance.observed.color, "#D62728")
+            self.assertEqual(xrd._appearance.calculated.linewidth, 0.5)
+            self.assertEqual(xrd._appearance.residual.linewidth, 0.2)
+            self.assertEqual(xrd._appearance.reflection.baseline, 0.0375)
+            before = xrd._appearance
+            with mock.patch(
+                "mygui.widgets.title_bar.titlebar_dialog.xrd_refinement_input.QDialog.exec",
+                return_value=0,
+            ):
+                xrd._edit_observed_appearance()
+                xrd._edit_calculated_appearance()
+                xrd._edit_residual_appearance()
+                xrd._edit_reflection_appearance()
+            self.assertEqual(xrd._appearance, before)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
 
 class XrdRefinementTableTests(XrdWindowTestCase):
     def test_complete_sheets_stable_refs_unique_names_and_undo_redo(self):
@@ -425,9 +460,28 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
             tuple(result.profile.prf_difference),
         )
         self.assertEqual(residual.state.data["y_ref"], outcome.table.residual_ref.to_dict())
+        self.assertEqual(references.state.data["positions"], [])
         self.assertEqual(
-            references.state.data["positions"],
+            references.state.data["position_ref"],
+            outcome.table.reflection_position_ref.to_dict(),
+        )
+        self.assertEqual(
+            [float(segment[0][0]) for segment in references.resolve_target().get_segments()],
             [item.position for item in result.reflections],
+        )
+        main_controller = registry.get(outcome.main_axes_id)
+        residual_controller = registry.get(outcome.residual_axes_id)
+        self.assertEqual(main_controller.state.properties["y_lower_reserve"], 0.1)
+        self.assertEqual(residual_controller.state.properties["y_lower_reserve"], 0.0)
+        self.assertEqual(references.state.properties["baseline"], 0.0375)
+        self.assertEqual(references.state.properties["height"], 0.025)
+        self.assertAlmostEqual(
+            float(references.resolve_target().get_segments()[0][0][1]),
+            0.0375,
+        )
+        self.assertAlmostEqual(
+            float(references.resolve_target().get_segments()[0][1][1]),
+            0.0625,
         )
 
         self.assertEqual(main_axes.get_ylabel(), "Intensity (a.u.)")
@@ -461,6 +515,66 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
             backg_ref,
             [controller.state.data.get("y_ref") for controller in registry.query()],
         )
+        self.assertEqual(observed.state.properties["color"], "#d62728")
+        self.assertEqual(observed.state.properties["edgecolor"], "#d62728")
+        self.assertEqual(observed.state.properties["size"], 1.0)
+        self.assertEqual(calculated.state.properties["color"], "#000000")
+        self.assertEqual(calculated.state.properties["linewidth"], 0.5)
+        self.assertEqual(residual.state.properties["color"], "#0000ff")
+        self.assertEqual(residual.state.properties["linewidth"], 0.2)
+
+    def test_user_appearance_override_and_reflection_table_refresh(self):
+        appearance = XrdAppearanceConfig(
+            observed=XrdScatterAppearance(
+                color="#00AA00",
+                edgecolor="#00AA00",
+                marker="s",
+                size=4.0,
+            ),
+            calculated=XrdPlotAppearance("#111111", 1.5, "--"),
+            residual=XrdPlotAppearance("#123456", 0.8, ":"),
+            reflection=XrdReflectionAppearance(
+                label="Custom reflections",
+                baseline=0.02,
+                height=0.03,
+            ),
+        )
+        request = XrdRefinementImportRequest(
+            small_result("Override"),
+            XrdRefinementLegendSelection(True, True, True, False),
+            appearance=appearance,
+        )
+        outcome = XrdRefinementImportService(
+            canvas=self.canvas,
+            table_view=self.window.table,
+        ).execute(self.main_residual_spec(), request)
+        observed = self.canvas.component_registry.get(outcome.observed_id)
+        calculated = self.canvas.component_registry.get(outcome.calculated_id)
+        residual = self.canvas.component_registry.get(outcome.residual_id)
+        references = self.canvas.component_registry.get(outcome.reflection_positions_id)
+        self.assertEqual(observed.state.properties["color"], "#00aa00")
+        self.assertEqual(observed.state.properties["size"], 4.0)
+        self.assertEqual(calculated.state.properties["linewidth"], 1.5)
+        self.assertEqual(residual.state.properties["linewidth"], 0.8)
+        self.assertEqual(references.state.properties["label"], "Custom reflections")
+        self.assertEqual(references.state.properties["baseline"], 0.02)
+        sheet = self.canvas.repository.sheet(
+            self.canvas.project_id,
+            outcome.table.reflection_position_ref.sheet_id,
+        )
+        column = sheet.column(outcome.table.reflection_position_ref.column_id)
+        frame = sheet.frame[column.id].copy()
+        frame.iloc[0] = 40.0
+        frame.iloc[1] = 41.0
+        frame.iloc[2] = 42.0
+        sheet.frame[column.id] = frame
+        change = self.canvas.reference_marks_service.refresh(references)
+        self.assertTrue(change.ok)
+        xs = [
+            float(segment[0][0])
+            for segment in references.resolve_target().get_segments()
+        ]
+        self.assertEqual(xs[:3], [40.0, 41.0, 42.0])
 
     def test_every_legend_checkbox_combination_is_independent(self):
         for values in itertools.product((False, True), repeat=4):
@@ -678,7 +792,13 @@ class XrdRefinementRoundTripTests(XrdWindowTestCase):
                     canvas.component_registry.get(outcome.reflection_positions_id).state.data[
                         "positions"
                     ],
-                    [15.1876, 15.2256, 15.2256],
+                    [],
+                )
+                self.assertEqual(
+                    canvas.component_registry.get(outcome.reflection_positions_id).state.data[
+                        "position_ref"
+                    ],
+                    outcome.table.reflection_position_ref.to_dict(),
                 )
                 main_legend = main.get_legend()
                 self.assertEqual(

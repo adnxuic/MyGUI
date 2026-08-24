@@ -1,9 +1,9 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 14. One file contains one
+MyGUI project files use strict JSON schema version 15. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v14, strictly validated integer v13 for direct
-in-memory migration, integer v12 through v13, integer v11 through v12/v13, and
+The loader accepts exact integer v15, strictly validated integer v14 for direct
+in-memory migration, integer v13 through v14, integer v12 through v13/v14, integer v11 through v12–v14, and
 integer v10 through every intervening version. Schema v4-v9, non-integer values, and unknown versions are rejected before
 application state is published.
 
@@ -12,7 +12,7 @@ application state is published.
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 14,
+  "schema_version": 15,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -23,7 +23,7 @@ application state is published.
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `14`.
+- Newly saved `schema_version` is always the integer `15`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -134,7 +134,7 @@ component wire shape.
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v14)](component-properties-v14.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v15)](component-properties-v15.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -144,7 +144,7 @@ Role-specific `data` fields are:
 | `function_curve` | `expression`, `x_start`, `x_stop` |
 | `data_plot` | `x_ref`, `y_ref`, `preprocess` |
 | `scatter` | `x_ref`, `y_ref`, optional `color_ref`, optional `size_ref`, `preprocess` |
-| `reflection_positions` | ordered finite `positions`; empty and duplicate values are valid |
+| `reflection_positions` | ordered finite manual `positions` plus nullable Number-column `position_ref`; empty cells are skipped, duplicates remain valid |
 | `reference_line` | exactly `{}`; constant geometry is owned by `properties` |
 | `reference_band` | exactly `{}`; constant geometry is owned by `properties` |
 | `colorbar` | `source_component_id` |
@@ -167,10 +167,12 @@ remain owned only by the Scatter. See [Colorbar Component](colorbar-component.md
 
 A `reference_marks/reflection_positions` record is a removable child of an
 ordinary Axes. Its selector contains only the stable component object ID, and
-its data contains only the complete ordered `positions` sequence. One
-`LineCollection` renders all positions using data X coordinates and normalized
-Axes Y coordinates. The ten exact appearance/geometry properties and validation
-rules are documented in
+its data contains exactly `positions` (manual finite numbers) and nullable
+`position_ref` (a current-project Number column). Effective X coordinates
+merge the manual sequence first, then the column values in row order, skipping
+empty cells. One `LineCollection` renders the merged positions using data X
+coordinates and normalized Axes Y coordinates. The ten exact
+appearance/geometry properties and validation rules are documented in
 [Reference Marks Component](reference-marks-component.md).
 
 A `reference_guide/reference_line` or `reference_guide/reference_band` record
@@ -214,7 +216,7 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v14.
+snapshot only and does not change schema v15.
 
 ## Stable IDs and compatibility
 
@@ -275,7 +277,7 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v14.
+are not added to schema v15.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean

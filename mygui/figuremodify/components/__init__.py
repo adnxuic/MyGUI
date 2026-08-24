@@ -38,6 +38,7 @@ from .controllers import (
     create_controller,
     decode_in_axes_image,
     normalize_linestyle,
+    normalize_position_ref,
     normalize_reference_positions,
     validate_controller_contracts,
 )
@@ -152,6 +153,7 @@ __all__ = [
     "create_controller",
     "decode_in_axes_image",
     "normalize_linestyle",
+    "normalize_position_ref",
     "normalize_reference_positions",
     "validate_controller_contracts",
     "register_figure_components",

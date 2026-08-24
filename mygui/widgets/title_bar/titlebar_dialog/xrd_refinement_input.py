@@ -7,6 +7,8 @@ from pathlib import Path
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -20,8 +22,22 @@ from PySide6.QtWidgets import (
 
 from mygui.fullprof_prf import FullProfPrfResult, parse_fullprof_prf
 from mygui.xrd_refinement import (
+    XrdAppearanceConfig,
+    XrdPlotAppearance,
     XrdRefinementImportRequest,
     XrdRefinementLegendSelection,
+    XrdReflectionAppearance,
+    XrdScatterAppearance,
+)
+from mygui.widgets.fig_control_window.component_editors.common import (
+    ScatterStyleEditor,
+)
+from mygui.widgets.fig_control_window.component_editors.inputs import (
+    LineAppearanceInput,
+    ReferenceMarksInput,
+)
+from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
+    ColorChoiceWidget,
 )
 
 
@@ -37,11 +53,16 @@ class XrdRefinementInput(QWidget):
         self,
         *,
         reflection_legend_supported: bool = True,
+        color_library=None,
+        style_defaults=None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._parsed_result: FullProfPrfResult | None = None
         self._parsed_file = ""
+        self._appearance = XrdAppearanceConfig()
+        self._color_library = color_library
+        self._style_defaults = style_defaults
 
         root = QVBoxLayout(self)
         self.import_checkbox = QCheckBox(
@@ -109,6 +130,31 @@ class XrdRefinementInput(QWidget):
         self.residual_legend.setChecked(False)
         residual_layout.addWidget(self.residual_legend)
         contents_layout.addWidget(residual_legend)
+
+        property_group = QGroupBox("Component properties", self.contents)
+        property_layout = QHBoxLayout(property_group)
+        self.observed_property_button = QPushButton("Observed Scatter…", property_group)
+        self.calculated_property_button = QPushButton("Calculated Plot…", property_group)
+        self.reflection_property_button = QPushButton(
+            "Reflection Positions…", property_group
+        )
+        self.residual_property_button = QPushButton("Residual Plot…", property_group)
+        for button in (
+            self.observed_property_button,
+            self.calculated_property_button,
+            self.reflection_property_button,
+            self.residual_property_button,
+        ):
+            property_layout.addWidget(button)
+        contents_layout.addWidget(property_group)
+        self.observed_property_button.clicked.connect(self._edit_observed_appearance)
+        self.calculated_property_button.clicked.connect(
+            self._edit_calculated_appearance
+        )
+        self.reflection_property_button.clicked.connect(
+            self._edit_reflection_appearance
+        )
+        self.residual_property_button.clicked.connect(self._edit_residual_appearance)
 
         self.validation_label = QLabel(self.contents)
         self.validation_label.setObjectName("xrd_refinement_validation")
@@ -260,6 +306,153 @@ class XrdRefinementInput(QWidget):
                 calculated=self.calculated_legend.isChecked(),
                 reflection_positions=self.reflection_legend.isChecked(),
                 residual=self.residual_legend.isChecked(),
+            ),
+            appearance=self._appearance,
+        )
+
+    def _edit_observed_appearance(self) -> None:
+        if self._color_library is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Observed Scatter")
+        layout = QVBoxLayout(dialog)
+        current = self._appearance.observed
+        marker_editor = ScatterStyleEditor(
+            current.marker, current.size, parent=dialog
+        )
+        color_editor = ColorChoiceWidget(
+            current.color,
+            color_library=self._color_library,
+            auto_record_recent=False,
+            parent=dialog,
+        )
+        layout.addWidget(marker_editor)
+        layout.addWidget(QLabel("Color:", dialog))
+        layout.addWidget(color_editor)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._appearance = XrdAppearanceConfig(
+            observed=XrdScatterAppearance(
+                color=color_editor.color(),
+                edgecolor=color_editor.color(),
+                marker=marker_editor.marker(),
+                size=marker_editor.size(),
+                linewidth=current.linewidth,
+            ),
+            calculated=self._appearance.calculated,
+            residual=self._appearance.residual,
+            reflection=self._appearance.reflection,
+        )
+
+    def _edit_plot_appearance(self, *, residual: bool) -> None:
+        if self._color_library is None:
+            return
+        current = self._appearance.residual if residual else self._appearance.calculated
+        title = "Residual Plot" if residual else "Calculated Plot"
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        editor = LineAppearanceInput(
+            color_library=self._color_library,
+            label="",
+            style=current.linestyle,
+            linewidth=current.linewidth,
+            show_label=False,
+            parent=dialog,
+        )
+        editor.color_input.set_color(current.color)
+        layout.addWidget(editor)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        updated = XrdPlotAppearance(
+            color=editor.color(),
+            linewidth=editor.linewidth(),
+            linestyle=editor.style(),
+        )
+        if residual:
+            self._appearance = XrdAppearanceConfig(
+                observed=self._appearance.observed,
+                calculated=self._appearance.calculated,
+                residual=updated,
+                reflection=self._appearance.reflection,
+            )
+        else:
+            self._appearance = XrdAppearanceConfig(
+                observed=self._appearance.observed,
+                calculated=updated,
+                residual=self._appearance.residual,
+                reflection=self._appearance.reflection,
+            )
+
+    def _edit_calculated_appearance(self) -> None:
+        self._edit_plot_appearance(residual=False)
+
+    def _edit_residual_appearance(self) -> None:
+        self._edit_plot_appearance(residual=True)
+
+    def _edit_reflection_appearance(self) -> None:
+        if self._color_library is None:
+            return
+        defaults = self._style_defaults
+        if defaults is None:
+            return
+        current = self._appearance.reflection
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Reflection Positions")
+        layout = QVBoxLayout(dialog)
+        editor = ReferenceMarksInput(
+            color_library=self._color_library,
+            defaults=defaults.reference_marks,
+            max_baseline_plus_height=0.1,
+            appearance_only=True,
+            parent=dialog,
+        )
+        editor.label_input.setText(current.label)
+        editor.baseline_input.setValue(current.baseline)
+        editor.height_input.setValue(current.height)
+        if current.color:
+            editor.color_input.set_color(current.color)
+        if current.linewidth is not None:
+            editor.linewidth_input.setValue(current.linewidth)
+        layout.addWidget(editor)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            editor.validate_geometry()
+        except ValueError:
+            return
+        properties = editor.properties()
+        self._appearance = XrdAppearanceConfig(
+            observed=self._appearance.observed,
+            calculated=self._appearance.calculated,
+            residual=self._appearance.residual,
+            reflection=XrdReflectionAppearance(
+                label=str(properties["label"]),
+                baseline=float(properties["baseline"]),
+                height=float(properties["height"]),
+                color=str(properties["color"]),
+                linewidth=float(properties["linewidth"]),
             ),
         )
 

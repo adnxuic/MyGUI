@@ -59,6 +59,6 @@ components additionally have a non-`None` `RESTORE_PHASE` and one exact
 `ComponentMaterializer`; fixed semantic components use `RESTORE_PHASE = None`.
 Removable components additionally have one deletion handler.
 
-Complete additions with schema-v14 round trips, empty-data coverage, data
+Complete additions with schema-v15 round trips, empty-data coverage, data
 refresh tests, lazy Inspector identity, failure rollback tests, component
 parameter documentation, and any applicable manual GUI smoke checks.

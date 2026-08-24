@@ -30,11 +30,13 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.component_services import DeletionRequest
 from mygui.project_io import (
+    PROJECT_SCHEMA_VERSION,
     load_project_file,
     restore_project_snapshot,
     save_project_snapshot,
     validate_project_snapshot,
 )
+from tests.schema_helpers import as_schema_v14
 from mygui.widgets.fig_control_window.component_editors import EditorPlacement
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
@@ -598,7 +600,7 @@ class ColorbarProjectTests(ColorbarRuntimeTests):
             path = Path(directory) / "colorbar.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(raw["schema_version"], 14)
+            self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
             record = next(
                 item
                 for item in raw["figure"]["components"]
@@ -711,16 +713,18 @@ class ColorbarProjectTests(ColorbarRuntimeTests):
                 for item in no_colorbar["figure"]["components"]
                 if item["kind"] != "colorbar"
             ]
-            no_colorbar["schema_version"] = 10
-            path.write_text(json.dumps(no_colorbar), encoding="utf-8")
+            expected_components = deepcopy(no_colorbar["figure"]["components"])
+            source = as_schema_v14(no_colorbar)
+            source["schema_version"] = 10
+            path.write_text(json.dumps(source), encoding="utf-8")
             migrated = load_project_file(path)
-            self.assertEqual(migrated["schema_version"], 14)
+            self.assertEqual(migrated["schema_version"], PROJECT_SCHEMA_VERSION)
             self.assertEqual(
                 migrated["figure"]["components"],
-                no_colorbar["figure"]["components"],
+                expected_components,
             )
 
-            malformed = deepcopy(no_colorbar)
+            malformed = deepcopy(source)
             next(
                 item
                 for item in malformed["figure"]["components"]

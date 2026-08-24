@@ -188,6 +188,10 @@ class PyLayoutDialog(QDialog):
                 raise RuntimeError("Main + Residual layout tabs are unavailable.")
             self.xrd_input = XrdRefinementInput(
                 reflection_legend_supported=True,
+                color_library=figure_window.color_library,
+                style_defaults=(
+                    None if canvas is None else canvas.component_creation_defaults()
+                ),
                 parent=self.input.tabs,
             )
             self.input.tabs.addTab(self.xrd_input, "XRD Refinement")

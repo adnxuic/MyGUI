@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v14 Figure trees."""
+"""Normalize and validate strict schema-v10 through v15 Figure trees."""
 
 from __future__ import annotations
 
@@ -138,7 +138,13 @@ def normalize_v13_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v14_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v14 Figure component tree."""
+    """Normalize a predecessor schema-v14 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v15_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v15 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -253,6 +259,30 @@ def _validate_controller_contract(
             for key, spec in controller_type.property_specs().items()
             if spec.persistent
         }
+        candidate = state
+        if schema_version < 15:
+            if state.kind is ComponentKind.AXES:
+                expected.discard("y_lower_reserve")
+                if "y_lower_reserve" not in state.properties:
+                    candidate = state.clone(
+                        properties={
+                            **state.properties,
+                            "y_lower_reserve": 0.0,
+                        }
+                    )
+            if state.kind is ComponentKind.REFERENCE_MARKS:
+                if set(state.data) != {"positions"}:
+                    raise ComponentValidationError(
+                        "Reference Marks data requires only positions."
+                    )
+                candidate = candidate.clone(
+                    data={**candidate.data, "position_ref": None}
+                )
+        elif state.kind is ComponentKind.REFERENCE_MARKS:
+            if set(state.data) != {"positions", "position_ref"}:
+                raise ComponentValidationError(
+                    "Reference Marks data requires positions and position_ref."
+                )
         actual = set(state.properties)
         if actual != expected:
             details = []
@@ -264,14 +294,14 @@ def _validate_controller_contract(
                 "property keys are invalid: " + ", ".join(details)
             )
         for key, spec in controller_type.property_specs().items():
-            if not spec.persistent:
+            if not spec.persistent or key not in candidate.properties:
                 continue
             expected_types = (
                 spec.value_type
                 if isinstance(spec.value_type, tuple)
                 else (spec.value_type,)
             )
-            value = state.properties[key]
+            value = candidate.properties[key]
             if (
                 dict in expected_types
                 and value is not None
@@ -280,7 +310,7 @@ def _validate_controller_contract(
                 raise ComponentValidationError(
                     f"property {key!r} must use its tagged JSON object form"
                 )
-        controller_type(state)
+        controller_type(candidate)
         if state.role is ComponentRole.IN_AXES_IMAGE:
             decode_in_axes_image(state.data)
     except (ComponentValidationError, TypeError, ValueError) as exc:
@@ -420,7 +450,23 @@ def _validate_data_references(
     path: str,
     project_id: str,
     available_refs: dict[ColumnRef, ColumnType],
+    *,
+    schema_version: int,
 ) -> None:
+    if (
+        schema_version >= 15
+        and state.kind is ComponentKind.REFERENCE_MARKS
+    ):
+        raw = state.data.get("position_ref")
+        if raw is not None:
+            _validate_reference(
+                raw,
+                f"{path}.data.position_ref",
+                project_id,
+                available_refs,
+                x_axis=False,
+            )
+        return
     if state.role not in _DATA_ROLES:
         return
     x_ref = _validate_reference(
@@ -701,7 +747,13 @@ def _validate_figure(
             path,
             schema_version=schema_version,
         )
-        _validate_data_references(state, path, project_id, available_refs)
+        _validate_data_references(
+            state,
+            path,
+            project_id,
+            available_refs,
+            schema_version=schema_version,
+        )
         if state.parent_id is not None:
             children.setdefault(state.parent_id, []).append(state)
         selector_key = (
@@ -864,7 +916,7 @@ def validate_v14_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v14 Figure component tree."""
+    """Validate one predecessor schema-v14 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -872,4 +924,21 @@ def validate_v14_figure(
         project_id,
         project_name,
         schema_version=14,
+    )
+
+
+def validate_v15_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v15 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=15,
     )

@@ -45,7 +45,11 @@ from mygui.widgets.fig_control_window.component_editors.registry import (
 
 # The Axes palette is the only property rendered by a dedicated Section
 # (``PaletteSection``) instead of an automatically generated control.
-_SECTION_OWNED_PROPERTIES = frozenset({(ComponentKind.AXES, "color_cycle")})
+_SECTION_OWNED_PROPERTIES = frozenset(
+    {
+        (ComponentKind.AXES, "color_cycle"),
+    }
+)
 
 
 class MatplotlibExposureContractTests(unittest.TestCase):

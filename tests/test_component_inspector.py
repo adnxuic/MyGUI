@@ -105,7 +105,7 @@ def _context(
         interpolation=interpolation,
         fitting=FitService(repository, registry),
         text_rendering=TextRenderService(registry),
-        reference_marks=ReferenceMarksService(registry),
+        reference_marks=ReferenceMarksService(registry, repository),
     )
 
 
@@ -287,7 +287,7 @@ class ComponentInspectorTests(unittest.TestCase):
                 ) + 1,
                 selector={"object_id": component_id},
                 properties=ReferenceMarksController.default_properties(),
-                data={"positions": [15.2, 22.9]},
+                data={"positions": [15.2, 22.9], "position_ref": None},
             ),
             target=artist,
         )
@@ -320,11 +320,12 @@ class ComponentInspectorTests(unittest.TestCase):
 
             data = inspector.section("data")
             data.positions_input.setText("22.9, 15.2, 15.2")
-            self.assertTrue(data.apply_positions())
+            self.assertTrue(data.apply_data())
             self.assertEqual(
                 controller.state.data["positions"],
                 [22.9, 15.2, 15.2],
             )
+            self.assertIsNone(controller.state.data["position_ref"])
             self.assertEqual(len(artist.get_segments()), 3)
 
             self.assertTrue(
@@ -337,9 +338,12 @@ class ComponentInspectorTests(unittest.TestCase):
 
             with patch("mygui.status_messages.show_error") as show_error:
                 data.positions_input.setText("15.2 nan")
-                self.assertFalse(data.apply_positions())
+                self.assertFalse(data.apply_data())
                 show_error.assert_called_once()
-            self.assertEqual(controller.state.data, {"positions": []})
+            self.assertEqual(
+                controller.state.data,
+                {"positions": [], "position_ref": None},
+            )
             self.assertEqual(data.positions_input.text(), "")
             self.assertEqual(len(artist.get_segments()), 0)
         finally:

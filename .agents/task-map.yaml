@@ -17,7 +17,7 @@ tasks:
       - tests.test_reference_guides
       - tests.test_component_deletion_and_project_close
       - tests.test_project_object_roundtrip
-    documentation: [docs/component-extension-template.md, docs/component-properties-v14.md]
+    documentation: [docs/component-extension-template.md, docs/component-properties-v15.md]
     manual_smoke: true
   modify_component_property:
     skill: .agents/skills/modify-component-property/SKILL.md
@@ -32,7 +32,9 @@ tasks:
       - tests.test_component_editors
       - tests.test_component_inspector
       - tests.test_matplotlib_property_contract
-    documentation: [docs/chart-component-parameters.md, docs/axes-component-parameters.md]
+      - tests.test_y_axis_reserve
+      - tests.test_reference_marks_table
+    documentation: [docs/chart-component-parameters.md, docs/axes-component-parameters.md, docs/reference-marks-component.md]
     manual_smoke: true
   schema_migration:
     skill: .agents/skills/schema-migration/SKILL.md
@@ -48,7 +50,10 @@ tasks:
       - tests.test_project_object_roundtrip
       - tests.test_component_materializers
       - tests.test_reference_guides
-    documentation: [docs/project-files.md, docs/component-properties-v14.md]
+      - tests.test_y_axis_reserve
+      - tests.test_reference_marks_table
+      - tests.test_xrd_refinement
+    documentation: [docs/project-files.md, docs/component-properties-v15.md]
     manual_smoke: true
   project_io_change:
     skill: .agents/skills/project-io-change/SKILL.md
@@ -63,6 +68,7 @@ tasks:
       - tests.test_project_object_roundtrip
       - tests.test_gui_file_flow
       - tests.test_component_deletion_and_project_close
+      - tests.test_xrd_refinement
     documentation: [docs/project-files.md]
     manual_smoke: true
   debug_gui_regression:

@@ -242,38 +242,69 @@ class RawXYDataSection(QWidget, EditorSection):
 class ReferenceMarksDataSection(QWidget, EditorSection):
     """Edit the authoritative ordered Reflection Positions sequence."""
 
-    DATA_KEYS = ("positions",)
+    DATA_KEYS = ("positions", "position_ref")
 
     def __init__(self, controller, *, context, parent=None):
         super().__init__(parent)
         self.controller = controller
         self.context = context
+        self.repository = context.repository
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.positions_input = QLineEdit(self)
         self.positions_input.setPlaceholderText(
             "Comma or space separated reflection positions"
         )
-        self.apply_button = QPushButton("Apply positions", self)
+        self.position_ref_input = QComboBox(self)
+        self.apply_button = QPushButton("Apply data", self)
         layout.addWidget(self.positions_input)
+        layout.addWidget(self.position_ref_input)
         layout.addWidget(self.apply_button)
-        self.apply_button.clicked.connect(self.apply_positions)
+        self.apply_button.clicked.connect(self.apply_data)
         self.sync_from_controller()
 
-    def apply_positions(self) -> bool:
-        """Submit one complete sequence through ReferenceMarksService."""
+    def _project_id(self) -> str | None:
+        service = self.context.reference_marks
+        return getattr(service, "project_id", None)
+
+    def _populate_refs(self, current: ColumnRef | None) -> None:
+        blocker = QSignalBlocker(self.position_ref_input)
+        self.position_ref_input.clear()
+        self.position_ref_input.addItem("(None)", None)
+        project_id = self._project_id()
+        if project_id is not None and project_id in self.repository.projects:
+            for ref in self.repository.iter_column_refs(
+                project_id, {ColumnType.NUMBER}
+            ):
+                self.position_ref_input.addItem(
+                    self.repository.ref_label(ref), ref
+                )
+        target = 0
+        if current is not None:
+            for index in range(1, self.position_ref_input.count()):
+                if self.position_ref_input.itemData(index, Qt.UserRole) == current:
+                    target = index
+                    break
+        self.position_ref_input.setCurrentIndex(target)
+        del blocker
+
+    def apply_data(self) -> bool:
+        """Submit positions and the Number-column ref through the Service."""
 
         try:
             positions = parse_number_sequence(self.positions_input.text())
+            raw_ref = self.position_ref_input.currentData(Qt.UserRole)
+            position_ref = raw_ref if isinstance(raw_ref, ColumnRef) else None
             service = self.context.reference_marks
             if service is None:
                 raise RuntimeError("Reference Marks service is unavailable.")
             result = perform_editor_action(
                 self.context,
                 "Change Reflection Positions Data",
-                lambda: service.update_positions(
+                lambda: service.update_data(
                     self.controller,
                     positions,
+                    position_ref.to_dict() if position_ref is not None else None,
                 ),
             )
         except Exception as exc:
@@ -291,16 +322,25 @@ class ReferenceMarksDataSection(QWidget, EditorSection):
     def sync_from_controller(self) -> None:
         """Refresh from committed ComponentState data."""
 
-        positions = self.controller.read_state().data.get("positions", [])
+        data = self.controller.read_state().data
+        positions = data.get("positions", [])
+        raw = data.get("position_ref")
+        current = None
+        if raw is not None:
+            try:
+                current = ColumnRef.from_dict(raw)
+            except (TypeError, ValueError):
+                current = None
         blocker = QSignalBlocker(self.positions_input)
         self.positions_input.setText(format_number_sequence(positions))
         del blocker
+        self._populate_refs(current)
 
     def dispose(self) -> None:
         """Disconnect the local submit callback idempotently."""
 
         try:
-            self.apply_button.clicked.disconnect(self.apply_positions)
+            self.apply_button.clicked.disconnect(self.apply_data)
         except (RuntimeError, TypeError):
             pass
 
@@ -308,7 +348,14 @@ class ReferenceMarksDataSection(QWidget, EditorSection):
 class AxesLimitsSection(QWidget, EditorSection):
     """Edit ordered Axes limits and expose inversion as non-persistent proxies."""
 
-    PROPERTY_KEYS = ("xlim", "ylim", "autoscalex_on", "autoscaley_on")
+    PROPERTY_KEYS = (
+        "xlim",
+        "ylim",
+        "autoscalex_on",
+        "autoscaley_on",
+        "y_lower_reserve",
+    )
+    LIMIT_KEYS = ("xlim", "ylim", "autoscalex_on", "autoscaley_on")
     PROXY_KEYS = ("x_inverted", "y_inverted")
 
     def __init__(self, controller, *, context, parent=None) -> None:
@@ -346,11 +393,18 @@ class AxesLimitsSection(QWidget, EditorSection):
         self.properties = PropertySection(
             controller,
             context=context,
-            property_keys=self.PROPERTY_KEYS,
+            property_keys=self.LIMIT_KEYS,
             apply_properties=apply,
             parent=self,
         )
+        self.reserve = PropertySection(
+            controller,
+            context=context,
+            property_keys=("y_lower_reserve",),
+            parent=self,
+        )
         layout.addWidget(self.properties)
+        layout.addWidget(self.reserve)
         proxy_row = QHBoxLayout()
         self.x_inverted = QCheckBox("Invert X", self)
         self.y_inverted = QCheckBox("Invert Y", self)
@@ -392,6 +446,8 @@ class AxesLimitsSection(QWidget, EditorSection):
 
         if key in self.PROXY_KEYS:
             return getattr(self, key)
+        if key == "y_lower_reserve":
+            return self.reserve.editor(key)
         return self.properties.editor(key)
 
     def editors(self):
@@ -399,6 +455,7 @@ class AxesLimitsSection(QWidget, EditorSection):
 
         return {
             **self.properties.editors(),
+            **self.reserve.editors(),
             "x_inverted": self.x_inverted,
             "y_inverted": self.y_inverted,
         }
@@ -407,6 +464,7 @@ class AxesLimitsSection(QWidget, EditorSection):
         """Synchronize limits and derived inversion without recursion."""
 
         self.properties.sync_from_controller()
+        self.reserve.sync_from_controller()
         state = self.controller.read_state().properties
         blockers = (
             QSignalBlocker(self.x_inverted),
@@ -425,6 +483,7 @@ class AxesLimitsSection(QWidget, EditorSection):
         except (RuntimeError, TypeError):
             pass
         self.properties.dispose()
+        self.reserve.dispose()
 
 
 class ScatterMappingSection(QWidget, EditorSection):

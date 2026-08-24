@@ -8,7 +8,7 @@ description: Add a persisted MyGUI Figure, chart, or in-Axes component with comp
 Read the architecture pages routed by `.agents/task-map.yaml`. Preserve
 `CORE-COMPONENT-STATE`, `CORE-EDITOR-PROFILES`,
 `CORE-REGISTRATION-ATOMICITY`, `CORE-DELETION-COORDINATOR`, and
-`CORE-PERSISTENCE-V14`.
+`CORE-PERSISTENCE-V15`.
 
 Before coding, decide whether existing kind/role/schema contracts are enough;
 route any persisted shape change through `schema-migration`. Implement domain
@@ -18,6 +18,6 @@ Canvas publication. UI Inputs remain Controller-free.
 
 Verify creation, empty valid data, style/palette precedence, data refresh,
 lazy Inspector reuse, deletion cohorts, failure rollback at every publication
-stage, and stable schema-v14 save/open. Update the routed parameter and feature
+stage, and stable schema-v15 save/open. Update the routed parameter and feature
 documentation. Do not finish while a required check or manual smoke item is not
 run.

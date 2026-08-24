@@ -18,8 +18,10 @@ from mygui.project_io import (
     project_snapshot,
     restore_project_snapshot,
     validate_project_snapshot,
+    validate_v14_project_snapshot,
 )
 from main import MainWindow
+from tests.schema_helpers import as_schema_v14
 
 
 class ProjectSchemaV14Tests(unittest.TestCase):
@@ -126,7 +128,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
             announce=False,
         )
         valid = self.snapshot()
-        self.assertEqual(valid["schema_version"], 14)
+        self.assertEqual(valid["schema_version"], PROJECT_SCHEMA_VERSION)
         component = self.component(valid, "reflection_positions")
         self.assertEqual(
             set(component),
@@ -161,10 +163,19 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                 "clip_on",
             },
         )
-        self.assertEqual(component["data"], {"positions": [15.2, 15.2, 22.9]})
+        self.assertEqual(
+            component["data"],
+            {"positions": [15.2, 15.2, 22.9], "position_ref": None},
+        )
         validate_project_snapshot(valid)
+        predecessor_v14 = as_schema_v14(valid)
+        self.assertEqual(
+            self.component(predecessor_v14, "reflection_positions")["data"],
+            {"positions": [15.2, 15.2, 22.9]},
+        )
+        validate_v14_project_snapshot(predecessor_v14)
 
-        predecessor = deepcopy(valid)
+        predecessor = as_schema_v14(valid)
         predecessor["schema_version"] = 11
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "v11-cannot-contain-reference-marks.json"
@@ -217,7 +228,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
             announce=False,
         )
         valid = self.snapshot()
-        self.assertEqual(valid["schema_version"], 14)
+        self.assertEqual(valid["schema_version"], PROJECT_SCHEMA_VERSION)
         line = self.component(valid, "reference_line")
         band = self.component(valid, "reference_band")
         self.assertEqual(line["kind"], "reference_guide")
@@ -244,7 +255,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
         )
         validate_project_snapshot(valid)
 
-        predecessor = deepcopy(valid)
+        predecessor = as_schema_v14(valid)
         predecessor["schema_version"] = 12
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "v12-cannot-contain-reference-guides.json"
@@ -274,46 +285,40 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_project_snapshot(candidate)
 
-    def test_schema_v10_v11_and_v12_migrate_to_v14_without_rewriting_components(self):
+    def test_schema_v10_v11_and_v12_migrate_to_v15_without_rewriting_components(self):
         current = self.snapshot()
         original_components = deepcopy(current["figure"]["components"])
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for source_version in (10, 11, 12):
                 with self.subTest(source_version=source_version):
-                    source = deepcopy(current)
+                    source = as_schema_v14(current)
                     source["schema_version"] = source_version
                     path = root / f"schema-v{source_version}.mygui.json"
                     path.write_text(json.dumps(source), encoding="utf-8")
                     migrated = load_project_file(path)
-                    self.assertEqual(migrated["schema_version"], 14)
+                    self.assertEqual(migrated["schema_version"], PROJECT_SCHEMA_VERSION)
                     self.assertEqual(
                         migrated["figure"]["components"],
                         original_components,
                     )
 
     def test_schema_v13_tick_label_fontfamilies_migrate_to_strings_only(self):
-        predecessor = self.snapshot()
+        current = self.snapshot()
+        predecessor = as_schema_v14(current)
         predecessor["schema_version"] = 13
-        expected = deepcopy(predecessor)
-        expected["schema_version"] = 14
         for component in predecessor["figure"]["components"]:
             if component["kind"] != "tick_label_group":
                 continue
             family = component["properties"]["fontfamily"]
             component["properties"]["fontfamily"] = [family, "sans-serif"]
-        for component in expected["figure"]["components"]:
-            if component["kind"] == "tick_label_group":
-                component["properties"]["fontfamily"] = str(
-                    component["properties"]["fontfamily"]
-                )
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "schema-v13-fontfamily.json"
             path.write_text(json.dumps(predecessor), encoding="utf-8")
             migrated = load_project_file(path)
 
-        self.assertEqual(migrated, expected)
+        self.assertEqual(migrated, current)
         self.assertTrue(
             all(
                 isinstance(component["properties"]["fontfamily"], str)
@@ -332,7 +337,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
         component_index = current["figure"]["components"].index(tick_label)
         for value in ([], ["DejaVu Sans", 3], [""], None):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
-                candidate = deepcopy(current)
+                candidate = as_schema_v14(current)
                 candidate["schema_version"] = 13
                 candidate["figure"]["components"][component_index]["properties"][
                     "fontfamily"
@@ -361,11 +366,11 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "fontfamily"):
                     validate_project_snapshot(candidate)
 
-    def test_only_exact_integer_v10_through_v14_are_accepted(self):
+    def test_only_exact_integer_v10_through_v15_are_accepted(self):
         current = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in (4, 9, 15, True, 14.0, "14"):
+            for version in (4, 9, 16, True, 14.0, 15.0, "14", "15"):
                 with self.subTest(version=version):
                     candidate = deepcopy(current)
                     candidate["schema_version"] = version
@@ -374,7 +379,34 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 14)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 15)
+
+    def test_schema_v15_axes_reserve_and_v14_migration_defaults(self):
+        current = self.snapshot()
+        axes = self.component(current, "axes")
+        self.assertEqual(axes["properties"]["y_lower_reserve"], 0.0)
+        predecessor = as_schema_v14(current)
+        self.assertNotIn("y_lower_reserve", self.component(predecessor, "axes")["properties"])
+        validate_v14_project_snapshot(predecessor)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "schema-v14.mygui.json"
+            path.write_text(json.dumps(predecessor), encoding="utf-8")
+            migrated = load_project_file(path)
+        self.assertEqual(migrated, current)
+
+        illegal = deepcopy(current)
+        self.component(illegal, "axes")["properties"]["y_lower_reserve"] = 0.9
+        with self.assertRaisesRegex(ValueError, "y_lower_reserve"):
+            validate_project_snapshot(illegal)
+        self.canvas.add_reference_marks([1.0], announce=False)
+        with_marks = self.snapshot()
+        self.component(with_marks, "reflection_positions")["data"]["position_ref"] = {
+            "project_id": "missing",
+            "sheet_id": "missing",
+            "column_id": "missing",
+        }
+        with self.assertRaisesRegex(ValueError, "position_ref"):
+            validate_project_snapshot(with_marks)
 
     def test_validation_rejects_invalid_graph_and_component_state(self):
         valid = self.snapshot()

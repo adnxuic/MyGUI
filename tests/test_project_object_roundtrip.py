@@ -255,6 +255,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 reference.state.data["positions"],
                 [15.2, 15.2, 22.9],
             )
+            self.assertIsNone(reference.state.data["position_ref"])
             reference_target = reference.resolve_target()
             self.assertIsInstance(reference_target, LineCollection)
             self.assertEqual(len(reference_target.get_segments()), 3)

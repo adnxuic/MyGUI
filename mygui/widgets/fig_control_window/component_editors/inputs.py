@@ -133,12 +133,19 @@ class ReferenceMarksInput(QFrame):
         color_library: ColorLibrary,
         defaults,
         parent=None,
+        repository: TableRepository | None = None,
+        project_id: str | None = None,
+        max_baseline_plus_height: float | None = None,
+        appearance_only: bool = False,
     ):
         super().__init__(parent)
         if color_library is None:
             raise ValueError(
                 "ReferenceMarksInput requires the application ColorLibrary."
             )
+        self.repository = repository
+        self.project_id = project_id
+        self.max_baseline_plus_height = max_baseline_plus_height
         layout = QFormLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -149,7 +156,18 @@ class ReferenceMarksInput(QFrame):
         self.positions_input.setPlaceholderText(
             "Comma or space separated values, e.g. 15.1876, 15.2256"
         )
-        layout.addRow("Positions:", self.positions_input)
+        if not appearance_only:
+            layout.addRow("Positions:", self.positions_input)
+
+        self.position_ref_input = QComboBox(self)
+        self.position_ref_input.addItem("(None)", None)
+        if repository is not None and project_id is not None:
+            for ref in repository.iter_column_refs(
+                project_id, {ColumnType.NUMBER}
+            ):
+                self.position_ref_input.addItem(repository.ref_label(ref), ref)
+        if not appearance_only:
+            layout.addRow("Table column:", self.position_ref_input)
 
         self.baseline_input = FocusAwareDoubleSpinBox(self)
         self.baseline_input.setRange(0.0, 1.0)
@@ -168,6 +186,7 @@ class ReferenceMarksInput(QFrame):
         self.color_input = ColorChoiceWidget(
             defaults.color,
             color_library=color_library,
+            auto_record_recent=not appearance_only,
             parent=self,
         )
         layout.addRow("Color:", self.color_input)
@@ -197,6 +216,34 @@ class ReferenceMarksInput(QFrame):
             "color": self.color_input.color(),
             "linewidth": float(self.linewidth_input.value()),
         }
+
+    def position_ref(self) -> ColumnRef | None:
+        """Return the selected nullable Number-column reference."""
+
+        value = self.position_ref_input.currentData(Qt.UserRole)
+        return value if isinstance(value, ColumnRef) else None
+
+    def set_position_ref(self, ref: ColumnRef | None) -> None:
+        """Select the Number-column reference or None."""
+
+        target = 0
+        if ref is not None:
+            for index in range(self.position_ref_input.count()):
+                if self.position_ref_input.itemData(index, Qt.UserRole) == ref:
+                    target = index
+                    break
+        self.position_ref_input.setCurrentIndex(target)
+
+    def validate_geometry(self) -> None:
+        """Reject XRD pre-creation geometry that leaves the reserved band."""
+
+        if self.max_baseline_plus_height is None:
+            return
+        total = float(self.baseline_input.value()) + float(self.height_input.value())
+        if total > float(self.max_baseline_plus_height) + 1e-12:
+            raise ValueError(
+                "Baseline plus height must not exceed the reserved Y-axis band."
+            )
 
 
 def _guide_number_input(value: float, parent) -> FocusAwareDoubleSpinBox:

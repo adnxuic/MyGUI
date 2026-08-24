@@ -25,8 +25,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
 )
 from mygui.figuremodify.components.serialization import (
-    validate_v10_figure,
-    validate_v14_figure,
+    validate_v15_figure,
 )
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
@@ -217,7 +216,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(registry.resolve_target(component_id))
 
         snapshot = self.canvas.component_snapshot()
-        validate_v10_figure(
+        validate_v15_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -397,6 +396,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 )
                 state = self.canvas.component_registry.get(component_id).state
                 self.assertEqual(state.data["positions"], positions)
+                self.assertIsNone(state.data["position_ref"])
                 self.assertEqual(
                     state.selector,
                     {"object_id": component_id},
@@ -409,7 +409,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             original_cycle,
         )
 
-        validate_v14_figure(
+        validate_v15_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,
@@ -539,6 +539,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.assertEqual(len(controllers), 1)
             state = controllers[0].state
             self.assertEqual(state.data["positions"], [15.2, 15.2, 22.9])
+            self.assertIsNone(state.data["position_ref"])
             self.assertEqual(state.properties["label"], "YBCO")
             self.assertEqual(state.properties["baseline"], 0.12)
             self.assertEqual(state.properties["height"], 0.04)
@@ -1138,7 +1139,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                         ),
                         1,
                     )
-                validate_v10_figure(
+                validate_v15_figure(
                     restored.component_snapshot(),
                     self._available_refs(restored),
                     restored.project_id,
@@ -1267,7 +1268,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 title="Native legend",
             )
             component("legend")["properties"]["label_font"]["size"] = 11.0
-            validate_v10_figure(
+            validate_v15_figure(
                 figure,
                 self._available_refs(),
                 self.canvas.project_id,
@@ -1640,7 +1641,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             {item["id"] for item in figure.state.data["layouts"]},
             {first_layout_id, second_layout_id},
         )
-        validate_v10_figure(
+        validate_v15_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

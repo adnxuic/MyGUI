@@ -35,14 +35,24 @@ are disabled and the template follows its ordinary layout-only creation path.
 | Calculated | Checkbox | Includes the imported Calculated Data Plot in the Main legend. | On | Applied through the Data Plot `properties.label` and Main Legend state |
 | Reflection positions | Checkbox | Includes the existing Reflection Positions component in the Main legend. | Off | Applied through Reference Marks `properties.label` and Main Legend state |
 | Residual | Checkbox | Includes the Residual Data Plot in the lower legend. | Off | Applied through the Data Plot `properties.label` and lower Legend state |
+| Observed Scatter… | Button | Opens the Scatter marker, size, and color controls. Cancel leaves the request unchanged. | `#D62728` circle, size `1.0` | Applied on create through Scatter properties; not a project field of the dialog |
+| Calculated Plot… | Button | Opens the Plot line style, line width, and color controls. Cancel leaves the request unchanged. | `#000000` solid, linewidth `0.5` | Applied on create through Data Plot properties; not a project field of the dialog |
+| Reflection Positions… | Button | Opens label, baseline, height, color, and line width. Pre-creation geometry is limited to `baseline + height <= 0.1`. Cancel leaves the request unchanged. | XRD `baseline=0.0375`, `height=0.025`; color/width from the current Figure style | Applied on create through Reference Marks properties; data remains `positions=[]` plus `position_ref` |
+| Residual Plot… | Button | Opens the residual Plot line style, line width, and color controls. Cancel leaves the request unchanged. | `#0000FF` solid, linewidth `0.2` | Applied on create through Data Plot properties; not a project field of the dialog |
 
 On creation, the upper semantic Axes at row 0 receives an Observed Scatter, a
-Calculated Data Plot, and the existing Reflection Positions component. The
-lower semantic Axes at row 1 receives a Residual Data Plot. The Residual values
+Calculated Data Plot, and the existing Reflection Positions component bound to
+`<source> Reflections/2Theta`. That Axes keeps Y autoscale on and sets
+`y_lower_reserve=0.1` so ordinary autoscale content occupies the upper 90% of
+the Axes. The lower semantic Axes at row 1 receives a Residual Data Plot and
+keeps `y_lower_reserve=0.0`. The Residual values
 are recomputed as `Yobs - Ycal`; the offset FullProf difference column is not
 used for that line. The two Axes keep the template's shared-X and outer-label
 behavior. Main and Residual legends remain independent, and an empty legend
-selection hides the corresponding Legend.
+selection hides the corresponding Legend. Observed, Calculated, and Residual
+use the fixed labels `Observed`, `Calculated`, and `Residual` when their
+legend checkboxes are on; Reflection uses the user label, or
+`Reflection positions` when that checkbox is on and the label is empty.
 
 The import creates two commands in the project's shared history: **Import XRD
 Refinement Data**, followed by **Create XRD Refinement Plot**. Undo therefore

@@ -106,12 +106,12 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   runtime mementos, never Artists, Controllers, QWidgets, or whole Figures;
   replay enters through Controllers, domain Services, materializers, and
   `DeletionCoordinator`. Restore, table-driven refresh, and replay are
-  recording-suspended. History is runtime-only, is absent from schema v14,
+  recording-suspended. History is runtime-only, is absent from schema v15,
   and is invalidated if a failed replay cannot prove a safe cursor.
-- **CORE-PERSISTENCE-V14:** Persist component state only through the exact
-  integer schema-v14 component tree. UI profiles, widgets, callbacks, tree
+- **CORE-PERSISTENCE-V15:** Persist component state only through the exact
+  integer schema-v15 component tree. UI profiles, widgets, callbacks, tree
   keys, and expansion/selection state never enter project files. Only strict
-  validated schema v13 may migrate directly to v14, while strict v12, v11, and
+  validated schema v14 may migrate directly to v15, while strict v13, v12, v11, and
   v10 migrate through each intervening version; v4-v9 loading remains retired. Any
   later persisted format change requires a dedicated migration task with
   validation, rollback, and round-trip coverage.

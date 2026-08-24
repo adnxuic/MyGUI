@@ -147,6 +147,9 @@ def apply_update_impacts(
             subject.relim()
         if UpdateImpact.AUTOSCALE in impacts and subject.has_data():
             subject.autoscale_view()
+            from mygui.figuremodify.y_axis_reserve import apply_y_lower_reserve
+
+            apply_y_lower_reserve(subject)
         if UpdateImpact.LEGEND in impacts:
             _refresh_legend(subject)
         figure = subject.figure
@@ -380,9 +383,12 @@ class ComponentController(Generic[T]):
                     mutation.runtime_data,
                     candidate,
                 )
-            elif mutation.data is not None:
+            elif mutation.data is not None or self._properties_require_data_apply(
+                property_patch
+            ):
                 self._apply_data(target, candidate)
-                impacts |= self._data_impacts(before, candidate)
+                if mutation.data is not None:
+                    impacts |= self._data_impacts(before, candidate)
 
             self._state = candidate
             actual = deepcopy(candidate.properties)
@@ -407,6 +413,14 @@ class ComponentController(Generic[T]):
                             target,
                             runtime_snapshot,
                         )
+                    except Exception:
+                        pass
+                elif before is not None and (
+                    mutation.data is not None
+                    or self._properties_require_data_apply(property_patch)
+                ):
+                    try:
+                        self._apply_data(target, before)
                     except Exception:
                         pass
             if before is not None:
@@ -438,6 +452,14 @@ class ComponentController(Generic[T]):
             if runtime_snapshot is not KEEP_RUNTIME_DATA:
                 try:
                     self._restore_runtime_data(target, runtime_snapshot)
+                except Exception:
+                    pass
+            elif before is not None and (
+                mutation.data is not None
+                or self._properties_require_data_apply(property_patch)
+            ):
+                try:
+                    self._apply_data(target, before)
                 except Exception:
                     pass
             if before is not None:
@@ -847,6 +869,12 @@ class ComponentController(Generic[T]):
 
     def _apply_data(self, target: T, state: ComponentState) -> None:
         """Apply role-specific data.  Style-only controllers need no hook."""
+
+    def _properties_require_data_apply(self, property_patch: dict[str, Any]) -> bool:
+        """Return whether property-only mutations must rebuild artist data."""
+
+        del property_patch
+        return False
 
     def _validate_runtime_data(
         self,

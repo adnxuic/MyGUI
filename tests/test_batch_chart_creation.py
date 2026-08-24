@@ -21,6 +21,7 @@ from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.components import ComponentRole
 from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui.project_io import (
+    PROJECT_SCHEMA_VERSION,
     load_project_file,
     restore_project_snapshot,
     save_project_snapshot,
@@ -656,7 +657,7 @@ class BatchChartCreationTests(unittest.TestCase):
             path = Path(directory) / "batch.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             snapshot = load_project_file(path)
-            self.assertEqual(snapshot["schema_version"], 14)
+            self.assertEqual(snapshot["schema_version"], PROJECT_SCHEMA_VERSION)
             def keys(value):
                 if isinstance(value, dict):
                     for key, child in value.items():

@@ -89,8 +89,9 @@ second project.
 
 `<source> Reflections` contains Number columns `2Theta`, `h`, `k`, and `l`.
 Reflection order, exact duplicates, and nearby Kα1/Kα2 positions are preserved.
-The existing Reflection Positions component stores the imported numeric
-positions through its normal component contract.
+The existing Reflection Positions component stores `positions: []` and binds
+`position_ref` to the imported `<source> Reflections/2Theta` Number column
+instead of copying PRF numeric values.
 
 Both complete Sheets are published atomically by one **Import XRD Refinement
 Data** command. Existing case-insensitive sheet-name uniqueness rules add a
