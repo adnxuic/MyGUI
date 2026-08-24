@@ -1,4 +1,4 @@
-"""Inline compound editors for the closed schema-v12 value contracts.
+"""Inline compound editors for the closed schema-v13 value contracts.
 
 Each editor keeps a complete, already normalized value and emits it as one
 ``valueChanged`` signal.  Domain validation stays in

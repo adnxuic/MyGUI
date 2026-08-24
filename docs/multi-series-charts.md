@@ -60,7 +60,7 @@ filters rows, one yellow result reports the total excluded row-pair count and
 the number of affected curves. A failed batch leaves the dialog open and
 shows one red result naming the failing Y series.
 
-Each component persists through the existing schema-v12 component tree with
+Each component persists through the existing schema-v13 component tree with
 its own `x_ref`, `y_ref`, and `preprocess` data. Dropdown checks and other
 creation-dialog state are not written to project files.
 

@@ -32,6 +32,7 @@ class ComponentKind(str, Enum):
     COLORBAR = "colorbar"
     IN_AXES = "in_axes"
     REFERENCE_MARKS = "reference_marks"
+    REFERENCE_GUIDE = "reference_guide"
 
 
 class ComponentRole(str, Enum):
@@ -62,6 +63,8 @@ class ComponentRole(str, Enum):
     IN_AXES_ZOOM = "in_axes_zoom"
     IN_AXES_IMAGE = "in_axes_image"
     REFLECTION_POSITIONS = "reflection_positions"
+    REFERENCE_LINE = "reference_line"
+    REFERENCE_BAND = "reference_band"
 
 
 class FitEngine(StrEnum):
@@ -184,6 +187,12 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
     ),
     ComponentKind.REFERENCE_MARKS: frozenset(
         {ComponentRole.REFLECTION_POSITIONS}
+    ),
+    ComponentKind.REFERENCE_GUIDE: frozenset(
+        {
+            ComponentRole.REFERENCE_LINE,
+            ComponentRole.REFERENCE_BAND,
+        }
     ),
 }
 

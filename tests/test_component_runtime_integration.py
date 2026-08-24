@@ -26,7 +26,7 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     validate_v10_figure,
-    validate_v12_figure,
+    validate_v13_figure,
 )
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
@@ -409,7 +409,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             original_cycle,
         )
 
-        validate_v12_figure(
+        validate_v13_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

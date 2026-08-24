@@ -59,6 +59,8 @@ from .inputs import (
     InterpolationOptionsInput,
     LineAppearanceInput,
     MultiSeriesDataReferenceInput,
+    ReferenceBandInput,
+    ReferenceLineInput,
     ReferenceMarksInput,
     ScatterMappingInput,
 )
@@ -124,6 +126,8 @@ __all__ = [
     "InterpolationOptionsInput",
     "LineAppearanceInput",
     "MultiSeriesDataReferenceInput",
+    "ReferenceBandInput",
+    "ReferenceLineInput",
     "ReferenceMarksInput",
     "ScatterMappingInput",
     "register_production_profiles",

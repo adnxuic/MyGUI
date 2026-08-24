@@ -44,7 +44,7 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 7, 5, 4])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 7, 5, 6])
             layout_bar = bars[1]
             presets = axes_layout_presets()
             self.assertEqual(
@@ -217,6 +217,19 @@ class CommandGalleryTests(unittest.TestCase):
         finally:
             host.close()
             self.app.processEvents()
+
+    def test_reference_guide_actions_use_distinct_bundled_icons(self):
+        line = element_action_specs["Add Reference Line"]
+        band = element_action_specs["Add Reference Band"]
+        self.assertEqual(
+            line.icon_path,
+            icon_path("element_images/reference_line.svg"),
+        )
+        self.assertEqual(
+            band.icon_path,
+            icon_path("element_images/reference_band.svg"),
+        )
+        self.assertNotEqual(line.icon_path, band.icon_path)
 
     def test_narrow_gallery_uses_qtoolbar_overflow(self):
         from main import MainWindow

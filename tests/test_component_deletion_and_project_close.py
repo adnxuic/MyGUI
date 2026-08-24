@@ -1127,7 +1127,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v12_figure",
+                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v13_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))
@@ -1586,6 +1586,24 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
     def test_discard_closes_project_and_cleans_all_runtime_maps(self):
         figure_window = self.window.figure_window
         project_id = self.canvas.project_id
+        self.canvas.add_reference_line(
+            {"value": 2.5},
+            object_id="close-reference-line",
+            announce=False,
+        )
+        self.canvas.add_reference_band(
+            {"lower": 1.0, "upper": 2.0},
+            object_id="close-reference-band",
+            announce=False,
+        )
+        self.assertEqual(
+            len(
+                self.canvas.component_registry.query(
+                    kind=ComponentKind.REFERENCE_GUIDE,
+                )
+            ),
+            2,
+        )
         with mock.patch.object(
             self.window,
             "_project_close_choice",
@@ -1604,6 +1622,9 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
         )
         self.assertIsNone(figure_window.current_canva)
         self.assertIsNone(self.window.table.current_project_id)
+        self.assertTrue(self.canvas._disposed)
+        self.assertTrue(self.canvas.figure_history._disposed)
+        self.assertTrue(self.canvas.component_editor_manager._closed)
 
     def test_exit_cancel_keeps_all_projects_and_prior_save_is_clean(self):
         first = self.canvas

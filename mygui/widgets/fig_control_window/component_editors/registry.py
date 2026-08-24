@@ -212,7 +212,7 @@ class EditorRegistry:
         return self._profiles.get((kind, role))
 
     def validate_production_profiles(self) -> None:
-        """Fail fast unless every schema-v12 kind/role has one exact profile."""
+        """Fail fast unless every schema-v13 kind/role has one exact profile."""
 
         expected = {
             (kind, role)

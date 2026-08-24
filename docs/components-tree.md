@@ -40,7 +40,9 @@ remain the only selection, refresh, Inspector lookup, and deletion targets.
 
 Labels are presentation-only and update from Registry events. Examples
 include `Figure — Project`, `Axes 1`, `Left Spine`, `Plot — Raw Data`, and
-`Text — note preview`, and `Reflection Positions — YBCO`. A Component Tooltip lists:
+`Text — note preview`, `Reflection Positions — YBCO`, and the shared
+`Reference Guides` group containing formula or label previews. A Component
+Tooltip lists:
 
 | Field | Source |
 | --- | --- |
@@ -67,13 +69,16 @@ its members visible. Clearing search restores the pre-search expansion state.
 tree remembers only typed expanded-node keys for the current application
 session; it does not keep a second selected ID. Switching project tabs
 reflects the Canvas selection and restores expansion.
+Reference Line and Reference Band always share one UI-only **Reference Guides**
+group under their owner Axes. The group is not a Component and is never saved.
+
 Closing a project releases its Registry and Canvas callbacks and discards its
 tree session. Selection, expansion, search text, and Explorer page state are
-not part of schema v12.
+not part of schema v13.
 
 When a project is first bound, the tree selects the current Axes when one
-exists, otherwise the Figure root. Creating an Axes, Chart, free Text, or
-Reference Marks component
+exists, otherwise the Figure root. Creating an Axes, Chart, free Text,
+Reference Marks, or Reference Guide component
 selects the new Component and opens its exact Inspector, but does not force
 the Explorer to change page or become visible.
 

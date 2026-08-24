@@ -582,7 +582,7 @@ class ExistingFigureColorbarTests(unittest.TestCase):
 
 
 class ColorbarProjectTests(ColorbarRuntimeTests):
-    def test_schema_v12_roundtrip_preserves_stable_source_relationship(self):
+    def test_schema_v13_roundtrip_preserves_stable_source_relationship(self):
         controller = self.add_colorbar(
             object_id="stable-colorbar",
             properties={
@@ -598,7 +598,7 @@ class ColorbarProjectTests(ColorbarRuntimeTests):
             path = Path(directory) / "colorbar.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(raw["schema_version"], 12)
+            self.assertEqual(raw["schema_version"], 13)
             record = next(
                 item
                 for item in raw["figure"]["components"]
@@ -714,7 +714,7 @@ class ColorbarProjectTests(ColorbarRuntimeTests):
             no_colorbar["schema_version"] = 10
             path.write_text(json.dumps(no_colorbar), encoding="utf-8")
             migrated = load_project_file(path)
-            self.assertEqual(migrated["schema_version"], 12)
+            self.assertEqual(migrated["schema_version"], 13)
             self.assertEqual(
                 migrated["figure"]["components"],
                 no_colorbar["figure"]["components"],

@@ -36,6 +36,7 @@ from mygui.figuremodify.component_services import (
     FitService,
     FunctionCurveService,
     InterpolationService,
+    ReferenceGuideService,
     ReferenceMarksService,
     TextRenderService,
 )
@@ -64,6 +65,8 @@ from mygui.figuremodify.components import (
     ImageInAxesController,
     LineController,
     ObserverFailure,
+    ReferenceBandController,
+    ReferenceLineController,
     ReferenceMarksController,
     ScatterController,
     TextController,
@@ -75,8 +78,8 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v12_figure,
-    validate_v12_figure,
+    normalize_v13_figure,
+    validate_v13_figure,
 )
 from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
@@ -358,6 +361,9 @@ class PyFigureCanvas(QWidget):
         self.reference_marks_service = ReferenceMarksService(
             self.component_registry
         )
+        self.reference_guide_service = ReferenceGuideService(
+            self.component_registry
+        )
         self.chart_data_service.colorbar_service = self.colorbar_service
         self.interpolation_service = InterpolationService(
             self.repository,
@@ -415,6 +421,7 @@ class PyFigureCanvas(QWidget):
             text_rendering=self.text_render_service,
             colorbars=self.colorbar_service,
             reference_marks=self.reference_marks_service,
+            reference_guides=self.reference_guide_service,
             in_axes=self.in_axes_service,
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
@@ -2652,6 +2659,126 @@ class PyFigureCanvas(QWidget):
             status_messages.show_success("Reflection Positions created.")
         return runtime
 
+    @_history_command("Create Reference Line")
+    def add_reference_line(
+        self,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        component_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one constant Reference Line atomically."""
+
+        return self._add_reference_guide(
+            ComponentRole.REFERENCE_LINE,
+            properties,
+            object_id=object_id,
+            component_order=component_order,
+            announce=announce,
+        )
+
+    @_history_command("Create Reference Band")
+    def add_reference_band(
+        self,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        component_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one constant Reference Band atomically."""
+
+        return self._add_reference_guide(
+            ComponentRole.REFERENCE_BAND,
+            properties,
+            object_id=object_id,
+            component_order=component_order,
+            announce=announce,
+        )
+
+    def _add_reference_guide(
+        self,
+        role: ComponentRole,
+        properties: dict[str, Any] | None,
+        *,
+        object_id: str | None,
+        component_order: int | None,
+        announce: bool,
+    ):
+        """Stage one guide and publish it through one registration boundary."""
+
+        owner_axes_id = self.current_axes_component_id
+        owner_axes = self.current_axes
+        if owner_axes_id is None or owner_axes is None:
+            raise ValueError("Select an Axes before creating a Reference Guide.")
+        style_defaults = self.component_creation_defaults().reference_marks
+        if role is ComponentRole.REFERENCE_LINE:
+            controller_type = ReferenceLineController
+            create_runtime = self.reference_guide_service.create_line_runtime
+            label = "Reference Line"
+            requested = {
+                "color": style_defaults.color,
+                "linewidth": style_defaults.linewidth,
+            }
+        elif role is ComponentRole.REFERENCE_BAND:
+            controller_type = ReferenceBandController
+            create_runtime = self.reference_guide_service.create_band_runtime
+            label = "Reference Band"
+            requested = {
+                "facecolor": style_defaults.color,
+                "edgecolor": style_defaults.color,
+                "linewidth": style_defaults.linewidth,
+            }
+        else:
+            raise ValueError("Unsupported Reference Guide role.")
+        requested.update(properties or {})
+
+        component_id = object_id or new_id()
+        controller = None
+        runtime = None
+        with self.component_registry.registration_transaction() as transaction:
+            runtime, normalized = create_runtime(owner_axes_id, requested)
+            transaction.on_rollback(
+                lambda target=runtime: (
+                    self.reference_guide_service.destroy_runtime(target)
+                )
+            )
+            state = ComponentState(
+                id=component_id,
+                kind=ComponentKind.REFERENCE_GUIDE,
+                role=role,
+                parent_id=owner_axes_id,
+                order=(
+                    self._next_child_order(owner_axes_id)
+                    if component_order is None
+                    else int(component_order)
+                ),
+                selector={"object_id": component_id},
+                properties=normalized,
+                data={},
+            )
+            controller = controller_type(state, target=runtime)
+            initialized = controller.apply_state(controller.state)
+            if not initialized.ok:
+                raise ValueError(
+                    initialized.message or f"Could not initialize {label}."
+                )
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=runtime)
+            runtime.set_gid(component_id)
+            self._prepare_created_component(controller, transaction)
+            self.reference_guide_service.verify_render(controller)
+            self.component_registry.request_update(
+                owner_axes,
+                UpdateImpact.REDRAW,
+            )
+
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
+            status_messages.show_success(f"{label} created.")
+        return runtime
+
     def save(self, filename, dpi=None):
         """Save the current figure through the selected destination."""
 
@@ -2729,6 +2856,32 @@ class PyFigureCanvas(QWidget):
                     (
                         ComponentKind.REFERENCE_MARKS,
                         ComponentRole.REFLECTION_POSITIONS,
+                    )
+                ],
+            ),
+            ComponentMaterializer(
+                (
+                    ComponentKind.REFERENCE_GUIDE,
+                    ComponentRole.REFERENCE_LINE,
+                ),
+                self._materialize_reference_line,
+                expected_phases[
+                    (
+                        ComponentKind.REFERENCE_GUIDE,
+                        ComponentRole.REFERENCE_LINE,
+                    )
+                ],
+            ),
+            ComponentMaterializer(
+                (
+                    ComponentKind.REFERENCE_GUIDE,
+                    ComponentRole.REFERENCE_BAND,
+                ),
+                self._materialize_reference_band,
+                expected_phases[
+                    (
+                        ComponentKind.REFERENCE_GUIDE,
+                        ComponentRole.REFERENCE_BAND,
                     )
                 ],
             ),
@@ -2939,6 +3092,36 @@ class PyFigureCanvas(QWidget):
             )
         self.add_reference_marks(
             state.data["positions"],
+            state.properties,
+            object_id=state.id,
+            component_order=state.order,
+            announce=False,
+        )
+
+    def _materialize_reference_line(self, state, _transaction) -> None:
+        if (
+            state.kind is not ComponentKind.REFERENCE_GUIDE
+            or state.role is not ComponentRole.REFERENCE_LINE
+        ):
+            raise ValueError(
+                "Reference Line materializer requires a Reference Line state."
+            )
+        self.add_reference_line(
+            state.properties,
+            object_id=state.id,
+            component_order=state.order,
+            announce=False,
+        )
+
+    def _materialize_reference_band(self, state, _transaction) -> None:
+        if (
+            state.kind is not ComponentKind.REFERENCE_GUIDE
+            or state.role is not ComponentRole.REFERENCE_BAND
+        ):
+            raise ValueError(
+                "Reference Band materializer requires a Reference Band state."
+            )
+        self.add_reference_band(
             state.properties,
             object_id=state.id,
             component_order=state.order,
@@ -3211,7 +3394,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v12 component tree."""
+        """Materialize and apply a validated schema-v13 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -3244,7 +3427,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v12_figure(source)
+        source = normalize_v13_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3276,7 +3459,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all schema-v12 states after their Matplotlib targets exist."""
+        """Apply all schema-v13 states after their Matplotlib targets exist."""
 
         if not isinstance(component_tree, dict):
             return
@@ -3425,7 +3608,7 @@ class PyFigureCanvas(QWidget):
         return value
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v12 component tree used by persistence."""
+        """Return the canonical schema-v13 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3445,10 +3628,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v12_figure(snapshot)
+        return normalize_v13_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v12 Figure tree."""
+        """Validate and return the current complete schema-v13 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3457,7 +3640,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v12_figure(
+        validate_v13_figure(
             snapshot,
             available_refs,
             self.project_id,

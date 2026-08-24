@@ -656,7 +656,7 @@ class BatchChartCreationTests(unittest.TestCase):
             path = Path(directory) / "batch.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             snapshot = load_project_file(path)
-            self.assertEqual(snapshot["schema_version"], 12)
+            self.assertEqual(snapshot["schema_version"], 13)
             def keys(value):
                 if isinstance(value, dict):
                     for key, child in value.items():

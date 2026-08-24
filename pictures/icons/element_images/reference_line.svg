@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="600" height="600" viewBox="462 212 600 600">
+  <!-- Transparent background; all icon strokes are solid black fills -->
+  <g fill="#000000">
+
+    <!-- X/Y axes with arrowheads -->
+    <path d="
+      M 518 731
+      L 518 273
+      L 497 296
+      C 493 300 487 300 483 296
+      C 479 292 480 286 484 282
+      L 515 245
+      C 522 236 534 236 541 245
+      L 572 282
+      C 576 286 576 292 572 296
+      C 568 300 562 300 558 296
+      L 538 273
+      L 538 731
+      L 1014 731
+      L 994 711
+      C 990 707 990 701 994 698
+      C 998 694 1004 695 1008 699
+      L 1042 733
+      C 1050 741 1050 744 1042 752
+      L 1008 785
+      C 1004 789 998 789 994 785
+      C 990 781 990 775 994 771
+      L 1014 752
+      L 529 752
+      C 523 752 518 747 518 741
+      Z" />
+
+    <!-- Horizontal dashed reference line -->
+    <rect x="550" y="492" width="56" height="19" rx="9.5"/>
+    <rect x="625" y="492" width="56" height="19" rx="9.5"/>
+    <rect x="700" y="492" width="50" height="19" rx="9.5"/>
+    <rect x="853" y="492" width="52" height="19" rx="9.5"/>
+    <rect x="921" y="492" width="54" height="19" rx="9.5"/>
+    <rect x="991" y="492" width="53" height="19" rx="9.5"/>
+
+    <!-- Vertical dashed reference line -->
+    <rect x="791" y="264" width="21" height="58" rx="10.5"/>
+    <rect x="791" y="340" width="21" height="58" rx="10.5"/>
+    <rect x="791" y="414" width="21" height="39" rx="10.5"/>
+    <rect x="791" y="552" width="21" height="36" rx="10.5"/>
+    <rect x="791" y="601" width="21" height="59" rx="10.5"/>
+    <rect x="791" y="675" width="21" height="46" rx="10.5"/>
+
+    <!-- Reference target ring: black ring with transparent center -->
+    <path fill-rule="evenodd" d="
+      M 843.5 501.5
+      A 42 42 0 1 1 759.5 501.5
+      A 42 42 0 1 1 843.5 501.5
+      Z
+      M 826 501.5
+      A 24.5 24.5 0 1 0 777 501.5
+      A 24.5 24.5 0 1 0 826 501.5
+      Z"/>
+  </g>
+</svg>

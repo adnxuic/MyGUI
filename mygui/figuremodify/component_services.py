@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 from matplotlib.axes import Axes
-from matplotlib.collections import LineCollection
+from matplotlib.collections import LineCollection, PolyCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 
@@ -62,6 +62,8 @@ from mygui.figuremodify.components import (
     InterpolationController,
     LegendController,
     MessageLevel,
+    ReferenceBandController,
+    ReferenceLineController,
     ReferenceMarksController,
     ObserverFailure,
     ScatterController,
@@ -298,6 +300,211 @@ class ReferenceMarksService:
             )
         return batch.changes[0]
 
+
+class ReferenceGuideService:
+    """Create and edit constant Reference Lines and Bands transactionally."""
+
+    def __init__(self, registry: ComponentRegistry) -> None:
+        self.registry = registry
+
+    def _owner_axes(self, owner_axes_id: str) -> Axes:
+        controller = self.registry.get(str(owner_axes_id))
+        if controller.state.kind is not ComponentKind.AXES:
+            raise ComponentValidationError(
+                "Reference Guide owner must be an ordinary Axes component."
+            )
+        target = self.registry.resolve_target(controller.component_id)
+        if not isinstance(target, Axes):
+            raise ComponentValidationError(
+                "Reference Guide owner target must be a Matplotlib Axes."
+            )
+        return target
+
+    def _preflight(
+        self,
+        owner_axes_id: str,
+        controller_type,
+        role: ComponentRole,
+        properties: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        self._owner_axes(owner_axes_id)
+        specs = controller_type.property_specs()
+        requested = dict(properties or {})
+        unknown = set(requested) - set(specs)
+        if unknown:
+            raise ComponentValidationError(
+                f"Unknown Reference Guide properties: {sorted(unknown)!r}."
+            )
+        normalized = controller_type.default_properties()
+        normalized.update(
+            {key: specs[key].normalize(value) for key, value in requested.items()}
+        )
+        candidate_id = f"{role.value}-preflight"
+        candidate = ComponentState(
+            id=candidate_id,
+            kind=ComponentKind.REFERENCE_GUIDE,
+            role=role,
+            parent_id=str(owner_axes_id),
+            order=0,
+            selector={"object_id": candidate_id},
+            properties=normalized,
+            data={},
+        )
+        controller_type(candidate)
+        return normalized
+
+    def preflight_line(
+        self,
+        owner_axes_id: str,
+        properties: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Validate a complete Reference Line candidate."""
+
+        return self._preflight(
+            owner_axes_id,
+            ReferenceLineController,
+            ComponentRole.REFERENCE_LINE,
+            properties,
+        )
+
+    def preflight_band(
+        self,
+        owner_axes_id: str,
+        properties: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Validate a complete Reference Band candidate."""
+
+        return self._preflight(
+            owner_axes_id,
+            ReferenceBandController,
+            ComponentRole.REFERENCE_BAND,
+            properties,
+        )
+
+    def create_line_runtime(
+        self,
+        owner_axes_id: str,
+        properties: dict[str, Any] | None = None,
+    ) -> tuple[LineCollection, dict[str, Any]]:
+        """Create one staged LineCollection without changing data limits."""
+
+        normalized = self.preflight_line(owner_axes_id, properties)
+        owner = self._owner_axes(owner_axes_id)
+        runtime = LineCollection(
+            [ReferenceLineController.segment_for(normalized)],
+            colors=[normalized["color"]],
+            linewidths=[normalized["linewidth"]],
+            linestyles=normalized["linestyle"],
+            alpha=normalized["alpha"],
+            visible=normalized["visible"],
+            zorder=normalized["zorder"],
+            clip_on=normalized["clip_on"],
+            label=normalized["label"],
+            transform=(
+                owner.get_xaxis_transform()
+                if normalized["orientation"] == "vertical"
+                else owner.get_yaxis_transform()
+            ),
+        )
+        try:
+            owner.add_collection(runtime, autolim=False)
+            if runtime.axes is not owner:
+                raise ComponentValidationError(
+                    "Matplotlib did not attach Reference Line to its owner Axes."
+                )
+        except Exception:
+            self.destroy_runtime(runtime)
+            raise
+        return runtime, normalized
+
+    def create_band_runtime(
+        self,
+        owner_axes_id: str,
+        properties: dict[str, Any] | None = None,
+    ) -> tuple[PolyCollection, dict[str, Any]]:
+        """Create one staged PolyCollection without changing data limits."""
+
+        normalized = self.preflight_band(owner_axes_id, properties)
+        owner = self._owner_axes(owner_axes_id)
+        runtime = PolyCollection(
+            [ReferenceBandController.polygon_for(normalized)],
+            facecolors=[normalized["facecolor"]],
+            edgecolors=[normalized["edgecolor"]],
+            linewidths=[normalized["linewidth"]],
+            linestyles=normalized["linestyle"],
+            alpha=normalized["alpha"],
+            visible=normalized["visible"],
+            zorder=normalized["zorder"],
+            clip_on=normalized["clip_on"],
+            label=normalized["label"],
+            transform=(
+                owner.get_xaxis_transform()
+                if normalized["orientation"] == "vertical"
+                else owner.get_yaxis_transform()
+            ),
+        )
+        try:
+            owner.add_collection(runtime, autolim=False)
+            if runtime.axes is not owner:
+                raise ComponentValidationError(
+                    "Matplotlib did not attach Reference Band to its owner Axes."
+                )
+        except Exception:
+            self.destroy_runtime(runtime)
+            raise
+        return runtime, normalized
+
+    @staticmethod
+    def destroy_runtime(runtime) -> None:
+        """Remove a staged guide Collection during rollback."""
+
+        if not isinstance(runtime, (LineCollection, PolyCollection)):
+            return
+        try:
+            runtime.remove()
+        except (RuntimeError, ValueError):
+            pass
+
+    @staticmethod
+    def verify_render(controller) -> None:
+        """Render-probe a staged or edited guide before publication."""
+
+        runtime = controller.resolve_target()
+        canvas = runtime.figure.canvas if runtime.figure is not None else None
+        if canvas is not None:
+            canvas.draw()
+
+    def apply_properties(
+        self,
+        component,
+        properties: dict[str, Any],
+    ) -> ComponentChange:
+        """Apply geometry and style through one verified Registry mutation."""
+
+        controller = _controller(self.registry, component)
+        if not isinstance(
+            controller,
+            (ReferenceLineController, ReferenceBandController),
+        ):
+            raise TypeError(
+                "Reference Guide edits require a Line or Band Controller."
+            )
+        batch = self.registry.apply_transaction(
+            (
+                ComponentMutation(
+                    controller.component_id,
+                    properties=dict(properties),
+                    data={},
+                ),
+            ),
+            verifier=lambda: self.verify_render(controller),
+        )
+        if not batch.committed or not batch.changes:
+            return _rejected(
+                controller,
+                batch.message or "Reference Guide render verification failed.",
+            )
+        return batch.changes[0]
 
 @dataclass(frozen=True, slots=True)
 class ColorbarSourceResolution:
@@ -1000,6 +1207,16 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
     handlers.register(
         ComponentKind.REFERENCE_MARKS,
         ComponentRole.REFLECTION_POSITIONS,
+        DeletionHandler(),
+    )
+    handlers.register(
+        ComponentKind.REFERENCE_GUIDE,
+        ComponentRole.REFERENCE_LINE,
+        DeletionHandler(),
+    )
+    handlers.register(
+        ComponentKind.REFERENCE_GUIDE,
+        ComponentRole.REFERENCE_BAND,
         DeletionHandler(),
     )
     handlers.register(

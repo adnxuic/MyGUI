@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512" height="512" viewBox="460 187 651 651">
+  <defs>
+    <linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a3a3a"/>
+      <stop offset="100%" stop-color="#2b2b2b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Transparent background: intentionally no background rectangle -->
+
+  <!-- Reference band -->
+  <rect x="521" y="430" width="557" height="212"
+        fill="url(#bandFill)" opacity="0.96"/>
+
+  <!-- Axes / arrows -->
+  <path d="
+    M 500 764
+    L 500 246
+    L 478 268
+    Q 471 274 465 267
+    Q 460 260 466 253
+    L 502 211
+    Q 511 201 520 211
+    L 558 253
+    Q 565 260 559 267
+    Q 553 274 546 268
+    L 522 246
+    L 522 764
+    L 1064 764
+    L 1044 743
+    Q 1038 737 1044 731
+    Q 1050 724 1057 729
+    L 1098 764
+    Q 1106 771 1099 779
+    L 1057 818
+    Q 1050 824 1043 817
+    Q 1038 811 1044 805
+    L 1064 785
+    L 520 785
+    Q 500 785 500 764
+    Z"
+    fill="#000000" stroke="#9a9a9a" stroke-width="1.15"
+    stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Top dashed boundary -->
+  <g fill="#000000" stroke="#9a9a9a" stroke-width="1.05">
+    <rect x="521"  y="413" width="20" height="18" rx="9"/>
+    <rect x="564"  y="413" width="54" height="18" rx="9"/>
+    <rect x="641"  y="413" width="53" height="18" rx="9"/>
+    <rect x="718"  y="413" width="54" height="18" rx="9"/>
+    <rect x="795"  y="413" width="53" height="18" rx="9"/>
+    <rect x="872"  y="413" width="53" height="18" rx="9"/>
+    <rect x="949"  y="413" width="53" height="18" rx="9"/>
+    <rect x="1026" y="413" width="53" height="18" rx="9"/>
+  </g>
+
+  <!-- Center dashed reference line -->
+  <g fill="#000000" stroke="#9a9a9a" stroke-width="1.05">
+    <rect x="541"  y="527" width="54" height="18" rx="9"/>
+    <rect x="618"  y="527" width="53" height="18" rx="9"/>
+    <rect x="694"  y="527" width="54" height="18" rx="9"/>
+    <rect x="771"  y="527" width="54" height="18" rx="9"/>
+    <rect x="848"  y="527" width="54" height="18" rx="9"/>
+    <rect x="925"  y="527" width="54" height="18" rx="9"/>
+    <rect x="1002" y="527" width="53" height="18" rx="9"/>
+  </g>
+<!-- Bottom dashed boundary -->
+  <g fill="#000000" stroke="#9a9a9a" stroke-width="1.05">
+    <rect x="521"  y="642" width="20" height="18" rx="9"/>
+    <rect x="564"  y="642" width="54" height="18" rx="9"/>
+    <rect x="641"  y="642" width="53" height="18" rx="9"/>
+    <rect x="718"  y="642" width="54" height="18" rx="9"/>
+    <rect x="795"  y="642" width="53" height="18" rx="9"/>
+    <rect x="872"  y="642" width="53" height="18" rx="9"/>
+    <rect x="949"  y="642" width="53" height="18" rx="9"/>
+    <rect x="1026" y="642" width="53" height="18" rx="9"/>
+  </g>
+</svg>

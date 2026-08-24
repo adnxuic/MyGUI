@@ -60,7 +60,7 @@ These settings are application preferences. They are not written to .mygui.json 
 
 The canvas tab bar resolves context menus with tabAt(position). Rename Project and Close Project therefore operate on the clicked tab without switching a background project.
 
-Each project has a runtime clean fingerprint made from its full typed Table snapshot and normalized schema-v12 component tree. A new project has no clean baseline and is dirty. Loading or completing an atomic save establishes the baseline. Table edits, project rename, Component changes, Undo, and Matplotlib toolbar view changes are detected by comparing a fresh snapshot; fingerprint errors are treated as dirty. Undoing exactly to the latest successful load/save fingerprint returns the project to clean state, while Redo makes it dirty again.
+Each project has a runtime clean fingerprint made from its full typed Table snapshot and normalized schema-v13 component tree. A new project has no clean baseline and is dirty. Loading or completing an atomic save establishes the baseline. Table edits, project rename, Component changes, Undo, and Matplotlib toolbar view changes are detected by comparing a fresh snapshot; fingerprint errors are treated as dirty. Undoing exactly to the latest successful load/save fingerprint returns the project to clean state, while Redo makes it dirty again.
 
 Closing a dirty tab offers Save, Discard, and Cancel:
 

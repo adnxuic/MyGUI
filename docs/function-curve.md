@@ -36,7 +36,7 @@ The shared Line Appearance section. Every parameter is documented in [Chart Comp
 
 ## Persistence
 
-A function curve stores expression, x_start, and x_stop in its component data and its visual properties in the schema-v12 component tree. See [Project Files](project-files.md).
+A function curve stores expression, x_start, and x_stop in its component data and its visual properties in the schema-v13 component tree. See [Project Files](project-files.md).
 
 ## Matplotlib reference
 

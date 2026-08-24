@@ -106,6 +106,94 @@ def _reference_marks_data(controller, context, parent):
     )
 
 
+def _reference_guide_properties(*keys: str):
+    def factory(controller, context, parent):
+        return PropertySection(
+            controller,
+            context=context,
+            property_keys=keys,
+            apply_properties=_reference_guide_apply(controller, context),
+            parent=parent,
+        )
+
+    return factory
+
+
+_REFERENCE_GUIDE_HISTORY_LABELS = {
+    "facecolor": "Face Color",
+    "edgecolor": "Edge Color",
+    "linewidth": "Line Width",
+    "linestyle": "Line Style",
+    "span_start": "Span Start",
+    "span_end": "Span End",
+    "clip_on": "Clip On",
+    "zorder": "Z-order",
+}
+
+
+def _reference_guide_apply(controller, context):
+    """Route one guide Inspector intent through Service and Figure history."""
+
+    def apply(properties):
+        patch = dict(properties)
+        role = controller.state.role.value.replace("_", " ").title()
+        if len(patch) == 1:
+            property_key = next(iter(patch))
+            label = _REFERENCE_GUIDE_HISTORY_LABELS.get(
+                property_key,
+                property_key.replace("_", " ").title(),
+            )
+            text = f"Change {role} {label}"
+            merge_key = (
+                "property",
+                controller.component_id,
+                property_key,
+            )
+        else:
+            text = f"Change {role} Properties"
+            merge_key = None
+        return perform_editor_action(
+            context,
+            text,
+            lambda: context.reference_guides.apply_properties(
+                controller,
+                patch,
+            ),
+            merge_key=merge_key,
+        )
+
+    return apply
+
+
+def _guide_number(value) -> str:
+    try:
+        return f"{float(value):g}"
+    except (TypeError, ValueError):
+        return "?"
+
+
+def _reference_line_preview(state) -> str:
+    label = str(state.properties.get("label", "")).strip()
+    if label:
+        return label
+    coordinate = (
+        "x" if state.properties.get("orientation") == "vertical" else "y"
+    )
+    return f"{coordinate} = {_guide_number(state.properties.get('value'))}"
+
+
+def _reference_band_preview(state) -> str:
+    label = str(state.properties.get("label", "")).strip()
+    if label:
+        return label
+    coordinate = (
+        "x" if state.properties.get("orientation") == "vertical" else "y"
+    )
+    lower = _guide_number(state.properties.get("lower"))
+    upper = _guide_number(state.properties.get("upper"))
+    return f"{lower} ≤ {coordinate} ≤ {upper}"
+
+
 def _axes_limits(controller, context, parent):
     return AxesLimitsSection(
         controller,
@@ -881,6 +969,110 @@ REFERENCE_MARKS_PROFILE = EditorProfile(
 )
 
 
+REFERENCE_LINE_PROFILE = EditorProfile(
+    "reference_line",
+    "Reference Line",
+    (
+        SectionSpec(
+            "general",
+            "General",
+            _reference_guide_properties("label", "visible"),
+            property_keys=("label", "visible"),
+        ),
+        SectionSpec(
+            "position",
+            "Position",
+            _reference_guide_properties("orientation", "value"),
+            property_keys=("orientation", "value"),
+        ),
+        SectionSpec(
+            "line",
+            "Line",
+            _reference_guide_properties(
+                "color", "linewidth", "linestyle", "alpha"
+            ),
+            property_keys=("color", "linewidth", "linestyle", "alpha"),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _reference_guide_properties(
+                "span_start", "span_end", "zorder", "clip_on"
+            ),
+            collapsed=True,
+            property_keys=("span_start", "span_end", "zorder", "clip_on"),
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Reference Line",
+        group_title="Reference Guides",
+        instance_prefix="Reference Line ",
+        preview=_reference_line_preview,
+        sort_bucket=50,
+        group_key="reference-guides",
+        group_order=50,
+        always_group=True,
+        delete_label="Reference Line",
+    ),
+)
+
+
+REFERENCE_BAND_PROFILE = EditorProfile(
+    "reference_band",
+    "Reference Band",
+    (
+        SectionSpec(
+            "general",
+            "General",
+            _reference_guide_properties("label", "visible"),
+            property_keys=("label", "visible"),
+        ),
+        SectionSpec(
+            "position",
+            "Position",
+            _reference_guide_properties("orientation", "lower", "upper"),
+            property_keys=("orientation", "lower", "upper"),
+        ),
+        SectionSpec(
+            "fill",
+            "Fill",
+            _reference_guide_properties("facecolor", "alpha"),
+            property_keys=("facecolor", "alpha"),
+        ),
+        SectionSpec(
+            "border",
+            "Border",
+            _reference_guide_properties(
+                "edgecolor", "linewidth", "linestyle"
+            ),
+            property_keys=("edgecolor", "linewidth", "linestyle"),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _reference_guide_properties(
+                "span_start", "span_end", "zorder", "clip_on"
+            ),
+            collapsed=True,
+            property_keys=("span_start", "span_end", "zorder", "clip_on"),
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Reference Band",
+        group_title="Reference Guides",
+        instance_prefix="Reference Band ",
+        preview=_reference_band_preview,
+        sort_bucket=50,
+        group_key="reference-guides",
+        group_order=50,
+        always_group=True,
+        delete_label="Reference Band",
+    ),
+)
+
+
 def _text_sections(*, free: bool) -> tuple[SectionSpec, ...]:
     position_keys = tuple(
         key
@@ -1337,6 +1529,16 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.REFERENCE_MARKS,
         REFERENCE_MARKS_PROFILE,
         role=ComponentRole.REFLECTION_POSITIONS,
+    )
+    editor_registry.register_profile(
+        ComponentKind.REFERENCE_GUIDE,
+        REFERENCE_LINE_PROFILE,
+        role=ComponentRole.REFERENCE_LINE,
+    )
+    editor_registry.register_profile(
+        ComponentKind.REFERENCE_GUIDE,
+        REFERENCE_BAND_PROFILE,
+        role=ComponentRole.REFERENCE_BAND,
     )
     editor_registry.register_profile(
         ComponentKind.TEXT,

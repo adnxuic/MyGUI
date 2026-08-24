@@ -199,6 +199,130 @@ class ReferenceMarksInput(QFrame):
         }
 
 
+def _guide_number_input(value: float, parent) -> FocusAwareDoubleSpinBox:
+    editor = FocusAwareDoubleSpinBox(parent)
+    editor.setRange(-1.0e100, 1.0e100)
+    editor.setDecimals(6)
+    editor.setSingleStep(0.1)
+    editor.setValue(float(value))
+    return editor
+
+
+def _guide_span_input(value: float, parent) -> FocusAwareDoubleSpinBox:
+    editor = FocusAwareDoubleSpinBox(parent)
+    editor.setRange(0.0, 1.0)
+    editor.setDecimals(4)
+    editor.setSingleStep(0.05)
+    editor.setValue(float(value))
+    return editor
+
+
+class ReferenceLineInput(QFrame):
+    """Controller-free typed input for constant Reference Line creation."""
+
+    def __init__(self, *, color_library: ColorLibrary, defaults, parent=None):
+        super().__init__(parent)
+        if color_library is None:
+            raise ValueError(
+                "ReferenceLineInput requires the application ColorLibrary."
+            )
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label_input = QLineEdit(self)
+        layout.addRow("Label:", self.label_input)
+        self.orientation_input = QComboBox(self)
+        self.orientation_input.addItem("Vertical (x = value)", "vertical")
+        self.orientation_input.addItem("Horizontal (y = value)", "horizontal")
+        layout.addRow("Orientation:", self.orientation_input)
+        self.value_input = _guide_number_input(0.0, self)
+        layout.addRow("Value:", self.value_input)
+        self.span_start_input = _guide_span_input(0.0, self)
+        self.span_end_input = _guide_span_input(1.0, self)
+        layout.addRow("Span start:", self.span_start_input)
+        layout.addRow("Span end:", self.span_end_input)
+        self.color_input = ColorChoiceWidget(
+            defaults.color,
+            color_library=color_library,
+            parent=self,
+        )
+        layout.addRow("Color:", self.color_input)
+        self.linewidth_input = FocusAwareDoubleSpinBox(self)
+        self.linewidth_input.setRange(0.0, 1000.0)
+        self.linewidth_input.setDecimals(3)
+        self.linewidth_input.setSingleStep(0.1)
+        self.linewidth_input.setValue(float(defaults.linewidth))
+        layout.addRow("Line width:", self.linewidth_input)
+
+    def properties(self) -> dict[str, object]:
+        return {
+            "label": self.label_input.text(),
+            "orientation": str(self.orientation_input.currentData(Qt.UserRole)),
+            "value": float(self.value_input.value()),
+            "span_start": float(self.span_start_input.value()),
+            "span_end": float(self.span_end_input.value()),
+            "color": self.color_input.color(),
+            "linewidth": float(self.linewidth_input.value()),
+        }
+
+
+class ReferenceBandInput(QFrame):
+    """Controller-free typed input for constant Reference Band creation."""
+
+    def __init__(self, *, color_library: ColorLibrary, defaults, parent=None):
+        super().__init__(parent)
+        if color_library is None:
+            raise ValueError(
+                "ReferenceBandInput requires the application ColorLibrary."
+            )
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label_input = QLineEdit(self)
+        layout.addRow("Label:", self.label_input)
+        self.orientation_input = QComboBox(self)
+        self.orientation_input.addItem("Vertical (x bounds)", "vertical")
+        self.orientation_input.addItem("Horizontal (y bounds)", "horizontal")
+        layout.addRow("Orientation:", self.orientation_input)
+        self.lower_input = _guide_number_input(0.0, self)
+        self.upper_input = _guide_number_input(1.0, self)
+        layout.addRow("Lower:", self.lower_input)
+        layout.addRow("Upper:", self.upper_input)
+        self.span_start_input = _guide_span_input(0.0, self)
+        self.span_end_input = _guide_span_input(1.0, self)
+        layout.addRow("Span start:", self.span_start_input)
+        layout.addRow("Span end:", self.span_end_input)
+        self.facecolor_input = ColorChoiceWidget(
+            defaults.color,
+            color_library=color_library,
+            parent=self,
+        )
+        self.edgecolor_input = ColorChoiceWidget(
+            defaults.color,
+            color_library=color_library,
+            parent=self,
+        )
+        layout.addRow("Face color:", self.facecolor_input)
+        layout.addRow("Edge color:", self.edgecolor_input)
+        self.linewidth_input = FocusAwareDoubleSpinBox(self)
+        self.linewidth_input.setRange(0.0, 1000.0)
+        self.linewidth_input.setDecimals(3)
+        self.linewidth_input.setSingleStep(0.1)
+        self.linewidth_input.setValue(float(defaults.linewidth))
+        layout.addRow("Line width:", self.linewidth_input)
+
+    def properties(self) -> dict[str, object]:
+        return {
+            "label": self.label_input.text(),
+            "orientation": str(self.orientation_input.currentData(Qt.UserRole)),
+            "lower": float(self.lower_input.value()),
+            "upper": float(self.upper_input.value()),
+            "span_start": float(self.span_start_input.value()),
+            "span_end": float(self.span_end_input.value()),
+            "facecolor": self.facecolor_input.color(),
+            "edgecolor": self.edgecolor_input.color(),
+            "linewidth": float(self.linewidth_input.value()),
+        }
+
+
 class DataReferenceInput(QFrame):
     """Controller-free X/Y column selector shared by create and edit UIs."""
 

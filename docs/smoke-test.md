@@ -226,6 +226,36 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    Inspector, collection, selection, and stable state disappear and return
    atomically with one result per action.
 
+## Reference Guides
+
+1. With no selected ordinary Axes, choose Elements > `Add Reference Line` and
+   then `Add Reference Band`. Confirm each action is intercepted with one
+   warning and no collection, Component, Inspector, or history command remains.
+2. Select an ordinary Axes and add a vertical Reference Line at `2.5` with span
+   `0.2` to `0.8`. Add a horizontal Reference Band from `-0.5` to `0.5` with
+   span `0.1` to `0.9`. Confirm both appear under one **Reference Guides** tree
+   group with formula previews and exact Inspector profiles.
+3. Pan, zoom, switch the applicable data axis to logarithmic scale, and change
+   both Axes limits. Confirm each guide follows its data-coordinate value or
+   bounds, retains its normalized Axes span, and does not expand `dataLim`,
+   relimit, or autoscale limits.
+4. Edit orientation, value/bounds, span, label, visibility, colors, line style,
+   line width, alpha, z order, and clipping. Confirm the same LineCollection or
+   PolyCollection updates and one user action creates one history command.
+5. Enter a non-finite value, equal/reversed band bounds, an out-of-range span,
+   or `span_start >= span_end`. Confirm UI, Controller state, collection,
+   selection, tree preview, and dirty state return atomically to their last
+   valid values with one red result.
+6. Create guides on separate ordinary Axes and on a right-Y Axes. Confirm each
+   guide belongs to the selected Axes and uses that Axes' blended transform.
+   Delete multiple Reference Lines together, then Undo/Redo; repeat by deleting
+   their owning Axes and confirm the full subtree restores with stable IDs.
+7. Save, close, and reopen the schema-v13 project. Confirm orientation,
+   position/bounds, spans, appearance, stable IDs, order, empty `data`, one
+   runtime collection per guide, selection/Inspector behavior, and clean/dirty
+   fingerprints survive the round trip. Close the project and confirm no
+   project, tree, Inspector, callback, or history resource remains active.
+
 ## FullProf XRD Refinement Import
 
 Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.

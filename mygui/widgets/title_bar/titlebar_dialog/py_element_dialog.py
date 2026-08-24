@@ -30,6 +30,8 @@ from mygui import status_messages
 from mygui.widgets.fig_control_window.component_editors import (
     ColorbarInput,
     InAxesInput,
+    ReferenceBandInput,
+    ReferenceLineInput,
     ReferenceMarksInput,
 )
 
@@ -347,6 +349,78 @@ class PyReferenceMarksDialog(QDialog):
         super().accept()
 
 
+class _PyReferenceGuideDialog(QDialog):
+    """Collect typed guide values and delegate creation to the Canvas."""
+
+    ICON_PATH = ""
+    INPUT_TYPE = None
+    GUIDE_LABEL = "Reference Guide"
+    CREATE_METHOD = ""
+
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName(f"{self.CREATE_METHOD}_dialog")
+        self.setWindowTitle(dialog_name or f"Add {self.GUIDE_LABEL}")
+        self.setWindowIcon(QIcon(self.ICON_PATH))
+        self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+        defaults = (
+            canvas.component_creation_defaults()
+            if canvas is not None
+            else resolve_component_creation_defaults("default")
+        )
+        color_library = getattr(figure_window, "color_library", None)
+        if color_library is None:
+            raise ValueError("The application ColorLibrary is unavailable.")
+        layout = QVBoxLayout(self)
+        self.input = self.INPUT_TYPE(
+            color_library=color_library,
+            defaults=defaults.reference_marks,
+            parent=self,
+        )
+        layout.addWidget(self.input)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self):
+        canvas = getattr(self.figure_window, "current_canva", None)
+        if canvas is None or not canvas.has_current_axes:
+            status_messages.show_warning(
+                f"Select an Axes before creating a {self.GUIDE_LABEL}."
+            )
+            return
+        try:
+            getattr(canvas, self.CREATE_METHOD)(self.input.properties())
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return
+        super().accept()
+
+
+class PyReferenceLineDialog(_PyReferenceGuideDialog):
+    """Collect Controller-free values for one constant Reference Line."""
+
+    ICON_PATH = icon_path("element_images/reference_line.svg")
+    INPUT_TYPE = ReferenceLineInput
+    GUIDE_LABEL = "Reference Line"
+    CREATE_METHOD = "add_reference_line"
+
+
+class PyReferenceBandDialog(_PyReferenceGuideDialog):
+    """Collect Controller-free values for one constant Reference Band."""
+
+    ICON_PATH = icon_path("element_images/reference_band.svg")
+    INPUT_TYPE = ReferenceBandInput
+    GUIDE_LABEL = "Reference Band"
+    CREATE_METHOD = "add_reference_band"
+
+
 @dataclass(frozen=True, slots=True)
 class ElementActionSpec:
     """Declare one Elements action and its resolved icon."""
@@ -371,5 +445,13 @@ element_action_specs = {
     "Reflection Positions": ElementActionSpec(
         PyReferenceMarksDialog,
         PyReferenceMarksDialog.ICON_PATH,
+    ),
+    "Add Reference Line": ElementActionSpec(
+        PyReferenceLineDialog,
+        PyReferenceLineDialog.ICON_PATH,
+    ),
+    "Add Reference Band": ElementActionSpec(
+        PyReferenceBandDialog,
+        PyReferenceBandDialog.ICON_PATH,
     ),
 }

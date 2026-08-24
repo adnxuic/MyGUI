@@ -17,6 +17,8 @@ rewriting existing artists.
 | Text | font family, font size, implicit text color/weight/style |
 | In-Axes | child-Axes background/border, indicator line, image interpolation |
 | Reference Marks | X major-tick color and tick-line width; does not consume the chart color sequence |
+| Reference Line | Reference Marks color and tick-line width; does not consume the chart color sequence |
+| Reference Band | Reference Marks color for its face and edge plus tick-line width; does not consume the chart color sequence |
 
 The resolver creates temporary Matplotlib Line, Scatter, Text, child-Axes,
 and inset-indicator artists
@@ -80,8 +82,10 @@ palette. A Figure style change alone does not recolor existing components.
   display properties without consuming the Axes chart-color cursor.
 - Reference Marks stores its resolved tick-derived color and line width and
   does not consume the Axes chart-color cursor.
+- Reference Lines and Reference Bands reuse those resolved Reference Marks
+  defaults and do not consume the Axes chart-color cursor.
 
-These values use the existing schema-v12 component tree. Opening a project
+These values use the existing schema-v13 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
 

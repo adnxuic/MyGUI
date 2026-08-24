@@ -1,10 +1,10 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 12. One file contains one
+MyGUI project files use strict JSON schema version 13. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v12, strictly validated integer v11 for direct
-in-memory migration, and strictly validated integer v10 through a v11 migration
-step. Schema v4-v9, non-integer values, and unknown versions are rejected before
+The loader accepts exact integer v13, strictly validated integer v12 for direct
+in-memory migration, integer v11 through v12, and integer v10 through v11 and
+v12. Schema v4-v9, non-integer values, and unknown versions are rejected before
 application state is published.
 
 ## Root structure
@@ -12,7 +12,7 @@ application state is published.
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 12,
+  "schema_version": 13,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -23,7 +23,7 @@ application state is published.
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `12`.
+- Newly saved `schema_version` is always the integer `13`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -87,6 +87,7 @@ The controlled kind/role combinations are:
 | `line` | `line`, `function_curve`, `data_plot`, `fit_curve`, `interpolation` |
 | `scatter` | `scatter` |
 | `reference_marks` | `reflection_positions` |
+| `reference_guide` | `reference_line`, `reference_band` |
 | `colorbar` | `colorbar` |
 | `in_axes` | `in_axes_zoom`, `in_axes_image` |
 
@@ -120,7 +121,7 @@ Tick, Tick Label, Grid, and Legend targets may be recreated by Matplotlib. Their
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v12)](component-properties-v12.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v13)](component-properties-v13.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -131,6 +132,8 @@ Role-specific `data` fields are:
 | `data_plot` | `x_ref`, `y_ref`, `preprocess` |
 | `scatter` | `x_ref`, `y_ref`, optional `color_ref`, optional `size_ref`, `preprocess` |
 | `reflection_positions` | ordered finite `positions`; empty and duplicate values are valid |
+| `reference_line` | exactly `{}`; constant geometry is owned by `properties` |
+| `reference_band` | exactly `{}`; constant geometry is owned by `properties` |
 | `colorbar` | `source_component_id` |
 | `interpolation` | `x_ref`, `y_ref`, `preprocess`, `method`, `k`, `samples`, `lam`, `lam_auto` |
 | `fit_curve` | `x_ref`, `y_ref`, `preprocess`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
@@ -156,6 +159,15 @@ its data contains only the complete ordered `positions` sequence. One
 Axes Y coordinates. The ten exact appearance/geometry properties and validation
 rules are documented in
 [Reference Marks Component](reference-marks-component.md).
+
+A `reference_guide/reference_line` or `reference_guide/reference_band` record
+is a removable child of an ordinary Axes. Its selector contains only the
+stable component object ID and its `data` object is exactly empty. Line
+properties own orientation, value, Axes-fraction span, and line appearance;
+Band properties own orientation, lower/upper bounds, Axes-fraction span, and
+fill/border appearance. Their `LineCollection` and `PolyCollection` runtimes
+use blended transforms and are attached with `autolim=False`, so they never
+expand data limits. See [Reference Guides](reference-guides-component.md).
 
 An `in_axes` record is a removable child of a main Axes and uses
 `selector: {"object_id": component_id}`. Both roles persist normalized parent
@@ -189,24 +201,24 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v12.
+snapshot only and does not change schema v13.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v12 save/open round trip. Strict v11 input is
-validated with the v11 graph before only its root version advances to v12.
-Strict v10 input is validated with the v10 graph, advances to v11, receives
-complete v11 validation, then advances to v12 and receives complete v12
-validation. Neither migration rewrites component records or stable IDs. v10
-cannot contain Colorbar, and v10/v11 cannot contain Reference Marks. Malformed
-predecessors and versions v4 through v9 are rejected before Table or Figure
-state is published.
+unchanged across every schema-v13 save/open round trip. Strict v12 input is
+validated with the v12 graph, deep-copied, advanced to v13, and validated again
+without rewriting component or Table records. Strict v11 input migrates through
+v12 to v13. Strict v10 input migrates through v11 and v12 to v13. v10 cannot
+contain Colorbar; v10/v11 cannot contain Reference Marks; and v10-v12 cannot
+contain Reference Guides. Malformed predecessors and versions v4 through v9
+are rejected before Table or Figure state is published.
 
 After validation, restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
-Colorbar after its source, with Legend restored from the v12 tree. Reference
-Marks is materialized as one collection in the dynamic component phase. Zoom mirrors receive one final batch refresh
+Colorbar after its source, with Legend restored from the v13 tree. Reference
+Marks and Reference Guides are materialized as collections in the dynamic
+component phase. Zoom mirrors receive one final batch refresh
 after their sources exist. Restore does not
 create legacy chart arrays or Modifier records as an intermediate runtime
 format. The Registry tree is subsequently the source for every save.
@@ -229,6 +241,8 @@ Before Table or Figure application state changes, the loader validates:
   mapping and `color_ref`, and one-Colorbar-per-source cardinality;
 - Reference Marks ownership by an ordinary Axes, exact selector/property/data
   keys, finite ordered positions, and normalized baseline/height geometry;
+- Reference Guide ownership by an ordinary Axes, exact selector/property keys,
+  empty data, finite values/bounds, orientation, and normalized spans;
 - property/data JSON types, finite numbers, normalized colors, and unique chart order values;
 - data references, compatible column types, preprocessing expressions,
   interpolation methods, and fitting engines.
@@ -246,11 +260,11 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v12.
+are not added to schema v13.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v12 project stays clean through those UI-only interactions, and a
+schema-v13 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export

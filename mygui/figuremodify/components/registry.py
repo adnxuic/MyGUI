@@ -1390,6 +1390,7 @@ class ComponentRegistry:
             ComponentKind.LEGEND,
             ComponentKind.COLORBAR,
             ComponentKind.REFERENCE_MARKS,
+            ComponentKind.REFERENCE_GUIDE,
         }:
             valid = parent_kind is ComponentKind.AXES
         elif kind is ComponentKind.TICK_GROUP:
@@ -1548,6 +1549,13 @@ class ComponentRegistry:
             if selector != {"object_id": state.id}:
                 raise ComponentValidationError(
                     f"Reference Marks component {state.id!r} requires only "
+                    "object_id equal to its component id."
+                )
+            return
+        if state.kind is ComponentKind.REFERENCE_GUIDE:
+            if selector != {"object_id": state.id}:
+                raise ComponentValidationError(
+                    f"Reference Guide component {state.id!r} requires only "
                     "object_id equal to its component id."
                 )
             return

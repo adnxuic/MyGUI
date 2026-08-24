@@ -475,6 +475,7 @@ class EditorContext:
     text_rendering: object
     colorbars: object | None = None
     reference_marks: object | None = None
+    reference_guides: object | None = None
     axes_layout: object | None = None
     in_axes: object | None = None
     dependency_service: object | None = None

@@ -22,7 +22,7 @@ from mygui.project_io import (
 from main import MainWindow
 
 
-class ProjectSchemaV12Tests(unittest.TestCase):
+class ProjectSchemaV13Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -113,7 +113,7 @@ class ProjectSchemaV12Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     validate_project_snapshot(candidate)
 
-    def test_schema_v12_reference_marks_exact_contract_and_rejections(self):
+    def test_schema_v13_reference_marks_exact_contract_and_rejections(self):
         self.canvas.add_reference_marks(
             [15.2, 15.2, 22.9],
             {
@@ -126,7 +126,7 @@ class ProjectSchemaV12Tests(unittest.TestCase):
             announce=False,
         )
         valid = self.snapshot()
-        self.assertEqual(valid["schema_version"], 12)
+        self.assertEqual(valid["schema_version"], 13)
         component = self.component(valid, "reflection_positions")
         self.assertEqual(
             set(component),
@@ -192,29 +192,111 @@ class ProjectSchemaV12Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_project_snapshot(candidate)
 
-    def test_schema_v10_and_v11_migrate_to_v12_without_rewriting_components(self):
+    def test_schema_v13_reference_guides_exact_contract_and_rejections(self):
+        self.canvas.add_reference_line(
+            {
+                "label": "threshold",
+                "orientation": "vertical",
+                "value": 2.5,
+                "span_start": 0.1,
+                "span_end": 0.9,
+            },
+            object_id="schema-reference-line",
+            announce=False,
+        )
+        self.canvas.add_reference_band(
+            {
+                "label": "range",
+                "orientation": "horizontal",
+                "lower": -0.2,
+                "upper": 0.2,
+                "span_start": 0.25,
+                "span_end": 0.75,
+            },
+            object_id="schema-reference-band",
+            announce=False,
+        )
+        valid = self.snapshot()
+        self.assertEqual(valid["schema_version"], 13)
+        line = self.component(valid, "reference_line")
+        band = self.component(valid, "reference_band")
+        self.assertEqual(line["kind"], "reference_guide")
+        self.assertEqual(band["kind"], "reference_guide")
+        self.assertEqual(line["selector"], {"object_id": "schema-reference-line"})
+        self.assertEqual(band["selector"], {"object_id": "schema-reference-band"})
+        self.assertEqual(line["data"], {})
+        self.assertEqual(band["data"], {})
+        self.assertEqual(
+            set(line["properties"]),
+            {
+                "label", "visible", "orientation", "value", "span_start",
+                "span_end", "color", "linewidth", "linestyle", "alpha",
+                "zorder", "clip_on",
+            },
+        )
+        self.assertEqual(
+            set(band["properties"]),
+            {
+                "label", "visible", "orientation", "lower", "upper",
+                "span_start", "span_end", "facecolor", "edgecolor",
+                "linewidth", "linestyle", "alpha", "zorder", "clip_on",
+            },
+        )
+        validate_project_snapshot(valid)
+
+        predecessor = deepcopy(valid)
+        predecessor["schema_version"] = 12
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "v12-cannot-contain-reference-guides.json"
+            path.write_text(json.dumps(predecessor), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "schema v12"):
+                load_project_file(path)
+
+        invalid_mutations = (
+            ("reference_line", lambda item: item["selector"].update(index=0)),
+            ("reference_line", lambda item: item["properties"].pop("value")),
+            ("reference_line", lambda item: item["properties"].update(unknown=True)),
+            ("reference_line", lambda item: item["properties"].update(value=float("nan"))),
+            ("reference_line", lambda item: item["properties"].update(value=float("inf"))),
+            ("reference_line", lambda item: item["properties"].update(orientation="diagonal")),
+            ("reference_line", lambda item: item["properties"].update(span_start=0.8, span_end=0.2)),
+            ("reference_line", lambda item: item["data"].update(value=2.5)),
+            ("reference_line", lambda item: item.update(parent_id=item["parent_id"] + "/xaxis")),
+            ("reference_band", lambda item: item["properties"].update(lower=1.0, upper=1.0)),
+            ("reference_band", lambda item: item["properties"].update(lower=2.0, upper=1.0)),
+            ("reference_band", lambda item: item["properties"].update(lower=float("nan"))),
+            ("reference_band", lambda item: item["properties"].update(upper=float("inf"))),
+        )
+        for index, (role, mutate) in enumerate(invalid_mutations):
+            with self.subTest(index=index, role=role):
+                candidate = deepcopy(valid)
+                mutate(self.component(candidate, role))
+                with self.assertRaises(ValueError):
+                    validate_project_snapshot(candidate)
+
+    def test_schema_v10_v11_and_v12_migrate_to_v13_without_rewriting_components(self):
         current = self.snapshot()
         original_components = deepcopy(current["figure"]["components"])
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for source_version in (10, 11):
+            for source_version in (10, 11, 12):
                 with self.subTest(source_version=source_version):
                     source = deepcopy(current)
                     source["schema_version"] = source_version
                     path = root / f"schema-v{source_version}.mygui.json"
                     path.write_text(json.dumps(source), encoding="utf-8")
                     migrated = load_project_file(path)
-                    self.assertEqual(migrated["schema_version"], 12)
+                    self.assertEqual(migrated["schema_version"], 13)
                     self.assertEqual(
                         migrated["figure"]["components"],
                         original_components,
                     )
 
-    def test_only_exact_integer_v10_v11_and_v12_are_accepted(self):
+    def test_only_exact_integer_v10_through_v13_are_accepted(self):
         current = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in (4, 9, 13, True, 12.0, "12"):
+            for version in (4, 9, 14, True, 13.0, "13"):
                 with self.subTest(version=version):
                     candidate = deepcopy(current)
                     candidate["schema_version"] = version
@@ -223,7 +305,7 @@ class ProjectSchemaV12Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 12)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 13)
 
     def test_validation_rejects_invalid_graph_and_component_state(self):
         valid = self.snapshot()

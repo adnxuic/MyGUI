@@ -102,6 +102,26 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             object_id="roundtrip-reference-marks",
             announce=False,
         )
+        canvas.add_reference_line(
+            {
+                "label": "threshold",
+                "value": 2.5,
+                "span_start": 0.2,
+                "span_end": 0.8,
+            },
+            object_id="roundtrip-reference-line",
+            announce=False,
+        )
+        canvas.add_reference_band(
+            {
+                "label": "range",
+                "orientation": "horizontal",
+                "lower": 1.0,
+                "upper": 2.0,
+            },
+            object_id="roundtrip-reference-band",
+            announce=False,
+        )
         linear_method = list(interpolate_dict)[2]
         canvas.add_interpolate_curve(
             valid_pair.x, valid_pair.y, x_ref, y_ref, linear_method, samples=64, label="interpolate"

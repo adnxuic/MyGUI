@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10, v11, and v12 Figure trees."""
+"""Normalize and validate strict schema-v10 through v13 Figure trees."""
 
 from __future__ import annotations
 
@@ -126,7 +126,13 @@ def normalize_v11_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v12_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v12 Figure component tree."""
+    """Normalize a strict schema-v12 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v13_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v13 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -263,6 +269,7 @@ def _validate_parent(
         ComponentKind.LEGEND,
         ComponentKind.COLORBAR,
         ComponentKind.REFERENCE_MARKS,
+        ComponentKind.REFERENCE_GUIDE,
     }:
         valid = parent_kind is ComponentKind.AXES
     elif state.kind is ComponentKind.TICK_GROUP:
@@ -338,6 +345,7 @@ def _validate_parent(
             ComponentKind.IN_AXES,
             ComponentKind.COLORBAR,
             ComponentKind.REFERENCE_MARKS,
+            ComponentKind.REFERENCE_GUIDE,
         }
         or state.role is ComponentRole.TEXT
     ) and selector.get("object_id") != state.id:
@@ -614,6 +622,14 @@ def _validate_figure(
                 f"Invalid project field {path}: Reference Marks is not part "
                 f"of schema v{schema_version}."
             )
+        if (
+            schema_version < 13
+            and state.kind is ComponentKind.REFERENCE_GUIDE
+        ):
+            raise ValueError(
+                f"Invalid project field {path}: Reference Guide is not part "
+                f"of schema v{schema_version}."
+            )
         if state.id in by_id:
             raise ValueError(f"Duplicate component id at {path}: {state.id}")
         by_id[state.id] = state
@@ -771,7 +787,7 @@ def validate_v12_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v12 Figure component tree."""
+    """Validate one predecessor schema-v12 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -779,4 +795,21 @@ def validate_v12_figure(
         project_id,
         project_name,
         schema_version=12,
+    )
+
+
+def validate_v13_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v13 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=13,
     )

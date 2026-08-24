@@ -20,7 +20,25 @@ class ComponentMaterializerContractTests(unittest.TestCase):
 
     def test_controller_contract_is_independent_completeness_source(self):
         contracts = validate_controller_contracts()
-        self.assertEqual(len(contracts), 11)
+        self.assertEqual(len(contracts), 13)
+        self.assertEqual(
+            contracts[
+                (
+                    ComponentKind.REFERENCE_GUIDE,
+                    ComponentRole.REFERENCE_LINE,
+                )
+            ],
+            RestorePhase.DYNAMIC,
+        )
+        self.assertEqual(
+            contracts[
+                (
+                    ComponentKind.REFERENCE_GUIDE,
+                    ComponentRole.REFERENCE_BAND,
+                )
+            ],
+            RestorePhase.DYNAMIC,
+        )
         self.assertEqual(
             contracts[
                 (

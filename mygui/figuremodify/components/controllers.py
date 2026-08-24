@@ -15,7 +15,7 @@ import numpy as np
 from matplotlib import colors as mcolors
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
-from matplotlib.collections import LineCollection, PathCollection
+from matplotlib.collections import LineCollection, PathCollection, PolyCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
@@ -3885,6 +3885,447 @@ class ReferenceMarksController(CollectionController):
         return UpdateImpact.REDRAW
 
 
+class _ReferenceGuideController(CollectionController):
+    """Share strict state, transform, and rollback behavior for guides."""
+
+    RESTORE_PHASE = RestorePhase.DYNAMIC
+    DELETION_POLICY = DeletionPolicy.REMOVE
+    DELETE_IMPACTS = UpdateImpact.REDRAW
+    CAPABILITIES = CollectionController.CAPABILITIES | frozenset(
+        {"reference_guide"}
+    )
+    GEOMETRY_KEYS = frozenset({"orientation", "span_start", "span_end"})
+
+    def set_property(self, key: str, value: Any) -> ComponentChange:
+        """Route geometry changes through one complete state mutation."""
+
+        if key in self.GEOMETRY_KEYS:
+            return self.apply_mutation(
+                ComponentMutation(
+                    self.component_id,
+                    properties={key: value},
+                    data=self._state.data,
+                )
+            )
+        return super().set_property(key, value)
+
+    def _validate_candidate(self, state: ComponentState) -> None:
+        if state.selector != {"object_id": state.id}:
+            raise ComponentValidationError(
+                "Reference Guide selector requires only its stable object_id."
+            )
+        start = float(state.properties["span_start"])
+        end = float(state.properties["span_end"])
+        if not start < end:
+            raise ComponentValidationError(
+                "Reference Guide span_start must be less than span_end."
+            )
+
+    @staticmethod
+    def _transform_for(target, orientation: str):
+        axes = target.axes
+        if not isinstance(axes, Axes):
+            raise ComponentValidationError(
+                "Reference Guide target must be attached to an ordinary Axes."
+            )
+        if orientation == "vertical":
+            return axes.get_xaxis_transform()
+        return axes.get_yaxis_transform()
+
+    def _read_property(self, target, spec: PropertySpec) -> Any:
+        if spec.key in self.GEOMETRY_KEYS or spec.key == "linestyle":
+            return deepcopy(self._state.properties.get(spec.key, spec.default))
+        return super()._read_property(target, spec)
+
+    def _write_property(self, target, spec: PropertySpec, value: Any) -> None:
+        if spec.key in self.GEOMETRY_KEYS:
+            # Geometry and the blended transform are rebuilt together in
+            # ``_apply_data`` from the already validated complete candidate.
+            return
+        if spec.key == "linewidth":
+            target.set_linewidth(float(value))
+            return
+        if spec.key == "linestyle":
+            target.set_linestyle(value)
+            return
+        super()._write_property(target, spec, value)
+
+    def _restore_transaction_snapshot(
+        self,
+        snapshot: tuple[ComponentState, Any, dict[str, Any]],
+    ) -> None:
+        """Restore state-owned geometry before replaying target properties."""
+
+        self._state = snapshot[0].clone()
+        super()._restore_transaction_snapshot(snapshot)
+
+    def _data_impacts(
+        self,
+        before: ComponentState | None,
+        after: ComponentState,
+    ) -> UpdateImpact:
+        del before, after
+        return UpdateImpact.REDRAW
+
+
+class ReferenceLineController(_ReferenceGuideController):
+    """Coordinate one constant Reference Line and one LineCollection."""
+
+    KIND = ComponentKind.REFERENCE_GUIDE
+    ROLES = frozenset({ComponentRole.REFERENCE_LINE})
+    GEOMETRY_KEYS = _ReferenceGuideController.GEOMETRY_KEYS | frozenset(
+        {"value"}
+    )
+    PROPERTY_SPECS = (
+        PropertySpec("label", str, "", editor=EditorKind.TEXT),
+        PropertySpec("visible", bool, True, editor=EditorKind.BOOL),
+        PropertySpec(
+            "orientation",
+            str,
+            "vertical",
+            editor=EditorKind.ENUM,
+            choices=("vertical", "horizontal"),
+        ),
+        PropertySpec("value", float, 0.0, editor=EditorKind.NUMBER),
+        PropertySpec(
+            "span_start",
+            float,
+            0.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=4,
+            advanced=True,
+        ),
+        PropertySpec(
+            "span_end",
+            float,
+            1.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=4,
+            advanced=True,
+        ),
+        PropertySpec(
+            "color",
+            str,
+            "#000000",
+            editor=EditorKind.COLOR,
+            normalizer=_normalize_color,
+        ),
+        PropertySpec(
+            "linewidth",
+            float,
+            0.8,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            step=0.1,
+            decimals=3,
+        ),
+        PropertySpec(
+            "linestyle",
+            str,
+            "-",
+            editor=EditorKind.LINE_STYLE,
+            normalizer=normalize_linestyle,
+        ),
+        PropertySpec(
+            "alpha",
+            float,
+            1.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=3,
+        ),
+        PropertySpec("zorder", float, 2.0, editor=EditorKind.NUMBER),
+        PropertySpec("clip_on", bool, True, editor=EditorKind.BOOL),
+    )
+    CAPABILITIES = _ReferenceGuideController.CAPABILITIES | frozenset(
+        {"reference_line"}
+    )
+
+    @staticmethod
+    def segment_for(properties: dict[str, Any]):
+        """Return the exact blended-coordinate segment for one line."""
+
+        value = float(properties["value"])
+        start = float(properties["span_start"])
+        end = float(properties["span_end"])
+        if properties["orientation"] == "vertical":
+            return ((value, start), (value, end))
+        return ((start, value), (end, value))
+
+    def resolve_target(self) -> LineCollection:
+        target = super().resolve_target()
+        if not isinstance(target, LineCollection):
+            raise ComponentValidationError(
+                "Reference Line target must be a Matplotlib LineCollection."
+            )
+        return target
+
+    def _read_property(
+        self,
+        target: LineCollection,
+        spec: PropertySpec,
+    ) -> Any:
+        if spec.key == "color":
+            colors = target.get_colors()
+            if len(colors):
+                saved = self._state.properties.get("color")
+                if saved is not None:
+                    try:
+                        if np.allclose(
+                            mcolors.to_rgba(saved)[:3],
+                            tuple(colors[0])[:3],
+                        ):
+                            return _normalize_color(saved)
+                    except (TypeError, ValueError):
+                        pass
+                return mcolors.to_hex(tuple(colors[0]), keep_alpha=False)
+            return str(self._state.properties.get("color", "#000000"))
+        if spec.key == "linewidth":
+            widths = target.get_linewidths()
+            return float(widths[0]) if len(widths) else 0.0
+        return super()._read_property(target, spec)
+
+    def _write_property(
+        self,
+        target: LineCollection,
+        spec: PropertySpec,
+        value: Any,
+    ) -> None:
+        if spec.key == "color":
+            target.set_color(value)
+            return
+        super()._write_property(target, spec, value)
+
+    def _apply_data(
+        self,
+        target: LineCollection,
+        state: ComponentState,
+    ) -> None:
+        target.set_transform(
+            self._transform_for(target, state.properties["orientation"])
+        )
+        target.set_segments([self.segment_for(state.properties)])
+
+    def _capture_runtime_data(self, target: LineCollection) -> Any:
+        return tuple(
+            tuple(tuple(float(value) for value in point) for point in segment)
+            for segment in target.get_segments()
+        )
+
+    def _restore_runtime_data(
+        self,
+        target: LineCollection,
+        runtime_data: Any,
+    ) -> None:
+        target.set_segments(runtime_data)
+
+
+class ReferenceBandController(_ReferenceGuideController):
+    """Coordinate one constant Reference Band and one PolyCollection."""
+
+    KIND = ComponentKind.REFERENCE_GUIDE
+    ROLES = frozenset({ComponentRole.REFERENCE_BAND})
+    GEOMETRY_KEYS = _ReferenceGuideController.GEOMETRY_KEYS | frozenset(
+        {"lower", "upper"}
+    )
+    PROPERTY_SPECS = (
+        PropertySpec("label", str, "", editor=EditorKind.TEXT),
+        PropertySpec("visible", bool, True, editor=EditorKind.BOOL),
+        PropertySpec(
+            "orientation",
+            str,
+            "vertical",
+            editor=EditorKind.ENUM,
+            choices=("vertical", "horizontal"),
+        ),
+        PropertySpec("lower", float, 0.0, editor=EditorKind.NUMBER),
+        PropertySpec("upper", float, 1.0, editor=EditorKind.NUMBER),
+        PropertySpec(
+            "span_start",
+            float,
+            0.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=4,
+            advanced=True,
+        ),
+        PropertySpec(
+            "span_end",
+            float,
+            1.0,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=4,
+            advanced=True,
+        ),
+        PropertySpec(
+            "facecolor",
+            str,
+            "#B0B0B0",
+            editor=EditorKind.COLOR,
+            normalizer=_normalize_color,
+        ),
+        PropertySpec(
+            "edgecolor",
+            str,
+            "#000000",
+            editor=EditorKind.COLOR,
+            normalizer=_normalize_color,
+        ),
+        PropertySpec(
+            "linewidth",
+            float,
+            0.8,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            step=0.1,
+            decimals=3,
+        ),
+        PropertySpec(
+            "linestyle",
+            str,
+            "-",
+            editor=EditorKind.LINE_STYLE,
+            normalizer=normalize_linestyle,
+        ),
+        PropertySpec(
+            "alpha",
+            float,
+            0.25,
+            editor=EditorKind.NUMBER,
+            minimum=0.0,
+            maximum=1.0,
+            step=0.05,
+            decimals=3,
+        ),
+        PropertySpec("zorder", float, 1.5, editor=EditorKind.NUMBER),
+        PropertySpec("clip_on", bool, True, editor=EditorKind.BOOL),
+    )
+    CAPABILITIES = _ReferenceGuideController.CAPABILITIES | frozenset(
+        {"reference_band"}
+    )
+
+    def _validate_candidate(self, state: ComponentState) -> None:
+        super()._validate_candidate(state)
+        if not float(state.properties["lower"]) < float(
+            state.properties["upper"]
+        ):
+            raise ComponentValidationError(
+                "Reference Band lower must be less than upper."
+            )
+
+    @staticmethod
+    def polygon_for(properties: dict[str, Any]):
+        """Return the exact blended-coordinate polygon for one band."""
+
+        lower = float(properties["lower"])
+        upper = float(properties["upper"])
+        start = float(properties["span_start"])
+        end = float(properties["span_end"])
+        if properties["orientation"] == "vertical":
+            return (
+                (lower, start),
+                (upper, start),
+                (upper, end),
+                (lower, end),
+            )
+        return (
+            (start, lower),
+            (end, lower),
+            (end, upper),
+            (start, upper),
+        )
+
+    def resolve_target(self) -> PolyCollection:
+        target = super().resolve_target()
+        if not isinstance(target, PolyCollection):
+            raise ComponentValidationError(
+                "Reference Band target must be a Matplotlib PolyCollection."
+            )
+        return target
+
+    def _read_color(self, target: PolyCollection, key: str) -> str:
+        colors = (
+            target.get_facecolors()
+            if key == "facecolor"
+            else target.get_edgecolors()
+        )
+        saved = self._state.properties.get(key)
+        if len(colors):
+            if saved is not None:
+                try:
+                    if np.allclose(
+                        mcolors.to_rgba(saved)[:3],
+                        tuple(colors[0])[:3],
+                    ):
+                        return _normalize_color(saved)
+                except (TypeError, ValueError):
+                    pass
+            return mcolors.to_hex(tuple(colors[0]), keep_alpha=False)
+        return str(saved or "#000000")
+
+    def _read_property(
+        self,
+        target: PolyCollection,
+        spec: PropertySpec,
+    ) -> Any:
+        if spec.key in {"facecolor", "edgecolor"}:
+            return self._read_color(target, spec.key)
+        if spec.key == "linewidth":
+            widths = target.get_linewidths()
+            return float(widths[0]) if len(widths) else 0.0
+        return super()._read_property(target, spec)
+
+    def _write_property(
+        self,
+        target: PolyCollection,
+        spec: PropertySpec,
+        value: Any,
+    ) -> None:
+        if spec.key == "facecolor":
+            target.set_facecolor(value)
+            return
+        if spec.key == "edgecolor":
+            target.set_edgecolor(value)
+            return
+        super()._write_property(target, spec, value)
+
+    def _apply_data(
+        self,
+        target: PolyCollection,
+        state: ComponentState,
+    ) -> None:
+        target.set_transform(
+            self._transform_for(target, state.properties["orientation"])
+        )
+        target.set_verts([self.polygon_for(state.properties)])
+
+    def _capture_runtime_data(self, target: PolyCollection) -> Any:
+        return tuple(
+            tuple(tuple(float(value) for value in point) for point in path.vertices)
+            for path in target.get_paths()
+        )
+
+    def _restore_runtime_data(
+        self,
+        target: PolyCollection,
+        runtime_data: Any,
+    ) -> None:
+        target.set_verts(runtime_data)
+
+
 class ScatterController(CollectionController):
     """Coordinate state changes for scatter components."""
 
@@ -4793,6 +5234,14 @@ CONTROLLER_TYPES: dict[
         ComponentKind.REFERENCE_MARKS,
         ComponentRole.REFLECTION_POSITIONS,
     ): ReferenceMarksController,
+    (
+        ComponentKind.REFERENCE_GUIDE,
+        ComponentRole.REFERENCE_LINE,
+    ): ReferenceLineController,
+    (
+        ComponentKind.REFERENCE_GUIDE,
+        ComponentRole.REFERENCE_BAND,
+    ): ReferenceBandController,
     (ComponentKind.COLORBAR, ComponentRole.COLORBAR): ColorbarController,
     (
         ComponentKind.IN_AXES,
