@@ -185,6 +185,194 @@ class AgentEngineeringTests(unittest.TestCase):
             "test_example",
         )
 
+    def test_default_application_pool_uses_four_workers(self):
+        with patch.dict(os.environ):
+            os.environ.pop("MYGUI_TEST_SHARDS", None)
+            self.assertEqual(self.verify_full.default_test_shards(), 4)
+            self.assertEqual(self.verify_full.DEFAULT_TEST_WORKERS, 4)
+
+    def test_application_plan_uses_one_shared_process_pool(self):
+        modules = {
+            "test_component_editors": (
+                self.verify_full.ISOLATION_GUI_MODULE,
+                2.6,
+            ),
+            "test_gui_layout": (
+                self.verify_full.ISOLATION_GUI_MODULE,
+                21.5,
+            ),
+            "test_safe_expression": (self.verify_full.ISOLATION_CORE, 0.1),
+            "test_resource_limits": (self.verify_full.ISOLATION_CORE, 0.0),
+            "test_xrd_refinement": (
+                self.verify_full.ISOLATION_GUI_TEST,
+                40.0,
+            ),
+        }
+        test_ids = [
+            "tests.test_component_editors.GuiTests.test_widget",
+            "tests.test_gui_layout.GuiTests.test_layout",
+            "tests.test_safe_expression.CoreTests.test_expression",
+            "tests.test_resource_limits.CoreTests.test_budget",
+            "tests.test_xrd_refinement.XrdRefinementFigureTests.test_a",
+            "tests.test_xrd_refinement.XrdRefinementFigureTests.test_b",
+        ]
+        with patch.object(self.verify_full, "APPLICATION_TEST_MODULES", modules):
+            plan = self.verify_full._build_test_plan(test_ids, 4)
+
+        self.assertEqual(plan["contractVersion"], 3)
+        self.assertEqual(plan["maxWorkers"], 4)
+        self.assertEqual(plan["isolationMode"], "process")
+        self.assertFalse(plan["serial"])
+        self.assertEqual(len(plan["groups"]), 1)
+        self.assertEqual(plan["groups"][0]["name"], "application")
+        self.assertEqual(plan["groups"][0]["workers"], 4)
+        isolations = {batch["isolation"] for batch in plan["batches"]}
+        self.assertEqual(
+            isolations,
+            {
+                self.verify_full.ISOLATION_GUI_MODULE,
+                self.verify_full.ISOLATION_GUI_TEST,
+                self.verify_full.ISOLATION_CORE,
+            },
+        )
+        gui_module_batches = [
+            batch
+            for batch in plan["batches"]
+            if batch["isolation"] == self.verify_full.ISOLATION_GUI_MODULE
+        ]
+        self.assertEqual(len(gui_module_batches), 2)
+        self.assertTrue(
+            all(len(batch["testIds"]) == 1 for batch in gui_module_batches)
+        )
+        xrd_batches = [
+            batch
+            for batch in plan["batches"]
+            if batch["isolation"] == self.verify_full.ISOLATION_GUI_TEST
+        ]
+        self.assertEqual(len(xrd_batches), 2)
+        self.assertTrue(all(len(batch["testIds"]) == 1 for batch in xrd_batches))
+        flattened = [
+            test_id
+            for batch in plan["batches"]
+            for test_id in batch["testIds"]
+        ]
+        self.assertEqual(sorted(flattened), sorted(test_ids))
+        self.assertEqual(len(flattened), len(set(flattened)))
+
+    def test_unified_pool_lpt_launch_order_is_stable(self):
+        modules = {
+            "test_gui_heavy": (self.verify_full.ISOLATION_GUI_MODULE, 100.0),
+            "test_gui_light": (self.verify_full.ISOLATION_GUI_MODULE, 10.0),
+            "test_core_a": (self.verify_full.ISOLATION_CORE, 50.0),
+            "test_xrd_refinement": (self.verify_full.ISOLATION_GUI_TEST, 40.0),
+        }
+        test_ids = [
+            "tests.test_gui_heavy.T.test_one",
+            "tests.test_gui_light.T.test_one",
+            "tests.test_core_a.T.test_one",
+            "tests.test_xrd_refinement.T.test_a",
+            "tests.test_xrd_refinement.T.test_b",
+        ]
+        with patch.object(self.verify_full, "APPLICATION_TEST_MODULES", modules):
+            first = self.verify_full._build_test_plan(test_ids, 4)
+            second = self.verify_full._build_test_plan(list(reversed(test_ids)), 4)
+        self.assertEqual(first["launchOrder"], second["launchOrder"])
+        self.assertEqual(
+            [batch["testIds"] for batch in first["batches"]],
+            [batch["testIds"] for batch in second["batches"]],
+        )
+        estimates = [batch["estimatedSeconds"] for batch in first["batches"]]
+        self.assertEqual(estimates, sorted(estimates, reverse=True))
+        self.assertEqual(
+            first["batches"][0]["testIds"],
+            ["tests.test_gui_heavy.T.test_one"],
+        )
+
+    def test_complete_module_classification_rejects_unknown_and_missing(self):
+        modules = {
+            "test_known": (self.verify_full.ISOLATION_CORE, 1.0),
+            "test_other": (self.verify_full.ISOLATION_CORE, 1.0),
+        }
+        with patch.object(self.verify_full, "APPLICATION_TEST_MODULES", modules):
+            with self.assertRaisesRegex(ValueError, "unclassified test modules"):
+                self.verify_full._build_test_plan(
+                    ["tests.test_mystery.T.test_one"],
+                    4,
+                )
+            with self.assertRaisesRegex(
+                ValueError,
+                "classified modules not collected",
+            ):
+                self.verify_full._build_test_plan(
+                    ["tests.test_known.T.test_one"],
+                    4,
+                )
+
+    def test_single_worker_falls_back_to_serial_process_isolation(self):
+        modules = {
+            "test_gui_layout": (self.verify_full.ISOLATION_GUI_MODULE, 21.5),
+            "test_safe_expression": (self.verify_full.ISOLATION_CORE, 0.1),
+            "test_xrd_refinement": (self.verify_full.ISOLATION_GUI_TEST, 9.0),
+        }
+        test_ids = [
+            "tests.test_gui_layout.GuiTests.test_layout",
+            "tests.test_safe_expression.CoreTests.test_expression",
+            "tests.test_xrd_refinement.T.test_mask_00",
+            "tests.test_xrd_refinement.T.test_mask_01",
+        ]
+        with patch.object(self.verify_full, "APPLICATION_TEST_MODULES", modules):
+            plan = self.verify_full._build_test_plan(test_ids, 1)
+        self.assertEqual(plan["maxWorkers"], 1)
+        self.assertTrue(plan["serial"])
+        self.assertEqual(plan["groups"][0]["workers"], 1)
+        gui_batches = [
+            batch
+            for batch in plan["batches"]
+            if batch["isolation"] == self.verify_full.ISOLATION_GUI_MODULE
+        ]
+        xrd_batches = [
+            batch
+            for batch in plan["batches"]
+            if batch["isolation"] == self.verify_full.ISOLATION_GUI_TEST
+        ]
+        core_batches = [
+            batch
+            for batch in plan["batches"]
+            if batch["isolation"] == self.verify_full.ISOLATION_CORE
+        ]
+        self.assertEqual(len(gui_batches), 1)
+        self.assertEqual(len(xrd_batches), 2)
+        self.assertEqual(len(core_batches), 1)
+        self.assertEqual(len(core_batches[0]["testIds"]), 1)
+
+    def test_xrd_legend_combination_ids_cover_all_bitmasks(self):
+        prefix = (
+            "tests.test_xrd_refinement.XrdRefinementFigureTests."
+            "test_legend_combination_mask_"
+        )
+        test_ids = self.coverage_batch.collect_test_ids()
+        combo_ids = [
+            test_id for test_id in test_ids if test_id.startswith(prefix)
+        ]
+        self.assertEqual(len(combo_ids), 16)
+        self.assertEqual(len(combo_ids), len(set(combo_ids)))
+        masks = []
+        for test_id in combo_ids:
+            suffix = test_id[len(prefix):]
+            self.assertRegex(suffix, r"^\d{2}$")
+            masks.append(int(suffix, 10))
+        self.assertEqual(sorted(masks), list(range(16)))
+        covered = {
+            (
+                bool(mask & 0b0001),
+                bool(mask & 0b0010),
+                bool(mask & 0b0100),
+                bool(mask & 0b1000),
+            )
+            for mask in masks
+        }
+        self.assertEqual(len(covered), 16)
+
     def test_application_plan_keeps_gui_sensitive_tests_in_one_serial_pool(self):
         gui_modules = {
             "test_component_editors",
@@ -197,35 +385,10 @@ class AgentEngineeringTests(unittest.TestCase):
         self.assertTrue(
             gui_modules <= self.verify_full.GUI_SENSITIVE_TEST_MODULES
         )
-        test_ids = [
-            "tests.test_component_editors.GuiTests.test_widget",
-            "tests.test_gui_layout.GuiTests.test_layout",
-            "tests.test_safe_expression.CoreTests.test_expression",
-            "tests.test_resource_limits.CoreTests.test_budget",
-        ]
-
-        plan = self.verify_full._build_test_plan(test_ids, 4)
-
-        groups = {group["name"]: group for group in plan["groups"]}
-        self.assertEqual(groups["application-gui"]["workers"], 1)
-        self.assertTrue(groups["application-gui"]["serial"])
-        gui_batches = [
-            plan["batches"][index]
-            for index in groups["application-gui"]["batchIndexes"]
-        ]
         self.assertEqual(
-            [test_id for batch in gui_batches for test_id in batch["testIds"]],
-            test_ids[:2],
+            self.verify_full.APPLICATION_TEST_MODULES["test_xrd_refinement"][0],
+            self.verify_full.ISOLATION_GUI_TEST,
         )
-        self.assertEqual(len(gui_batches), 2)
-        self.assertTrue(all(len(batch["testIds"]) == 1 for batch in gui_batches))
-        self.assertEqual(groups["application-core"]["workers"], 2)
-        flattened = [
-            test_id
-            for batch in plan["batches"]
-            for test_id in batch["testIds"]
-        ]
-        self.assertEqual(sorted(flattened), sorted(test_ids))
 
     def test_test_worker_environment_is_strictly_validated(self):
         with patch.dict(os.environ, {"MYGUI_TEST_SHARDS": "8"}):
@@ -290,7 +453,7 @@ class AgentEngineeringTests(unittest.TestCase):
             result = json.loads(result_path.read_text(encoding="utf-8"))
 
         self.assertEqual(returncode, 1)
-        self.assertEqual(result["contractVersion"], 2)
+        self.assertEqual(result["contractVersion"], 3)
         self.assertEqual(result["failureCount"], 1)
         self.assertEqual(result["errorCount"], 1)
         self.assertEqual(result["failures"][0]["testId"], test_ids[0])

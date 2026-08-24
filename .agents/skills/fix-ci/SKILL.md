@@ -16,6 +16,18 @@ PySide6/application profile; Ubuntu owns Agent Core/DSH/Node/Bash. Model-driven
 evals are scheduled/manual, while deterministic DSH tests and E2E remain
 blocking.
 
+Application verification (`verify_full --profile application` / `local`) uses
+one shared process pool. `MYGUI_TEST_SHARDS` is the pool concurrency cap
+(default and Windows CI: 4; `1` is serial diagnosis; legal range 1–16). GUI
+modules stay process-isolated; XRD hotspot tests use per-test-ID processes;
+core tests use LPT micro-batches. The scheduler launches batches in
+deterministic longest-processing-time order. Isolation and duration weights
+are one complete table: added, removed, or unclassified modules fail planning.
+Contract v3 plan/summary JSON records `maxWorkers`, `isolationMode`,
+`launchOrder`, batch durations, and completeness. Coverage still combines only
+after every batch is complete; do not move the full gate to nightly or lower
+the 74%/80% thresholds.
+
 Run the originally failing check and its containing full profile. Report every
 required check as passed, failed, or not run; never mark completion from a
 partial rerun.

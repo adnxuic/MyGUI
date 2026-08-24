@@ -1628,4 +1628,3 @@ def register_production_profiles(editor_registry) -> None:
     )
     for (kind, role), profile in PROPERTY_PROFILES.items():
         editor_registry.register_profile(kind, profile, role=role)
-    editor_registry.validate_production_profiles()

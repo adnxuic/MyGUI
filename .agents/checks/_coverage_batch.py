@@ -203,7 +203,7 @@ def _run_batch(plan_path: str | Path, batch_index: int, output: str | Path) -> i
     load_complete = not failed_loads and loaded_ids == test_ids
     if not load_complete:
         result = {
-            "contractVersion": 2,
+            "contractVersion": 3,
             "batchIndex": batch_index,
             "batchCount": batch_count,
             "expectedCount": len(test_ids),
@@ -242,7 +242,7 @@ def _run_batch(plan_path: str | Path, batch_index: int, output: str | Path) -> i
         and sorted(observed_ids) == sorted(test_ids)
     )
     result = {
-        "contractVersion": 2,
+        "contractVersion": 3,
         "batchIndex": batch_index,
         "batchCount": batch_count,
         "expectedCount": len(test_ids),

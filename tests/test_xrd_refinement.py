@@ -1,5 +1,4 @@
 import inspect
-import itertools
 import os
 import tempfile
 import unittest
@@ -576,102 +575,97 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
         ]
         self.assertEqual(xs[:3], [40.0, 41.0, 42.0])
 
-    def test_every_legend_checkbox_combination_is_independent(self):
-        for values in itertools.product((False, True), repeat=4):
-            with self.subTest(selection=values):
-                window = MainWindow()
-                window.figure_window.add_figure(
-                    width=4,
-                    height=3,
-                    dpi=100,
-                    style="default",
-                    canva_name="Legend",
+    def _assert_legend_combination(
+        self,
+        observed: bool,
+        calculated: bool,
+        reflection: bool,
+        residual: bool,
+    ) -> None:
+        values = (observed, calculated, reflection, residual)
+        layout_input = AxesLayoutInput(
+            color_library=self.window.figure_window.color_library,
+            preset_key="main_residual",
+        )
+        try:
+            selection = XrdRefinementLegendSelection(*values)
+            outcome = XrdRefinementImportService(
+                canvas=self.canvas,
+                table_view=self.window.table,
+            ).execute(
+                layout_input.spec(),
+                XrdRefinementImportRequest(small_result(), selection),
+            )
+            registry = self.canvas.component_registry
+            main_legend = registry.find_one(
+                parent_id=outcome.main_axes_id,
+                kind=ComponentKind.LEGEND,
+                role=ComponentRole.LEGEND,
+                recursive=False,
+            )
+            residual_legend = registry.find_one(
+                parent_id=outcome.residual_axes_id,
+                kind=ComponentKind.LEGEND,
+                role=ComponentRole.LEGEND,
+                recursive=False,
+            )
+            expected_main = [
+                label
+                for include, label in zip(
+                    values[:3],
+                    ("Observed", "Calculated", "Reflection positions"),
                 )
-                canvas = window.figure_window.current_canva
-                layout_input = AxesLayoutInput(
-                    color_library=window.figure_window.color_library,
-                    preset_key="main_residual",
+                if include
+            ]
+            expected_residual = ["Residual"] if residual else []
+            main_target = registry.resolve_target(main_legend.component_id)
+            residual_target = registry.resolve_target(residual_legend.component_id)
+            if expected_main:
+                self.assertIsNotNone(main_target)
+                self.assertEqual(
+                    [text.get_text() for text in main_target.get_texts()],
+                    expected_main,
                 )
-                try:
-                    selection = XrdRefinementLegendSelection(*values)
-                    outcome = XrdRefinementImportService(
-                        canvas=canvas,
-                        table_view=window.table,
-                    ).execute(
-                        layout_input.spec(),
-                        XrdRefinementImportRequest(small_result(), selection),
-                    )
-                    registry = canvas.component_registry
-                    main_legend = registry.find_one(
-                        parent_id=outcome.main_axes_id,
-                        kind=ComponentKind.LEGEND,
-                        role=ComponentRole.LEGEND,
-                        recursive=False,
-                    )
-                    residual_legend = registry.find_one(
-                        parent_id=outcome.residual_axes_id,
-                        kind=ComponentKind.LEGEND,
-                        role=ComponentRole.LEGEND,
-                        recursive=False,
-                    )
-                    expected_main = [
-                        label
-                        for include, label in zip(
-                            values[:3],
-                            ("Observed", "Calculated", "Reflection positions"),
-                        )
-                        if include
-                    ]
-                    expected_residual = ["Residual"] if values[3] else []
-                    main_target = registry.resolve_target(main_legend.component_id)
-                    residual_target = registry.resolve_target(residual_legend.component_id)
-                    if expected_main:
-                        self.assertIsNotNone(main_target)
-                        self.assertEqual(
-                            [text.get_text() for text in main_target.get_texts()],
-                            expected_main,
-                        )
-                        self.assertTrue(main_target.get_visible())
-                    elif main_target is not None:
-                        self.assertEqual(main_target.get_texts(), [])
-                        self.assertFalse(main_target.get_visible())
-                    if expected_residual:
-                        self.assertIsNotNone(residual_target)
-                        self.assertEqual(
-                            [text.get_text() for text in residual_target.get_texts()],
-                            expected_residual,
-                        )
-                        self.assertTrue(residual_target.get_visible())
-                    elif residual_target is not None:
-                        self.assertEqual(residual_target.get_texts(), [])
-                        self.assertFalse(residual_target.get_visible())
-                    if main_target is not None and residual_target is not None:
-                        self.assertIsNot(main_target, residual_target)
-                    self.assertEqual(
-                        main_legend.state.properties["visible"],
-                        bool(expected_main),
-                    )
-                    self.assertEqual(
-                        residual_legend.state.properties["visible"],
-                        bool(expected_residual),
-                    )
-                    attached_main = registry.resolve_target(outcome.main_axes_id).get_legend()
-                    attached_residual = registry.resolve_target(
-                        outcome.residual_axes_id
-                    ).get_legend()
-                    self.assertIs(
-                        attached_main,
-                        main_target if expected_main else None,
-                    )
-                    self.assertIs(
-                        attached_residual,
-                        residual_target if expected_residual else None,
-                    )
-                finally:
-                    layout_input.close()
-                    layout_input.deleteLater()
-                    window.close()
-                    self.app.processEvents()
+                self.assertTrue(main_target.get_visible())
+            elif main_target is not None:
+                self.assertEqual(main_target.get_texts(), [])
+                self.assertFalse(main_target.get_visible())
+            if expected_residual:
+                self.assertIsNotNone(residual_target)
+                self.assertEqual(
+                    [text.get_text() for text in residual_target.get_texts()],
+                    expected_residual,
+                )
+                self.assertTrue(residual_target.get_visible())
+            elif residual_target is not None:
+                self.assertEqual(residual_target.get_texts(), [])
+                self.assertFalse(residual_target.get_visible())
+            if main_target is not None and residual_target is not None:
+                self.assertIsNot(main_target, residual_target)
+            self.assertEqual(
+                main_legend.state.properties["visible"],
+                bool(expected_main),
+            )
+            self.assertEqual(
+                residual_legend.state.properties["visible"],
+                bool(expected_residual),
+            )
+            attached_main = registry.resolve_target(outcome.main_axes_id).get_legend()
+            attached_residual = registry.resolve_target(
+                outcome.residual_axes_id
+            ).get_legend()
+            self.assertIs(
+                attached_main,
+                main_target if expected_main else None,
+            )
+            self.assertIs(
+                attached_residual,
+                residual_target if expected_residual else None,
+            )
+        finally:
+            layout_input.close()
+            layout_input.deleteLater()
+            self.app.processEvents()
 
     def test_history_order_and_replay_preserve_cross_domain_dependency(self):
         outcome = self.execute()
@@ -729,6 +723,47 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
         stack = self.canvas.repository.undo_stack(self.canvas.project_id)
         self.assertEqual(stack.count(), 1)
         self.assertEqual(stack.text(0), TABLE_COMMAND_TEXT)
+
+
+def _legend_combination_mask_values(mask: int) -> tuple[bool, bool, bool, bool]:
+    return (
+        bool(mask & 0b0001),
+        bool(mask & 0b0010),
+        bool(mask & 0b0100),
+        bool(mask & 0b1000),
+    )
+
+
+def _register_legend_combination_tests() -> None:
+    """Install 16 stable unittest IDs covering every legend bitmask."""
+
+    for mask in range(16):
+        observed, calculated, reflection, residual = (
+            _legend_combination_mask_values(mask)
+        )
+
+        def _test(
+            self,
+            *,
+            _observed=observed,
+            _calculated=calculated,
+            _reflection=reflection,
+            _residual=residual,
+        ):
+            self._assert_legend_combination(
+                _observed,
+                _calculated,
+                _reflection,
+                _residual,
+            )
+
+        name = f"test_legend_combination_mask_{mask:02d}"
+        _test.__name__ = name
+        _test.__qualname__ = f"XrdRefinementFigureTests.{name}"
+        setattr(XrdRefinementFigureTests, name, _test)
+
+
+_register_legend_combination_tests()
 
 
 class XrdRefinementRoundTripTests(XrdWindowTestCase):

@@ -82,7 +82,11 @@ class EditorRegistry:
             raise RuntimeError("EditorRegistry is frozen.")
 
     def freeze(self) -> None:
-        """Prevent runtime mutation after production registration."""
+        """Seal production registration after the complete startup gate.
+
+        Canvas initialization registers profiles first, then calls freeze()
+        once. Validation is never cached or skipped.
+        """
 
         self.validate_production_profiles()
         self._frozen = True

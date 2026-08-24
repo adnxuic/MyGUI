@@ -33,111 +33,92 @@ CRITICAL_FILES = [
 APPLICATION_TEST_TIMEOUT_SECONDS = 3600
 APPLICATION_BATCH_TIMEOUT_SECONDS = 1200
 MAX_TEST_WORKERS = 16
+DEFAULT_TEST_WORKERS = 4
 TEST_BATCH_FACTOR = 4
 RESULT_DIR = ROOT / "build" / "agent-results"
 APPLICATION_RESULT_DIR = RESULT_DIR / "application"
 COVERAGE_BATCH_RUNNER = ROOT / ".agents" / "checks" / "_coverage_batch.py"
 APPLICATION_TIMINGS_PATH = RESULT_DIR / "application-test-timings.json"
+PLAN_CONTRACT_VERSION = 3
 
-# These modules own QApplication/QWidget/QTimer event-loop state, Matplotlib
-# Figures or process-global catalogs/configuration. Keep them on one serial
-# worker and give each module a fresh process so lifecycle and global state do
-# not leak across module boundaries.
-# The remaining contract, parsing, numerical, and static-analysis tests form
-# the parallel application-core pool.
-GUI_SENSITIVE_TEST_MODULES = frozenset({
-    "test_application_icon",
-    "test_axes_layout",
-    "test_background_task",
-    "test_batch_chart_creation",
-    "test_bottom_bar",
-    "test_chart_modifier_styles",
-    "test_color_integration",
-    "test_color_library",
-    "test_color_picker",
-    "test_colorbar_component",
-    "test_command_gallery",
-    "test_component_controllers",
-    "test_component_deletion_and_project_close",
-    "test_component_editors",
-    "test_component_inspector",
-    "test_component_runtime_integration",
-    "test_component_services",
-    "test_component_tree",
-    "test_excel_import",
-    "test_figure_dpi",
-    "test_figure_history",
-    "test_font_diagnostics",
-    "test_gui_data_flow",
-    "test_gui_file_flow",
-    "test_gui_layout",
-    "test_in_axes",
-    "test_matplotlib_property_contract",
-    "test_optional_dependencies",
-    "test_project_io",
-    "test_project_object_roundtrip",
-    "test_project_schema",
-    "test_resource_locator",
-    "test_style_creation_defaults",
-    "test_table_document",
-    "test_table_ui",
-    "test_text_import",
-})
+# Isolation modes for the unified application process pool.
+# gui-module: one fresh process per test module (Qt/Matplotlib lifecycle).
+# gui-test: one fresh process per test ID (hotspots such as XRD combinations).
+# core: contract/parsing/numerical tests packed into LPT micro-batches.
+ISOLATION_GUI_MODULE = "gui-module"
+ISOLATION_GUI_TEST = "gui-test"
+ISOLATION_CORE = "core"
+GUI_ISOLATION_MODES = frozenset({ISOLATION_GUI_MODULE, ISOLATION_GUI_TEST})
 
-# Per-module wall-clock seconds measured 2026-08-22 (Windows, 20 logical CPUs,
-# one process, no coverage instrumentation). Used only to balance parallel
-# coverage batches; each module's weight is shared by its collected test IDs,
-# and unmeasured tests fall back to 0.1 seconds each.
-# Refresh this table whenever test suites change significantly.
+# Complete classification: isolation plus historical wall-clock seconds.
+# Measured 2026-08-22 except XRD/reference/canvas modules added later.
+# Plan validation fails if discovery adds, removes, or leaves a module
+# unclassified, so new suites cannot enter LPT with a 0.1s fallback.
+APPLICATION_TEST_MODULES = {
+    "test_component_deletion_and_project_close": (ISOLATION_GUI_MODULE, 174.3),
+    "test_component_tree": (ISOLATION_GUI_MODULE, 106.3),
+    "test_component_runtime_integration": (ISOLATION_GUI_MODULE, 94.7),
+    "test_project_io": (ISOLATION_GUI_MODULE, 91.9),
+    "test_figure_history": (ISOLATION_GUI_MODULE, 86.2),
+    "test_colorbar_component": (ISOLATION_GUI_MODULE, 69.7),
+    "test_color_integration": (ISOLATION_GUI_MODULE, 52.0),
+    "test_batch_chart_creation": (ISOLATION_GUI_MODULE, 45.4),
+    "test_axes_layout": (ISOLATION_GUI_MODULE, 27.8),
+    "test_reference_guides": (ISOLATION_GUI_MODULE, 25.0),
+    "test_gui_data_flow": (ISOLATION_GUI_MODULE, 24.2),
+    "test_gui_layout": (ISOLATION_GUI_MODULE, 21.5),
+    "test_xrd_refinement": (ISOLATION_GUI_TEST, 260.0),
+    "test_project_schema": (ISOLATION_GUI_MODULE, 15.7),
+    "test_project_object_roundtrip": (ISOLATION_GUI_MODULE, 10.0),
+    "test_in_axes": (ISOLATION_GUI_MODULE, 9.3),
+    "test_canvas_popout": (ISOLATION_GUI_MODULE, 8.0),
+    "test_reference_marks_table": (ISOLATION_GUI_MODULE, 8.0),
+    "test_figure_dpi": (ISOLATION_GUI_MODULE, 6.9),
+    "test_text_import": (ISOLATION_GUI_MODULE, 6.7),
+    "test_excel_import": (ISOLATION_GUI_MODULE, 6.6),
+    "test_optional_dependencies": (ISOLATION_GUI_MODULE, 4.1),
+    "test_component_editors": (ISOLATION_GUI_MODULE, 2.6),
+    "test_resource_locator": (ISOLATION_GUI_MODULE, 2.4),
+    "test_gui_file_flow": (ISOLATION_GUI_MODULE, 2.0),
+    "test_font_diagnostics": (ISOLATION_GUI_MODULE, 1.5),
+    "test_component_inspector": (ISOLATION_GUI_MODULE, 1.4),
+    "test_command_gallery": (ISOLATION_GUI_MODULE, 1.3),
+    "test_matplotlib_boundaries": (ISOLATION_CORE, 1.2),
+    "test_table_ui": (ISOLATION_GUI_MODULE, 1.1),
+    "test_component_controllers": (ISOLATION_GUI_MODULE, 1.0),
+    "test_bounded_process": (ISOLATION_CORE, 0.7),
+    "test_package_boundary": (ISOLATION_CORE, 0.4),
+    "test_color_library": (ISOLATION_GUI_MODULE, 0.4),
+    "test_style_creation_defaults": (ISOLATION_GUI_MODULE, 0.4),
+    "test_fullprof_prf": (ISOLATION_CORE, 0.3),
+    "test_component_services": (ISOLATION_GUI_MODULE, 0.3),
+    "test_y_axis_reserve": (ISOLATION_CORE, 0.2),
+    "test_background_task": (ISOLATION_GUI_MODULE, 0.2),
+    "test_application_icon": (ISOLATION_GUI_MODULE, 0.2),
+    "test_table_document": (ISOLATION_GUI_MODULE, 0.1),
+    "test_safe_expression": (ISOLATION_CORE, 0.1),
+    "test_data_preprocessing": (ISOLATION_CORE, 0.1),
+    "test_agent_engineering": (ISOLATION_CORE, 0.1),
+    "test_matplotlib_property_contract": (ISOLATION_GUI_MODULE, 0.1),
+    "test_bottom_bar": (ISOLATION_GUI_MODULE, 0.0),
+    "test_resource_limits": (ISOLATION_CORE, 0.0),
+    "test_chart_modifier_styles": (ISOLATION_GUI_MODULE, 0.0),
+    "test_color_picker": (ISOLATION_GUI_MODULE, 0.0),
+    "test_fit_catalog": (ISOLATION_CORE, 0.0),
+    "test_interpolate_func": (ISOLATION_CORE, 0.0),
+    "test_color_models": (ISOLATION_CORE, 0.0),
+    "test_scipy_fit_adapter": (ISOLATION_CORE, 0.0),
+    "test_component_materializers": (ISOLATION_CORE, 0.0),
+}
+
+GUI_SENSITIVE_TEST_MODULES = frozenset(
+    module
+    for module, (isolation, _seconds) in APPLICATION_TEST_MODULES.items()
+    if isolation in GUI_ISOLATION_MODES
+)
 TEST_MODULE_SECONDS = {
-    "test_component_deletion_and_project_close": 174.3,
-    "test_component_tree": 106.3,
-    "test_component_runtime_integration": 94.7,
-    "test_project_io": 91.9,
-    "test_figure_history": 86.2,
-    "test_colorbar_component": 69.7,
-    "test_color_integration": 52.0,
-    "test_batch_chart_creation": 45.4,
-    "test_axes_layout": 27.8,
-    "test_gui_data_flow": 24.2,
-    "test_gui_layout": 21.5,
-    "test_project_schema": 15.7,
-    "test_project_object_roundtrip": 10.0,
-    "test_in_axes": 9.3,
-    "test_figure_dpi": 6.9,
-    "test_text_import": 6.7,
-    "test_excel_import": 6.6,
-    "test_optional_dependencies": 4.1,
-    "test_component_editors": 2.6,
-    "test_resource_locator": 2.4,
-    "test_gui_file_flow": 2.0,
-    "test_font_diagnostics": 1.5,
-    "test_component_inspector": 1.4,
-    "test_command_gallery": 1.3,
-    "test_matplotlib_boundaries": 1.2,
-    "test_table_ui": 1.1,
-    "test_component_controllers": 1.0,
-    "test_bounded_process": 0.7,
-    "test_package_boundary": 0.4,
-    "test_color_library": 0.4,
-    "test_style_creation_defaults": 0.4,
-    "test_component_services": 0.3,
-    "test_background_task": 0.2,
-    "test_application_icon": 0.2,
-    "test_table_document": 0.1,
-    "test_safe_expression": 0.1,
-    "test_data_preprocessing": 0.1,
-    "test_agent_engineering": 0.1,
-    "test_matplotlib_property_contract": 0.1,
-    "test_bottom_bar": 0.0,
-    "test_resource_limits": 0.0,
-    "test_chart_modifier_styles": 0.0,
-    "test_color_picker": 0.0,
-    "test_fit_catalog": 0.0,
-    "test_interpolate_func": 0.0,
-    "test_color_models": 0.0,
-    "test_scipy_fit_adapter": 0.0,
-    "test_component_materializers": 0.0,
+    module: seconds
+    for module, (_isolation, seconds) in APPLICATION_TEST_MODULES.items()
 }
 
 # Build the shared Matplotlib font cache once before parallel shards start so
@@ -162,7 +143,7 @@ def default_test_shards() -> int:
                 "MYGUI_TEST_SHARDS must be an integer from 1 through 16."
             )
         return workers
-    return min(8, max(2, os.cpu_count() or 2))
+    return DEFAULT_TEST_WORKERS
 
 
 def configured_timeout_seconds(name: str, default: int) -> int:
@@ -191,17 +172,36 @@ def _module_from_test_id(test_id: str) -> str:
     return module
 
 
+def _module_spec(module: str) -> tuple[str, float]:
+    try:
+        isolation, seconds = APPLICATION_TEST_MODULES[module]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unclassified application test module: {module}."
+        ) from exc
+    return str(isolation), float(seconds)
+
+
+def _classification_errors(modules: set[str]) -> list[str]:
+    configured = set(APPLICATION_TEST_MODULES)
+    missing = sorted(modules - configured)
+    extra = sorted(configured - modules)
+    errors = []
+    if missing:
+        errors.append(f"unclassified test modules: {missing}")
+    if extra:
+        errors.append(f"classified modules not collected: {extra}")
+    return errors
+
+
 def _test_weights(test_ids: list[str]) -> dict[str, float]:
     module_counts = Counter(_module_from_test_id(test_id) for test_id in test_ids)
     weights = {}
     for test_id in test_ids:
         module = _module_from_test_id(test_id)
-        measured = TEST_MODULE_SECONDS.get(module)
-        weights[test_id] = (
-            measured / module_counts[module]
-            if measured is not None and measured > 0
-            else 0.1
-        )
+        _isolation, measured = _module_spec(module)
+        count = module_counts[module]
+        weights[test_id] = measured / count if measured > 0 else 0.0
     return weights
 
 
@@ -238,75 +238,130 @@ def _balanced_test_batches(
 
 
 def _build_test_plan(test_ids: list[str], requested_workers: int) -> dict:
-    weights = _test_weights(test_ids)
-    gui_ids = sorted(
-        test_id
-        for test_id in test_ids
-        if _module_from_test_id(test_id) in GUI_SENSITIVE_TEST_MODULES
-    )
-    core_ids = sorted(set(test_ids) - set(gui_ids))
-    batches = []
-    groups = []
+    if not test_ids:
+        raise ValueError("Cannot create application test batches without tests.")
+    if not 1 <= requested_workers <= MAX_TEST_WORKERS:
+        raise ValueError("Application test workers must be between 1 and 16.")
+    if len(test_ids) != len(set(test_ids)):
+        raise ValueError("Application test IDs must be unique before batching.")
 
-    def add_group(name: str, group_batches: list[list[str]], workers: int) -> None:
-        indexes = []
-        for test_batch in group_batches:
-            index = len(batches)
-            indexes.append(index)
-            batches.append({
-                "index": index,
-                "pool": name,
+    modules = sorted({_module_from_test_id(test_id) for test_id in test_ids})
+    classification_errors = _classification_errors(set(modules))
+    if classification_errors:
+        raise ValueError(
+            "Application test module classification is incomplete: "
+            + "; ".join(classification_errors)
+            + "."
+        )
+
+    weights = _test_weights(test_ids)
+    gui_module_ids: dict[str, list[str]] = {}
+    gui_test_ids: list[str] = []
+    core_ids: list[str] = []
+    for test_id in test_ids:
+        module = _module_from_test_id(test_id)
+        isolation, _seconds = _module_spec(module)
+        if isolation == ISOLATION_GUI_MODULE:
+            gui_module_ids.setdefault(module, []).append(test_id)
+        elif isolation == ISOLATION_GUI_TEST:
+            gui_test_ids.append(test_id)
+        elif isolation == ISOLATION_CORE:
+            core_ids.append(test_id)
+        else:
+            raise ValueError(
+                f"Unknown isolation mode {isolation!r} for module {module}."
+            )
+
+    raw_batches: list[dict] = []
+    for module in sorted(gui_module_ids):
+        batch_ids = sorted(gui_module_ids[module])
+        raw_batches.append({
+            "isolation": ISOLATION_GUI_MODULE,
+            "module": module,
+            "estimatedSeconds": round(
+                sum(weights[test_id] for test_id in batch_ids),
+                3,
+            ),
+            "testIds": batch_ids,
+        })
+    for test_id in sorted(gui_test_ids):
+        raw_batches.append({
+            "isolation": ISOLATION_GUI_TEST,
+            "module": _module_from_test_id(test_id),
+            "estimatedSeconds": round(weights[test_id], 3),
+            "testIds": [test_id],
+        })
+    if core_ids:
+        core_workers = min(requested_workers, len(core_ids))
+        for test_batch in _balanced_test_batches(
+            core_ids,
+            core_workers,
+            weights=weights,
+        ):
+            raw_batches.append({
+                "isolation": ISOLATION_CORE,
+                "module": None,
                 "estimatedSeconds": round(
                     sum(weights[test_id] for test_id in test_batch),
                     3,
                 ),
                 "testIds": test_batch,
             })
-        groups.append({
-            "name": name,
-            "workers": workers,
-            "serial": workers == 1,
-            "batchIndexes": indexes,
-            "testCount": sum(len(batch) for batch in group_batches),
+
+    ordered = sorted(
+        raw_batches,
+        key=lambda batch: (
+            -float(batch["estimatedSeconds"]),
+            str(batch["isolation"]),
+            tuple(batch["testIds"]),
+        ),
+    )
+    batches = []
+    for index, batch in enumerate(ordered):
+        batches.append({
+            "index": index,
+            "pool": "application",
+            "isolation": batch["isolation"],
+            "module": batch["module"],
+            "estimatedSeconds": batch["estimatedSeconds"],
+            "launchOrder": index,
+            "testIds": batch["testIds"],
         })
 
-    if gui_ids:
-        gui_by_module: dict[str, list[str]] = {}
-        for test_id in gui_ids:
-            gui_by_module.setdefault(
-                _module_from_test_id(test_id),
-                [],
-            ).append(test_id)
-        add_group(
-            "application-gui",
-            [gui_by_module[module] for module in sorted(gui_by_module)],
-            1,
-        )
-    core_workers = min(requested_workers, len(core_ids)) if core_ids else 0
-    if core_ids:
-        add_group(
-            "application-core",
-            _balanced_test_batches(core_ids, core_workers, weights=weights),
-            core_workers,
-        )
-
-    modules = sorted({_module_from_test_id(test_id) for test_id in test_ids})
-    missing_baselines = sorted(set(modules) - set(TEST_MODULE_SECONDS))
+    max_workers = min(requested_workers, len(batches)) if batches else 0
+    launch_order = [batch["index"] for batch in batches]
     return {
-        "contractVersion": 2,
+        "contractVersion": PLAN_CONTRACT_VERSION,
         "testCount": len(test_ids),
         "uniqueTestCount": len(set(test_ids)),
         "requestedWorkers": requested_workers,
-        "workers": core_workers,
-        "guiTestCount": len(gui_ids),
+        "maxWorkers": max_workers,
+        "workers": max_workers,
+        "isolationMode": "process",
+        "serial": requested_workers == 1,
+        "guiTestCount": (
+            sum(len(values) for values in gui_module_ids.values())
+            + len(gui_test_ids)
+        ),
         "coreTestCount": len(core_ids),
         "batchCount": len(batches),
-        "groups": groups,
+        "launchOrder": launch_order,
+        "groups": [{
+            "name": "application",
+            "workers": max_workers,
+            "serial": requested_workers == 1,
+            "isolationMode": "process",
+            "batchIndexes": launch_order,
+            "testCount": len(test_ids),
+        }],
         "batches": batches,
         "timingBaseline": {
             "collectedModules": modules,
-            "measuredModules": sorted(set(modules) & set(TEST_MODULE_SECONDS)),
-            "missingModules": missing_baselines,
+            "classifiedModules": sorted(APPLICATION_TEST_MODULES),
+            "guiModules": sorted(GUI_SENSITIVE_TEST_MODULES),
+            "measuredModules": sorted(TEST_MODULE_SECONDS),
+            "missingModules": [],
+            "extraModules": [],
         },
     }
 
@@ -330,12 +385,14 @@ def _failed_batch_metadata(
     reason: str,
     *,
     pool: str,
+    isolation: str = ISOLATION_CORE,
     exception_type: str = "InfrastructureError",
 ) -> dict:
     return {
-        "contractVersion": 2,
+        "contractVersion": PLAN_CONTRACT_VERSION,
         "batchIndex": index,
         "pool": pool,
+        "isolation": isolation,
         "expectedCount": len(test_ids),
         "assignedTestIds": list(test_ids),
         "testsRun": 0,
@@ -377,7 +434,8 @@ def _run_coverage_batch(
     result_path: Path,
     deadline: float,
     batch_timeout: int = APPLICATION_BATCH_TIMEOUT_SECONDS,
-    pool: str = "application-core",
+    pool: str = "application",
+    isolation: str = ISOLATION_CORE,
 ) -> tuple[dict, dict, str]:
     command = [
         sys.executable, "-m", "coverage", "run", "--parallel-mode",
@@ -399,6 +457,7 @@ def _run_coverage_batch(
             test_ids,
             evidence,
             pool=pool,
+            isolation=isolation,
             exception_type="GlobalTimeout",
         )
         metadata["timeoutReason"] = "global_timeout_before_launch"
@@ -479,6 +538,7 @@ def _run_coverage_batch(
             test_ids,
             timeout_message,
             pool=pool,
+            isolation=isolation,
             exception_type=(
                 "BatchTimeout"
                 if timeout_reason == "batch_timeout"
@@ -499,11 +559,13 @@ def _run_coverage_batch(
             test_ids,
             message,
             pool=pool,
+            isolation=isolation,
             exception_type=type(exc).__name__,
         )
     duration_ms = (time.monotonic() - started) * 1000
-    metadata["contractVersion"] = 2
+    metadata["contractVersion"] = PLAN_CONTRACT_VERSION
     metadata["pool"] = pool
+    metadata["isolation"] = isolation
     metadata["assignedTestIds"] = list(test_ids)
     metadata["effectiveTimeoutSeconds"] = round(effective_timeout, 3)
     metadata["wallDurationMs"] = round(duration_ms, 3)
@@ -525,75 +587,76 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
     batches = plan["batches"]
     outcomes: dict[int, tuple[dict, dict]] = {}
     batch_by_index = {int(batch["index"]): batch for batch in batches}
-    groups = plan.get("groups") or [{
-        "name": "application-core",
-        "workers": max(1, int(plan.get("workers", 1))),
-        "batchIndexes": sorted(batch_by_index),
-    }]
-
-    for group in groups:
-        pool = str(group["name"])
-        workers = max(1, int(group["workers"]))
-        group_batches = [
-            batch_by_index[int(index)]
-            for index in group["batchIndexes"]
-        ]
-        print(
-            f"\n=== {pool.upper()} "
-            f"(workers={workers}, batches={len(group_batches)}) ==="
-        )
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(
-                    _run_coverage_batch,
-                    int(batch["index"]),
-                    list(batch["testIds"]),
+    max_workers = max(
+        1,
+        int(plan.get("maxWorkers") or plan.get("workers") or 1),
+    )
+    launch_order = list(
+        plan.get("launchOrder")
+        or [int(batch["index"]) for batch in batches]
+    )
+    ordered_batches = [batch_by_index[int(index)] for index in launch_order]
+    pool = "application"
+    print(
+        f"\n=== APPLICATION TEST POOL "
+        f"(maxWorkers={max_workers}, batches={len(ordered_batches)}, "
+        f"isolation=process, lptLaunchOrder={launch_order}) ==="
+    )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _run_coverage_batch,
+                int(batch["index"]),
+                list(batch["testIds"]),
+                len(batches),
+                plan_path,
+                result_dir / f"batch-{int(batch['index']):03d}.json",
+                deadline,
+                batch_timeout,
+                str(batch.get("pool") or pool),
+                str(batch.get("isolation") or ISOLATION_CORE),
+            ): batch
+            for batch in ordered_batches
+        }
+        for future in as_completed(futures):
+            batch = futures[future]
+            index = int(batch["index"])
+            isolation = str(batch.get("isolation") or ISOLATION_CORE)
+            try:
+                step, metadata, output = future.result()
+            except Exception as exc:
+                evidence = (
+                    f"Coverage batch future failed: {type(exc).__name__}: {exc}"
+                )
+                command = ["coverage batch", str(index)]
+                step = _batch_step(
+                    index,
                     len(batches),
-                    plan_path,
-                    result_dir / f"batch-{int(batch['index']):03d}.json",
-                    deadline,
-                    batch_timeout,
-                    pool,
-                ): batch
-                for batch in group_batches
-            }
-            for future in as_completed(futures):
-                batch = futures[future]
-                index = int(batch["index"])
-                try:
-                    step, metadata, output = future.result()
-                except Exception as exc:
-                    evidence = (
-                        f"Coverage batch future failed: {type(exc).__name__}: {exc}"
-                    )
-                    command = ["coverage batch", str(index)]
-                    step = _batch_step(
-                        index,
-                        len(batches),
-                        command,
-                        "failed",
-                        0,
-                        evidence,
-                    )
-                    metadata = _failed_batch_metadata(
-                        index,
-                        list(batch["testIds"]),
-                        evidence,
-                        pool=pool,
-                        exception_type=type(exc).__name__,
-                    )
-                    _write_json(
-                        result_dir / f"batch-{index:03d}.json",
-                        metadata,
-                    )
-                    _write_text(
-                        result_dir / f"batch-{index:03d}.log",
-                        evidence + "\n",
-                    )
-                    output = evidence
-                outcomes[index] = (step, metadata)
-                print(f"\n== {step['id']} ({step['status']}) ==")
-                print(output[-6000:], end="" if output.endswith("\n") else "\n")
+                    command,
+                    "failed",
+                    0,
+                    evidence,
+                )
+                metadata = _failed_batch_metadata(
+                    index,
+                    list(batch["testIds"]),
+                    evidence,
+                    pool=str(batch.get("pool") or pool),
+                    isolation=isolation,
+                    exception_type=type(exc).__name__,
+                )
+                _write_json(
+                    result_dir / f"batch-{index:03d}.json",
+                    metadata,
+                )
+                _write_text(
+                    result_dir / f"batch-{index:03d}.log",
+                    evidence + "\n",
+                )
+                output = evidence
+            outcomes[index] = (step, metadata)
+            print(f"\n== {step['id']} ({step['status']}) ==")
+            print(output[-6000:], end="" if output.endswith("\n") else "\n")
 
     wall_duration_ms = round((time.monotonic() - started) * 1000, 3)
     ordered = [outcomes[index] for index in range(len(batches))]
@@ -636,10 +699,22 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
             float(aggregate["durationMs"]) + float(timing.get("durationMs", 0)),
             3,
         )
+    groups = plan.get("groups") or [{
+        "name": pool,
+        "workers": max_workers,
+        "serial": max_workers == 1,
+        "isolationMode": plan.get("isolationMode", "process"),
+        "batchIndexes": launch_order,
+        "testCount": len(expected_ids),
+    }]
     summary = {
-        "contractVersion": 2,
+        "contractVersion": PLAN_CONTRACT_VERSION,
+        "maxWorkers": max_workers,
+        "requestedWorkers": int(plan.get("requestedWorkers", max_workers)),
+        "isolationMode": plan.get("isolationMode", "process"),
+        "serial": bool(plan.get("serial", max_workers == 1)),
+        "launchOrder": launch_order,
         "groups": groups,
-        "coreWorkers": int(plan.get("workers", 0)),
         "batchCount": len(batches),
         "testCount": len(expected_ids),
         "uniqueTestCount": len(set(expected_ids)),
@@ -652,13 +727,23 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
         "testTimings": test_timings,
         "moduleTimings": module_timings,
         "failures": [
-            {**issue, "batchIndex": result.get("batchIndex"), "pool": result.get("pool")}
+            {
+                **issue,
+                "batchIndex": result.get("batchIndex"),
+                "pool": result.get("pool"),
+                "isolation": result.get("isolation"),
+            }
             for result in batch_results
             for issue in result.get("failures", [])
             if isinstance(issue, dict)
         ],
         "errors": [
-            {**issue, "batchIndex": result.get("batchIndex"), "pool": result.get("pool")}
+            {
+                **issue,
+                "batchIndex": result.get("batchIndex"),
+                "pool": result.get("pool"),
+                "isolation": result.get("isolation"),
+            }
             for result in batch_results
             for issue in result.get("errors", [])
             if isinstance(issue, dict)
@@ -670,7 +755,10 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
     if issues:
         print("\n=== APPLICATION TEST FAILURES ===")
         for issue in issues:
-            print(f"batch: {int(issue['batchIndex']) + 1}/{len(batches)} ({issue['pool']})")
+            print(
+                f"batch: {int(issue['batchIndex']) + 1}/{len(batches)} "
+                f"({issue['pool']}/{issue.get('isolation') or 'unknown'})"
+            )
             print(f"test: {issue.get('testId') or '<batch infrastructure>'}")
             print(f"exception: {issue.get('exceptionType') or 'Unknown'}")
             print(f"message: {issue.get('message') or ''}")
@@ -679,11 +767,13 @@ def _execute_test_plan(plan: dict, plan_path: Path, result_dir: Path,
                 print("traceback:")
                 print(traceback_text)
     summary_evidence = (
+        f"maxWorkers={max_workers}, isolation=process, "
+        f"serial={plan.get('serial', max_workers == 1)}, "
         f"gui_tests={plan.get('guiTestCount', 0)}, "
         f"core_tests={plan.get('coreTestCount', len(expected_ids))}, "
-        f"core_workers={plan.get('workers', 0)}, batches={len(batches)}, "
-        f"expected={len(expected_ids)}, ran={len(observed_ids)}, "
-        f"unique={len(set(observed_ids))}, coverage_complete={coverage_complete}, "
+        f"batches={len(batches)}, expected={len(expected_ids)}, "
+        f"ran={len(observed_ids)}, unique={len(set(observed_ids))}, "
+        f"coverage_complete={coverage_complete}, "
         f"wall={wall_duration_ms / 1000:.3f}s; "
         f"timings={APPLICATION_TIMINGS_PATH}"
     )
@@ -724,7 +814,10 @@ def _application_steps() -> list[dict]:
         "status": "failed" if worker_error else "passed",
         "required": True,
         "durationMs": 0,
-        "evidence": worker_error or f"Requested {requested_workers} application test workers.",
+        "evidence": worker_error or (
+            f"Requested {requested_workers} application test pool workers "
+            f"(MYGUI_TEST_SHARDS default {DEFAULT_TEST_WORKERS})."
+        ),
     })
     try:
         global_timeout = configured_timeout_seconds(
@@ -862,12 +955,12 @@ def _application_steps() -> list[dict]:
                 "required": True,
                 "durationMs": 0,
                 "evidence": plan_error or (
+                    f"contract=v{plan['contractVersion']}, "
                     f"tests={plan['testCount']}, unique={plan['uniqueTestCount']}, "
-                    f"gui={plan['guiTestCount']} (workers=1), "
-                    f"core={plan['coreTestCount']} (workers={plan['workers']}), "
-                    f"batches={plan['batchCount']}, "
-                    f"missing_timing_baselines="
-                    f"{plan['timingBaseline']['missingModules']}"
+                    f"maxWorkers={plan['maxWorkers']}, serial={plan['serial']}, "
+                    f"isolation={plan['isolationMode']}, "
+                    f"gui={plan['guiTestCount']}, core={plan['coreTestCount']}, "
+                    f"batches={plan['batchCount']}"
                 ),
             })
             if plan_error:

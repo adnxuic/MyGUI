@@ -433,7 +433,6 @@ class PyFigureCanvas(QWidget):
         materializer_contracts = validate_controller_contracts()
         self.editor_registry = EditorRegistry()
         register_production_profiles(self.editor_registry)
-        self.editor_registry.validate_production_profiles()
         self.axes_commands = AxesCommandService(self.component_registry)
         self.axes_layout_service = AxesLayoutService(self)
         self.function_curve_service = FunctionCurveService(
