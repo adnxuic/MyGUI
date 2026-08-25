@@ -1,0 +1,22 @@
+# Major Tick Labels Component
+
+The **Major Tick Labels** component controls the font styling, orientation, alignment, padding, and background frame formatting of tick label text strings generated at major tick locations.
+
+## Properties
+
+--8<-- "_snippets/components/ticks/tick-label-properties.md"
+
+## Advanced
+
+--8<-- "_snippets/components/ticks/tick-label-advanced.md"
+
+## Project record
+
+Schema v15 persists Major Tick Labels as `kind: "tick_label_group"`, `role: "major_tick_label"`, with `selector: {"axis_name": "x", "group_type": "major"}` under its parent Axes.
+
+## Referenced Matplotlib 3.9.0 URLs
+
+- [Text API](https://matplotlib.org/3.9.0/api/text_api.html#matplotlib.text.Text)
+- [Mathtext guide](https://matplotlib.org/3.9.0/users/explain/text/mathtext.html)
+- [Artist sketch params](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_sketch_params)
+- [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap)

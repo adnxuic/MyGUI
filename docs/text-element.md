@@ -84,7 +84,7 @@ The Text action on the Element command bar adds a free Text component. A Text ca
 | Snap (snap) | Aligns the text to the pixel grid: auto (None), on, or off. See [Artist snap](https://matplotlib.org/3.9.0/api/artist_api.html#matplotlib.artist.Artist.set_snap). | None |
 | URL (url) | Hyperlink attached to the text in SVG exports. | None |
 
-See [Chart Component Parameters](chart-component-parameters.md) for the shared export parameters and the generic Line/Scatter appearance sections.
+See [Text](editing-components/elements/text.md) for the complete parameter reference and export options.
 
 ## Matplotlib reference
 

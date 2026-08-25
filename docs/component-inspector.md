@@ -79,14 +79,14 @@ Legend, Scatter, and Inset numeric controls use the same behavior.
 
 ## Line profiles
 
-Function Curve, Data Plot, Fit Curve, Interpolation, and Generic Line use the same `LineAppearanceSection`; its complete Basic, Marker, and Advanced parameter list is documented in [Chart Component Parameters](chart-component-parameters.md). The field order is identical for every Line role. Appearance properties call the Line Controller. Role-specific sections use their domain services:
+Function Curve, Data Plot, Fit Curve, Interpolation, and Generic Line use the same `LineAppearanceSection`; its complete Basic, Marker, and Advanced parameter list is documented in [Plot](editing-components/charts/plot.md). The field order is identical for every Line role. Appearance properties call the Line Controller. Role-specific sections use their domain services:
 
 - Function Curve: definition and display range through `FunctionCurveService`.
 - Data Plot: `DataReferenceSection` through `ChartDataService`; source changes redraw automatically.
 - Fit Curve: data source, fit operations, fit result, and display range through `FitService`; source changes keep manual refitting semantics.
 - Interpolation: data source and `InterpolationOptionsInput` through `InterpolationService`; source or option changes recompute automatically.
 
-Scatter uses `ScatterAppearanceSection` and the color/size mapping section; their parameters are documented in [Chart Component Parameters](chart-component-parameters.md).
+Scatter uses `ScatterAppearanceSection` and the color/size mapping section; their parameters are documented in [Scatter](editing-components/charts/scatter.md).
 
 Colorbar uses one exact Element profile with Source, Placement, Scale & Ticks,
 Label, Appearance, and Advanced sections. `ColorbarSourceSection` displays the

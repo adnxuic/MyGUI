@@ -88,6 +88,7 @@ APPLICATION_TEST_MODULES = {
     "test_table_ui": (ISOLATION_GUI_MODULE, 1.1),
     "test_component_controllers": (ISOLATION_GUI_MODULE, 1.0),
     "test_bounded_process": (ISOLATION_CORE, 0.7),
+    "test_component_documentation": (ISOLATION_CORE, 0.5),
     "test_package_boundary": (ISOLATION_CORE, 0.4),
     "test_color_library": (ISOLATION_GUI_MODULE, 0.4),
     "test_style_creation_defaults": (ISOLATION_GUI_MODULE, 0.4),

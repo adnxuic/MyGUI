@@ -65,4 +65,4 @@ its own `x_ref`, `y_ref`, and `preprocess` data. Dropdown checks and other
 creation-dialog state are not written to project files.
 
 Every Inspector control of the created components is documented in
-[Chart Component Parameters](chart-component-parameters.md).
+[Plot](editing-components/charts/plot.md) and [Scatter](editing-components/charts/scatter.md).

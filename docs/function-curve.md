@@ -32,7 +32,7 @@ Select the curve in the Components tree to open its Inspector.
 
 ### Appearance
 
-The shared Line Appearance section. Every parameter is documented in [Chart Component Parameters](chart-component-parameters.md).
+The shared Line Appearance section. Every parameter is documented in [Function Curve](editing-components/charts/function-curve.md).
 
 ## Persistence
 

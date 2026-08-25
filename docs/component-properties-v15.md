@@ -50,10 +50,9 @@ The exact Reference Guide field matrices, controls, defaults, transforms, and
 pinned Matplotlib links are in [Reference Guides](reference-guides-component.md).
 Reference Marks fields are in
 [Reference Marks Component](reference-marks-component.md). Colorbar fields are
-in [Colorbar Component](colorbar-component.md). Chart fields are in
-[Chart Component Parameters](chart-component-parameters.md), and Figure/Axes
-fields are in
-[Axes and Figure Component Parameters](axes-component-parameters.md).
+in [Colorbar Component](colorbar-component.md). Modular component fields across
+all 27 profiles are documented in [Figure](editing-components/fixed-semantics/figure.md),
+[Axes](editing-components/fixed-semantics/axes.md), and child component guides.
 
 ## Closed tagged values
 

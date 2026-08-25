@@ -33,7 +33,7 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 | `Color` | All interpolation curves | Line color for the interpolation curve. |
 | `Legend` | All interpolation curves | Matplotlib label shown in the axes legend. |
 
-The Interpolation Inspector section exposes the same parameters and recomputes the curve after each change. Its controls are summarized in [Chart Component Parameters](chart-component-parameters.md).
+The Interpolation Inspector section exposes the same parameters and recomputes the curve after each change. Its controls are summarized in [Interpolation](editing-components/charts/interpolation.md).
 
 ## Data Requirements
 

@@ -29,7 +29,7 @@ MyGUI targets [Matplotlib 3.9](https://matplotlib.org/3.9.0/); parameter pages l
 - **Getting Started** — [GUI Workbench](workbench.md), [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md), [Bottom Bar](bottom-bar.md).
 - **Working with Data** — [Table Data](table-data.md), [Data Preprocessing](data-preprocessing.md), [Text Data Import](text-data-import.md), [Excel Import](excel-import.md).
 - **Creating Charts** — [Axes Layout Templates](axes-layouts.md), [Multi-Series Chart Creation](multi-series-charts.md), [Function Curve](function-curve.md), [Interpolation](interpolation.md), [Fitting](fitting.md), [In-Axes Elements](in-axes.md), [Text Element](text-element.md), [Color Picker](color-picker.md).
-- **Editing Components** — [Components Tree](components-tree.md), [Chart Component Parameters](chart-component-parameters.md), [Axes and Figure Component Parameters](axes-component-parameters.md).
+- **Editing Components** — [Components Tree](components-tree.md), [Figure](editing-components/fixed-semantics/figure.md), [Axes](editing-components/fixed-semantics/axes.md), and [Plots](editing-components/charts/plot.md).
 - **Projects and Appearance** — [Project Files](project-files.md), [Figure Export](figure-export.md), [Style Creation Defaults](style-creation-defaults.md).
 - **Integrations and Configuration** — [TeX Rendering Integration](tex-integration.md), [Resource and Process Limits](resource-limits.md).
 - **Developer Reference** — [Component Controllers](component-controllers.md), [Component Inspector Architecture](component-inspector.md), [Atomic Component Deletion](component-deletion.md), [Component Extension Template](component-extension-template.md), [Component Properties (schema v15)](component-properties-v15.md).

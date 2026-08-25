@@ -6,6 +6,10 @@ repo_name: adnxuic/MyGUI
 edit_uri: edit/master/docs/
 
 docs_dir: docs
+exclude_docs: |
+  _snippets/**
+  axes-component-parameters.md
+  chart-component-parameters.md
 
 theme:
   name: material
@@ -28,6 +32,7 @@ theme:
     - content.code.copy
     - content.code.annotate
     - navigation.top
+    - navigation.indexes
 
 markdown_extensions:
   - admonition
@@ -42,9 +47,17 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight
+  - pymdownx.snippets:
+      base_path:
+        - docs
+      check_paths: true
 
 plugins:
   - search
+  - redirects:
+      redirect_maps:
+        chart-component-parameters.md: editing-components/charts/line.md
+        axes-component-parameters.md: editing-components/fixed-semantics/axes.md
 
 nav:
   - Home: index.md
@@ -72,8 +85,52 @@ nav:
       - Color Picker: color-picker.md
   - Editing Components:
       - Components Tree: components-tree.md
-      - Chart Component Parameters: chart-component-parameters.md
-      - Axes and Figure Component Parameters: axes-component-parameters.md
+      - Figure:
+          - editing-components/fixed-semantics/figure.md
+          - Axes:
+              - editing-components/fixed-semantics/axes.md
+              - Axes Structure:
+                  - Spine (Left / Right / Top / Bottom): editing-components/fixed-semantics/axes-structure/spine.md
+                  - Title: editing-components/fixed-semantics/axes-structure/title.md
+                  - Legend: editing-components/fixed-semantics/axes-structure/legend.md
+              - X Axis:
+                  - editing-components/fixed-semantics/x-axis/index.md
+                  - Major Ticks:
+                      - editing-components/fixed-semantics/x-axis/major-ticks.md
+                      - Major Tick Labels: editing-components/fixed-semantics/x-axis/major-tick-labels.md
+                  - Minor Ticks:
+                      - editing-components/fixed-semantics/x-axis/minor-ticks.md
+                      - Minor Tick Labels: editing-components/fixed-semantics/x-axis/minor-tick-labels.md
+                  - Major Grid: editing-components/fixed-semantics/x-axis/major-grid.md
+                  - X Axis Label: editing-components/fixed-semantics/x-axis/x-label.md
+              - Y Axis:
+                  - editing-components/fixed-semantics/y-axis/index.md
+                  - Major Ticks:
+                      - editing-components/fixed-semantics/x-axis/major-ticks.md
+                      - Major Tick Labels: editing-components/fixed-semantics/x-axis/major-tick-labels.md
+                  - Minor Ticks:
+                      - editing-components/fixed-semantics/x-axis/minor-ticks.md
+                      - Minor Tick Labels: editing-components/fixed-semantics/x-axis/minor-tick-labels.md
+                  - Major Grid: editing-components/fixed-semantics/x-axis/major-grid.md
+                  - Y Axis Label: editing-components/fixed-semantics/y-axis/y-label.md
+              - Charts:
+                  - Lines: editing-components/charts/line.md
+                  - Function Curves: editing-components/charts/function-curve.md
+                  - Plots: editing-components/charts/plot.md
+                  - Fit Curves: editing-components/charts/fit-curve.md
+                  - Interpolations: editing-components/charts/interpolation.md
+                  - Scatters: editing-components/charts/scatter.md
+              - Texts:
+                  - Texts: editing-components/elements/text.md
+              - Insets:
+                  - Zoom Insets: editing-components/elements/in-axes-zoom.md
+                  - Image Insets: editing-components/elements/in-axes-image.md
+              - Colorbars & Reference Guides:
+                  - Colorbars: editing-components/elements/colorbar.md
+                  - Reference Marks: editing-components/elements/reflection-positions.md
+                  - Reference Guides:
+                      - Reference Line: editing-components/elements/reference-line.md
+                      - Reference Band: editing-components/elements/reference-band.md
   - Projects and Appearance:
       - Project Files: project-files.md
       - Figure Export: figure-export.md
