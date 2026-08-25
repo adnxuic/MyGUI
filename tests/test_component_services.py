@@ -842,6 +842,96 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertNotIn("first", self.registry)
         self.assertNotIn("second", self.registry)
 
+    def test_interpolation_service_insufficient_points_and_all_methods(self):
+        self.sheet.set_block(0, 0, [[0.0, 1.0], [1.0, 2.0], [2.0, 4.0], [3.0, 8.0], [4.0, 16.0], [5.0, 32.0]])
+        pair = self.repository.line_pair(self.x_ref, self.y_ref)
+        line, = self.axes.plot(pair.x, pair.y)
+        initial_method = "线性插值"
+        interpolation = InterpolationController(
+            ComponentState(
+                id="interp_methods",
+                kind=ComponentKind.LINE,
+                role=ComponentRole.INTERPOLATION,
+                order=0,
+                selector={"object_id": "interp_methods"},
+                properties={"label": "interp"},
+                data={
+                    "x_ref": self.x_ref.to_dict(),
+                    "y_ref": self.y_ref.to_dict(),
+                    "preprocess": DataPreprocessSpec().to_dict(),
+                    "method": initial_method,
+                    "k": 3,
+                    "samples": 50,
+                    "lam": None,
+                    "lam_auto": True,
+                },
+            )
+        )
+        self.registry.register(interpolation, target=line, require_parent=False)
+        service = InterpolationService(self.repository, self.registry)
+
+        # Test method families from interpolate_dict
+        for method in ("线性插值", "三次样条插值", "PCHIP保形插值", "Akima插值", "平滑样条"):
+            result = service.configure(
+                interpolation,
+                x_ref=self.x_ref,
+                y_ref=self.y_ref,
+                preprocess=DataPreprocessSpec(),
+                method=method,
+                k=3,
+                samples=30,
+                lam=None,
+                lam_auto=True,
+            )
+            self.assertTrue(result.ok)
+
+
+
+    def test_function_curve_service_evaluation_and_domain_errors(self):
+        line, = self.axes.plot([0.0, 1.0], [0.0, 1.0])
+        from mygui.figuremodify.components import FunctionCurveController
+        from mygui.figuremodify.component_services import FunctionCurveService
+
+        controller = FunctionCurveController(
+            ComponentState(
+                id="func_curve",
+                kind=ComponentKind.LINE,
+                role=ComponentRole.FUNCTION_CURVE,
+                order=0,
+                selector={"object_id": "func_curve"},
+                properties={"label": "func"},
+                data={
+                    "expression": "sin(x)",
+                    "x_start": 0.0,
+                    "x_stop": 10.0,
+                },
+            )
+        )
+        self.registry.register(controller, target=line, require_parent=False)
+        service = FunctionCurveService(self.registry)
+
+        # Valid update
+        valid_change = service.update(controller, "2 * x + 1", 0.0, 5.0, samples=50)
+        self.assertTrue(valid_change.ok)
+        self.assertEqual(controller.state.data["expression"], "2 * x + 1")
+
+        # Invalid syntax expression rejection
+        bad_syntax_change = service.update(controller, "sin(x +", 0.0, 5.0)
+        self.assertFalse(bad_syntax_change.ok)
+
+        # Non-finite range rejection
+        bad_range_change = service.update(controller, "x", float("nan"), 5.0)
+        self.assertFalse(bad_range_change.ok)
+
+    def test_colorbar_service_source_and_dependents_queries(self):
+        from mygui.figuremodify.component_services import ColorbarService
+        service = ColorbarService(self.registry)
+
+        self.assertFalse(service.has_dependents("non_existent_source"))
+        self.assertEqual(service.dependents("non_existent_source"), ())
+        self.assertEqual(service.eligible_sources("non_existent_axes"), ())
+
 
 if __name__ == "__main__":
     unittest.main()
+

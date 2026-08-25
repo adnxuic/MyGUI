@@ -1669,5 +1669,64 @@ class OptionalDependencyTests(unittest.TestCase):
             result = matlab_adapter.fit_curve([1.0], [2.0], "poly9")
             self.assertEqual(result["value_expression"], "10.0*x+2.0")
 
+    def test_validate_tex_runtime_branches(self):
+        from mygui.bounded_process import ProcessOutputLimitExceeded
+
+        # No executable branch
+        with patch.object(tex_config, "has_tex_engine", return_value=False):
+            err = tex_config.validate_tex_runtime(r"\usepackage{amsmath}")
+            self.assertIn("No TeX executable", err)
+
+        # TimeoutExpired branch
+        with patch.object(tex_config, "has_tex_engine", return_value=True), \
+                patch.object(tex_config, "run_bounded_process", side_effect=subprocess.TimeoutExpired(["tex"], 15)):
+            err = tex_config.validate_tex_runtime(r"\usepackage{amsmath}")
+            self.assertIn("timed out", err)
+
+        # Output limit exceeded branch
+        with patch.object(tex_config, "has_tex_engine", return_value=True), \
+                patch.object(tex_config, "run_bounded_process", side_effect=ProcessOutputLimitExceeded("Too much output")):
+            err = tex_config.validate_tex_runtime(r"\usepackage{amsmath}")
+            self.assertIn("too much output", err.lower())
+
+
+        # Non-zero returncode branch
+        fake_result = SimpleNamespace(returncode=1, stderr=b"! LaTeX Error: File not found.\n")
+        with patch.object(tex_config, "has_tex_engine", return_value=True), \
+                patch.object(tex_config, "run_bounded_process", return_value=fake_result):
+            err = tex_config.validate_tex_runtime(r"\usepackage{amsmath}")
+            self.assertIn("LaTeX Error", err)
+
+        # Success branch
+        fake_success = SimpleNamespace(returncode=0, stderr=b"")
+        with patch.object(tex_config, "has_tex_engine", return_value=True), \
+                patch.object(tex_config, "run_bounded_process", return_value=fake_success):
+            err = tex_config.validate_tex_runtime(r"\usepackage{amsmath}")
+            self.assertIsNone(err)
+
+    def test_tex_config_listener_exceptions_and_environment_timeouts(self):
+        # Listener raising exception
+        def failing_render_listener(change):
+            raise RuntimeError("Render listener exploded")
+
+        def failing_avail_listener(enabled):
+            raise RuntimeError("Availability listener exploded")
+
+        tex_config.register_tex_render_listener(failing_render_listener)
+        tex_config.register_tex_availability_listener(failing_avail_listener)
+
+        # Should not raise exception and should auto-detach
+        update = tex_config.configure_tex_runtime(enabled=True, notify=True)
+        self.assertTrue(update.change.after.enabled)
+
+        # Timeout from environment
+        with patch.dict(os.environ, {"MYGUI_TEX_TIMEOUT_SECONDS": "25.5"}):
+            self.assertEqual(tex_config._timeout_from_environment(), 25.5)
+        with patch.dict(os.environ, {"MYGUI_TEX_TIMEOUT_SECONDS": "invalid_num"}):
+            self.assertEqual(tex_config._timeout_from_environment(), 15.0)
+
+
+
 if __name__ == "__main__":
     unittest.main()
+

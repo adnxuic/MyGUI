@@ -233,6 +233,85 @@ class TextDataImportTests(unittest.TestCase):
         finally:
             dialog.close()
 
+    def test_text_field_splitting_and_numeric_parsing(self):
+        from mygui.text_io import _number_value, _numeric_ratio, split_text_fields
+
+        # Delimiters
+        self.assertEqual(split_text_fields("a\tb\tc", "Tab"), ["a", "b", "c"])
+        self.assertEqual(split_text_fields("a;b;c", "Semicolon"), ["a", "b", "c"])
+        self.assertEqual(split_text_fields("a,b,c", "Comma"), ["a", "b", "c"])
+        self.assertEqual(split_text_fields("a   b  c", "Whitespace"), ["a", "b", "c"])
+        self.assertEqual(split_text_fields("", "Whitespace"), [])
+
+        # _number_value
+        self.assertAlmostEqual(_number_value("1.0D-3"), 0.001)
+        self.assertAlmostEqual(_number_value("2.5d+2"), 250.0)
+        self.assertAlmostEqual(_number_value("−5.5"), -5.5)
+        with self.assertRaises(ValueError):
+            _number_value("")
+        with self.assertRaises(ValueError):
+            _number_value("abc")
+
+        # _numeric_ratio
+        self.assertEqual(_numeric_ratio([]), 0.0)
+        self.assertAlmostEqual(
+            _numeric_ratio(["1.5", "true", "2025-01-01", "text"]),
+            0.75,
+        )
+
+    def test_read_text_source_error_handling_and_encodings(self):
+        # Nonexistent file
+        with self.assertRaisesRegex(ValueError, "does not exist"):
+            read_text_source(Path(self.directory.name) / "nonexistent.txt")
+
+        # Empty file
+        empty_path = Path(self.directory.name) / "empty.txt"
+        empty_path.write_bytes(b"")
+        with self.assertRaisesRegex(ValueError, "empty"):
+            read_text_source(empty_path)
+
+        # Whitespace-only file
+        ws_path = Path(self.directory.name) / "ws.txt"
+        ws_path.write_text("   \n\t  \n  ", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "no readable content"):
+            read_text_source(ws_path)
+
+        # UTF-16 with BOM
+        utf16_path = Path(self.directory.name) / "utf16.txt"
+        utf16_path.write_bytes("A,B\n1,2\n".encode("utf-16"))
+        src_utf16 = read_text_source(utf16_path)
+        self.assertEqual(src_utf16.encoding, "utf-16")
+        self.assertEqual(len(src_utf16.lines), 2)
+
+        # UTF-8 with BOM
+        utf8_sig_path = Path(self.directory.name) / "utf8_sig.txt"
+        utf8_sig_path.write_bytes("X Y\n10 20\n".encode("utf-8-sig"))
+        src_sig = read_text_source(utf8_sig_path)
+        self.assertEqual(src_sig.encoding, "utf-8-sig")
+
+    def test_text_import_dialog_interactive_controls(self):
+        source = TextDataSource(
+            Path("interactive.txt"),
+            "utf-8",
+            ["HeaderA\tHeaderB\tHeaderC", "1.0\t2.0\t3.0", "4.0\t5.0\t6.0"],
+        )
+        dialog = TextImportDialog(source)
+        try:
+            # Change delimiter combo box
+            dialog.delimiter_combo.setCurrentText("Tab")
+            self.assertEqual(dialog.delimiter_combo.currentText(), "Tab")
+
+            dialog.delimiter_combo.setCurrentText("Comma")
+            dialog.delimiter_combo.setCurrentText("Whitespace")
+
+            # Adjust line spin boxes
+            dialog.header_line_spin.setValue(1)
+            dialog.data_start_spin.setValue(2)
+            self.assertGreater(len(dialog.specs()), 0)
+        finally:
+            dialog.close()
+
 
 if __name__ == "__main__":
     unittest.main()
+

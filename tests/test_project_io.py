@@ -14,14 +14,26 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from mygui import status_messages
-from mygui.database import ColumnRef, ColumnType, TableRepository, scipy_fit_adapter
+from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, scipy_fit_adapter
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
+    export_database_snapshot,
     load_project_file,
+    migrate_v13_to_v14,
+    migrate_v14_to_v15,
     project_snapshot,
     restore_project_snapshot,
     save_project_snapshot,
+    _atomic_write_bytes,
+    _expect_dict,
+    _expect_exact_keys,
+    _expect_list,
+    _expect_string,
+    _reject_json_constant,
+    _validate_project_snapshot_version,
+    _validate_table,
 )
+from mygui.resource_limits import ResourceLimits
 from mygui.figuremodify.components import ComponentRole
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
@@ -695,5 +707,286 @@ class ProjectIoTests(unittest.TestCase):
             self.app.processEvents()
 
 
+class ProjectIoBranchCoverageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = Path(self.directory.name) / "project.mygui.json"
+        self.window = MainWindow()
+
+    def tearDown(self):
+        self.window.close()
+        self.app.processEvents()
+        self.directory.cleanup()
+
+    def build_project(self):
+        self.window.figure_window.add_figure(
+            width=4, height=3, dpi=100, style="default", canva_name="ProjectA"
+        )
+        canvas = self.window.figure_window.current_canva
+        create_regular_axes(canvas)
+        sheet = self.window.table.current_subtable().get_table(0).table_model.sheet
+        sheet.set_block(0, 0, [
+            [1, "alpha", "2026-07-10", "true", 10],
+            ["", "", "", "", ""],
+            [3, "beta", "2026-07-12", "false", 30],
+        ])
+        x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[4].id)
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        canvas.add_plot(pair.x, pair.y, "-", 2, "black", "plot", x_ref, y_ref)
+        return canvas, sheet
+
+    def test_export_database_snapshot_all_and_single_project(self):
+        repo = TableRepository()
+        doc1 = repo.create_project("Project1")
+        doc2 = repo.create_project("Project2")
+        all_export_path = Path(self.directory.name) / "all_db.json"
+        export_database_snapshot(all_export_path, repo, project_id=None)
+        self.assertTrue(all_export_path.exists())
+        with all_export_path.open("r", encoding="utf-8") as f:
+            all_data = json.load(f)
+        self.assertEqual(len(all_data), 2)
+        self.assertEqual({p["id"] for p in all_data}, {doc1.id, doc2.id})
+
+        single_export_path = Path(self.directory.name) / "single_db.json"
+        export_database_snapshot(single_export_path, repo, project_id=doc1.id)
+        self.assertTrue(single_export_path.exists())
+        with single_export_path.open("r", encoding="utf-8") as f:
+            single_data = json.load(f)
+        self.assertEqual(single_data["id"], doc1.id)
+
+    def test_export_database_snapshot_rejects_oversized_payload(self):
+        repo = TableRepository()
+        repo.create_project("Project1")
+        export_path = Path(self.directory.name) / "oversized.json"
+        tiny_limits = ResourceLimits(max_project_bytes=5)
+        with mock.patch("mygui.project_io.load_resource_limits", return_value=tiny_limits):
+            with self.assertRaisesRegex(ValueError, "Database export exceeds the configured file-size budget."):
+                export_database_snapshot(export_path, repo)
+
+    def test_expect_helpers_and_json_constant(self):
+        with self.assertRaisesRegex(ValueError, "Invalid project field field_obj: expected object."):
+            _expect_dict([1, 2, 3], "field_obj")
+
+        with self.assertRaisesRegex(ValueError, "Invalid project field field_arr: expected array."):
+            _expect_list({"a": 1}, "field_arr")
+
+        with self.assertRaisesRegex(ValueError, "Invalid project field field_str: expected string."):
+            _expect_string(123, "field_str")
+
+        with self.assertRaisesRegex(ValueError, "Invalid project field field_keys: expected exactly"):
+            _expect_exact_keys({"a": 1, "b": 2}, {"a"}, "field_keys")
+
+        with self.assertRaisesRegex(ValueError, "Invalid JSON numeric constant: NaN."):
+            _reject_json_constant("NaN")
+
+    def test_validate_table_inconsistencies(self):
+        repo = TableRepository()
+        doc = repo.create_project("ProjAlpha")
+        snapshot = doc.to_snapshot()
+
+        # mismatched project_id
+        with self.assertRaisesRegex(ValueError, "Project and table identifiers must match."):
+            _validate_table(snapshot, "different_id", "ProjAlpha")
+
+        # mismatched project_name
+        with self.assertRaisesRegex(ValueError, "Project and table names must match."):
+            _validate_table(snapshot, doc.id, "different_name")
+
+        # duplicate sheet name
+        dup_sheet_snapshot = deepcopy(snapshot)
+        sheet0 = dup_sheet_snapshot["sheets"][0]
+        sheet_copy = deepcopy(sheet0)
+        sheet_copy["id"] = "sheet_copy_id"
+        sheet_copy["name"] = sheet0["name"].upper()
+        dup_sheet_snapshot["sheets"].append(sheet_copy)
+        with self.assertRaisesRegex(ValueError, r"(Duplicate sheet name|Sheet name already exists)"):
+            _validate_table(dup_sheet_snapshot, doc.id, "ProjAlpha")
+
+        # duplicate column name in sheet
+        dup_doc = ProjectTableDocument.from_snapshot(snapshot)
+        first_sheet = list(dup_doc.sheets.values())[0]
+        first_sheet.columns.append(first_sheet.columns[0])
+        with mock.patch("mygui.project_io.ProjectTableDocument.from_snapshot", return_value=dup_doc):
+            with self.assertRaisesRegex(ValueError, "Duplicate column name in"):
+                _validate_table(snapshot, doc.id, "ProjAlpha")
+
+    def test_validate_project_snapshot_version_and_migrations(self):
+        canvas, sheet = self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+        valid_snapshot = load_project_file(self.path)
+
+        # 1. Invalid schema name
+        bad_schema = deepcopy(valid_snapshot)
+        bad_schema["schema"] = "invalid_schema"
+        with self.assertRaisesRegex(ValueError, "Unsupported project file."):
+            _validate_project_snapshot_version(
+                bad_schema,
+                version=PROJECT_SCHEMA_VERSION,
+                figure_validator=lambda *_: None,
+            )
+
+        # 2. Invalid schema version
+        bad_version = deepcopy(valid_snapshot)
+        bad_version["schema_version"] = 15.0
+        with self.assertRaisesRegex(ValueError, "Unsupported project schema version"):
+            _validate_project_snapshot_version(
+                bad_version,
+                version=PROJECT_SCHEMA_VERSION,
+                figure_validator=lambda *_: None,
+            )
+
+        # 3. Empty project ID
+        bad_id = deepcopy(valid_snapshot)
+        bad_id["project"]["id"] = "   "
+        with self.assertRaisesRegex(ValueError, "Project id must not be empty."):
+            _validate_project_snapshot_version(
+                bad_id,
+                version=PROJECT_SCHEMA_VERSION,
+                figure_validator=lambda *_: None,
+            )
+
+        # 4. migrate_v13_to_v14 with fontfamily list
+        v14_snap = as_schema_v14(valid_snapshot)
+        v13_snap = deepcopy(v14_snap)
+        v13_snap["schema_version"] = 13
+        for comp in v13_snap["figure"]["components"]:
+            if comp["kind"] == "tick_label_group":
+                comp["properties"]["fontfamily"] = ["Arial", "sans-serif"]
+        migrated_14 = migrate_v13_to_v14(v13_snap)
+        for comp in migrated_14["figure"]["components"]:
+            if comp["kind"] == "tick_label_group":
+                self.assertEqual(comp["properties"]["fontfamily"], "Arial")
+
+        # 5. migrate_v13_to_v14 with invalid fontfamily type
+        bad_font_snap = deepcopy(v13_snap)
+        for comp in bad_font_snap["figure"]["components"]:
+            if comp["kind"] == "tick_label_group":
+                comp["properties"]["fontfamily"] = 12345
+        with self.assertRaisesRegex(ValueError, r"(expected string or string array|expected string or non-empty string array)"):
+            migrate_v13_to_v14(bad_font_snap)
+
+        # 6. migrate_v14_to_v15 reference_marks and axes defaults
+        v14_with_rm = deepcopy(v14_snap)
+        axes_id = next(c["id"] for c in v14_with_rm["figure"]["components"] if c["kind"] == "axes")
+        rm_comp = {
+            "id": "rm_1",
+            "kind": "reference_marks",
+            "role": "reflection_positions",
+            "parent_id": axes_id,
+            "order": 10,
+            "selector": {"object_id": "rm_1"},
+            "properties": {
+                "label": "Marks",
+                "visible": True,
+                "baseline": 0.08,
+                "height": 0.025,
+                "color": "#000000",
+                "linewidth": 0.8,
+                "linestyle": "-",
+                "alpha": 1.0,
+                "zorder": 2.0,
+                "clip_on": True,
+            },
+            "data": {"positions": [1.0, 2.0, 3.0]},
+        }
+        v14_with_rm["figure"]["components"].append(rm_comp)
+        migrated_15 = migrate_v14_to_v15(v14_with_rm)
+        rm_result = next(c for c in migrated_15["figure"]["components"] if c["id"] == "rm_1")
+        self.assertIn("position_ref", rm_result["data"])
+        self.assertIsNone(rm_result["data"]["position_ref"])
+        self.assertEqual(rm_result["data"]["placement"], {"kind": "fixed"})
+        axes_result = next(c for c in migrated_15["figure"]["components"] if c["kind"] == "axes")
+        self.assertEqual(axes_result["properties"]["y_lower_reserve"], 0.0)
+
+    def test_save_and_load_file_error_branches(self):
+        # 1. project_snapshot with figure_window=None
+        with self.assertRaisesRegex(ValueError, "No Figure window is available to save."):
+            project_snapshot(None)
+
+        # 2. project_snapshot with canvas=None and figure_window without current_canva
+        empty_fw = SimpleNamespace(current_canva=None)
+        with self.assertRaisesRegex(ValueError, "No current project canvas to save."):
+            project_snapshot(empty_fw)
+
+        # 3. save_project_snapshot with oversized payload
+        self.build_project()
+        tiny_limits = ResourceLimits(max_project_bytes=10)
+        with mock.patch("mygui.project_io.load_resource_limits", return_value=tiny_limits):
+            with self.assertRaisesRegex(ValueError, "Project exceeds the configured file-size budget."):
+                save_project_snapshot(self.path, self.window.figure_window)
+
+        # 4. save_project_snapshot when mark_canvas_clean raises exception
+        with (
+            mock.patch.object(self.window.figure_window, "mark_canvas_clean", side_effect=RuntimeError("Clean fail")),
+            self.assertLogs("mygui.project_io", level="ERROR") as logs,
+        ):
+            saved_snap = save_project_snapshot(self.path, self.window.figure_window)
+            self.assertIsInstance(saved_snap, dict)
+            self.assertTrue(self.path.exists())
+            self.assertIn("clean-state bookkeeping failed", "\n".join(logs.output))
+
+        # 5. load_project_file with non-existent path
+        missing_path = Path(self.directory.name) / "does_not_exist.json"
+        with self.assertRaisesRegex(ValueError, "Project file does not exist"):
+            load_project_file(missing_path)
+
+        # 6. load_project_file with oversized file
+        with mock.patch("mygui.project_io.load_resource_limits", return_value=tiny_limits):
+            with self.assertRaisesRegex(ValueError, "Project file exceeds the configured file-size budget."):
+                load_project_file(self.path)
+
+        # 7. load_project_file with non-integer schema_version
+        bad_version_path = Path(self.directory.name) / "bad_version.json"
+        with self.path.open("r", encoding="utf-8") as f:
+            raw = json.load(f)
+        raw["schema_version"] = "15"
+        with bad_version_path.open("w", encoding="utf-8") as f:
+            json.dump(raw, f)
+        with self.assertRaisesRegex(ValueError, "schema versions must use exact integers"):
+            load_project_file(bad_version_path)
+
+        # 8. load_project_file with unsupported schema_version 99
+        unsupported_path = Path(self.directory.name) / "unsupported.json"
+        raw["schema_version"] = 99
+        with unsupported_path.open("w", encoding="utf-8") as f:
+            json.dump(raw, f)
+        with self.assertRaisesRegex(ValueError, "Unsupported project schema version 99"):
+            load_project_file(unsupported_path)
+
+    def test_restore_project_snapshot_error_branches(self):
+        self.build_project()
+        save_project_snapshot(self.path, self.window.figure_window)
+
+        # 1. restore without TableRepository
+        with self.assertRaisesRegex(ValueError, "Project restore requires a TableRepository-backed window."):
+            restore_project_snapshot(self.path, table=None, figure_window=None)
+
+        # 2. restore duplicate project
+        with self.assertRaisesRegex(ValueError, "Project already exists:"):
+            restore_project_snapshot(self.path, self.window.table, self.window.figure_window)
+
+        # 3. restore with table=None (when figure_window has repo)
+        fw = SimpleNamespace(repository=TableRepository(), current_canva=None, canvas={}, remove_project_by_id=lambda *_: None)
+        with self.assertRaisesRegex(ValueError, "Project restore requires the Table widget."):
+            restore_project_snapshot(self.path, table=None, figure_window=fw)
+
+    def test_atomic_write_bytes_unlink_os_error(self):
+        target_path = Path(self.directory.name) / "atomic_test.json"
+        with (
+            mock.patch("os.replace", side_effect=RuntimeError("replace failed")),
+            mock.patch("os.unlink", side_effect=OSError("disk error")),
+            self.assertLogs("mygui.project_io", level="ERROR") as logs,
+        ):
+            with self.assertRaises(RuntimeError):
+                _atomic_write_bytes(target_path, b"test_payload")
+        self.assertIn("Unable to remove temporary project file", "\n".join(logs.output))
+
+
 if __name__ == "__main__":
     unittest.main()
+

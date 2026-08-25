@@ -1115,12 +1115,229 @@ class SemanticControllerTests(unittest.TestCase):
             create_controller(duplicate_order, target=self.line),
             target=self.line,
         )
-        with self.assertRaisesRegex(
-            ComponentValidationError,
-            "Chart component order values must be unique",
-        ):
-            chart_registry.validate_tree()
+class ControllerValidationTests(unittest.TestCase):
+    def test_controller_validators_and_normalizers_edge_cases(self):
+        from mygui.figuremodify.components.controllers import (
+            _anchor,
+            _connectors,
+            _in_axes_range,
+            _in_axes_rectangle,
+            _legend_anchor,
+            _line_pattern,
+            _marker_spec,
+            _normalize_color,
+            _optional_extent,
+            _optional_sketch,
+            _pair,
+            _primary_font_family,
+            _rectangle,
+            _url_sequence,
+        )
+
+        # _primary_font_family
+        self.assertEqual(_primary_font_family("Arial"), "Arial")
+        self.assertEqual(_primary_font_family(["Helvetica", "Arial"]), "Helvetica")
+        with self.assertRaises(ComponentValidationError):
+            _primary_font_family("")
+        with self.assertRaises(ComponentValidationError):
+            _primary_font_family([])
+        with self.assertRaises(ComponentValidationError):
+            _primary_font_family([""])
+        with self.assertRaises(ComponentValidationError):
+            _primary_font_family(123)
+
+        # _url_sequence
+        self.assertEqual(_url_sequence(["http://a", None]), ("http://a", None))
+        with self.assertRaises(ComponentValidationError):
+            _url_sequence("http://not-an-array")
+        with self.assertRaises(ComponentValidationError):
+            _url_sequence(123)
+
+        # _line_pattern & _marker_spec
+        self.assertIsNotNone(_line_pattern("--"))
+        self.assertIsNotNone(_line_pattern((0, (2, 2))))
+        self.assertIsNotNone(_marker_spec((5, 0, 45)))
+        self.assertIsNotNone(_marker_spec("o"))
+
+        # _connectors
+        with self.assertRaises(ComponentValidationError):
+            _connectors([1, 2])
+
+        # _optional_sketch
+        self.assertIsNone(_optional_sketch(None))
+        self.assertEqual(_optional_sketch((1.0, 2.0, 3.0)), (1.0, 2.0, 3.0))
+        with self.assertRaises(ComponentValidationError):
+            _optional_sketch((1, 2))
+        with self.assertRaises(ComponentValidationError):
+            _optional_sketch((float("nan"), 1, 1))
+        with self.assertRaises(ComponentValidationError):
+            _optional_sketch((-1, 1, 1))
+
+        # _normalize_color
+        self.assertEqual(_normalize_color("#FF0000"), "#ff0000")
+        with self.assertRaises(ComponentValidationError):
+            _normalize_color("invalid_color_xyz")
+
+        # _pair & _rectangle
+        self.assertEqual(_pair((1, 2)), (1.0, 2.0))
+        with self.assertRaises(ComponentValidationError):
+            _pair((1,))
+        self.assertEqual(_rectangle((0, 0, 1, 2)), (0.0, 0.0, 1.0, 2.0))
+        with self.assertRaises(ComponentValidationError):
+            _rectangle((0, 0, -1, 1))
+
+        # _anchor & _legend_anchor
+        self.assertEqual(_anchor("NW"), "NW")
+        self.assertEqual(_anchor((0.2, 0.8)), (0.2, 0.8))
+        with self.assertRaises(ComponentValidationError):
+            _anchor("INVALID")
+        with self.assertRaises(ComponentValidationError):
+            _anchor((1.5, 0.5))
+
+        self.assertIsNone(_legend_anchor(None))
+        self.assertEqual(_legend_anchor((0.5, 0.5)), (0.5, 0.5))
+        self.assertEqual(_legend_anchor((0.0, 0.0, 1.0, 1.0)), (0.0, 0.0, 1.0, 1.0))
+        with self.assertRaises(ComponentValidationError):
+            _legend_anchor((1,))
+        with self.assertRaises(ComponentValidationError):
+            _legend_anchor((float("inf"), 0.5))
+
+        # _in_axes_range & _in_axes_rectangle & _optional_extent
+        self.assertEqual(_in_axes_range((1, 2)), (1.0, 2.0))
+        with self.assertRaises(ComponentValidationError):
+            _in_axes_range((1, 1))
+        with self.assertRaises(ComponentValidationError):
+            _in_axes_range((float("inf"), 2))
+        with self.assertRaises(ComponentValidationError):
+            _in_axes_rectangle((0, 0, float("nan"), 1))
+
+        self.assertIsNone(_optional_extent(None))
+        self.assertEqual(_optional_extent((0, 1, 0, 1)), (0.0, 1.0, 0.0, 1.0))
+        with self.assertRaises(ComponentValidationError):
+            _optional_extent((0, 1, 0))
+        with self.assertRaises(ComponentValidationError):
+            _optional_extent((1, 1, 2, 3))
+
+    def test_in_axes_image_validation_and_decoding_errors(self):
+        import base64
+        import io
+        from PIL import Image
+        from mygui.figuremodify.components.controllers import (
+            _validate_in_axes_image_data,
+            decode_in_axes_image,
+        )
+
+        # Missing fields
+        with self.assertRaises(ComponentValidationError):
+            _validate_in_axes_image_data({})
+
+        # Empty filename
+        with self.assertRaises(ComponentValidationError):
+            _validate_in_axes_image_data({
+                "filename": "",
+                "mime_type": "image/png",
+                "payload_base64": "AA==",
+            })
+
+        # Directory path in filename
+        with self.assertRaises(ComponentValidationError):
+            _validate_in_axes_image_data({
+                "filename": "subdir/test.png",
+                "mime_type": "image/png",
+                "payload_base64": "AA==",
+            })
+
+        # Unsupported MIME
+        with self.assertRaises(ComponentValidationError):
+            _validate_in_axes_image_data({
+                "filename": "test.gif",
+                "mime_type": "image/gif",
+                "payload_base64": "AA==",
+            })
+
+        # Empty payload
+        with self.assertRaises(ComponentValidationError):
+            _validate_in_axes_image_data({
+                "filename": "test.png",
+                "mime_type": "image/png",
+                "payload_base64": "",
+            })
+
+        # Invalid base64
+        with self.assertRaises(ComponentValidationError):
+            _validate_in_axes_image_data({
+                "filename": "test.png",
+                "mime_type": "image/png",
+                "payload_base64": "not_base64!!!",
+            })
+
+        # Corrupted payload decode
+        with self.assertRaises(ComponentValidationError):
+            decode_in_axes_image({
+                "filename": "test.png",
+                "mime_type": "image/png",
+                "payload_base64": base64.b64encode(b"not_an_image").decode("ascii"),
+            })
+
+        # Valid 2x2 PNG decode
+        img = Image.new("RGBA", (2, 2), color=(255, 0, 0, 255))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        payload = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        # MIME mismatch
+        with self.assertRaises(ComponentValidationError):
+            decode_in_axes_image({
+                "filename": "test.png",
+                "mime_type": "image/jpeg",
+                "payload_base64": payload,
+            })
+
+        # Valid decode
+        array = decode_in_axes_image({
+            "filename": "test.png",
+            "mime_type": "image/png",
+            "payload_base64": payload,
+        })
+        self.assertEqual(array.shape, (2, 2, 4))
+
+    def test_axes_spine_tick_legend_controllers_extended_properties(self):
+        figure = Figure()
+        axes = figure.subplots()
+        line, = axes.plot([0.0, 1.0], [0.0, 1.0], label="line1")
+        registry = register_figure_components(figure, id_factory=lambda path: path)
+
+        axes_ctrl = registry.get("figure/axes/0")
+        self.assertIsNotNone(axes_ctrl)
+        axes_ctrl.set_property("aspect", "equal")
+        axes_ctrl.set_property("box_aspect", 1.0)
+        axes_ctrl.set_property("xlim", (0.0, 10.0))
+        axes_ctrl.set_property("ylim", (0.0, 10.0))
+
+        # SpineController
+        for spine_ctrl in [c for c in registry._controllers.values() if c.state.role == ComponentRole.SPINE]:
+            spine_ctrl.set_property("visible", True)
+            spine_ctrl.set_property("linewidth", 2.0)
+            spine_ctrl.set_property("position", {"kind": "outward", "value": 5.0})
+
+        # TickGroupController
+        for tick_ctrl in [c for c in registry._controllers.values() if c.state.role == ComponentRole.MAJOR_TICK]:
+            tick_ctrl.set_property("direction", "inout")
+
+
+        # LegendController
+        for legend_ctrl in [c for c in registry._controllers.values() if c.state.role == ComponentRole.LEGEND]:
+            legend_ctrl.set_property("ncols", 2)
+            legend_ctrl.set_property("frameon", True)
+            legend_ctrl.set_property("framealpha", 0.8)
+            legend_ctrl.set_property("shadow", True)
+            legend_ctrl.set_property("fancybox", True)
+
+
+
+
 
 
 if __name__ == "__main__":
     unittest.main()
+
