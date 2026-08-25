@@ -78,7 +78,11 @@ Select an inset in the Components tree to edit it. The Inspector exposes the com
 
 ## Persistence and deletion
 
-Both modes use ComponentKind.IN_AXES with roles IN_AXES_ZOOM and IN_AXES_IMAGE. Their parent_id is the main Axes Component ID and their selector is {"object_id": component_id}. The child Axes, locator, mirrored artists, image artist, zoom rectangle, and connectors are runtime-only.
+Schema v15 persists both modes as `kind: "in_axes"` with roles
+`in_axes_zoom` and `in_axes_image`. Their `parent_id` is the main Axes
+component ID and their selector is `{"object_id": component_id}`. The child
+Axes, locator, mirrored artists, image artist, zoom rectangle, and connectors
+are runtime-only.
 
 Both roles are removable. A single or same-role batch deletion uses the normal Component deletion transaction. Deleting the parent Axes removes its complete inset subtree. Failed creation or deletion restores the Registry, locator, artists, Inspector, selection, and emitted-event state together.
 

@@ -28,7 +28,7 @@ it is the rule-loss audit for the split.
 | --- | --- |
 | Project Basics / Working Rules | `AGENTS.md`; `architecture/component-system.md`; `ui-state-boundaries.md` |
 | Documentation Rules | `AGENTS.md`; routed feature/property Skills |
-| Component Architecture | `component-system.md`; `inspector.md`; add/modify Skills |
+| Component Architecture | `component-system.md` (including current module layout); `inspector.md`; add/modify Skills |
 | Property and Editor Contracts | `inspector.md`; `modify-component-property` Skill |
 | Component Tree / Selection | `inspector.md`; `debug-gui-regression` Skill |
 | Inspector Containers | `inspector.md` |

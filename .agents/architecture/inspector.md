@@ -13,10 +13,30 @@ never a silent production fallback.
 
 Use `PropertySection` for `PropertySpec` fields. Dialog-backed summaries live
 in `spec_editors.py`, inline compound editors in `inline_spec_editors.py`, and
-numeric/text primitives in `common.py`. A compound editor exposes `value()`,
-`set_value(value, *, emit=False)`, `valueChanged(object)`, and submits one
-normalized value. Cancellation changes nothing; Controller rejection restores
-the control and emits one red result.
+numeric/text primitives in `common.py`. Reusable Inspector sections live under
+`component_editors/sections/` and are imported as
+`component_editors.sections`. Role-specific Function Curve, Interpolation, and
+Fit sections remain in `chart_sections.py` and `fit_sections.py`.
+Controller-free Inputs live in `data_inputs.py`, `appearance_inputs.py`, and
+`reference_inputs.py`, re-exported from `inputs.py`. A compound editor exposes
+`value()`, `set_value(value, *, emit=False)`, `valueChanged(object)`, and
+submits one normalized value. Cancellation changes nothing; Controller
+rejection restores the control and emits one red result.
+
+| Module | Sections / inputs |
+| --- | --- |
+| `sections/property.py` | `PropertySection`, Reference Marks position |
+| `sections/data.py` | data source, mapping, Colorbar/image source |
+| `sections/appearance.py` | Line and Scatter appearance |
+| `sections/text.py` | shared Text section set |
+| `sections/axes.py` | Axes limits and layout |
+| `sections/legend.py` | Legend location |
+| `sections/palette.py` | Axes palette |
+| `chart_sections.py` | Function Curve definition, Interpolation options |
+| `fit_sections.py` | Fit operations, result, and display range |
+| `data_inputs.py` | `DataReferenceInput`, multi-series, Scatter mapping |
+| `appearance_inputs.py` | Line appearance, Interpolation options, In-Axes |
+| `reference_inputs.py` | Colorbar, Reference Marks, Reference Line/Band |
 
 Every `PropertySpec` declares an explicit `EditorKind`; `AUTO` is valid only
 when value type or choices uniquely determine the control. `EditorKind.JSON`

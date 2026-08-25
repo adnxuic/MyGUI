@@ -2,9 +2,9 @@
 
 ## Project and component state
 
-- Project files save exact integer schema v12, migrate strictly valid v11
-  files, and migrate strictly valid v10 files through v11. Historical v4-v9
-  files require an external conversion step.
+- Project files save exact integer schema v15. The loader accepts strictly
+  valid v14 by in-memory migration, and strictly valid v13, v12, v11, and v10
+  through every intervening version. Versions v4-v9 remain unsupported.
 - The Components tree does not provide drag reparenting or ordering, inline
   rename, visibility controls, or canvas highlighting. Selection and expansion
   state last only for the current application session.
@@ -41,8 +41,10 @@
 
 ## Runtime and desktop boundaries
 
-- MATLAB fitting and TeX rendering are optional and require compatible local
-  runtimes. Missing or broken integrations do not block the base GUI.
+- Curve fitting uses SciPy in the project Python environment
+  (`mygui/database/scipy_fit_adapter.py`). MATLAB fitting and TeX rendering
+  remain optional and require compatible local runtimes. Missing or broken
+  MATLAB or TeX does not block the base GUI or SciPy fitting.
 - Cancelling a background UI request suppresses its callback, but an already
   running worker exits cooperatively or at its bounded process timeout.
 - Project creation starts from the Style gallery. There is no separate welcome

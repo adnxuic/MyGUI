@@ -34,7 +34,7 @@ tasks:
       - tests.test_matplotlib_property_contract
       - tests.test_y_axis_reserve
       - tests.test_reference_marks_table
-    documentation: [docs/chart-component-parameters.md, docs/axes-component-parameters.md, docs/reference-marks-component.md]
+    documentation: [docs/editing-components/charts/line.md, docs/editing-components/fixed-semantics/axes.md, docs/editing-components/elements/reflection-positions.md, docs/reference-marks-component.md]
     manual_smoke: true
   schema_migration:
     skill: .agents/skills/schema-migration/SKILL.md

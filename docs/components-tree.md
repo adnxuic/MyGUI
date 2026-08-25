@@ -79,7 +79,7 @@ group under their owner Axes. The group is not a Component and is never saved.
 
 Closing a project releases its Registry and Canvas callbacks and discards its
 tree session. Selection, expansion, search text, and Explorer page state are
-not part of schema v14.
+not part of schema v15.
 
 When a project is first bound, the tree selects the current Axes when one
 exists, otherwise the Figure root. Creating an Axes, Chart, free Text,

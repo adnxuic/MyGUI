@@ -389,56 +389,56 @@ class TableUiTests(unittest.TestCase):
              patch.object(self.view.verticalHeader(), "logicalIndexAt", return_value=0):
 
             # Header menu: test rename action
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Rename Column")), \
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Rename Column")), \
                  patch.object(QInputDialog, "getText", return_value=("ColRenamed", True)):
                 self.view.header_context_menu(QPoint(10, 10))
             self.assertEqual(self.model.sheet.columns[0].name, "ColRenamed")
 
             # Header menu: test change type action
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Change Type")), \
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Change Type")), \
                  patch.object(QInputDialog, "getItem", return_value=("text", True)):
                 self.view.header_context_menu(QPoint(10, 10))
             self.assertEqual(self.model.sheet.columns[0].type, ColumnType.TEXT)
 
             # Header menu: test Add Column Right
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Add Column Right")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Add Column Right")):
                 self.view.header_context_menu(QPoint(10, 10))
 
             # Header menu: test Move Left & Move Right
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Move Right")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Move Right")):
                 self.view.header_context_menu(QPoint(10, 10))
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Move Left")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Move Left")):
                 self.view.header_context_menu(QPoint(10, 10))
 
             # Header menu: test Sort Rows Ascending & Descending
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Sort Rows Ascending")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Sort Rows Ascending")):
                 self.view.header_context_menu(QPoint(10, 10))
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Sort Rows Descending")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Sort Rows Descending")):
                 self.view.header_context_menu(QPoint(10, 10))
 
             # Header menu: test Delete Column
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Delete Column")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Delete Column")):
                 self.view.header_context_menu(QPoint(10, 10))
 
             # Row menu actions: Insert Row, Delete Row, Move Up, Move Down
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Move Down")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Move Down")):
                 self.view.row_context_menu(QPoint(10, 10))
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Move Up")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Move Up")):
                 self.view.row_context_menu(QPoint(10, 10))
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Insert Row Above")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Insert Row Above")):
                 self.view.row_context_menu(QPoint(10, 10))
-            with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Delete Row")):
+            with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Delete Row")):
                 self.view.row_context_menu(QPoint(10, 10))
 
         # Sheet TabBar context menu actions
         self.subtable.add_new_sheet("Tab2")
-        with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Rename Sheet")), \
+        with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Rename Sheet")), \
              patch.object(QInputDialog, "getText", return_value=("Tab2Renamed", True)):
             with patch.object(self.subtable.tabWidget.tabBar(), "tabAt", return_value=1):
                 self.subtable.tabWidget._context_menu(QPoint(50, 10))
         self.assertEqual(self.subtable.tabWidget.tabText(1), "Tab2Renamed")
 
-        with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type("Delete Sheet")):
+        with patch("mygui.widgets.table.table_view.QMenu", self._menu_type("Delete Sheet")):
             with patch.object(self.subtable.tabWidget.tabBar(), "tabAt", return_value=1):
                 self.subtable.tabWidget._context_menu(QPoint(50, 10))
         self.assertEqual(self.subtable.tabWidget.count(), 2)  # Sheet1 + plus
@@ -564,7 +564,7 @@ class TableUiTests(unittest.TestCase):
             self.subtable.delete_current_sheet()
 
         # Context menu on sheet tab bar
-        with patch("mygui.widgets.table.py_subtable.QMenu", self._menu_type(None)):
+        with patch("mygui.widgets.table.table_view.QMenu", self._menu_type(None)):
             self.subtable.tabWidget._context_menu(QPoint(10, 10))
 
         # Sync sheets

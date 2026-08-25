@@ -41,9 +41,9 @@ scalar data. Reference Marks owns one ordered `positions` sequence and one
 The complete Reference Marks field matrix, controls, defaults, and pinned
 Matplotlib links are in [Reference Marks Component](reference-marks-component.md).
 Colorbar fields are in [Colorbar Component](colorbar-component.md). Chart fields
-are in [Chart Component Parameters](chart-component-parameters.md), and
-Figure/Axes fields are in
-[Axes and Figure Component Parameters](axes-component-parameters.md).
+are in [Plot](editing-components/charts/plot.md) and the other
+[Editing Components](components-tree.md) chart pages, and Figure/Axes fields
+are in [Axes](editing-components/fixed-semantics/axes.md).
 
 ## Closed tagged values
 
@@ -77,8 +77,9 @@ kind/role. Existing component records and stable IDs are not rewritten.
 Malformed predecessors are rejected before migration. Current MyGUI then
 deep-copies the strictly validated v12 snapshot, changes only its root version
 to v13, strictly validates v13, and then applies the v13-to-v14 Tick Label
-font-family migration before validating v14. Other component and Table state
-is not rewritten.
+font-family migration before validating v14. The validated v14 snapshot then
+migrates in memory to v15 before Table or Figure publication. Other component
+and Table state is not rewritten.
 Reference Guides are therefore not valid in v12. Versions v4-v9, booleans,
 floats, strings, and unknown versions remain unsupported.
 

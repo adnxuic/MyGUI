@@ -11,9 +11,11 @@ Read the routed persistence, component, and testing pages. Preserve
 
 Trace the operation from file validation through repository/Canvas preparation,
 materialization, Inspector/tree setup, tab publication, fingerprint updates,
-and user messaging. Stage all state before official mappings and clean failures
-by stable project/object ID. Do not infer success from a tab name, QUndoStack
-index, or partially written file.
+and user messaging. Restore enters `PyFigureCanvas.restore_component_tree`;
+handlers live in `canvas_materialize_handlers.py`, and snapshot apply is
+`CanvasSnapshotApplier`. Stage all state before official mappings and clean
+failures by stable project/object ID. Do not infer success from a tab name,
+QUndoStack index, or partially written file.
 
 Add tests on both sides of tab publication, file replace/cleanup failure,
 repository mismatch, materializer failure, one final message/refresh, exact

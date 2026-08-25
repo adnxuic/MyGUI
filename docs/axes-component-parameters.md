@@ -179,7 +179,7 @@ Ticks. A configured custom locator remains authoritative.
 | Color (color) | Color picker | The label text color. | #000000 |
 | Font size (fontsize) | Number | The label font size in points. | 10.0 |
 | Rotation (rotation) | Number | The label angle in degrees. | 0.0 |
-| Font family (fontfamily) | Font dropdown | The primary label font family. Runtime input may use a Matplotlib font-family sequence, but the Controller and schema v14 persist exactly its first family as one non-empty string. See the [fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | sans-serif |
+| Font family (fontfamily) | Font dropdown | The primary label font family. Runtime input may use a Matplotlib font-family sequence, but the Controller and schema v15 persist exactly its first family as one non-empty string. See the [fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | sans-serif |
 | Pad (pad) | Number | The distance between the labels and the ticks, in points. | 3.5 |
 | Font weight (fontweight) | Named/number editor | The label stroke thickness. | normal |
 | Font style (fontstyle) | Dropdown | normal, italic, or oblique. | normal |

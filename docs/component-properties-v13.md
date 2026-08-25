@@ -2,7 +2,7 @@
 
 Schema v13 is retained as a strict chained migration source for current
 [schema v15](component-properties-v15.md) files. Valid v13 snapshots migrate
-through v14. New saves no longer emit v13.
+through v14 to v15. New saves no longer emit v13.
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
@@ -54,9 +54,10 @@ pinned Matplotlib links are in [Reference Guides](reference-guides-component.md)
 Reference Marks fields are in
 [Reference Marks Component](reference-marks-component.md). Colorbar fields are
 in [Colorbar Component](colorbar-component.md). Chart fields are in
-[Chart Component Parameters](chart-component-parameters.md), and Figure/Axes
+[Plot](editing-components/charts/plot.md) and the other
+[Editing Components](components-tree.md) chart pages, and Figure/Axes
 fields are in
-[Axes and Figure Component Parameters](axes-component-parameters.md).
+[Axes](editing-components/fixed-semantics/axes.md).
 
 ## Closed tagged values
 
@@ -96,7 +97,8 @@ booleans, floats, strings, and unknown versions remain unsupported.
 
 Current loading then validates the complete v13 snapshot, deep-copies it,
 canonicalizes Tick Label `fontfamily` from a non-empty string list to its first
-string, changes the root version to 14, and strictly validates schema v14 before
+string, changes the root version to 14, and strictly validates schema v14.
+The validated v14 snapshot then migrates in memory to v15 before
 publication. Non-empty v13 string values remain unchanged; invalid or empty
 font lists are rejected.
 

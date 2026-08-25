@@ -14,7 +14,13 @@ Before coding, decide whether existing kind/role/schema contracts are enough;
 route any persisted shape change through `schema-migration`. Implement domain
 state and validation first, then Controller/Service, style-derived creation,
 materializer/deletion declarations, exact EditorProfile, and transactional
-Canvas publication. UI Inputs remain Controller-free.
+Canvas publication. Place the Controller in
+`mygui/figuremodify/components/controllers/`, the Service in
+`mygui/figuremodify/services/` (re-export from `component_services`), and
+the restore handler in `canvas_materialize_handlers.py` with a Canvas
+wrapper. UI Inputs remain Controller-free. Reusable Inspector sections live
+in `component_editors/sections/`; Function Curve, Interpolation, and Fit
+sections remain in `chart_sections.py` and `fit_sections.py`.
 
 Verify creation, empty valid data, style/palette precedence, data refresh,
 lazy Inspector reuse, deletion cohorts, failure rollback at every publication

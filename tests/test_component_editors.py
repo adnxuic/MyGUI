@@ -1193,7 +1193,7 @@ class ComponentEditorTests(unittest.TestCase):
 
             with patch(
                 "mygui.widgets.fig_control_window.component_editors."
-                "sections.choose_palette",
+                "sections.palette.choose_palette",
                 return_value=None,
             ):
                 section.source_input.setCurrentIndex(
@@ -1204,7 +1204,7 @@ class ComponentEditorTests(unittest.TestCase):
 
             with patch(
                 "mygui.widgets.fig_control_window.component_editors."
-                "sections.choose_palette",
+                "sections.palette.choose_palette",
                 return_value=custom,
             ):
                 section.source_input.setCurrentIndex(

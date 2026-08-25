@@ -14,9 +14,12 @@ subprocesses through their current `sys.executable`. Qt tests run with
 | Inspector/editor lifecycle | `test_component_inspector`, `test_component_editors` |
 | Tree/selection | `test_component_tree` |
 | Registration/services | `test_component_services`, `test_component_runtime_integration` |
+| Canvas host/batch/restore | `test_py_figure_canvas`, `test_batch_chart_creation`, `test_canvas_popout`, `test_in_axes` |
+| Table widget / color picker | `test_table_ui`, `test_color_picker`, `test_color_library` |
 | Materialization/schema/IO | `test_component_materializers`, `test_project_schema`, `test_project_io`, `test_project_object_roundtrip` |
 | Deletion/project publication | `test_component_deletion_and_project_close` |
-| Optional TeX/MATLAB/font paths | `test_optional_dependencies`, `test_font_diagnostics` |
+| Optional TeX/MATLAB/font paths | `test_optional_dependencies`, `test_font_diagnostics`, `test_scipy_fit_adapter` |
+| MkDocs component contract | `test_component_documentation` |
 
 `verify_fast` runs compileall, Ruff, and the route's focused modules.
 `verify_full --profile application` runs the complete suite once under branch

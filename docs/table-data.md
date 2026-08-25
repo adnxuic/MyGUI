@@ -46,7 +46,9 @@ TSV copy/paste accepts LF, CRLF, and CR line endings. Paste validates all locked
 
 The Table toolbar provides Undo, Redo, Rename Sheet, Delete Sheet, Add Row,
 Delete Row, Move Row Up, Move Row Down, Add Column, and Delete Column for the
-active Sheet. Undo and Redo may name a Figure command because they use the
+active Sheet. The widget host is `PySubTable`; the Qt model and sheet view
+live in sibling modules and still read and mutate only through
+`TableRepository`. Undo and Redo may name a Figure command because they use the
 active project's shared timeline.
 
 - The column-header right-click menu offers Rename Column, Change Type, Add Column Right, Delete Column, Move Left, Move Right, Sort Rows Ascending, and Sort Rows Descending.

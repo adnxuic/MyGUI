@@ -1,6 +1,6 @@
 # Matplotlib Component Controllers
 
-The component-controller layer under `mygui/figuremodify/components/` provides Qt-independent control of a Matplotlib Figure. It separates artist behavior, serializable state, semantic lookup, hierarchy, and redraw coordination so GUI editors, project restore, scripted changes, and project Undo/Redo can call the same API.
+The component-controller layer under `mygui/figuremodify/components/` provides Qt-independent control of a Matplotlib Figure. Concrete Controller classes live in `mygui/figuremodify/components/controllers/` and stay exported from `mygui.figuremodify.components`. Domain Services are implemented in `mygui/figuremodify/services/` and re-exported from `mygui.figuremodify.component_services`. The layer separates artist behavior, serializable state, semantic lookup, hierarchy, and redraw coordination so GUI editors, project restore, scripted changes, and project Undo/Redo can call the same API.
 
 ## Architecture
 
@@ -44,7 +44,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v14.
+  serialized into `ComponentState` or schema v15.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -137,16 +137,17 @@ subtree.
 | `ReferenceLineController` | Reference Line | finite constant value, vertical/horizontal orientation, Axes-fraction span, uniform line appearance, visibility, layering, and clipping |
 | `ReferenceBandController` | Reference Band | finite ordered bounds, vertical/horizontal orientation, Axes-fraction span, fill/border appearance, visibility, layering, and clipping |
 | `ColorbarController` | Colorbar | visibility/label, constructor-sensitive placement, extend/spacing/edges, tagged locator/formatter, minor ticks/tick side, fonts, and outline appearance |
+| `ZoomInAxesController`, `ImageInAxesController` | Zoom/Image inset | child-Axes placement and frame plus zoom connectors/range or embedded-image data |
 
-The exact schema-v14 ownership matrix and tagged-value formats are maintained
-in [`component-properties-v14.md`](component-properties-v14.md). Colorbar
+The exact schema-v15 ownership matrix and tagged-value formats are maintained
+in [`component-properties-v15.md`](component-properties-v15.md). Colorbar
 controls and defaults are listed in
 [`colorbar-component.md`](colorbar-component.md).
 Axes do not persist scales, Axis does not persist inversion or side visibility,
 and Tick groups do not persist label padding; those single-owner boundaries are
 part of the project format.
 
-`FunctionCurveController`, `DataPlotController`, `FitCurveController`, and `InterpolationController` specialize `LineController` with role-specific data. `controller_type_for(state)` and `create_controller(state, ...)` dispatch from the controlled kind/role pair.
+`FunctionCurveController`, `DataPlotController`, `FitCurveController`, and `InterpolationController` specialize `LineController` with role-specific data. `controller_type_for(state)` and `create_controller(state, ...)` dispatch from the controlled kind/role pair (`registry_bridge.py` inside the controllers package).
 
 Role data is validated by the Controller as well as by project IO:
 
@@ -169,7 +170,20 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
 
 ## Domain services and Editors
 
-`mygui/figuremodify/component_services.py` contains application commands that span Controller or repository boundaries:
+Domain service implementations live in `mygui/figuremodify/services/`.
+`mygui.figuremodify.component_services` remains the stable import facade
+and re-exports application commands that span Controller or repository
+boundaries:
+
+| Module | Commands |
+| --- | --- |
+| `services/axes_command.py` | `AxesCommandService` |
+| `services/chart_data.py` | `FunctionCurveService`, `ChartDataService`, `InterpolationService`, `FitService` |
+| `services/colorbar.py` | `ColorbarService` |
+| `services/reference_marks.py` | `ReferenceMarksService`, `ReferenceGuideService` |
+| `services/text_render.py` | `TextRenderService` |
+| `services/deletion.py` | `ComponentDeletionService`, `DeletionHandlerRegistry`, request/plan types |
+| `services/dependency.py` | `ComponentDependencyService` |
 
 - `AxesCommandService`: semantic Axis/Spine/Label/Legend commands and ordered palette application;
 - `FunctionCurveService`: safe expression evaluation and atomic curve-data replacement;
@@ -193,6 +207,14 @@ An empty resolved data array is valid and keeps its Controller, editor, referenc
   component snapshots together with exact parent Axes palette state.
 
 These services do not maintain parallel project records. `ComponentRegistry` and `ComponentState` are the only runtime truth. The visible panels receive an `EditorContext`, call Controllers/services directly, and are synchronized or removed through committed Registry events. `Py*Modify` façade classes are not part of the architecture.
+
+The Canvas host package is `mygui/widgets/figure_canvas/`. Public `add_*` and
+`restore_component_tree` stay on `PyFigureCanvas` in the historical filename
+`py_figure_canves.py`. Batch staging (`ChartCreationStager`), restore handlers
+(`canvas_materialize_handlers.py`), snapshot apply (`CanvasSnapshotApplier`),
+the Canvas Window (`canvas_popout.py`), and the project navigation toolbar
+(`canvas_toolbar.py`) hold only a host reference and must not cache
+`ComponentState`, selection, or color-cycle state.
 
 Production editors use one `ComponentInspector` shell. `EditorProfile` declares
 the ordered `EditorSection` composition, explicit placement, and UI-only tree
@@ -270,7 +292,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend strict schema-v14 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
+9. Extend strict schema-v15 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

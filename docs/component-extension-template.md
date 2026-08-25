@@ -2,7 +2,7 @@
 
 Use this checklist when adding a Figure component. It preserves the single
 mutable state path, lazy Inspector lifecycle, current Figure style, and
-schema-v14 project behavior.
+schema-v15 project behavior.
 
 ## Domain declaration
 
@@ -10,24 +10,30 @@ schema-v14 project behavior.
    new enum value or persistent field is a separate schema migration task with
    validation, migration, rollback, and save/open tests.
 2. Implement the Controller, explicit `DeletionPolicy`, property specs,
-   selector/data validation, and Locator strategy. Fixed semantic components
-   hide; genuinely removable artists implement reversible removal.
+   selector/data validation, and Locator strategy in
+   `mygui/figuremodify/components/controllers/` and export the type from that
+   package. Fixed semantic components hide; genuinely removable artists
+   implement reversible removal.
    Declare every property editor with `EditorKind`; use `AUTO` only when the
    value type or choices uniquely determine the control. A composite value must
    declare its dedicated inline or dialog editor kind; `JSON` is reserved for
    tests and never renders a production property.
 3. Put cross-component, repository, or render-sensitive work in a domain
-   Service. Inspector code submits to the Controller or Service and never
-   mutates Matplotlib directly.
+   Service under `mygui/figuremodify/services/` and re-export it from
+   `mygui.figuremodify.component_services`. Inspector code submits to the
+   Controller or Service and never mutates Matplotlib directly.
 4. For `REMOVE`, register one exact `DeletionHandler` for the Editor key.
    Compose `ColorCycleDeletionEffect` only for palette-backed components. A
    leaf handler must have no registered children; a composite handler owns
    and tests its complete child-artist removal coverage.
 5. For every runtime-created persisted component, declare `RESTORE_PHASE` on
-   its Controller and register one exact `ComponentMaterializer`. The Canvas
-   validates missing, extra, duplicate, non-callable, and phase-mismatched
-   declarations before publishing components. Fixed semantic components use
-   `RESTORE_PHASE = None`.
+   its Controller and register one exact `ComponentMaterializer` through
+   `register_canvas_materializers()` in
+   `canvas_materialize_handlers.py`, with a thin `PyFigureCanvas._materialize_*`
+   wrapper. The Canvas validates missing, extra, duplicate, non-callable, and
+   phase-mismatched declarations before publishing components. Fixed semantic
+   components use `RESTORE_PHASE = None`. `ComponentMaterializerRegistry`
+   remains the Matplotlib-free declaration table.
 
 ## Creation
 
@@ -37,7 +43,9 @@ schema-v14 project behavior.
    `ColorCycleState.peek()` and call `commit()` only after creation succeeds.
 3. Create the artist under the same style context, synchronize the Controller
    from that artist, and register it inside
-   `ComponentRegistry.registration_transaction()`.
+   `ComponentRegistry.registration_transaction()`. Multi-series Plot, Scatter,
+   and Interpolation creation stages through `ChartCreationStager` on the
+   Canvas host; public `add_*` methods stay on `PyFigureCanvas`.
 4. Preflight the lazy Inspector before transaction commit. Failure removes
    the artist, Controller, Locator binding, cached Inspector, pending updates,
    and any consumed creation cursor without publishing lifecycle events.
@@ -85,10 +93,10 @@ preview, and sort behavior. No tree or container source edit is required.
   panel/project removal disposes every callback exactly once.
 - Empty data remains a valid registered and persisted component where the
   domain permits it.
-- Every dynamic Controller key has a parameterized schema-v14 save/open test;
+- Every dynamic Controller key has a parameterized schema-v15 save/open test;
   materializer failure leaves no project tab, artist, Controller, Locator,
   Inspector, listener, selection, or color consumption behind.
-- Deletion, data refresh semantics, stable-ID save/open, and schema-v14
+- Deletion, data refresh semantics, stable-ID save/open, and schema-v15
   round-trip are covered without persisting Profiles, typed tree keys,
   Section expansion, QWidget state, or callbacks.
 - Single and batch deletion cover exact right-click targeting, full cohorts

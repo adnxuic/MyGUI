@@ -31,7 +31,14 @@ commit only.
 Every runtime-created persisted component declares a restore phase and one
 exact materializer. `ComponentMaterializerRegistry.validate_complete()` rejects
 missing, extra, duplicate, non-callable, or phase-mismatched declarations
-before components are published.
+before components are published. Register Canvas handlers with
+`register_canvas_materializers()` in
+`mygui/widgets/figure_canvas/canvas_materialize_handlers.py`. Keep thin
+`PyFigureCanvas._materialize_*` wrappers so restore and tests still enter
+through the Canvas. `restore_component_tree` stays on the Canvas (history
+suspend, `_restoring_component_tree_now`, final `select_component`).
+`apply_component_tree` is delegated to `CanvasSnapshotApplier` after
+Matplotlib targets exist; the applier must not own a pending-state queue.
 
 Project creation and restore are staged: prepare Canvas, Inspector hierarchy,
 tree session, fingerprints, mappings, and subscriptions before official tab

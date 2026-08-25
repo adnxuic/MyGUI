@@ -6,11 +6,12 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 - `mkdocs.yml` at the repository root is the only site configuration. Its `docs_dir` is `docs/` and its `nav` groups the existing feature documents; document content stays in the Markdown files.
 - `docs/index.md` is the site landing page. Creating Charts includes the
-  Reference Guides and Reference Marks feature pages, Projects and Appearance
-  includes Figure Export, Developer Reference
-  links the current schema-v15 property contract plus legacy v14, v13, v12, and
-  v10 migration references, and Editing Components mirrors the full 27-profile
-  runtime component hierarchy.
+  Reference Guides, Reference Marks, and Colorbar feature pages, Projects and
+  Appearance includes Figure Export, Developer Reference documents the
+  Controller/Service/Canvas package layout plus the current schema-v15
+  property contract and legacy v14, v13, v12, and v10 migration references,
+  and Editing Components mirrors the full 27-profile runtime component
+  hierarchy.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.
 
 ## Configuration parameters
@@ -24,7 +25,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 ## Navigation hierarchy and component tree
 
-The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 27 production Inspector profiles across four semantic tiers:
+The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 27 production Inspector profiles:
 
 1. **Fixed Semantics (14 profiles)**:
    - `Figure` (`editing-components/fixed-semantics/figure.md`)
@@ -36,11 +37,10 @@ The navigation structure under **Editing Components** strictly mirrors the runti
    - `X Axis` (`editing-components/fixed-semantics/x-axis/index.md`):
      - `Major Ticks` (`editing-components/fixed-semantics/x-axis/major-ticks.md`) -> `Major Tick Labels` (`editing-components/fixed-semantics/x-axis/major-tick-labels.md`)
      - `Minor Ticks` (`editing-components/fixed-semantics/x-axis/minor-ticks.md`) -> `Minor Tick Labels` (`editing-components/fixed-semantics/x-axis/minor-tick-labels.md`)
-     - `Major Grid` (`editing-components/fixed-semantics/x-axis/major-grid.md`)
-     - `Minor Grid` (`editing-components/fixed-semantics/x-axis/minor-grid.md`)
+     - `Major Grid` (`editing-components/fixed-semantics/x-axis/major-grid.md`) documents the single Grid Inspector profile used by both major and minor grid nodes
      - `X Axis Label` (`editing-components/fixed-semantics/x-axis/x-label.md`)
    - `Y Axis` (`editing-components/fixed-semantics/y-axis/index.md`):
-     - Shares Major/Minor Ticks, Major/Minor Tick Labels, and Major/Minor Grid pages co-located under `fixed-semantics/x-axis/`.
+     - Shares Major/Minor Ticks, Major/Minor Tick Labels, and the Grid page co-located under `fixed-semantics/x-axis/`.
      - `Y Axis Label` (`editing-components/fixed-semantics/y-axis/y-label.md`)
 2. **Charts (6 profiles)**:
    - `Lines` (`editing-components/charts/line.md`)
@@ -67,8 +67,9 @@ Parent container nodes (`Figure`, `Axes`, `X Axis`, `Y Axis`, `Major Ticks`, `Mi
 
 Component documentation uses `pymdownx.snippets` to maintain single-source-of-truth modularity across shared Inspector sections and parameter definitions:
 
-- Snippet files are organized under `docs/_snippets/components/**` partitioned by concern (e.g. `appearance/`, `font/`, `limits/`, `picker/`, `geometry/`, `spine/`, `tick/`).
-- `pymdownx.snippets` is configured with `base_path: [docs]` and `check_paths: true`, allowing inclusion via syntax such as `--8<-- "_snippets/components/appearance/line.md"`.
+- Snippet files are organized under `docs/_snippets/components/` by concern:
+  `charts/`, `text/`, `ticks/`, `common/`, `in_axes/`, and `reference_guides/`.
+- `pymdownx.snippets` is configured with `base_path: [docs]` and `check_paths: true`, allowing inclusion via syntax such as `--8<-- "_snippets/components/charts/line-appearance.md"`.
 - `check_paths: true` guarantees that any missing or invalid snippet path immediately fails the strict MkDocs build during local verification and CI.
 - The `_snippets/` directory is deliberately omitted from standalone navigation in `mkdocs.yml` to prevent raw snippet fragments from appearing as independent documentation pages.
 

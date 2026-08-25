@@ -101,6 +101,8 @@ through v12–v14, and v10 through every intervening version. Versions v4-v9,
 booleans, floats, strings, and unknown versions remain unsupported.
 
 See [Project Files](project-files.md) for the file graph and restore order, and
-[Component Controllers](component-controllers.md) for runtime mutation and
-rollback contracts. [Component Properties (schema v14)](component-properties-v14.md)
+[Component Controllers](component-controllers.md) for runtime mutation,
+module layout, and rollback contracts. Parameter tables live under
+[Editing Components](components-tree.md).
+[Component Properties (schema v14)](component-properties-v14.md)
 documents the immediate migration source.

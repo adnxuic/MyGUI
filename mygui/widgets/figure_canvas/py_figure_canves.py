@@ -2,15 +2,11 @@
 
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
-from functools import partial, wraps
+from functools import partial
 from typing import Any, Optional
 from PySide6.QtCore import QTimer, Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
-    QDialogButtonBox,
     QLabel,
     QScrollArea,
     QSizePolicy,
@@ -51,8 +47,41 @@ from mygui.figuremodify.history import FigureHistoryService
 from mygui.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
 from mygui.widgets.figure_canvas.project_metadata import ProjectMetadataPort
 from mygui.widgets.figure_canvas.component_materializers import (
-    ComponentMaterializer,
     ComponentMaterializerRegistry,
+)
+from mygui.widgets.figure_canvas.canvas_popout import (
+    CanvasPopoutWindow as _CanvasPopoutWindow,
+)
+from mygui.widgets.figure_canvas.canvas_toolbar import (
+    ProjectNavigationToolbar as _ProjectNavigationToolbar,
+    history_command as _history_command,
+)
+from mygui.widgets.figure_canvas.chart_creation import (
+    ChartBatchCreationResult,
+    ChartCreationStager,
+    PreparedChartSeries,
+)
+from mygui.widgets.figure_canvas.canvas_materialize_handlers import (
+    materialize_colorbar,
+    materialize_data_plot,
+    materialize_fit,
+    materialize_function_curve,
+    materialize_image_in_axes,
+    materialize_interpolation,
+    materialize_line,
+    materialize_reference_band,
+    materialize_reference_line,
+    materialize_reference_marks,
+    materialize_scatter,
+    materialize_text,
+    materialize_zoom_in_axes,
+    materializer_pair,
+    register_canvas_materializers,
+)
+from mygui.widgets.figure_canvas.canvas_snapshot import (
+    CanvasSnapshotApplier,
+    component_paths_from_tree,
+    json_component_value,
 )
 from mygui.figuremodify.components import (
     AxesController,
@@ -63,12 +92,10 @@ from mygui.figuremodify.components import (
     ComponentRole,
     ComponentState,
     ColorbarController,
-    DataPlotController,
     FigureController,
     FitCurveController,
     FitEngine,
     FunctionCurveController,
-    InterpolationController,
     ImageInAxesController,
     LineController,
     ObserverFailure,
@@ -88,7 +115,6 @@ from mygui.figuremodify.components.serialization import (
     normalize_v15_figure,
     validate_v15_figure,
 )
-from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
 from mygui.figuremodify.in_axes import (
@@ -108,7 +134,6 @@ from mygui.figure_export import (
 )
 from mygui.database import (
     ColumnRef,
-    ColumnType,
     DataPreprocessSpec,
     TableChangeSet,
     TableRepository,
@@ -137,244 +162,10 @@ from mygui.figuremodify.style_base.creation_defaults import (
 from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.backends.backend_qtagg import (
-    NavigationToolbar2QT as NavigationToolbar,
-)
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
 import numpy as np
-
-
-def _history_command(text: str, *, scan_all: bool = False):
-    """Record one public Canvas operation as a single user intent."""
-
-    def decorate(method):
-        @wraps(method)
-        def wrapped(self, *args, **kwargs):
-            history = getattr(self, "figure_history", None)
-            if history is None:
-                return method(self, *args, **kwargs)
-            return history.perform(
-                text,
-                lambda: method(self, *args, **kwargs),
-                scan_all=scan_all,
-            )
-
-        return wrapped
-
-    return decorate
-
-
-class _ProjectNavigationToolbar(NavigationToolbar):
-    """Add project history boundaries to persisted canvas view actions."""
-
-    def __init__(self, canvas, parent, history) -> None:
-        self._project_history = history
-        super().__init__(canvas, parent)
-
-    def home(self, *args):
-        return self._project_history.perform(
-            "Reset Figure View",
-            lambda: super(_ProjectNavigationToolbar, self).home(*args),
-            scan_all=True,
-        )
-
-    def back(self, *args):
-        return self._project_history.perform(
-            "Back Figure View",
-            lambda: super(_ProjectNavigationToolbar, self).back(*args),
-            scan_all=True,
-        )
-
-    def forward(self, *args):
-        return self._project_history.perform(
-            "Forward Figure View",
-            lambda: super(_ProjectNavigationToolbar, self).forward(*args),
-            scan_all=True,
-        )
-
-    def edit_parameters(self):
-        result = super().edit_parameters()
-        dialog = getattr(self, "_fedit_dialog", None)
-        if dialog is None or bool(
-            dialog.property("mygui_history_connected")
-        ):
-            return result
-        dialog.setProperty("mygui_history_connected", True)
-        apply_button = dialog.bbox.button(
-            QDialogButtonBox.StandardButton.Apply
-        )
-        ok_button = dialog.bbox.button(
-            QDialogButtonBox.StandardButton.Ok
-        )
-        if apply_button is not None:
-            apply_button.pressed.connect(
-                lambda: self._project_history.begin_interaction(
-                    "Customize Figure"
-                )
-            )
-            apply_button.clicked.connect(
-                self._project_history.end_interaction
-            )
-        if ok_button is not None:
-            ok_button.pressed.connect(
-                lambda: self._project_history.begin_interaction(
-                    "Customize Figure"
-                )
-            )
-            dialog.accepted.connect(self._project_history.end_interaction)
-        dialog.rejected.connect(self._project_history.cancel_interaction)
-        return result
-
-    def save_figure(self, *args):
-        figure_canvas = self.parent()
-        figure_canvas.exportRequested.emit(figure_canvas)
-
-    def press_pan(self, event):
-        started = self._project_history.begin_interaction("Pan Figure View")
-        try:
-            result = super().press_pan(event)
-        except Exception:
-            if started:
-                self._project_history.cancel_interaction()
-            raise
-        if started and self._pan_info is None:
-            self._project_history.cancel_interaction()
-        return result
-
-    def release_pan(self, event):
-        active = self._pan_info is not None
-        try:
-            result = super().release_pan(event)
-        except Exception:
-            if active:
-                self._project_history.cancel_interaction()
-            raise
-        if active:
-            self._project_history.end_interaction()
-        return result
-
-    def press_zoom(self, event):
-        started = self._project_history.begin_interaction("Zoom Figure View")
-        try:
-            result = super().press_zoom(event)
-        except Exception:
-            if started:
-                self._project_history.cancel_interaction()
-            raise
-        if started and self._zoom_info is None:
-            self._project_history.cancel_interaction()
-        return result
-
-    def release_zoom(self, event):
-        active = self._zoom_info is not None
-        try:
-            result = super().release_zoom(event)
-        except Exception:
-            if active:
-                self._project_history.cancel_interaction()
-            raise
-        if active:
-            self._project_history.end_interaction()
-        return result
-
-
-@dataclass(frozen=True, slots=True)
-class ChartBatchCreationResult:
-    """Transient result returned after one atomic chart creation batch."""
-
-    component_ids: tuple[str, ...]
-    artists: tuple[Any, ...]
-    colors: tuple[str, ...]
-    excluded_counts: tuple[int, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class _PreparedChartSeries:
-    x_ref: ColumnRef
-    y_ref: ColumnRef
-    x: Any
-    y: Any
-    label: str
-    color: str
-    excluded_count: int
-
-
-class _CanvasPopoutWindow(QDialog):
-    """Temporarily host one Canvas scroll area in a top-level window."""
-
-    def __init__(self, owner: "PyFigureCanvas") -> None:
-        # Keep this native window parentless.  A QDialog whose QObject parent
-        # is the Canvas can become only a transient/owned window on Windows;
-        # with MyGUI's custom main window that leaves the dialog behind the
-        # owner even after raise_()/activateWindow().  PyFigureCanvas retains
-        # and closes this object explicitly, so QObject parenting is not
-        # needed for lifetime management.
-        super().__init__(None, Qt.Window)
-        self._owner = owner
-        self._content: QWidget | None = None
-        self._canvas_returned = False
-        self.setObjectName("figure_popout_window")
-        self.setWindowModality(Qt.NonModal)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        # Esc must close the window even while the Canvas holds the keyboard
-        # focus, and the Matplotlib canvas consumes key events without
-        # propagating them.  A window shortcut is resolved before the focus
-        # widget sees the key, unlike QDialog's own Esc handling.
-        self._close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
-        self._close_shortcut.setContext(Qt.WindowShortcut)
-        self._close_shortcut.activated.connect(self.close)
-
-    def attach_content(self, content: QWidget) -> None:
-        """Attach the unique live Canvas content widget."""
-
-        if self._content is not None:
-            raise RuntimeError("The Canvas popout already owns content.")
-        self._content = content
-        self.layout().addWidget(content)
-        # The project tab hid this widget explicitly when its QStackedWidget
-        # switched to the placeholder.  Reparenting preserves that flag, so
-        # without an explicit show the window stays empty and reports a
-        # 0 x 0 size hint.
-        content.setVisible(True)
-        self.layout().activate()
-
-    @property
-    def canvas_returned(self) -> bool:
-        """Return whether this window already handed its Canvas back."""
-
-        return self._canvas_returned
-
-    def release_content(self) -> QWidget | None:
-        """Detach and return the hosted content exactly once."""
-
-        content = self._content
-        self._canvas_returned = True
-        if content is None:
-            return None
-        self.layout().removeWidget(content)
-        self._content = None
-        return content
-
-    def closeEvent(self, event) -> None:
-        """Return the Canvas content before the top-level window closes."""
-
-        self._owner._restore_canvas_from_popout(self)
-        super().closeEvent(event)
-
-    def done(self, result: int) -> None:
-        """Return the Canvas on every QDialog result path.
-
-        ``QDialog.reject()`` hides the window without sending a close event,
-        which would otherwise leave the live Canvas inside an invisible window
-        while the project tab keeps showing its placeholder.
-        """
-
-        self._owner._restore_canvas_from_popout(self)
-        super().done(result)
 
 
 class PyFigureCanvas(QWidget):
@@ -487,6 +278,8 @@ class PyFigureCanvas(QWidget):
             self.editor_registry,
         )
         self.color_consumption_ledger = ColorConsumptionLedger()
+        self._chart_stager = ChartCreationStager(self)
+        self._snapshot_applier = CanvasSnapshotApplier(self)
         self.deletion_service = ComponentDeletionService(
             self.component_registry,
             color_ledger=self.color_consumption_ledger,
@@ -914,93 +707,7 @@ class PyFigureCanvas(QWidget):
     ) -> dict[str, str]:
         """Map fixed semantic paths to IDs from a validated component tree."""
 
-        if not isinstance(component_tree, dict):
-            return {}
-        raw_components = component_tree.get("components")
-        root_id = component_tree.get("root_component_id")
-        if not isinstance(raw_components, list) or not isinstance(root_id, str):
-            return {}
-        components = [
-            item for item in raw_components if isinstance(item, dict)
-        ]
-        children: dict[str | None, list[dict[str, Any]]] = {}
-        for component in components:
-            children.setdefault(component.get("parent_id"), []).append(component)
-
-        paths: dict[str, str] = {"figure": root_id}
-        axes_components = sorted(
-            (
-                item
-                for item in components
-                if item.get("kind") == ComponentKind.AXES.value
-                and item.get("parent_id") == root_id
-            ),
-            key=lambda item: int(item.get("selector", {}).get("index", 0)),
-        )
-        for fallback_index, axes_component in enumerate(axes_components):
-            selector = axes_component.get("selector", {})
-            axes_index = int(selector.get("index", fallback_index))
-            axes_id = axes_component.get("id")
-            if not isinstance(axes_id, str):
-                continue
-            axes_path = f"figure/axes/{axes_index}"
-            paths[axes_path] = axes_id
-            direct = children.get(axes_id, [])
-            axis_ids: dict[str, str] = {}
-            for component in direct:
-                component_id = component.get("id")
-                kind = component.get("kind")
-                role = component.get("role")
-                component_selector = component.get("selector", {})
-                if not isinstance(component_id, str):
-                    continue
-                if kind == ComponentKind.AXIS.value:
-                    axis_name = component_selector.get("axis")
-                    if axis_name in {"x", "y"}:
-                        axis_ids[axis_name] = component_id
-                        paths[f"{axes_path}/axis/{axis_name}"] = component_id
-                elif kind == ComponentKind.SPINE.value:
-                    name = component_selector.get("name")
-                    if name in {"left", "right", "top", "bottom"}:
-                        paths[f"{axes_path}/spine/{name}"] = component_id
-                elif role == ComponentRole.TITLE.value:
-                    paths[f"{axes_path}/title"] = component_id
-                elif kind == ComponentKind.LEGEND.value:
-                    paths[f"{axes_path}/legend"] = component_id
-
-            for axis_name, axis_id in axis_ids.items():
-                for component in children.get(axis_id, []):
-                    component_id = component.get("id")
-                    kind = component.get("kind")
-                    role = component.get("role")
-                    selector = component.get("selector", {})
-                    if not isinstance(component_id, str):
-                        continue
-                    if role == f"{axis_name}_label":
-                        paths[f"{axes_path}/axis/{axis_name}/label"] = component_id
-                        continue
-                    level = selector.get("level")
-                    if level not in {"major", "minor"}:
-                        continue
-                    if kind == ComponentKind.TICK_GROUP.value:
-                        tick_path = f"{axes_path}/axis/{axis_name}/tick/{level}"
-                        paths[tick_path] = component_id
-                        label = next(
-                            (
-                                item
-                                for item in children.get(component_id, [])
-                                if item.get("kind")
-                                == ComponentKind.TICK_LABEL_GROUP.value
-                            ),
-                            None,
-                        )
-                        if label is not None and isinstance(label.get("id"), str):
-                            paths[f"{tick_path}/label"] = label["id"]
-                    elif kind == ComponentKind.GRID.value:
-                        paths[f"{axes_path}/axis/{axis_name}/grid/{level}"] = (
-                            component_id
-                        )
-        return paths
+        return component_paths_from_tree(component_tree)
 
     def _source_component_state(
         self, component_id: str
@@ -1503,67 +1210,13 @@ class PyFigureCanvas(QWidget):
         x_ref: ColumnRef,
         y_refs,
     ) -> tuple[ColumnRef, tuple[ColumnRef, ...]]:
-        if not isinstance(x_ref, ColumnRef):
-            raise ValueError("Please select X Data.")
-        normalized_y = tuple(y_refs)
-        if not normalized_y:
-            raise ValueError("Please select at least one Y Data column.")
-        if any(not isinstance(ref, ColumnRef) for ref in normalized_y):
-            raise ValueError("Every Y Data selection must be a column reference.")
-        if len(set(normalized_y)) != len(normalized_y):
-            raise ValueError("Duplicate Y Data selections are not allowed.")
-        if x_ref.project_id != self.project_id:
-            raise ValueError("X Data must belong to the current project.")
-        if not self.repository.has_ref(x_ref):
-            raise ValueError("X Data column was removed.")
-        x_column = self.repository.sheet(
-            x_ref.project_id, x_ref.sheet_id
-        ).column(x_ref.column_id)
-        if x_column.type not in {ColumnType.NUMBER, ColumnType.DATETIME}:
-            raise ValueError("X Data must be numeric or date/time.")
-        for index, ref in enumerate(normalized_y, start=1):
-            if ref.project_id != self.project_id:
-                raise ValueError(
-                    f"Y Data selection {index} must belong to the current project."
-                )
-            if not self.repository.has_ref(ref):
-                raise ValueError(f"Y Data selection {index} was removed.")
-            column = self.repository.sheet(
-                ref.project_id, ref.sheet_id
-            ).column(ref.column_id)
-            if column.type is not ColumnType.NUMBER:
-                raise ValueError(
-                    f"Y Data selection {index} must be numeric."
-                )
-        return x_ref, normalized_y
+        return self._chart_stager.normalize_batch_refs(x_ref, y_refs)
 
     def _batch_series_labels(
         self,
         y_refs: tuple[ColumnRef, ...],
     ) -> tuple[str, ...]:
-        names = tuple(
-            str(
-                self.repository.sheet(ref.project_id, ref.sheet_id)
-                .column(ref.column_id)
-                .name
-            )
-            for ref in y_refs
-        )
-        counts = {
-            name.casefold(): sum(
-                candidate.casefold() == name.casefold()
-                for candidate in names
-            )
-            for name in names
-        }
-        labels = []
-        for ref, name in zip(y_refs, names):
-            if counts[name.casefold()] == 1:
-                labels.append(name)
-                continue
-            sheet = self.repository.sheet(ref.project_id, ref.sheet_id)
-            labels.append(f"{sheet.name}/{name}")
-        return tuple(labels)
+        return self._chart_stager.batch_series_labels(y_refs)
 
     def _batch_color_plan(
         self,
@@ -1575,30 +1228,7 @@ class PyFigureCanvas(QWidget):
         bool,
         tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
     ]:
-        if not isinstance(selection, ColorSelection):
-            raise TypeError("Batch chart color must be a ColorSelection.")
-        if selection.palette is None:
-            return (
-                tuple(selection.color for _index in range(count)),
-                None,
-                False,
-                (),
-            )
-        axes_id = self.current_axes_component_id
-        if axes_id is None:
-            raise ValueError("Select an axes before adding charts.")
-        cycle = self.axes_commands.cycle_state(axes_id)
-        colors: list[str] = []
-        transitions = []
-        next_selection = selection
-        for index in range(count):
-            if index:
-                next_selection = cycle.peek()
-            colors.append(next_selection.color)
-            before = cycle.to_dict()
-            cycle.commit(next_selection)
-            transitions.append((before, cycle.to_dict()))
-        return tuple(colors), cycle.to_dict(), True, tuple(transitions)
+        return self._chart_stager.batch_color_plan(selection, count)
 
     def _prepare_data_batch(
         self,
@@ -1610,63 +1240,24 @@ class PyFigureCanvas(QWidget):
         preserve_gaps: bool,
         consume_palette: bool = True,
     ) -> tuple[
-        tuple[_PreparedChartSeries, ...],
+        tuple[PreparedChartSeries, ...],
         dict[str, Any] | None,
         bool,
         tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
     ]:
-        x_ref, normalized_y = self._normalize_batch_refs(x_ref, y_refs)
-        spec = DataPreprocessSpec.from_dict(preprocess)
-        labels = self._batch_series_labels(normalized_y)
-        resolved = []
-        for y_ref, label in zip(normalized_y, labels):
-            try:
-                pair = resolve_preprocessed_pair(
-                    self.repository,
-                    x_ref,
-                    y_ref,
-                    spec,
-                    preserve_gaps=preserve_gaps,
-                )
-                if not pair.valid_mask.any():
-                    raise ValueError(
-                        "X Data and Y Data have no valid row pairs after preprocessing."
-                    )
-            except Exception as exc:
-                raise ValueError(f"{label}: {exc}") from exc
-            resolved.append((y_ref, label, pair))
-        if consume_palette:
-            colors, final_cycle, commit_cycle, transitions = (
-                self._batch_color_plan(
-                    color_selection,
-                    len(resolved),
-                )
-            )
-        else:
-            if not isinstance(color_selection, ColorSelection):
-                raise TypeError("Batch chart color must be a ColorSelection.")
-            colors = tuple(color_selection.color for _item in resolved)
-            final_cycle = None
-            commit_cycle = False
-            transitions = ()
-        prepared = tuple(
-            _PreparedChartSeries(
-                x_ref=x_ref,
-                y_ref=y_ref,
-                x=pair.x,
-                y=pair.y,
-                label=label,
-                color=color,
-                excluded_count=pair.excluded_count,
-            )
-            for (y_ref, label, pair), color in zip(resolved, colors)
+        return self._chart_stager.prepare_data_batch(
+            x_ref,
+            y_refs,
+            preprocess,
+            color_selection,
+            preserve_gaps=preserve_gaps,
+            consume_palette=consume_palette,
         )
-        return prepared, final_cycle, commit_cycle, transitions
 
     def _stage_plot(
         self,
         transaction,
-        series: _PreparedChartSeries,
+        series: PreparedChartSeries,
         *,
         style,
         size,
@@ -1675,46 +1266,21 @@ class PyFigureCanvas(QWidget):
         object_id: str | None = None,
         color_order: int | None = None,
     ):
-        object_id = object_id or new_id()
-        plot_kwargs = {
-            "linestyle": style,
-            "markersize": size,
-            "color": series.color,
-            "label": series.label,
-        }
-        if linewidth is not None:
-            plot_kwargs["linewidth"] = float(linewidth)
-        with matplotlib_style_context(self.component_style):
-            (line,) = self.current_axes.plot(series.x, series.y, **plot_kwargs)
-        transaction.on_rollback(
-            lambda line=line: self._remove_created_artist(line)
+        return self._chart_stager.stage_plot(
+            transaction,
+            series,
+            style=style,
+            size=size,
+            linewidth=linewidth,
+            preprocess=preprocess,
+            object_id=object_id,
+            color_order=color_order,
         )
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            DataPlotController,
-            object_id,
-            ComponentRole.DATA_PLOT,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "markersize": float(line.get_markersize()),
-                "color": series.color,
-                "label": series.label,
-            },
-            {
-                "x_ref": series.x_ref.to_dict(),
-                "y_ref": series.y_ref.to_dict(),
-                "preprocess": preprocess.to_dict(),
-            },
-        )
-        self._prepare_created_component(controller, transaction)
-        return line, controller
 
     def _stage_scatter(
         self,
         transaction,
-        series: _PreparedChartSeries,
+        series: PreparedChartSeries,
         *,
         size,
         marker,
@@ -1726,70 +1292,24 @@ class PyFigureCanvas(QWidget):
         object_id: str | None = None,
         color_order: int | None = None,
     ):
-        object_id = object_id or new_id()
-        with matplotlib_style_context(self.component_style):
-            scatter = self.current_axes.scatter(
-                series.x,
-                series.y,
-                s=size,
-                c=series.color,
-                marker=marker,
-                label=series.label,
-            )
-        transaction.on_rollback(
-            lambda scatter=scatter: self._remove_created_artist(scatter)
+        return self._chart_stager.stage_scatter(
+            transaction,
+            series,
+            size=size,
+            marker=marker,
+            preprocess=preprocess,
+            color_ref=color_ref,
+            size_ref=size_ref,
+            color_mapping=color_mapping,
+            size_mapping=size_mapping,
+            object_id=object_id,
+            color_order=color_order,
         )
-        component_order = self._claim_color_order(color_order)
-        properties = {
-            "color": series.color,
-            "edgecolor": series.color,
-            "size": float(size),
-            "marker": marker,
-            "label": series.label,
-        }
-        if color_mapping is not None:
-            properties["color_mapping"] = deepcopy(color_mapping)
-        if size_mapping is not None:
-            properties["size_mapping"] = deepcopy(size_mapping)
-        controller = self._register_chart_controller(
-            ScatterController,
-            object_id,
-            ComponentRole.SCATTER,
-            scatter,
-            component_order,
-            properties,
-            {
-                "x_ref": series.x_ref.to_dict(),
-                "y_ref": series.y_ref.to_dict(),
-                "color_ref": (
-                    None if color_ref is None else color_ref.to_dict()
-                ),
-                "size_ref": (
-                    None if size_ref is None else size_ref.to_dict()
-                ),
-                "preprocess": preprocess.to_dict(),
-            },
-        )
-        if color_mapping is not None or size_mapping is not None:
-            state = controller.state
-            change = self.chart_data_service.configure_scatter_mapping(
-                controller,
-                color_ref=color_ref,
-                size_ref=size_ref,
-                color_mapping=state.properties["color_mapping"],
-                size_mapping=state.properties["size_mapping"],
-            )
-            if not change.ok:
-                raise ValueError(
-                    change.message or "Could not configure Scatter mapping."
-                )
-        self._prepare_created_component(controller, transaction)
-        return scatter, controller
 
     def _stage_interpolation(
         self,
         transaction,
-        series: _PreparedChartSeries,
+        series: PreparedChartSeries,
         *,
         method,
         k: int,
@@ -1800,44 +1320,22 @@ class PyFigureCanvas(QWidget):
         object_id: str | None = None,
         color_order: int | None = None,
     ):
-        object_id = object_id or new_id()
-        with matplotlib_style_context(self.component_style):
-            (line,) = self.current_axes.plot(
-                series.x,
-                series.y,
-                color=series.color,
-                label=series.label,
-            )
-        transaction.on_rollback(lambda line=line: self._remove_created_artist(line))
-        component_order = self._claim_color_order(color_order)
-        controller = self._register_chart_controller(
-            InterpolationController,
-            object_id,
-            ComponentRole.INTERPOLATION,
-            line,
-            component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "color": series.color,
-                "label": series.label,
-            },
-            {
-                "x_ref": series.x_ref.to_dict(),
-                "y_ref": series.y_ref.to_dict(),
-                "preprocess": preprocess.to_dict(),
-                "method": method,
-                "k": int(k),
-                "samples": int(samples),
-                "lam": None if lam is None else float(lam),
-                "lam_auto": bool(lam_auto),
-            },
+        return self._chart_stager.stage_interpolation(
+            transaction,
+            series,
+            method=method,
+            k=k,
+            samples=samples,
+            lam=lam,
+            lam_auto=lam_auto,
+            preprocess=preprocess,
+            object_id=object_id,
+            color_order=color_order,
         )
-        self._prepare_created_component(controller, transaction)
-        return line, controller
 
     def _commit_chart_batch(
         self,
-        prepared: tuple[_PreparedChartSeries, ...],
+        prepared: tuple[PreparedChartSeries, ...],
         stage,
         *,
         final_cycle: dict[str, Any] | None,
@@ -1845,50 +1343,13 @@ class PyFigureCanvas(QWidget):
         color_transitions: tuple[tuple[dict[str, Any] | None, dict[str, Any]], ...],
         record_recent: bool = True,
     ) -> ChartBatchCreationResult:
-        axes_id = self.current_axes_component_id
-        axes_controller = self.current_axes_controller
-        if axes_id is None or axes_controller is None or self.current_axes is None:
-            raise ValueError("Select an axes before adding charts.")
-        artists = []
-        controllers = []
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.watch_existing(axes_id)
-            for series in prepared:
-                artist, controller = stage(transaction, series)
-                artists.append(artist)
-                controllers.append(controller)
-            if commit_cycle:
-                change = axes_controller.set_property(
-                    "color_cycle", final_cycle
-                )
-                if not change.ok:
-                    raise ValueError(
-                        change.message or "Could not commit the chart color cycle."
-                    )
-        for controller, (before, after) in zip(
-            controllers,
-            color_transitions,
-        ):
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                before,
-                after,
-            )
-        self._select_created_component(controllers[-1])
-        self.redraw()
-        colors = tuple(series.color for series in prepared)
-        if record_recent:
-            self.color_library.record_recent_many(colors)
-        return ChartBatchCreationResult(
-            component_ids=tuple(
-                controller.component_id for controller in controllers
-            ),
-            artists=tuple(artists),
-            colors=colors,
-            excluded_counts=tuple(
-                series.excluded_count for series in prepared
-            ),
+        return self._chart_stager.commit_chart_batch(
+            prepared,
+            stage,
+            final_cycle=final_cycle,
+            commit_cycle=commit_cycle,
+            color_transitions=color_transitions,
+            record_recent=record_recent,
         )
 
     def _commit_single_creation_color(
@@ -2119,7 +1580,7 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=True,
         )
-        series = _PreparedChartSeries(
+        series = PreparedChartSeries(
             x_ref=x_ref,
             y_ref=y_ref,
             x=pair.x,
@@ -2216,7 +1677,7 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=False,
         )
-        series = _PreparedChartSeries(
+        series = PreparedChartSeries(
             x_ref=x_ref,
             y_ref=y_ref,
             x=pair.x,
@@ -2491,7 +1952,7 @@ class PyFigureCanvas(QWidget):
                     f"current source data ({exc}); an empty component "
                     "was restored."
                 )
-        series = _PreparedChartSeries(
+        series = PreparedChartSeries(
             x_ref=x_ref,
             y_ref=y_ref,
             x=x_new,
@@ -2566,7 +2027,7 @@ class PyFigureCanvas(QWidget):
             except Exception as exc:
                 raise ValueError(f"{series.label}: {exc}") from exc
             prepared.append(
-                _PreparedChartSeries(
+                PreparedChartSeries(
                     x_ref=series.x_ref,
                     y_ref=series.y_ref,
                     x=x_new,
@@ -3120,408 +2581,49 @@ class PyFigureCanvas(QWidget):
         )
 
     def _register_component_materializers(self, expected_phases) -> None:
-        declarations = (
-            ComponentMaterializer(
-                (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM),
-                self._materialize_zoom_in_axes,
-                expected_phases[
-                    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE),
-                self._materialize_image_in_axes,
-                expected_phases[
-                    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE),
-                self._materialize_function_curve,
-                expected_phases[
-                    (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.LINE, ComponentRole.LINE),
-                self._materialize_line,
-                expected_phases[(ComponentKind.LINE, ComponentRole.LINE)],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.LINE, ComponentRole.DATA_PLOT),
-                self._materialize_data_plot,
-                expected_phases[
-                    (ComponentKind.LINE, ComponentRole.DATA_PLOT)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.SCATTER, ComponentRole.SCATTER),
-                self._materialize_scatter,
-                expected_phases[
-                    (ComponentKind.SCATTER, ComponentRole.SCATTER)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.COLORBAR, ComponentRole.COLORBAR),
-                self._materialize_colorbar,
-                expected_phases[
-                    (ComponentKind.COLORBAR, ComponentRole.COLORBAR)
-                ],
-            ),
-            ComponentMaterializer(
-                (
-                    ComponentKind.REFERENCE_MARKS,
-                    ComponentRole.REFLECTION_POSITIONS,
-                ),
-                self._materialize_reference_marks,
-                expected_phases[
-                    (
-                        ComponentKind.REFERENCE_MARKS,
-                        ComponentRole.REFLECTION_POSITIONS,
-                    )
-                ],
-            ),
-            ComponentMaterializer(
-                (
-                    ComponentKind.REFERENCE_GUIDE,
-                    ComponentRole.REFERENCE_LINE,
-                ),
-                self._materialize_reference_line,
-                expected_phases[
-                    (
-                        ComponentKind.REFERENCE_GUIDE,
-                        ComponentRole.REFERENCE_LINE,
-                    )
-                ],
-            ),
-            ComponentMaterializer(
-                (
-                    ComponentKind.REFERENCE_GUIDE,
-                    ComponentRole.REFERENCE_BAND,
-                ),
-                self._materialize_reference_band,
-                expected_phases[
-                    (
-                        ComponentKind.REFERENCE_GUIDE,
-                        ComponentRole.REFERENCE_BAND,
-                    )
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.LINE, ComponentRole.INTERPOLATION),
-                self._materialize_interpolation,
-                expected_phases[
-                    (ComponentKind.LINE, ComponentRole.INTERPOLATION)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.LINE, ComponentRole.FIT_CURVE),
-                self._materialize_fit,
-                expected_phases[
-                    (ComponentKind.LINE, ComponentRole.FIT_CURVE)
-                ],
-            ),
-            ComponentMaterializer(
-                (ComponentKind.TEXT, ComponentRole.TEXT),
-                self._materialize_text,
-                expected_phases[(ComponentKind.TEXT, ComponentRole.TEXT)],
-            ),
-        )
-        for declaration in declarations:
-            self.component_materializers.register(declaration)
-        self.component_materializers.validate_complete(expected_phases)
+        register_canvas_materializers(self, expected_phases)
 
     def _materialize_zoom_in_axes(self, state, _transaction) -> None:
-        if state.role is not ComponentRole.IN_AXES_ZOOM:
-            raise ValueError("Zoom materializer requires an in-axes Zoom state.")
-        properties = state.properties
-        spec = ZoomInAxesCreateSpec(
-            bounds=tuple(properties["bounds"]),
-            xlim=tuple(properties["xlim"]),
-            ylim=tuple(properties["ylim"]),
-            facecolor=properties["facecolor"],
-            edgecolor=properties["edgecolor"],
-            linewidth=properties["linewidth"],
-            indicator_color=properties["region_color"],
-            indicator_linestyle=(
-                properties["region_linestyle"].get("value", "-")
-                if isinstance(properties["region_linestyle"], dict)
-                else properties["region_linestyle"]
-            ),
-            indicator_linewidth=properties["region_linewidth"],
-            indicator_alpha=properties["region_alpha"],
-            visible=properties["visible"],
-            zorder=properties["zorder"],
-            frameon=properties["frameon"],
-            ticks_visible=properties["ticks_visible"],
-            region_visible=properties["region_visible"],
-            connectors_visible=any(item["visible"] for item in properties["connectors"]),
-        )
-        self.add_in_axes(spec, object_id=state.id)
+        materialize_zoom_in_axes(self, state, _transaction)
 
     def _materialize_image_in_axes(self, state, _transaction) -> None:
-        if state.role is not ComponentRole.IN_AXES_IMAGE:
-            raise ValueError("Image materializer requires an in-axes Image state.")
-        properties = state.properties
-        data = state.data
-        spec = ImageInAxesCreateSpec(
-            bounds=tuple(properties["bounds"]),
-            filename=data["filename"],
-            mime_type=data["mime_type"],
-            payload_base64=data["payload_base64"],
-            facecolor=properties["facecolor"],
-            edgecolor=properties["edgecolor"],
-            linewidth=properties["linewidth"],
-            opacity=properties["opacity"],
-            fit_mode=properties["fit_mode"],
-            interpolation=properties["interpolation"],
-            origin=properties["origin"],
-            extent=properties["extent"],
-            resample=properties["resample"],
-            filternorm=properties["filternorm"],
-            filterrad=properties["filterrad"],
-            interpolation_stage=properties["interpolation_stage"],
-            image_visible=properties["image_visible"],
-            image_zorder=properties["image_zorder"],
-            image_clip_on=properties["image_clip_on"],
-            image_rasterized=properties["image_rasterized"],
-            image_in_layout=properties["image_in_layout"],
-            image_snap=properties["image_snap"],
-            image_gid=properties["image_gid"],
-            image_url=properties["image_url"],
-            visible=properties["visible"],
-            zorder=properties["zorder"],
-            frameon=properties["frameon"],
-        )
-        self.add_in_axes(spec, object_id=state.id)
+        materialize_image_in_axes(self, state, _transaction)
 
     def _materialize_function_curve(self, state, _transaction) -> None:
-        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
-        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
-        self.add_curve(
-            state.data["expression"],
-            state.data["x_start"],
-            state.data["x_stop"],
-            style,
-            state.properties.get("color", "black"),
-            state.properties.get("label", ""),
-            object_id=state.id,
-            color_order=state.order,
-        )
+        materialize_function_curve(self, state, _transaction)
 
     def _materialize_line(self, state, _transaction) -> None:
-        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
-        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
-        self.add_component_line(
-            state.data.get("x", []),
-            state.data.get("y", []),
-            style,
-            state.properties.get("color", "black"),
-            state.properties.get("label", ""),
-            object_id=state.id,
-            color_order=state.order,
-        )
+        materialize_line(self, state, _transaction)
 
     def _materializer_pair(self, state, *, preserve_gaps: bool):
-        x_ref = ColumnRef.from_dict(state.data["x_ref"])
-        y_ref = ColumnRef.from_dict(state.data["y_ref"])
-        preprocess = DataPreprocessSpec.from_dict(state.data["preprocess"])
-        pair = resolve_preprocessed_pair(
-            self.repository,
-            x_ref,
-            y_ref,
-            preprocess,
-            preserve_gaps=preserve_gaps,
-        )
-        return x_ref, y_ref, preprocess, pair
+        return materializer_pair(self, state, preserve_gaps=preserve_gaps)
 
     def _materialize_data_plot(self, state, _transaction) -> None:
-        x_ref, y_ref, preprocess, pair = self._materializer_pair(
-            state,
-            preserve_gaps=True,
-        )
-        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
-        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
-        self.add_plot(
-            pair.x,
-            pair.y,
-            style,
-            state.properties.get("markersize", 2.0),
-            state.properties.get("color", "black"),
-            state.properties.get("label", ""),
-            x_ref,
-            y_ref,
-            object_id=state.id,
-            color_order=state.order,
-            preprocess=preprocess,
-        )
+        materialize_data_plot(self, state, _transaction)
 
     def _materialize_scatter(self, state, _transaction) -> None:
-        x_ref, y_ref, preprocess, pair = self._materializer_pair(
-            state,
-            preserve_gaps=False,
-        )
-        self.add_scatter(
-            pair.x,
-            pair.y,
-            state.properties.get("size", 20.0),
-            state.properties.get("color", "black"),
-            marker_value(state.properties.get("marker", {"kind": "symbol", "value": "o"})),
-            state.properties.get("label", ""),
-            x_ref,
-            y_ref,
-            object_id=state.id,
-            color_order=state.order,
-            preprocess=preprocess,
-            color_ref=(
-                None
-                if state.data.get("color_ref") is None
-                else ColumnRef.from_dict(state.data["color_ref"])
-            ),
-            size_ref=(
-                None
-                if state.data.get("size_ref") is None
-                else ColumnRef.from_dict(state.data["size_ref"])
-            ),
-            color_mapping=state.properties["color_mapping"],
-            size_mapping=state.properties["size_mapping"],
-        )
+        materialize_scatter(self, state, _transaction)
 
     def _materialize_colorbar(self, state, _transaction) -> None:
-        if (
-            state.kind is not ComponentKind.COLORBAR
-            or state.role is not ComponentRole.COLORBAR
-        ):
-            raise ValueError("Colorbar materializer requires a Colorbar state.")
-        source_id = state.data.get("source_component_id")
-        if not isinstance(source_id, str) or source_id not in self.component_registry:
-            raise ValueError("Colorbar source component is unavailable.")
-        self.add_colorbar(
-            source_id,
-            state.properties,
-            object_id=state.id,
-            component_order=state.order,
-            announce=False,
-        )
+        materialize_colorbar(self, state, _transaction)
 
     def _materialize_reference_marks(self, state, _transaction) -> None:
-        if (
-            state.kind is not ComponentKind.REFERENCE_MARKS
-            or state.role is not ComponentRole.REFLECTION_POSITIONS
-        ):
-            raise ValueError(
-                "Reference Marks materializer requires Reflection Positions."
-            )
-        self.add_reference_marks(
-            state.data["positions"],
-            state.properties,
-            object_id=state.id,
-            component_order=state.order,
-            announce=False,
-            position_ref=state.data.get("position_ref"),
-            placement=state.data.get("placement"),
-        )
+        materialize_reference_marks(self, state, _transaction)
 
     def _materialize_reference_line(self, state, _transaction) -> None:
-        if (
-            state.kind is not ComponentKind.REFERENCE_GUIDE
-            or state.role is not ComponentRole.REFERENCE_LINE
-        ):
-            raise ValueError(
-                "Reference Line materializer requires a Reference Line state."
-            )
-        self.add_reference_line(
-            state.properties,
-            object_id=state.id,
-            component_order=state.order,
-            announce=False,
-        )
+        materialize_reference_line(self, state, _transaction)
 
     def _materialize_reference_band(self, state, _transaction) -> None:
-        if (
-            state.kind is not ComponentKind.REFERENCE_GUIDE
-            or state.role is not ComponentRole.REFERENCE_BAND
-        ):
-            raise ValueError(
-                "Reference Band materializer requires a Reference Band state."
-            )
-        self.add_reference_band(
-            state.properties,
-            object_id=state.id,
-            component_order=state.order,
-            announce=False,
-        )
+        materialize_reference_band(self, state, _transaction)
 
     def _materialize_interpolation(self, state, _transaction) -> None:
-        x_ref, y_ref, preprocess, pair = self._materializer_pair(
-            state,
-            preserve_gaps=False,
-        )
-        self.add_interpolate_curve(
-            pair.x,
-            pair.y,
-            x_ref,
-            y_ref,
-            state.data["method"],
-            k=state.data.get("k", 3),
-            label=state.properties.get("label", "interpolate"),
-            color=state.properties.get("color", "black"),
-            samples=state.data.get("samples", DEFAULT_INTERPOLATION_SAMPLES),
-            lam=state.data.get("lam"),
-            lam_auto=state.data.get("lam_auto", True),
-            object_id=state.id,
-            color_order=state.order,
-            allow_empty=True,
-            preprocess=preprocess,
-            announce=False,
-        )
+        materialize_interpolation(self, state, _transaction)
 
     def _materialize_fit(self, state, _transaction) -> None:
-        x_ref, y_ref, preprocess, pair = self._materializer_pair(
-            state,
-            preserve_gaps=False,
-        )
-        pattern = state.properties.get("linestyle", {"kind": "preset", "value": "-"})
-        style = pattern.get("value", "-") if pattern.get("kind") == "preset" else (pattern["offset"], pattern["dashes"])
-        self.add_fit_curve(
-            pair.x,
-            pair.y,
-            state.properties.get("color", "black"),
-            state.properties.get("label", "fitting"),
-            x_ref,
-            y_ref,
-            engine=state.data.get("engine", FitEngine.PYTHON.value),
-            fit_type=state.data.get("fit_type"),
-            fit_options=state.data.get("fit_options"),
-            fit_result=state.data.get("fit_result"),
-            expression=state.data.get("expression", ""),
-            x_start=state.data.get("x_start"),
-            x_stop=state.data.get("x_stop"),
-            style=style,
-            object_id=state.id,
-            color_order=state.order,
-            preprocess=preprocess,
-        )
+        materialize_fit(self, state, _transaction)
 
     def _materialize_text(self, state, _transaction) -> None:
-        properties = state.properties
-        position = properties.get("position", (0.0, 0.0))
-        family = properties.get("fontfamily", "sans-serif")
-        if isinstance(family, (list, tuple)):
-            family = family[0] if family else "sans-serif"
-        kwargs = dict(
-            x=float(position[0]),
-            y=float(position[1]),
-            text=properties.get("text", ""),
-            fontfamily=family,
-            fontsize=properties.get("fontsize", 10.0),
-            usetex=properties.get("usetex", False),
-            object_id=state.id,
-        )
-        if state.parent_id == self.root_component_id:
-            self.add_global_text(**kwargs)
-        else:
-            self.add_text(**kwargs)
+        materialize_text(self, state, _transaction)
 
     @contextmanager
     def _history_component_id_overrides(
@@ -3785,154 +2887,11 @@ class PyFigureCanvas(QWidget):
     ) -> None:
         """Apply all schema-v14 states after their Matplotlib targets exist."""
 
-        if not isinstance(component_tree, dict):
-            return
-        states = [
-            ComponentState.from_dict(raw_state)
-            for raw_state in component_tree.get("components", [])
-        ]
-        states = list(
-            self.axes_layout_service.repair_legacy_minor_locator_states(states)
-        )
-        source_by_id = {state.id: state for state in states}
-        runtime_ids = {
-            controller.component_id
-            for controller in self.component_registry.query()
-        }
-        missing = sorted(set(source_by_id) - runtime_ids)
-        unexpected = sorted(runtime_ids - set(source_by_id))
-        if missing or unexpected:
-            details = []
-            if missing:
-                details.append("missing " + ", ".join(missing))
-            if unexpected:
-                details.append("unexpected " + ", ".join(unexpected))
-            raise ValueError(
-                "Project components could not be restored: "
-                + "; ".join(details)
-            )
-
-        figure_states = [
-            state for state in states if state.kind is ComponentKind.FIGURE
-        ]
-        axes_states = [state for state in states if state.kind is ComponentKind.AXES]
-        legend_states = [
-            state for state in states
-            if state.kind is ComponentKind.LEGEND
-        ]
-        body_states = [
-            state for state in states
-            if state.kind not in {
-                ComponentKind.FIGURE,
-                ComponentKind.AXES,
-                ComponentKind.LEGEND,
-            }
-        ]
-        in_axes_states = [
-            state
-            for state in body_states
-            if state.kind is ComponentKind.IN_AXES
-        ]
-        body_states = [
-            state
-            for state in body_states
-            if state.kind is not ComponentKind.IN_AXES
-        ]
-        tex_fallback = False
-
-        def apply_states(values: list[ComponentState]) -> None:
-            nonlocal tex_fallback
-            with self.component_registry.batch_updates():
-                for source_state in sorted(
-                    values,
-                    key=lambda item: (item.order, item.id),
-                ):
-                    controller = self.component_registry.get(source_state.id)
-                    use_effective_fallback = (
-                        source_state.kind is ComponentKind.TEXT
-                        and source_state.properties.get("usetex")
-                        and not tex_config.is_tex_enabled()
-                    )
-                    change = controller.apply_state(source_state)
-                    if not change.ok:
-                        raise ValueError(
-                            f"Could not restore component {source_state.id}: {change.message}"
-                        )
-                    if use_effective_fallback:
-                        fallback = (
-                            self.text_render_service.apply_tex_availability(
-                                False,
-                                force=True,
-                            )
-                        )
-                        if not fallback.committed:
-                            raise ValueError(fallback.message)
-                        tex_fallback = True
-
-        apply_states(figure_states)
-        if figure_states:
-            root_properties = figure_states[0].properties
-            self._document_dpi = float(
-                root_properties.get("dpi", self._document_dpi)
-            )
-            self.style = str(root_properties.get("style", self.style or "default"))
-
-        # Apply containers/semantics first.  Chart labels and persisted raw
-        # data are then allowed to refresh limits and legends once.
-        apply_states(axes_states)
-        apply_states(body_states)
-
-        # Raw Line/Scatter data can autoscale the Axes.  Reapply the persisted
-        # Axes range after that update has been coalesced.
-        apply_states(axes_states)
-        apply_states(in_axes_states)
-        self.in_axes_service.refresh_all_zoom()
-
-        for legend_state in legend_states:
-            controller = self.component_registry.get(legend_state.id)
-            try:
-                controller.resolve_target()
-            except Exception:
-                if bool(legend_state.properties.get("visible", True)):
-                    self.axes_commands.ensure_legend(
-                        legend_state.parent_id
-                    )
-            result = self.axes_commands.apply_legend_properties(
-                controller,
-                legend_state.properties,
-            )
-            if not result.ok:
-                raise ValueError(
-                    f"Could not restore component {legend_state.id}: {result.message}"
-                )
-        self.axes_layout_service.restore_runtime_relationships(refresh=True)
-        self.component_registry.validate_tree()
-        self.component_registry.validate_axes_targets()
-        if tex_fallback:
-            status_messages.show_warning(
-                "TeX text is displayed with Matplotlib text rendering until "
-                "TeX is enabled; its saved TeX preference was preserved."
-            )
-
-        self.redraw()
+        self._snapshot_applier.apply_component_tree(component_tree)
 
     @staticmethod
     def _json_component_value(value):
-        if isinstance(value, dict):
-            return {
-                str(key): PyFigureCanvas._json_component_value(item)
-                for key, item in value.items()
-            }
-        if isinstance(value, (list, tuple)):
-            return [
-                PyFigureCanvas._json_component_value(item)
-                for item in value
-            ]
-        if isinstance(value, np.ndarray):
-            return PyFigureCanvas._json_component_value(value.tolist())
-        if isinstance(value, np.generic):
-            return value.item()
-        return value
+        return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
         """Return the canonical schema-v15 component tree used by persistence."""

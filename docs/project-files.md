@@ -226,24 +226,29 @@ snapshot only and does not change schema v15.
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v14 save/open round trip. Strict v13 input is
-validated completely, deep-copied, and advanced to v14. Tick Label
+unchanged across every schema-v15 save/open round trip. Strict v14 input is
+validated completely and migrated in memory to v15. Strict v13 input is
+validated completely, deep-copied, and advanced through v14 to v15. Tick Label
 `fontfamily` string values remain unchanged; non-empty string lists become only
 their first string. No other component or Table field is rewritten. Strict v12
-input migrates through v13 to v14, strict v11 through v12/v13, and strict v10
-through every intervening version. v10 cannot
+input migrates through v13 and v14 to v15, strict v11 through v12–v14, and
+strict v10 through every intervening version. v10 cannot
 contain Colorbar; v10/v11 cannot contain Reference Marks; and v10-v12 cannot
 contain Reference Guides. Malformed predecessors and versions v4 through v9
 are rejected before Table or Figure state is published.
 
-After validation, restore materializes Figure, Axes/layout groups, fixed semantic
+After validation, restore enters `PyFigureCanvas.restore_component_tree` on
+the target Canvas. Handlers live in `canvas_materialize_handlers.py`; after
+Matplotlib targets exist, `CanvasSnapshotApplier` applies the saved property
+tree. Restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then `in_axes` Elements and
-Colorbar after its source, with Legend restored from the v14 tree. Reference
-Marks and Reference Guides are materialized as collections in the dynamic
-component phase. Zoom mirrors receive one final batch refresh
-after their sources exist. Restore does not
-create legacy chart arrays or Modifier records as an intermediate runtime
-format. The Registry tree is subsequently the source for every save.
+Colorbar after its source, with Legend restored from the component tree.
+Reference Marks and Reference Guides are materialized as collections in the
+dynamic component phase. After those Matplotlib targets exist, the Canvas
+applies the saved property tree and publishes one final selection. Zoom
+mirrors receive one final batch refresh after their sources exist. Restore
+does not create legacy chart arrays or Modifier records as an intermediate
+runtime format. The Registry tree is subsequently the source for every save.
 
 Component-level fallback messages accumulated while materializing a complete
 tree are discarded at the restore transaction boundary. A successful open
@@ -286,7 +291,7 @@ are not added to schema v15.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v14 project stays clean through those UI-only interactions, and a
+schema-v15 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export

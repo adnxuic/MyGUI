@@ -600,7 +600,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         with (
             mock.patch(
                 "mygui.widgets.fig_control_window.component_editors."
-                "sections.tex_config.is_tex_enabled",
+                "sections.text.tex_config.is_tex_enabled",
                 return_value=True,
             ),
             mock.patch.object(target.figure.canvas, "draw", return_value=None),

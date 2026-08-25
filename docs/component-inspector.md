@@ -5,7 +5,7 @@
 ## Using the Inspector
 
 - Selecting a Component in the Components tree opens exactly one Inspector bound to that Component's Controller.
-- Each profile orders its reusable sections: shared sections such as Data source and Appearance, plus role-specific sections such as Definition and range, Color and size mapping, Fit operations, and Interpolation parameters. The per-parameter meanings are in [Chart Component Parameters](chart-component-parameters.md) and [Axes and Figure Component Parameters](axes-component-parameters.md).
+- Each profile orders its reusable sections: shared sections such as Data source and Appearance, plus role-specific sections such as Definition and range, Color and size mapping, Fit operations, and Interpolation parameters. The per-parameter meanings are on the matching page under [Editing Components](components-tree.md).
 - Edits apply immediately through the Controller or domain service; a rejected edit restores the previous value and reports one Message Bar result.
 - Dynamic Inspectors are created on first selection and cached by Component; the Figure root Inspector is prepared during Figure setup.
 
@@ -19,7 +19,7 @@
   records, an explicit visual `placement`, and a UI-only
   `TreePresentationSpec`.
 - `EditorSection` provides `sync_from_controller()` and `dispose()` lifecycle methods.
-- `PropertySection` generates a selected, ordered subset of Controller `PropertySpec` editors. It blocks signals during synchronization, rolls rejected values back, injects the application `ColorLibrary`, and reports one Message Bar result per operation.
+- `PropertySection` generates a selected, ordered subset of Controller `PropertySpec` editors. It blocks signals during synchronization, rolls rejected values back, injects the application `ColorLibrary`, and reports one Message Bar result per operation. Reusable sections live under `component_editors/sections/` and are imported from `component_editors.sections`. Function Curve, Interpolation, and Fit sections remain in `chart_sections.py` and `fit_sections.py`.
 - `ComponentEditorBase` remains an explicit generic all-properties fallback
   for tests and non-production tooling. Production profile coverage is
   validated and cannot silently fall back.
@@ -202,7 +202,11 @@ when hiding is supported.
 
 ## Controller-free creation inputs
 
-Creation dialogs reuse input-only widgets and still call the existing canvas creation methods after acceptance:
+Creation dialogs reuse input-only widgets from
+`component_editors.inputs`. The public names stay on that facade;
+implementations live in `data_inputs.py`, `appearance_inputs.py`, and
+`reference_inputs.py`. Acceptance still calls the existing Canvas creation
+methods:
 
 - `LineAppearanceInput`: label, canonical line style, optional width, and injected `ColorChoiceWidget`.
 - `DataReferenceInput`: project-scoped X/Y column choices with signal-safe programmatic synchronization.

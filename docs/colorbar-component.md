@@ -79,7 +79,7 @@ Colorbar exists. Delete the Colorbar first.
 
 ## Persistence
 
-Schema v14 stores Colorbar with the standard eight-field `ComponentState`
+Schema v15 stores Colorbar with the standard eight-field `ComponentState`
 record, owner Axes `parent_id`, `selector.object_id`, complete properties, and
 `data.source_component_id`. Restore materializes ordinary charts and Scatter
 sources before the later Colorbar phase. Missing, wrong-kind, cross-Axes,

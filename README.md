@@ -69,11 +69,21 @@ python -m mkdocs build --strict # build site/, fails on broken links or warnings
 
 ## Runtime architecture
 
-- Table data: each main window owns a pandas-backed `TableRepository`; charts use stable UUID column references.
+- Table data: each main window owns a pandas-backed `TableRepository`; the
+  Table widget host is `PySubTable`, with the Qt model and sheet view in
+  sibling modules. Charts use stable UUID column references.
+- Figure components: import Controllers from `mygui.figuremodify.components`
+  and Services from `mygui.figuremodify.component_services`.
 - Expression evaluation: curve and fitting expressions use the restricted safe-expression evaluator.
-- Project files: only strict schema v10 files are accepted; one file contains a typed table document and its Figure component tree.
+- Project files: newly saved files use exact integer schema v15. The loader
+  also accepts strictly validated v14 (direct in-memory migration) and
+  strictly validated v13/v12/v11/v10 through every intervening version; one
+  file contains a typed table document and its Figure component tree.
 - Untrusted input: projects, images, Text/Excel imports, expressions, and external-process I/O have centralized budgets documented in [docs/resource-limits.md](docs/resource-limits.md).
-- Optional integrations: MATLAB and TeX depend on local installations and should not be treated as required for baseline GUI maintenance.
+- Optional integrations: MATLAB and TeX depend on local installations and should
+  not be treated as required for baseline GUI maintenance. MATLAB process work
+  stays in `mygui.database.matlab_adapter`; pure-Python fallbacks that must
+  not start MATLAB live in `matlab_fallbacks.py`.
 
 ## Maintenance Notes
 

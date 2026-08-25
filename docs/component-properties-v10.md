@@ -206,7 +206,7 @@ must already use their tagged object shape.
 Only exact integer schema version `10` enters the migration path. The complete
 v10 snapshot is validated first, copied without component rewrites, changed to
 schema version `11`, and validated again before publication. Saving always
-writes v14 after the chained v10-to-v11-to-v12-to-v13-to-v14 migration. Schema v4-v9, booleans/floats/strings that resemble a supported
+writes v15 after the chained v10-to-v11-to-v12-to-v13-to-v14-to-v15 migration. Schema v4-v9, booleans/floats/strings that resemble a supported
 version, and unknown versions are rejected. Inspector profiles, section
 expansion, tree session keys, QWidget state, and callbacks are never
 serialized.

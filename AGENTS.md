@@ -51,8 +51,11 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   edit, atomically restores UI/Controller/Artist state, and emits one red
   result.
 - MATLAB and TeX are optional integrations. Their failure must not block basic
-  GUI maintenance. User-entered expression evaluation remains high risk and
-  any replacement of evaluation machinery is a dedicated task.
+  GUI maintenance. `mygui.database.matlab_adapter` is the MATLAB process
+  boundary; pure-Python expression fallbacks live in `matlab_fallbacks.py`
+  and must not start MATLAB or MCR. User-entered expression evaluation
+  remains high risk and any replacement of evaluation machinery is a dedicated
+  task.
 
 ## Component, Inspector, and Selection Invariants
 
@@ -60,6 +63,9 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   and domain Services are the only mutable Figure-component business-state
   path. UI submits through them and synchronizes from Registry events; it must
   not maintain a second state model or mutate Artists/Controller state.
+  Import Controllers from `mygui.figuremodify.components` and Services from
+  `mygui.figuremodify.component_services`; implementations live in
+  `components/controllers/` and `services/`.
 - **CORE-EDITOR-PROFILES:** Production editors use `ComponentInspector` and one
   exact `EditorProfile` per `(ComponentKind, ComponentRole)`, composed from
   reusable Sections. `ComponentEditorManager.create()` is the only visible
@@ -73,7 +79,12 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 - **CORE-SELECTION-AUTHORITY:** `PyFigureCanvas.current_component_id` is the
   only component selection authority. Tree search affects display only. Tree
   groups use typed `GroupNodeKey`; `COMPONENT_ID_ROLE` is reserved for real
-  IDs, and UI projection state is never persisted.
+  IDs, and UI projection state is never persisted. Keep the historical
+  filename `py_figure_canves.py`. Host-protocol helpers
+  (`ChartCreationStager`, `canvas_materialize_handlers`,
+  `CanvasSnapshotApplier`, `CanvasPopoutWindow`, `ProjectNavigationToolbar`)
+  run through that Canvas and must not cache `ComponentState`, selection IDs,
+  or color-cycle state.
 - Inspector/container ownership, lifecycle, tree projection, data refresh, and
   editor placement follow `.agents/architecture/inspector.md` and
   `.agents/architecture/component-system.md`. Containers expose public APIs and

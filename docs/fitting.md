@@ -85,7 +85,7 @@ does not update the plotted curve or result table.
 
 ## Project Files
 
-Fitting curves are saved in schema v14 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
+Fitting curves are saved in schema v15 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
 Saved records include a stable `object_id`, X/Y `ColumnRef` objects, fitting engine, fit type,
 advanced options when used, fit result, drawing expression, X range, style,
 color, and legend label.
@@ -122,7 +122,7 @@ SciPy does not call MATLAB code.
 
 ## MATLAB Engine
 
-MATLAB fitting depends on local MATLAB Runtime or MATLAB plus generated MATLAB Compiler Python packages.
+MATLAB fitting depends on local MATLAB Runtime or MATLAB plus generated MATLAB Compiler Python packages. The application boundary is `mygui/database/matlab_adapter.py`. Pure-Python expression fallbacks that must not start MATLAB or MCR live in `matlab_fallbacks.py`.
 
 The right activity rail opens the MATLAB panel. Its `Connect Matlab` button runs the connection check in the background and then shows the connected description on success or one red error on failure; the State Bar indicator reflects the enabled state.
 

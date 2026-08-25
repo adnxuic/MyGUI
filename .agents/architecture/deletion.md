@@ -12,7 +12,10 @@ Registry children.
 All production entry points—Tree single/batch actions, Inspector commands,
 Axes deletion, and data-dependency cascades—submit a `DeletionRequest` to
 `DeletionCoordinator`. They do not call Registry/Controller physical-delete
-primitives directly.
+primitives directly. Deletion request types, the color-consumption ledger,
+and `ComponentDeletionService` are implemented in
+`mygui/figuremodify/services/deletion.py` and remain imported through
+`mygui.figuremodify.component_services`.
 
 Prepared deletion snapshots Artists, Controllers, Locator bindings, survivor
 states, Inspector/container identity and order, tree/schema/live-Axes

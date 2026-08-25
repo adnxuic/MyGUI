@@ -11,6 +11,26 @@ capability queries, and immutable adapter catalogs. It must not import
 Matplotlib, resolve live Artists/Axes/Figures, call Artist setters/removal, read
 `canvas.fig`, or write process-global Matplotlib configuration.
 
+`mygui/widgets/figure_canvas/` is the Canvas package, not Inspector
+presentation. `PyFigureCanvas` remains the selection authority and public
+creation/restore entry. `ChartCreationStager`,
+`canvas_materialize_handlers`, `CanvasSnapshotApplier`,
+`CanvasPopoutWindow`, and `ProjectNavigationToolbar` may call host Canvas
+APIs (including Axes `plot`/`scatter` during staging) but must not cache
+component business state or write `current_component_id` themselves.
+Artist `.set_*` / `.remove()` / `.set_visible()` from those helpers still
+belongs on the Canvas host or a Controller/Service.
+
+`PySubTable` in `mygui/widgets/table/py_subtable.py` remains the table widget
+host. `table_model.py` owns the Qt model/delegate; `table_view.py` owns the
+sheet view and south tabs. They read and mutate only through
+`TableRepository`.
+
+`ColorChoiceWidget` in `py_colorchoice_widgets.py` remains the public color
+editor. Dialogs live in `color_choice_dialogs.py` and list/grid models in
+`color_choice_model.py`. They require the injected `ColorLibrary` and must
+not create a private library.
+
 `mygui.figuremodify.matplotlib_adapter` owns style/catalog contexts;
 `mygui.tex_config` owns TeX rcParams. These boundaries are enforced by
 `ARCH-UI-ARTIST-MUTATION` and

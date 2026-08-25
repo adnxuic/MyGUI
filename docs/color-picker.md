@@ -4,9 +4,11 @@ MyGUI uses one color picker for Curve, Plot, Scatter, Fit, and Interpolation cha
 
 `MainWindow` owns one `ColorLibrary` and injects that exact object into the
 Figure window, every Canvas, Inspector editor, and creation dialog.
-`ColorChoiceWidget` requires the injected library; it never creates a private
-fallback library, so recents, favorites, and custom palettes remain consistent
-throughout the application.
+`ColorChoiceWidget` in `py_colorchoice_widgets.py` requires the injected
+library; it never creates a private fallback library, so recents, favorites,
+and custom palettes remain consistent throughout the application. Picker and
+palette dialogs live in `color_choice_dialogs.py`; list and grid models live
+in `color_choice_model.py`.
 
 ## Color parameters
 

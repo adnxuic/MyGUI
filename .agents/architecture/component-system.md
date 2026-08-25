@@ -20,6 +20,62 @@ re-enters the same Controller, Service, materializer, and deletion paths under
 recording suspension. Direct scripted Service calls remain non-history
 operations unless their caller deliberately opens a history boundary.
 
+## Module layout
+
+Keep importing Controllers from `mygui.figuremodify.components` (or
+`mygui.figuremodify.components.controllers`) and Services from
+`mygui.figuremodify.component_services`. Do not split `components/base.py`.
+The facade modules must re-export every public symbol.
+
+Concrete Controllers live in `mygui/figuremodify/components/controllers/`:
+
+| Module | Controllers |
+| --- | --- |
+| `containers.py` | `FigureController`, `AxesController` |
+| `axes_semantics.py` | Axis, Spine, Tick, Tick Label, Grid |
+| `text.py` | `TextController`, Title, Axis Label |
+| `legend.py` | `LegendController` |
+| `in_axes.py` | Zoom and Image insets |
+| `lines.py` | Line, Function Curve, Plot, Fit, Interpolation |
+| `collections.py` | Scatter, Reference Marks, Reference Line/Band |
+| `colorbar.py` | `ColorbarController` |
+| `registry_bridge.py` | `CONTROLLER_TYPES`, `controller_type_for`, `create_controller` |
+
+Domain Services live in `mygui/figuremodify/services/`:
+
+| Module | Public types |
+| --- | --- |
+| `axes_command.py` | `AxesCommandService` |
+| `chart_data.py` | `FunctionCurveService`, `ChartDataService`, `InterpolationService`, `FitService` |
+| `colorbar.py` | `ColorbarService` and source resolvers |
+| `reference_marks.py` | `ReferenceMarksService`, `ReferenceGuideService` |
+| `text_render.py` | `TextRenderService` |
+| `deletion.py` | deletion request/plan/handler types and `ComponentDeletionService` |
+| `dependency.py` | `ComponentDependencyService` |
+
+`PyFigureCanvas` in `mygui/widgets/figure_canvas/py_figure_canves.py` is
+the Qt widget entry, selection authority, and history-decorated public
+`add_*` / `restore_component_tree` surface. Keep that historical filename.
+Other files in the same package are host-protocol helpers: they hold only a
+host reference and must not cache `ComponentState`, selection, or color-cycle
+state.
+
+| Module | Role |
+| --- | --- |
+| `chart_creation.py` | `ChartCreationStager` and batch records |
+| `canvas_materialize_handlers.py` | Canvas restore handlers; bind with `register_canvas_materializers()` |
+| `canvas_snapshot.py` | `CanvasSnapshotApplier` after Matplotlib targets exist |
+| `canvas_popout.py` | `CanvasPopoutWindow` for the live canvas viewport |
+| `canvas_toolbar.py` | `ProjectNavigationToolbar` and `history_command` |
+| `deletion_coordinator.py` | production `DeletionCoordinator` |
+| `component_materializers.py` | Matplotlib-free `ComponentMaterializerRegistry` |
+| `py_figure_window.py` | Figure window host |
+| `project_metadata.py` | project metadata port |
+
+Do not move `add_*` handlers into `component_materializers.py`. Keep thin
+`PyFigureCanvas._materialize_*` wrappers so restore and tests still enter
+through the Canvas.
+
 ## Component creation
 
 - Prefer existing `ComponentKind` and `ComponentRole`; adding persisted kinds,
@@ -38,6 +94,11 @@ operations unless their caller deliberately opens a history boundary.
 - Creation dialogs may reuse Controller-free Inputs only. Acceptance still
   delegates component creation to the Canvas/Controller workflow; dialogs do
   not publish Artists or Registry state themselves.
+- Multi-series Plot, Scatter, and Interpolation creation stages through
+  `ChartCreationStager` inside one `registration_transaction()`, then
+  commits the Axes color cycle and ledger only after that transaction
+  succeeds. Public `add_plot` / `add_plots` (and scatter/interpolation
+  equivalents) stay on `PyFigureCanvas`.
 
 ## Data semantics
 

@@ -53,9 +53,10 @@ pinned Matplotlib links are in [Reference Guides](reference-guides-component.md)
 Reference Marks fields are in
 [Reference Marks Component](reference-marks-component.md). Colorbar fields are
 in [Colorbar Component](colorbar-component.md). Chart fields are in
-[Chart Component Parameters](chart-component-parameters.md), and Figure/Axes
+[Plot](editing-components/charts/plot.md) and the other
+[Editing Components](components-tree.md) chart pages, and Figure/Axes
 fields are in
-[Axes and Figure Component Parameters](axes-component-parameters.md).
+[Axes](editing-components/fixed-semantics/axes.md).
 
 ## Closed tagged values
 
@@ -79,7 +80,7 @@ project state.
 
 ## Schema v14 and migration
 
-Saving writes exact integer `schema_version: 14`. Schema v14 requires every
+A schema-v14 project file uses exact integer `schema_version: 14`. Schema v14 requires every
 `tick_label_group.properties.fontfamily` value to be a non-empty string. A v14
 file containing a list, an empty string, `null`, or another type is rejected at
 that exact field path.

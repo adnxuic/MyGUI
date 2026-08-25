@@ -54,7 +54,7 @@ error and leave the controls, component state, and artist unchanged.
 
 ## Project data
 
-Each data-backed component stores the following schema-v14 object inside its
+Each data-backed component stores the following schema-v15 object inside its
 role-specific `data` record:
 
 ```json
@@ -64,5 +64,5 @@ role-specific `data` record:
 }
 ```
 
-Every schema-v14 data-backed component contains this object. Parsed syntax
+Every schema-v15 data-backed component contains this object. Parsed syntax
 trees, evaluated arrays, masks, and editor state are runtime-only.
