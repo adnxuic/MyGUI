@@ -55,7 +55,7 @@ Plus the shared export parameters above.
 | Aspect (aspect) | Aspect editor | The height-to-width ratio of the Axes box: auto, equal, or a positive number. | auto |
 | Face color (facecolor) | Color picker | The Axes background color. | #ffffff |
 | Visible (visible) | Checkbox | Shows or hides the Axes. | On |
-| X margin (xmargin) | Number | The automatic X padding fraction added to each side of the data. | 0.05 |
+| X margin (xmargin) | Number | The automatic X padding fraction added to each side of the data. When the value is `0`, autoscale X uses the data interval with no locator expansion. XRD Single and Main Plot + Residual set this to `0` so X stays on the imported 2θ range. | 0.05 |
 | Y margin (ymargin) | Number | The automatic Y padding fraction added to each side of the data. | 0.05 |
 | Adjustable (adjustable) | Dropdown | Which Axes dimension changes to satisfy the aspect: box or datalim. | box |
 | Anchor (anchor) | Anchor editor | How the Axes box is anchored when its size differs from the available space (C, SW, S, SE, E, NE, N, NW, W, and combinations). See [Axes.set_anchor](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_anchor.html). | C |

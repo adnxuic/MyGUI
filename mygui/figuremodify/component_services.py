@@ -79,6 +79,7 @@ from mygui.figuremodify.reference_marks_data import (
     between_table_range_extrema,
     merged_reference_positions,
 )
+from mygui.figuremodify.x_axis_tight import apply_tight_xlim
 from mygui.figuremodify.y_axis_reserve import apply_y_lower_reserve
 from mygui.figuremodify.components.property_values import (
     legend_anchor_value,
@@ -200,6 +201,7 @@ class ReferenceMarksService:
                 continue
             owner.update_datalim(collection.get_datalim(owner.transData))
         owner.autoscale_view()
+        apply_tight_xlim(owner)
         apply_y_lower_reserve(owner)
 
     def compute_automatic_baseline(

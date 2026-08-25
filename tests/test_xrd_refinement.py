@@ -170,6 +170,20 @@ class XrdWindowTestCase(unittest.TestCase):
             table_view=self.window.table,
         ).execute(self.single_spec(), request)
 
+    def _assert_xrd_xlim_is_profile_two_theta(self, axes_ids, result):
+        values = [float(value) for value in result.profile.two_theta]
+        expected = (min(values), max(values))
+        for axes_id in axes_ids:
+            controller = self.canvas.component_registry.get(axes_id)
+            target = controller.resolve_target()
+            self.assertEqual(controller.state.properties["xmargin"], 0.0)
+            self.assertTrue(controller.state.properties["autoscalex_on"])
+            np.testing.assert_allclose(target.get_xlim(), expected)
+            np.testing.assert_allclose(
+                tuple(controller.state.properties["xlim"]),
+                expected,
+            )
+
 
 class XrdRefinementDialogTests(XrdWindowTestCase):
     def test_xrd_tab_exists_only_for_single_and_main_residual_creation(self):
@@ -598,6 +612,11 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
         residual_controller = registry.get(outcome.residual_axes_id)
         self.assertEqual(main_controller.state.properties["y_lower_reserve"], 0.1)
         self.assertEqual(residual_controller.state.properties["y_lower_reserve"], 0.0)
+        self._assert_xrd_xlim_is_profile_two_theta(
+            (outcome.main_axes_id, outcome.residual_axes_id),
+            result,
+        )
+        self.assertLess(float(main_axes.get_xlim()[1]), 15.0)
         self.assertEqual(references.state.properties["baseline"], 0.0375)
         self.assertEqual(references.state.properties["height"], 0.025)
         self.assertAlmostEqual(
@@ -647,6 +666,29 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
         self.assertEqual(calculated.state.properties["linewidth"], 0.5)
         self.assertEqual(residual.state.properties["color"], "#0000ff")
         self.assertEqual(residual.state.properties["linewidth"], 0.2)
+
+    def test_manual_xlim_can_exceed_data_then_autoscale_returns(self):
+        result = small_result()
+        outcome = self.execute(
+            XrdRefinementLegendSelection(True, True, True, True),
+            result,
+        )
+        registry = self.canvas.component_registry
+        main = registry.get(outcome.main_axes_id)
+        residual = registry.get(outcome.residual_axes_id)
+        self._assert_xrd_xlim_is_profile_two_theta(
+            (outcome.main_axes_id, outcome.residual_axes_id),
+            result,
+        )
+        self.assertTrue(main.set_property("autoscalex_on", False).ok)
+        self.assertTrue(main.set_property("xlim", (0.0, 20.0)).ok)
+        self.assertEqual(tuple(main.resolve_target().get_xlim()), (0.0, 20.0))
+        self.assertEqual(tuple(residual.resolve_target().get_xlim()), (0.0, 20.0))
+        self.assertTrue(main.set_property("autoscalex_on", True).ok)
+        self._assert_xrd_xlim_is_profile_two_theta(
+            (outcome.main_axes_id, outcome.residual_axes_id),
+            result,
+        )
 
     def test_user_appearance_override_and_reflection_table_refresh(self):
         appearance = XrdAppearanceConfig(
@@ -1030,7 +1072,14 @@ class XrdSingleAxesTests(XrdWindowTestCase):
         self.assertEqual(chi2.state.parent_id, outcome.main_axes_id)
         axes = registry.get(outcome.main_axes_id)
         self.assertEqual(axes.state.properties["y_lower_reserve"], 0.0)
+        self._assert_xrd_xlim_is_profile_two_theta((outcome.main_axes_id,), result)
+        self.assertLess(float(axes.resolve_target().get_xlim()[1]), 15.0)
         self._assert_reflection_between_residual_and_data(outcome)
+        self.assertTrue(axes.set_property("autoscalex_on", False).ok)
+        self.assertTrue(axes.set_property("xlim", (0.0, 20.0)).ok)
+        self.assertEqual(tuple(axes.resolve_target().get_xlim()), (0.0, 20.0))
+        self.assertTrue(axes.set_property("autoscalex_on", True).ok)
+        self._assert_xrd_xlim_is_profile_two_theta((outcome.main_axes_id,), result)
 
     def _assert_reflection_between_residual_and_data(self, outcome):
         registry = self.canvas.component_registry
@@ -1070,6 +1119,10 @@ class XrdSingleAxesTests(XrdWindowTestCase):
         self.assertEqual(
             registry.get(outcome.main_axes_id).state.properties["y_lower_reserve"],
             0.1,
+        )
+        self._assert_xrd_xlim_is_profile_two_theta(
+            (outcome.main_axes_id,),
+            small_result(),
         )
         self.assertAlmostEqual(
             float(references.resolve_target().get_segments()[0][0][1]),

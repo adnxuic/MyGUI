@@ -95,6 +95,7 @@ APPLICATION_TEST_MODULES = {
     "test_fullprof_prf": (ISOLATION_CORE, 0.3),
     "test_component_services": (ISOLATION_GUI_MODULE, 0.3),
     "test_y_axis_reserve": (ISOLATION_CORE, 0.2),
+    "test_x_axis_tight": (ISOLATION_CORE, 0.2),
     "test_background_task": (ISOLATION_GUI_MODULE, 0.2),
     "test_application_icon": (ISOLATION_GUI_MODULE, 0.2),
     "test_table_document": (ISOLATION_GUI_MODULE, 0.1),

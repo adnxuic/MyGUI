@@ -49,16 +49,20 @@ autoscale on and sets `y_lower_reserve=0.1` so ordinary autoscale content
 occupies the upper 90% of the Axes. The lower semantic Axes at row 1 receives a
 Residual Data Plot bound to the recomputed `Residual = Yobs - Ycal` column and
 keeps `y_lower_reserve=0.0`. The offset FullProf difference column is not used
-for that line. The two Axes keep the template's shared-X and outer-label
-behavior. Main and Residual legends remain independent, and an empty legend
-selection hides the corresponding Legend.
+for that line. Both Axes set `xmargin=0` and keep X autoscale on so the shared
+X range is the imported Profile `2Theta` minimum and maximum; Reflection
+Positions do not expand it. The two Axes keep the template's shared-X and
+outer-label behavior. Main and Residual legends remain independent, and an
+empty legend selection hides the corresponding Legend.
 
 On **Single Axes** creation, one Axes receives Observed Scatter, Calculated
 Plot, Reflection Positions, and a Chi² Text at Axes coordinates `(0.04, 0.96)`
-with the current Figure style font. Missing χ² values display `χ²: —`. **Draw
-residual** (default on) adds a Residual Plot bound to `Yobs-Ycal (PRF)` on the
-same Axes, sets `y_lower_reserve=0.0`, and places Reflection Positions with
-`between_table_ranges` between the PRF difference maximum and the lowest
+with the current Figure style font. Missing χ² values display `χ²: —`. The Axes
+sets `xmargin=0` and keeps X autoscale on so the X range is the imported
+Profile `2Theta` minimum and maximum; Reflection Positions do not expand it.
+**Draw residual** (default on) adds a Residual Plot bound to `Yobs-Ycal (PRF)`
+on the same Axes, sets `y_lower_reserve=0.0`, and places Reflection Positions
+with `between_table_ranges` between the PRF difference maximum and the lowest
 `Yobs`/`Ycal` values. If that file has no display gap, creation is rejected.
 Turning Draw residual off omits the blue line, restores `y_lower_reserve=0.1`,
 and uses fixed `baseline=0.0375` / `height=0.025`. Single legend checkboxes all

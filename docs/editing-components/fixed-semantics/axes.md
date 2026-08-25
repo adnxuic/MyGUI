@@ -50,7 +50,7 @@ For details on color choice workflows, see [Color Picker](../../color-picker.md)
 | Aspect | Aspect editor | Aspect ratio of coordinate scaling: `auto`, `equal`, or numeric ratio. | `auto`, `equal`, or positive number; default `auto` | `properties.aspect` |
 | Facecolor | Color choice | Background fill color of the Axes plotting rectangle. | Hex color; default `#ffffff` | `properties.facecolor` |
 | Visible | Checkbox | Shows or hides the entire Axes and its children. | `true` or `false`; default `true` | `properties.visible` |
-| Xmargin | Number | Automatic padding fraction added to each side of X data limits during autoscale. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.xmargin` |
+| Xmargin | Number | Automatic padding fraction added to each side of X data limits during autoscale. When `0`, autoscale X uses the data interval with no locator expansion. XRD Single and Main Plot + Residual set this to `0`. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.xmargin` |
 | Ymargin | Number | Automatic padding fraction added to each side of Y data limits during autoscale. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.ymargin` |
 | Adjustable | Dropdown | Defines whether the physical `box` or data limits `datalim` adjust to satisfy aspect ratio. | `box` or `datalim`; default `box` | `properties.adjustable` |
 | Anchor | Anchor editor | Alignment anchor of the Axes box within its available bounding space. | Compass string (`C`, `SW`, `NE`, etc.); default `C` | `properties.anchor` |

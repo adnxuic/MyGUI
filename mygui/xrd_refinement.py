@@ -762,7 +762,21 @@ class XrdRefinementImportService:
         )
         style_result = canvas.component_registry.apply_transaction(
             (
-                ComponentMutation(main_id, properties={"y_lower_reserve": 0.1}),
+                ComponentMutation(
+                    main_id,
+                    properties={
+                        "y_lower_reserve": 0.1,
+                        "xmargin": 0.0,
+                        "autoscalex_on": True,
+                    },
+                ),
+                ComponentMutation(
+                    residual_axes_id,
+                    properties={
+                        "xmargin": 0.0,
+                        "autoscalex_on": True,
+                    },
+                ),
                 self._observed_style_mutation(observed.component_ids[0], request),
                 self._plot_style_mutation(
                     calculated.component_ids[0],
@@ -820,7 +834,11 @@ class XrdRefinementImportService:
         mutations = [
             ComponentMutation(
                 axes_id,
-                properties={"y_lower_reserve": 0.0 if draw_residual else 0.1},
+                properties={
+                    "y_lower_reserve": 0.0 if draw_residual else 0.1,
+                    "xmargin": 0.0,
+                    "autoscalex_on": True,
+                },
             ),
             self._observed_style_mutation(observed.component_ids[0], request),
             self._plot_style_mutation(

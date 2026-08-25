@@ -292,16 +292,17 @@ Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.
    **Reflection Positions…** and confirm **Baseline: Automatic** is disabled.
 4. Create with Draw residual on. Confirm one Axes, Observed Scatter, Calculated
    Plot, Residual Plot bound to `Yobs-Ycal (PRF)`, Reflection Positions, and a
-   Chi² Text at Axes `(0.04, 0.96)`. Confirm `y_lower_reserve=0.0` and that
+   Chi² Text at Axes `(0.04, 0.96)`. Confirm `y_lower_reserve=0.0`, `xmargin=0`,
+   and that the X range equals the imported 2θ minimum and maximum. Confirm
    Reflection sits between the residual maximum and the lowest observed or
    calculated intensity without overlapping either.
 5. Open the four XRD property buttons; Residual is enabled while Draw residual
    is on. Edit a Table Yobs or residual cell and confirm Reflection recenters
    after autoscale.
 6. Repeat creation with Draw residual off. Confirm Residual Plot is omitted,
-   Residual legend and property button are disabled, `y_lower_reserve=0.1`, and
-   Reflection uses `baseline=0.0375` / `height=0.025`. Confirm Chi² Text
-   remains.
+   Residual legend and property button are disabled, `y_lower_reserve=0.1`,
+   `xmargin=0`, X range still equal to the imported 2θ range, and Reflection
+   uses `baseline=0.0375` / `height=0.025`. Confirm Chi² Text remains.
 7. Save, close, temporarily move `YBCO.prf`, and reopen. Confirm the Table,
    four or three data components, Chi² Text, and placement restore without a
    file prompt.
@@ -329,22 +330,26 @@ Use `tests/test_datas/XRD/YBCO.prf` as the representative v1 input.
    Plot, and one editable Reflection Positions component whose data is an empty
    manual sequence plus the Reflections/`2Theta` column and `placement.kind`
    `fixed`. Confirm the main Y range keeps ordinary autoscale content in the
-   upper 90% and the reflection marks sit in the lower 10% band. Confirm Backg
-   is not plotted and no extra vertical-line artists exist.
+   upper 90% and the reflection marks sit in the lower 10% band. Confirm both
+   Axes keep `xmargin=0` and a shared X range equal to the imported 2θ minimum
+   and maximum. Confirm Backg is not plotted and no extra vertical-line artists
+   exist.
 9. Confirm the lower Axes contains one Residual Data Plot whose first value is
    `Yobs - Ycal`, not the offset `Yobs-Ycal (PRF)` value, and that Residual
    Axes Y reserve stays at `0`.
 10. Open the four XRD property buttons, confirm the default styles, Cancel
     without changing the request, then override colors/sizes and create.
-11. Change the X limits and confirm both Axes move together. Change either Y
-    limit and confirm reflection marks keep their normalized Axes height.
+11. Change the X limits and confirm both Axes move together, including a range
+    wider than the imported 2θ interval. Re-enable Autoscale X and confirm both
+    Axes return to the imported 2θ range. Change either Y limit and confirm
+    reflection marks keep their normalized Axes height.
 12. Confirm each selected Main legend entry appears, each excluded entry is
     absent, the lower legend contains only Residual when selected, and an empty
     selection hides its corresponding legend.
 13. Save the project and close it. Temporarily move or rename `YBCO.prf`, then
     reopen the project and confirm both imported Sheets, all four components,
-    the shared layout, Axes `y_lower_reserve`, and the legends remain complete
-    without a file prompt.
+    the shared layout, Axes `y_lower_reserve`, `xmargin=0`, and the legends
+    remain complete without a file prompt.
 14. In a fresh import, Undo once and confirm only the Figure setup disappears
     while both Sheets remain. Undo again and confirm both imported Sheets are
     removed. Redo twice and confirm the Sheets return before the data-backed

@@ -147,8 +147,10 @@ def apply_update_impacts(
             subject.relim()
         if UpdateImpact.AUTOSCALE in impacts and subject.has_data():
             subject.autoscale_view()
+            from mygui.figuremodify.x_axis_tight import apply_tight_xlim
             from mygui.figuremodify.y_axis_reserve import apply_y_lower_reserve
 
+            apply_tight_xlim(subject)
             apply_y_lower_reserve(subject)
         if UpdateImpact.LEGEND in impacts:
             _refresh_legend(subject)
