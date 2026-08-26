@@ -289,7 +289,7 @@ class PyColorbarDialog(QDialog):
         if not self.input.has_source():
             self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
             status_messages.show_warning(
-                "No scalar-mapped Scatter without a Colorbar is available "
+                "No eligible colormap source without a Colorbar is available "
                 "under the selected Axes."
             )
 

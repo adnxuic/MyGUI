@@ -9,6 +9,7 @@ from .appearance_inputs import (
 )
 from .data_inputs import (
     DataReferenceInput,
+    Field2DDataReferenceInput,
     MultiSeriesDataReferenceInput,
     ScatterMappingInput,
 )
@@ -22,6 +23,7 @@ from .reference_inputs import (
 __all__ = [
     "ColorbarInput",
     "DataReferenceInput",
+    "Field2DDataReferenceInput",
     "InAxesInput",
     "InterpolationOptionsInput",
     "LineAppearanceInput",

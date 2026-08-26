@@ -137,6 +137,19 @@ MATPLOTLIB_39_EXPOSURE: dict[str, ArtistExposureContract] = {
         derived={"clim", "cmap", "norm"},
         unsupported={"agg_filter", "animated", "clip_box", "clip_path", "figure", "mouseover", "path_effects", "picker", "transform"},
     ),
+    "QuadMesh": _contract(
+        core={"alpha", "antialiased", "capstyle", "color", "edgecolor", "facecolor", "hatch", "joinstyle", "label", "linestyle", "linewidth", "visible", "zorder"},
+        advanced={"clip_on", "gid", "in_layout", "rasterized", "sketch_params", "snap", "url", "urls"},
+        derived={"array", "clim", "cmap", "norm", "offsets"},
+        unsupported={"agg_filter", "animated", "clip_box", "clip_path", "figure", "mouseover", "offset_transform", "path_effects", "picker", "pickradius", "transform"},
+    ),
+    "QuadContourSet": _contract(
+        core={"alpha", "antialiased", "color", "edgecolor", "facecolor", "linestyle", "linewidth", "visible", "zorder"},
+        advanced={"clip_on", "gid", "in_layout", "rasterized", "sketch_params", "snap", "url"},
+        aliases={"capstyle", "hatch", "joinstyle", "label", "urls"},
+        derived={"array", "clim", "cmap", "norm", "offsets", "paths"},
+        unsupported={"agg_filter", "animated", "clip_box", "clip_path", "figure", "mouseover", "offset_transform", "path_effects", "picker", "pickradius", "transform"},
+    ),
     "Rectangle": _contract(
         core={"alpha", "edgecolor", "facecolor", "fill", "hatch", "linestyle", "linewidth", "visible", "zorder"},
         aliases={"color"},
@@ -169,6 +182,8 @@ def _representative_artists() -> dict[str, object]:
         "PathCollection": axes.scatter([], []),
         "LineCollection": LineCollection([]),
         "AxesImage": axes.imshow([[0.0]]),
+        "QuadMesh": axes.pcolormesh([[0.0, 1.0], [1.0, 0.0]]),
+        "QuadContourSet": axes.contour([[0.0, 1.0], [1.0, 0.0]]),
         "Rectangle": axes.indicate_inset_zoom(figure.add_axes([0.1, 0.1, 0.2, 0.2]))[0],
         "ConnectionPatch": axes.indicate_inset_zoom(figure.axes[-1])[1][0],
     }

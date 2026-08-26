@@ -27,6 +27,7 @@ from .sections import (
     AxesLimitsSection,
     ColorbarSourceSection,
     DataReferenceSection,
+    Field2DDataSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
     LineAppearanceSection,
@@ -84,6 +85,35 @@ def _minor_properties(*keys: str):
         )
 
     return factory
+
+
+def _field_2d_properties(*keys: str):
+    def factory(controller, context, parent):
+        return PropertySection(
+            controller,
+            context=context,
+            property_keys=keys,
+            apply_properties=lambda properties: context.field_2d.apply_properties(
+                controller,
+                properties,
+            ),
+            parent=parent,
+        )
+
+    return factory
+
+
+def _field_2d_data(controller, context, parent):
+    return Field2DDataSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
+
+
+def _field_2d_preview(state) -> str:
+    cmap = str((state.properties.get("colormap") or {}).get("cmap", "")).strip()
+    return cmap or state.role.value.replace("_", " ").title()
 
 
 def _colorbar_properties(*keys: str):
@@ -906,6 +936,218 @@ SCATTER_PROFILE = EditorProfile(
 )
 
 
+PSEUDOCOLOR_PROFILE = EditorProfile(
+    "pseudocolor",
+    "Pseudocolor",
+    (
+        SectionSpec(
+            "data",
+            "Data source",
+            _field_2d_data,
+            data_keys=("x_ref", "y_ref", "z_ref"),
+        ),
+        SectionSpec(
+            "colormap",
+            "Color mapping",
+            _field_2d_properties("colormap"),
+            property_keys=("colormap",),
+        ),
+        SectionSpec(
+            "appearance",
+            "Appearance",
+            _field_2d_properties(
+                "visible",
+                "alpha",
+                "zorder",
+                "shading",
+                "edgecolor",
+                "linewidth",
+                "antialiased",
+            ),
+            property_keys=(
+                "visible",
+                "alpha",
+                "zorder",
+                "shading",
+                "edgecolor",
+                "linewidth",
+                "antialiased",
+            ),
+        ),
+        SectionSpec(
+            "export",
+            "Export",
+            _field_2d_properties(
+                "clip_on", "gid", "in_layout", "rasterized", "snap", "url"
+            ),
+            property_keys=(
+                "clip_on",
+                "gid",
+                "in_layout",
+                "rasterized",
+                "snap",
+                "url",
+            ),
+        ),
+    ),
+    placement=EditorPlacement.CHART,
+    tree=TreePresentationSpec(
+        "Pseudocolor", "Pseudocolor", "pseudocolor", _field_2d_preview, 32,
+        delete_label="Pseudocolor",
+    ),
+)
+
+
+HEATMAP_PROFILE = EditorProfile(
+    "heatmap",
+    "Heatmap",
+    (
+        SectionSpec(
+            "data",
+            "Data source",
+            _field_2d_data,
+            data_keys=("x_ref", "y_ref", "z_ref"),
+        ),
+        SectionSpec(
+            "colormap",
+            "Color mapping",
+            _field_2d_properties("colormap"),
+            property_keys=("colormap",),
+        ),
+        SectionSpec(
+            "appearance",
+            "Appearance",
+            _field_2d_properties(
+                "visible",
+                "alpha",
+                "zorder",
+                "interpolation",
+                "interpolation_stage",
+                "resample",
+            ),
+            property_keys=(
+                "visible",
+                "alpha",
+                "zorder",
+                "interpolation",
+                "interpolation_stage",
+                "resample",
+            ),
+        ),
+        SectionSpec(
+            "export",
+            "Export",
+            _field_2d_properties(
+                "filternorm",
+                "filterrad",
+                "clip_on",
+                "gid",
+                "in_layout",
+                "rasterized",
+                "snap",
+                "url",
+            ),
+            property_keys=(
+                "filternorm",
+                "filterrad",
+                "clip_on",
+                "gid",
+                "in_layout",
+                "rasterized",
+                "snap",
+                "url",
+            ),
+        ),
+    ),
+    placement=EditorPlacement.CHART,
+    tree=TreePresentationSpec(
+        "Heatmap", "Heatmaps", "heatmap", _field_2d_preview, 32,
+        delete_label="Heatmap",
+    ),
+)
+
+
+CONTOUR_PROFILE = EditorProfile(
+    "contour",
+    "Contour",
+    (
+        SectionSpec(
+            "data",
+            "Data source",
+            _field_2d_data,
+            data_keys=("x_ref", "y_ref", "z_ref"),
+        ),
+        SectionSpec(
+            "colormap",
+            "Color mapping",
+            _field_2d_properties("colormap"),
+            property_keys=("colormap",),
+        ),
+        SectionSpec(
+            "appearance",
+            "Appearance",
+            _field_2d_properties(
+                "visible",
+                "alpha",
+                "zorder",
+                "mode",
+                "levels",
+                "corner_mask",
+                "extend",
+                "linewidth",
+                "linestyle",
+                "negative_linestyle",
+                "labels",
+            ),
+            property_keys=(
+                "visible",
+                "alpha",
+                "zorder",
+                "mode",
+                "levels",
+                "corner_mask",
+                "extend",
+                "linewidth",
+                "linestyle",
+                "negative_linestyle",
+                "labels",
+            ),
+        ),
+        SectionSpec(
+            "export",
+            "Export",
+            _field_2d_properties(
+                "algorithm",
+                "nchunk",
+                "antialiased",
+                "clip_on",
+                "gid",
+                "in_layout",
+                "rasterized",
+                "snap",
+                "url",
+            ),
+            property_keys=(
+                "algorithm",
+                "nchunk",
+                "antialiased",
+                "clip_on",
+                "gid",
+                "in_layout",
+                "rasterized",
+                "snap",
+                "url",
+            ),
+        ),
+    ),
+    placement=EditorPlacement.CHART,
+    tree=TreePresentationSpec(
+        "Contour", "Contours", "contour", _field_2d_preview, 32,
+        delete_label="Contour",
+    ),
+)
+
+
 COLORBAR_PROFILE = EditorProfile(
     "colorbar",
     "Colorbar",
@@ -1582,6 +1824,21 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.SCATTER,
         SCATTER_PROFILE,
         role=ComponentRole.SCATTER,
+    )
+    editor_registry.register_profile(
+        ComponentKind.FIELD_2D,
+        PSEUDOCOLOR_PROFILE,
+        role=ComponentRole.PSEUDOCOLOR,
+    )
+    editor_registry.register_profile(
+        ComponentKind.FIELD_2D,
+        HEATMAP_PROFILE,
+        role=ComponentRole.HEATMAP,
+    )
+    editor_registry.register_profile(
+        ComponentKind.FIELD_2D,
+        CONTOUR_PROFILE,
+        role=ComponentRole.CONTOUR,
     )
     editor_registry.register_profile(
         ComponentKind.COLORBAR,

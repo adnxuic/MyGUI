@@ -49,7 +49,7 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   QSettings is the only persistent preference store. Sessions keep a dirty
   patch plus base revision; commit is atomic. Controllers, Services,
   `ChartCreationStager`, and `EditorContext` receive only narrow ports.
-  Settings never enter schema v15, Undo/Redo, dirty fingerprints,
+  Settings never enter schema v16, Undo/Redo, dirty fingerprints,
   `ComponentState`, or Canvas materialization. Line/Scatter/free-Text use
   explicit input > Components `NEXT_USE` > Axes palette or Figure style >
   Matplotlib 3.9 fallback. Ordinary Axes use explicit layout/XRD >
@@ -125,14 +125,14 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   runtime mementos, never Artists, Controllers, QWidgets, or whole Figures;
   replay enters through Controllers, domain Services, materializers, and
   `DeletionCoordinator`. Restore, table-driven refresh, and replay are
-  recording-suspended. History is runtime-only, is absent from schema v15,
+  recording-suspended. History is runtime-only, is absent from schema v16,
   and is invalidated if a failed replay cannot prove a safe cursor.
-- **CORE-PERSISTENCE-V15:** Persist component state only through the exact
-  integer schema-v15 component tree. UI profiles, widgets, callbacks, tree
-  keys, and expansion/selection state never enter project files. Only strict
-  v14 migrates directly to v15; strict v13–v10 migrate stepwise; v4–v9 stay
-  retired. A later persisted format change needs a dedicated migration task
-  with validation, rollback, and round-trip coverage.
+- **CORE-PERSISTENCE-V16:** Persist component state only through the exact
+  integer schema-v16 component tree. UI profiles, widgets, callbacks, tree
+  keys, and expansion/selection state never enter project files. Strict v15
+  migrates directly to v16; v14–v10 migrate stepwise; v4–v9 stay retired. A
+  later persisted format change needs a dedicated migration task with
+  validation, rollback, and round-trip coverage.
 - Runtime-created persisted components declare `RESTORE_PHASE` and exactly one
   `ComponentMaterializer`; fixed semantic components use `None`. Preserve
   stable IDs and empty valid data-backed components.

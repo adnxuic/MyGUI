@@ -45,7 +45,9 @@ if TYPE_CHECKING:
 _STANDARD_SPINES = frozenset({"left", "right", "bottom", "top"})
 _AXIS_NAMES = frozenset({"x", "y"})
 _TICK_LEVELS = frozenset({"major", "minor"})
-_CHART_KINDS = frozenset({ComponentKind.LINE, ComponentKind.SCATTER})
+_CHART_KINDS = frozenset(
+    {ComponentKind.LINE, ComponentKind.SCATTER, ComponentKind.FIELD_2D}
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -1284,13 +1286,25 @@ class ComponentRegistry:
             state = controller.state
             source_id = state.data.get("source_component_id")
             source = self._controllers.get(source_id)
-            if (
-                source is None
-                or source.state.kind is not ComponentKind.SCATTER
-                or source.state.role is not ComponentRole.SCATTER
-            ):
+            scatter_source = (
+                source is not None
+                and source.state.kind is ComponentKind.SCATTER
+                and source.state.role is ComponentRole.SCATTER
+            )
+            field_source = (
+                source is not None
+                and source.state.kind is ComponentKind.FIELD_2D
+                and source.state.role
+                in {
+                    ComponentRole.PSEUDOCOLOR,
+                    ComponentRole.HEATMAP,
+                    ComponentRole.CONTOUR,
+                }
+            )
+            if source is None or not (scatter_source or field_source):
                 raise ComponentValidationError(
-                    f"Colorbar component {state.id!r} requires a Scatter source."
+                    f"Colorbar component {state.id!r} requires a Scatter "
+                    "or FIELD_2D source."
                 )
             if source.state.parent_id != state.parent_id:
                 raise ComponentValidationError(

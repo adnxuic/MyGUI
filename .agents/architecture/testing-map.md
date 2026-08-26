@@ -16,7 +16,7 @@ subprocesses through their current `sys.executable`. Qt tests run with
 | Registration/services | `test_component_services`, `test_component_runtime_integration` |
 | Canvas host/batch/restore | `test_py_figure_canvas`, `test_batch_chart_creation`, `test_canvas_popout`, `test_in_axes` |
 | Table widget / color picker | `test_table_ui`, `test_color_picker`, `test_color_library` |
-| Materialization/schema/IO | `test_component_materializers`, `test_project_schema`, `test_project_io`, `test_project_object_roundtrip` |
+| Materialization/schema/IO | `test_component_materializers`, `test_project_schema`, `test_project_io`, `test_project_object_roundtrip`, `test_field_2d_grid`, `test_field_2d_component` |
 | Deletion/project publication | `test_component_deletion_and_project_close` |
 | Optional TeX/MATLAB/font paths | `test_optional_dependencies`, `test_font_diagnostics`, `test_scipy_fit_adapter` |
 | Application settings / dual-slot storage | `test_application_settings_storage`, `test_application_settings_service`, `test_application_settings_session`, `test_application_settings_contracts`, `test_application_settings_new_figure`, `test_application_settings_pages`, `test_application_settings_center`, `test_application_settings_center_c`, `test_application_settings_components`, `test_application_settings_axes_components`, `test_application_settings_component_creation`, `test_application_settings_axes_creation`, `test_color_library`, `test_figure_export`, `test_gui_layout` |

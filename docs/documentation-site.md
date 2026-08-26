@@ -6,12 +6,13 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 - `mkdocs.yml` at the repository root is the only site configuration. Its `docs_dir` is `docs/` and its `nav` groups the existing feature documents; document content stays in the Markdown files.
 - `docs/index.md` is the site landing page. Creating Charts includes the
-  Reference Guides, Reference Marks, and Colorbar feature pages, Projects and
+  Reference Guides, Reference Marks, Colorbar, Pseudocolor, Heatmap, and
+  Contour feature pages, Projects and
   Appearance includes Figure Export, Getting Started includes Application
   Settings, Developer Reference documents the
-  Controller/Service/Canvas package layout plus the current schema-v15
-  property contract and legacy v14, v13, v12, and v10 migration references,
-  and Editing Components mirrors the full 27-profile runtime component
+  Controller/Service/Canvas package layout plus the current schema-v16
+  property contract and legacy v15, v14, v13, v12, and v10 migration references,
+  and Editing Components mirrors the full 30-profile runtime component
   hierarchy.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.
 
@@ -26,7 +27,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 ## Navigation hierarchy and component tree
 
-The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 27 production Inspector profiles:
+The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 30 production Inspector profiles:
 
 1. **Fixed Semantics (14 profiles)**:
    - `Figure` (`editing-components/fixed-semantics/figure.md`)
@@ -43,13 +44,16 @@ The navigation structure under **Editing Components** strictly mirrors the runti
    - `Y Axis` (`editing-components/fixed-semantics/y-axis/index.md`):
      - Shares Major/Minor Ticks, Major/Minor Tick Labels, and the Grid page co-located under `fixed-semantics/x-axis/`.
      - `Y Axis Label` (`editing-components/fixed-semantics/y-axis/y-label.md`)
-2. **Charts (6 profiles)**:
+2. **Charts (9 profiles)**:
    - `Lines` (`editing-components/charts/line.md`)
    - `Function Curves` (`editing-components/charts/function-curve.md`)
    - `Plots` (`editing-components/charts/plot.md`)
    - `Fit Curves` (`editing-components/charts/fit-curve.md`)
    - `Interpolations` (`editing-components/charts/interpolation.md`)
    - `Scatters` (`editing-components/charts/scatter.md`)
+   - `Pseudocolor` (`editing-components/charts/pseudocolor.md`)
+   - `Heatmaps` (`editing-components/charts/heatmap.md`)
+   - `Contours` (`editing-components/charts/contour.md`)
 3. **Texts (1 profile)**:
    - `Texts` (`editing-components/elements/text.md`)
 4. **Insets (2 profiles)**:
@@ -76,7 +80,7 @@ Component documentation uses `pymdownx.snippets` to maintain single-source-of-tr
 
 ## Redirect policy
 
-Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 27-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
+Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 30-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
 
 - `chart-component-parameters.md` -> `editing-components/charts/line.md`
 - `axes-component-parameters.md` -> `editing-components/fixed-semantics/axes.md`

@@ -36,6 +36,8 @@ from mygui.figuremodify.component_services import (
     ComponentDependencyService,
     DeleteReason,
     DeletionRequest,
+    Field2DService,
+    default_field_2d_properties,
     FitService,
     FunctionCurveService,
     InterpolationService,
@@ -64,6 +66,7 @@ from mygui.widgets.figure_canvas.chart_creation import (
 from mygui.widgets.figure_canvas.canvas_materialize_handlers import (
     materialize_colorbar,
     materialize_data_plot,
+    materialize_field_2d,
     materialize_fit,
     materialize_function_curve,
     materialize_image_in_axes,
@@ -92,13 +95,16 @@ from mygui.figuremodify.components import (
     ComponentRole,
     ComponentState,
     ColorbarController,
+    ContourController,
     FigureController,
     FitCurveController,
     FitEngine,
     FunctionCurveController,
+    HeatmapController,
     ImageInAxesController,
     LineController,
     ObserverFailure,
+    PseudocolorController,
     ReferenceBandController,
     ReferenceLineController,
     ReferenceMarksController,
@@ -112,8 +118,8 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v15_figure,
-    validate_v15_figure,
+    normalize_v16_figure,
+    validate_v16_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
@@ -254,6 +260,11 @@ class PyFigureCanvas(QWidget):
             self.component_registry,
         )
         self.colorbar_service = ColorbarService(self.component_registry)
+        self.field_2d_service = Field2DService(
+            self.repository,
+            self.component_registry,
+            colorbar_service=self.colorbar_service,
+        )
         self.reference_marks_service = ReferenceMarksService(
             self.component_registry,
             self.repository,
@@ -320,6 +331,7 @@ class PyFigureCanvas(QWidget):
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
             colorbars=self.colorbar_service,
+            field_2d=self.field_2d_service,
             reference_marks=self.reference_marks_service,
             reference_guides=self.reference_guide_service,
             in_axes=self.in_axes_service,
@@ -1259,6 +1271,11 @@ class PyFigureCanvas(QWidget):
                 changes.changed_columns
             )
             results.extend(
+                self.field_2d_service.refresh_affected(
+                    changes.changed_columns
+                )
+            )
+            results.extend(
                 self.reference_marks_service.refresh_affected(
                     changes.changed_columns
                 )
@@ -1268,6 +1285,9 @@ class PyFigureCanvas(QWidget):
             )
         self._observer_failures.extend(
             self.chart_data_service.drain_observer_failures()
+        )
+        self._observer_failures.extend(
+            self.field_2d_service.drain_observer_failures()
         )
         self._observer_failures.extend(
             self.fit_service.drain_observer_failures()
@@ -1352,6 +1372,7 @@ class PyFigureCanvas(QWidget):
             if controller.state.kind in {
                 ComponentKind.LINE,
                 ComponentKind.SCATTER,
+                ComponentKind.FIELD_2D,
             }
         ]
         return max(orders, default=-1) + 1
@@ -2744,6 +2765,185 @@ class PyFigureCanvas(QWidget):
                 status_messages.show_success("Image inset created.")
         return runtime.axes
 
+    def _add_field_2d(
+        self,
+        role: ComponentRole,
+        display_name: str,
+        x_ref: ColumnRef | dict[str, Any],
+        y_ref: ColumnRef | dict[str, Any],
+        z_ref: ColumnRef | dict[str, Any],
+        properties: dict[str, Any] | None,
+        *,
+        object_id: str | None,
+        color_order: int | None,
+        announce: bool,
+    ):
+        owner_axes_id = self.current_axes_component_id
+        owner_axes = self.current_axes
+        if owner_axes_id is None or owner_axes is None:
+            raise ValueError(f"Select an Axes before creating a {display_name}.")
+        x_ref = ColumnRef.from_dict(x_ref) if not isinstance(x_ref, ColumnRef) else x_ref
+        y_ref = ColumnRef.from_dict(y_ref) if not isinstance(y_ref, ColumnRef) else y_ref
+        z_ref = ColumnRef.from_dict(z_ref) if not isinstance(z_ref, ColumnRef) else z_ref
+        controller_type = {
+            ComponentRole.PSEUDOCOLOR: PseudocolorController,
+            ComponentRole.HEATMAP: HeatmapController,
+            ComponentRole.CONTOUR: ContourController,
+        }[role]
+        component_id = object_id or new_id()
+        if self._restoring_component_tree_now:
+            requested = dict(properties or {})
+        else:
+            requested = default_field_2d_properties(role, self.component_style)
+            requested.update(properties or {})
+        controller = None
+        runtime = None
+        grid = None
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.watch_existing(owner_axes_id)
+            with matplotlib_style_context(self.component_style):
+                grid = self.field_2d_service.resolve_grid(
+                    x_ref, y_ref, z_ref, role
+                )
+                runtime = self.field_2d_service.create_runtime(
+                    owner_axes,
+                    role,
+                    grid,
+                    requested,
+                    style=self.component_style,
+                    gid=component_id,
+                )
+            transaction.on_rollback(
+                lambda target=runtime: self.field_2d_service.destroy_runtime(target)
+            )
+            state = ComponentState(
+                id=component_id,
+                kind=ComponentKind.FIELD_2D,
+                role=role,
+                parent_id=owner_axes_id,
+                order=self._claim_color_order(color_order),
+                selector={"object_id": component_id},
+                properties=dict(requested),
+                data={
+                    "x_ref": x_ref.to_dict(),
+                    "y_ref": y_ref.to_dict(),
+                    "z_ref": z_ref.to_dict(),
+                },
+            )
+            controller = controller_type(state, target=runtime)
+            actual = controller.sync_from_target(strict=True)
+            desired = deepcopy(actual.properties)
+            for key in requested:
+                desired[key] = deepcopy(requested[key])
+            applied = controller.apply_state(actual.clone(properties=desired))
+            if not applied.ok:
+                raise ValueError(applied.message or f"Could not initialize {display_name}.")
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=runtime)
+            runtime.set_gid(component_id)
+            self.component_registry.request_update(
+                owner_axes,
+                UpdateImpact.AUTOSCALE,
+            )
+            self._prepare_created_component(controller, transaction)
+            self.component_registry.request_update(self.fig, UpdateImpact.REDRAW)
+            if self.fig.canvas is not None:
+                self.fig.canvas.draw()
+
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
+            if grid is not None and grid.skipped_xy_count:
+                status_messages.show_warning(
+                    f"{display_name} created; skipped "
+                    f"{grid.skipped_xy_count} row(s) with missing or "
+                    "non-finite X or Y coordinates."
+                )
+            elif runtime is not None and runtime.empty:
+                status_messages.show_warning(
+                    f"{display_name} created with no drawable data yet."
+                )
+            else:
+                status_messages.show_success(f"{display_name} created.")
+        return runtime
+
+    @_history_command("Create Pseudocolor")
+    def add_pseudocolor(
+        self,
+        x_ref,
+        y_ref,
+        z_ref,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one Pseudocolor chart atomically."""
+
+        return self._add_field_2d(
+            ComponentRole.PSEUDOCOLOR,
+            "Pseudocolor",
+            x_ref,
+            y_ref,
+            z_ref,
+            properties,
+            object_id=object_id,
+            color_order=color_order,
+            announce=announce,
+        )
+
+    @_history_command("Create Heatmap")
+    def add_heatmap(
+        self,
+        x_ref,
+        y_ref,
+        z_ref,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one Heatmap chart atomically."""
+
+        return self._add_field_2d(
+            ComponentRole.HEATMAP,
+            "Heatmap",
+            x_ref,
+            y_ref,
+            z_ref,
+            properties,
+            object_id=object_id,
+            color_order=color_order,
+            announce=announce,
+        )
+
+    @_history_command("Create Contour")
+    def add_contour(
+        self,
+        x_ref,
+        y_ref,
+        z_ref,
+        properties: dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one Contour chart atomically."""
+
+        return self._add_field_2d(
+            ComponentRole.CONTOUR,
+            "Contour",
+            x_ref,
+            y_ref,
+            z_ref,
+            properties,
+            object_id=object_id,
+            color_order=color_order,
+            announce=announce,
+        )
+
     def eligible_colorbar_sources(self) -> tuple[tuple[str, str], ...]:
         """Return valid scalar-mapped sources under the selected owner Axes."""
 
@@ -3103,6 +3303,9 @@ class PyFigureCanvas(QWidget):
     def _materialize_scatter(self, state, _transaction) -> None:
         materialize_scatter(self, state, _transaction)
 
+    def _materialize_field_2d(self, state, _transaction) -> None:
+        materialize_field_2d(self, state, _transaction)
+
     def _materialize_colorbar(self, state, _transaction) -> None:
         materialize_colorbar(self, state, _transaction)
 
@@ -3319,7 +3522,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v15 component tree."""
+        """Materialize and apply a validated schema-v16 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -3352,7 +3555,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v15_figure(source)
+        source = normalize_v16_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3393,7 +3596,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v15 component tree used by persistence."""
+        """Return the canonical schema-v16 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3413,10 +3616,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v15_figure(snapshot)
+        return normalize_v16_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v15 Figure tree."""
+        """Validate and return the current complete schema-v16 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3425,7 +3628,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v15_figure(
+        validate_v16_figure(
             snapshot,
             available_refs,
             self.project_id,

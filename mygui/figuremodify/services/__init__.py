@@ -11,6 +11,7 @@ from .colorbar import (
     ColorbarService,
     ColorbarSourceResolution,
     ColorbarSourceResolverRegistry,
+    Field2DColorbarSourceResolver,
     ScatterColorbarSourceResolver,
     production_colorbar_source_resolvers,
 )
@@ -29,6 +30,7 @@ from .deletion import (
     production_deletion_handlers,
 )
 from .dependency import ComponentDependencyService, ComponentDependencySnapshot
+from .field_2d import Field2DService, default_field_2d_properties, field_2d_style_seed
 from .reference_marks import ReferenceGuideService, ReferenceMarksService
 from .text_render import TextRenderService
 
@@ -52,6 +54,8 @@ __all__ = [
     "DeletionPlan",
     "DeletionRequest",
     "FitService",
+    "Field2DColorbarSourceResolver",
+    "Field2DService",
     "FunctionCurveService",
     "InterpolationService",
     "PreparedDeletion",
@@ -59,6 +63,8 @@ __all__ = [
     "ReferenceMarksService",
     "ScatterColorbarSourceResolver",
     "TextRenderService",
+    "default_field_2d_properties",
+    "field_2d_style_seed",
     "production_colorbar_source_resolvers",
     "production_deletion_handlers",
 ]

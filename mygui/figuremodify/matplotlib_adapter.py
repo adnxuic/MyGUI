@@ -47,6 +47,49 @@ def copy_colormap(name: str):
     return matplotlib.colormaps[str(name)].copy()
 
 
+IMAGE_INTERPOLATION_CHOICES: tuple[str, ...] = (
+    "none",
+    "antialiased",
+    "nearest",
+    "bilinear",
+    "bicubic",
+    "spline16",
+    "spline36",
+    "hanning",
+    "hamming",
+    "hermite",
+    "kaiser",
+    "quadric",
+    "catrom",
+    "gaussian",
+    "bessel",
+    "mitchell",
+    "sinc",
+    "lanczos",
+    "blackman",
+)
+
+
+PSEUDOCOLOR_SHADING_CHOICES: tuple[str, ...] = (
+    "auto",
+    "flat",
+    "nearest",
+    "gouraud",
+)
+
+
+CONTOUR_MODE_CHOICES: tuple[str, ...] = ("lines", "filled", "overlay")
+CONTOUR_EXTEND_CHOICES: tuple[str, ...] = ("neither", "both", "min", "max")
+CONTOUR_ALGORITHM_CHOICES: tuple[str, ...] = ("mpl2014", "serial", "threaded")
+CONTOUR_LABEL_FORMAT_CHOICES: tuple[str, ...] = (
+    "general",
+    "scientific",
+    "fixed",
+    "integer",
+)
+INTERPOLATION_STAGE_CHOICES: tuple[str, ...] = ("data", "rgba")
+
+
 def available_marker_definitions() -> tuple[tuple[Any, str], ...]:
     """Return supported marker values paired with Matplotlib descriptions."""
 

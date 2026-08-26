@@ -27,7 +27,7 @@ from ..common import (
     parse_number_sequence,
 )
 from ..context import perform_editor_action
-from ..inputs import DataReferenceInput
+from ..inputs import DataReferenceInput, Field2DDataReferenceInput
 from ..inspector import EditorSection
 from ._types import ApplyReferences
 from .property import PropertySection
@@ -522,6 +522,71 @@ class ScatterMappingSection(QWidget, EditorSection):
             except (RuntimeError, TypeError):
                 pass
         self._mapping_properties.dispose()
+
+
+class Field2DDataSection(QWidget, EditorSection):
+    """Submit X/Y/Z column references as one FIELD_2D transaction."""
+
+    def __init__(self, controller, *, context, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.context = context
+        data = controller.read_state().data
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.data_choice_widget = Field2DDataReferenceInput(
+            context.repository,
+            ColumnRef.from_dict(data["x_ref"]).project_id,
+            parent=self,
+        )
+        self.data_choice_widget.set_refs(
+            ColumnRef.from_dict(data["x_ref"]),
+            ColumnRef.from_dict(data["y_ref"]),
+            ColumnRef.from_dict(data["z_ref"]),
+        )
+        layout.addWidget(self.data_choice_widget)
+        self.data_choice_widget.refs_connect(self._refs_changed)
+
+    def _refs_changed(self, *_args) -> bool:
+        x_ref = self.data_choice_widget.get_x_ref()
+        y_ref = self.data_choice_widget.get_y_ref()
+        z_ref = self.data_choice_widget.get_z_ref()
+        if x_ref is None or y_ref is None or z_ref is None:
+            return False
+        result = perform_editor_action(
+            self.context,
+            (
+                "Change "
+                f"{self.controller.state.role.value.replace('_', ' ').title()} "
+                "Data Source"
+            ),
+            lambda: self.context.field_2d.set_refs(
+                self.controller,
+                x_ref,
+                y_ref,
+                z_ref,
+            ),
+        )
+        if not self.context.messages.present(
+            result,
+            success="FIELD_2D data source updated.",
+        ):
+            self.sync_from_controller()
+            return False
+        return True
+
+    def sync_from_controller(self) -> None:
+        data = self.controller.read_state().data
+        self.data_choice_widget.set_refs(
+            ColumnRef.from_dict(data["x_ref"]),
+            ColumnRef.from_dict(data["y_ref"]),
+            ColumnRef.from_dict(data["z_ref"]),
+        )
+
+    def dispose(self) -> None:
+        self.data_choice_widget.dispose()
+
+
 class ColorbarSourceSection(QWidget, EditorSection):
     """Display the immutable stable source relationship of a Colorbar."""
 
@@ -559,7 +624,8 @@ class ColorbarSourceSection(QWidget, EditorSection):
             return
         source = self.context.registry.get(source_id).state
         label = str(source.properties.get("label", "")).strip()
-        preview = label or f"Scatter {source_id[:8]}"
+        role = source.role.value.replace("_", " ").title()
+        preview = label or f"{role} {source_id[:8]}"
         self.summary_label.setText(
             f"{preview}\nStable component id: {source_id}\n"
             "The source owns the colormap, norm, limits, and scalar data."

@@ -17,7 +17,7 @@ import numpy as np
 from matplotlib import colors as mcolors
 from matplotlib import ticker
 
-from mygui.figuremodify.matplotlib_adapter import has_colormap
+from mygui.figuremodify.matplotlib_adapter import copy_colormap, has_colormap
 
 from .errors import ComponentValidationError
 
@@ -920,6 +920,158 @@ def build_norm(value: Any) -> mcolors.Normalize:
 
 
 DEFAULT_NORM = {"kind": "linear", "params": {"vmin": None, "vmax": None, "clip": False}}
+
+
+DEFAULT_COLOR_MAP = {
+    "cmap": "viridis",
+    "norm": deepcopy(DEFAULT_NORM),
+    "bad": "#00000000",
+    "under": None,
+    "over": None,
+}
+
+
+DEFAULT_GRID_EDGE = {"kind": "none"}
+DEFAULT_CONTOUR_LEVELS = {"kind": "count", "count": 8}
+DEFAULT_CONTOUR_LABELS = {
+    "enabled": False,
+    "fmt": "general",
+    "fontsize": 10.0,
+    "color": None,
+    "inline": True,
+    "inline_spacing": 5.0,
+}
+
+
+def normalize_color_map_spec(value: Any) -> dict[str, Any]:
+    """Normalize a closed colormap, norm, and out-of-range color contract."""
+
+    spec = _mapping(value, "Color map")
+    expected = {"cmap", "norm", "bad", "under", "over"}
+    _exact(spec, expected, "Color map")
+    cmap = str(spec["cmap"])
+    if not has_colormap(cmap):
+        raise ComponentValidationError(f"Unknown colormap {cmap!r}.")
+    return {
+        "cmap": cmap,
+        "norm": normalize_norm(spec["norm"]),
+        "bad": _color(spec["bad"], "Bad color"),
+        "under": _color(spec["under"], "Under color", allow_none=True),
+        "over": _color(spec["over"], "Over color", allow_none=True),
+    }
+
+
+def apply_color_map_spec(mappable: Any, value: Any) -> None:
+    """Write a closed colormap specification onto a ScalarMappable."""
+
+    spec = normalize_color_map_spec(value)
+    cmap = copy_colormap(spec["cmap"])
+    cmap.set_bad(spec["bad"])
+    if spec["under"] is not None:
+        cmap.set_under(spec["under"])
+    if spec["over"] is not None:
+        cmap.set_over(spec["over"])
+    mappable.set_cmap(cmap)
+    mappable.set_norm(build_norm(spec["norm"]))
+
+
+def normalize_grid_edge_spec(value: Any) -> dict[str, Any]:
+    """Normalize pcolormesh edgecolor mode: none, face, or an explicit color."""
+
+    spec = _mapping(value, "Grid edge")
+    kind = str(spec.get("kind", ""))
+    if kind == "none":
+        _exact(spec, {"kind"}, "Grid edge")
+        return {"kind": "none"}
+    if kind == "face":
+        _exact(spec, {"kind"}, "Grid edge")
+        return {"kind": "face"}
+    if kind == "color":
+        _exact(spec, {"kind", "value"}, "Grid edge")
+        return {"kind": "color", "value": _color(spec["value"], "Grid edge color")}
+    raise ComponentValidationError("Grid edge kind must be none, face, or color.")
+
+
+def grid_edge_value(value: Any) -> Any:
+    spec = normalize_grid_edge_spec(value)
+    if spec["kind"] == "none":
+        return "none"
+    if spec["kind"] == "face":
+        return "face"
+    return spec["value"]
+
+
+def normalize_contour_levels_spec(value: Any) -> dict[str, Any]:
+    """Normalize automatic count or strictly increasing explicit contour levels."""
+
+    spec = _mapping(value, "Contour levels")
+    kind = str(spec.get("kind", ""))
+    if kind == "count":
+        _exact(spec, {"kind", "count"}, "Contour levels")
+        count = spec["count"]
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise ComponentValidationError("Contour level count must be an integer.")
+        if count < 2 or count > 256:
+            raise ComponentValidationError(
+                "Automatic contour levels must be between 2 and 256."
+            )
+        return {"kind": "count", "count": int(count)}
+    if kind == "values":
+        _exact(spec, {"kind", "values"}, "Contour levels")
+        values = _finite_sequence(spec["values"], "Contour levels", minimum_length=2)
+        if any(right <= left for left, right in zip(values, values[1:])):
+            raise ComponentValidationError(
+                "Explicit contour levels must be strictly increasing."
+            )
+        if len(values) > 256:
+            raise ComponentValidationError(
+                "Explicit contour levels must contain at most 256 values."
+            )
+        return {"kind": "values", "values": values}
+    raise ComponentValidationError("Contour levels kind must be count or values.")
+
+
+def contour_levels_value(value: Any) -> Any:
+    spec = normalize_contour_levels_spec(value)
+    if spec["kind"] == "count":
+        return int(spec["count"])
+    return spec["values"]
+
+
+def normalize_contour_label_spec(value: Any) -> dict[str, Any]:
+    """Normalize closed contour-label formatting and placement."""
+
+    from mygui.figuremodify.matplotlib_adapter import CONTOUR_LABEL_FORMAT_CHOICES
+
+    spec = _mapping(value, "Contour labels")
+    expected = {"enabled", "fmt", "fontsize", "color", "inline", "inline_spacing"}
+    _exact(spec, expected, "Contour labels")
+    fmt = str(spec["fmt"])
+    if fmt not in CONTOUR_LABEL_FORMAT_CHOICES:
+        raise ComponentValidationError(f"Unsupported contour label format {fmt!r}.")
+    fontsize = _positive(spec["fontsize"], "Contour label fontsize")
+    spacing = _positive(spec["inline_spacing"], "Contour label spacing", allow_zero=True)
+    return {
+        "enabled": bool(spec["enabled"]),
+        "fmt": fmt,
+        "fontsize": fontsize,
+        "color": _color(spec["color"], "Contour label color", allow_none=True),
+        "inline": bool(spec["inline"]),
+        "inline_spacing": spacing,
+    }
+
+
+CONTOUR_LABEL_FORMATTERS = {
+    "general": "%g",
+    "scientific": "%.3e",
+    "fixed": "%.2f",
+    "integer": "%d",
+}
+
+
+def contour_label_fmt(value: Any) -> str:
+    spec = normalize_contour_label_spec(value)
+    return CONTOUR_LABEL_FORMATTERS[spec["fmt"]]
 
 
 def normalize_scatter_color_map(value: Any) -> dict[str, Any]:

@@ -43,6 +43,7 @@ resource loading.
 | `MYGUI_MAX_PRF_REFLECTIONS` | 1,000,000 | 5,000,000 | FullProf reflection records |
 | `MYGUI_MAX_EXTERNAL_INPUT_BYTES` | 16 MiB | 64 MiB | Child-process stdin |
 | `MYGUI_MAX_EXTERNAL_OUTPUT_BYTES` | 8 MiB | 32 MiB | Each captured output stream |
+| `MYGUI_MAX_FIELD_GRID_CELLS` | 2,000,000 | 10,000,000 | FIELD_2D `nx * ny` allocation before grid build |
 
 Invalid, zero, negative, or over-cap overrides are rejected rather than
 silently widened. Project JSON also rejects `NaN`, `Infinity`, and

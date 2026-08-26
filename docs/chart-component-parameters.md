@@ -10,6 +10,9 @@ Reference for every Inspector control of the chart components. Each parameter li
 | Function Curve | Definition and range, Appearance |
 | Plot | Data source, Appearance |
 | Scatter | Data source, Color and size mapping, Appearance |
+| Pseudocolor | Data source, Color mapping, Appearance |
+| Heatmap | Data source, Color mapping, Appearance |
+| Contour | Data source, Color mapping, Appearance |
 | Fit Curve | Data source, Fit operations, Fit result, Display range, Appearance |
 | Interpolation | Data source, Interpolation parameters, Appearance |
 | Legend (per Axes) | Title, Typography, Layout, Layout details, Frame, Advanced |

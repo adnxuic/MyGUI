@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v15 Figure trees."""
+"""Normalize and validate strict schema-v10 through v16 Figure trees."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ from .errors import ComponentValidationError
 from .models import ComponentKind, ComponentRole, ComponentState
 
 
-_CHART_KINDS = frozenset({ComponentKind.LINE, ComponentKind.SCATTER})
+_CHART_KINDS = frozenset(
+    {ComponentKind.LINE, ComponentKind.SCATTER, ComponentKind.FIELD_2D}
+)
 _DATA_ROLES = frozenset(
     {
         ComponentRole.DATA_PLOT,
@@ -101,7 +103,7 @@ def _normalize_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
             f"figure.components[{index}].properties",
         )
         for name in _COLOR_PROPERTIES.intersection(properties):
-            if properties[name] is None:
+            if properties[name] is None or isinstance(properties[name], dict):
                 continue
             try:
                 properties[name] = normalize_color(properties[name])
@@ -144,7 +146,13 @@ def normalize_v14_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v15_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v15 Figure component tree."""
+    """Normalize a predecessor schema-v15 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v16_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v16 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -245,7 +253,7 @@ def _validate_controller_contract(
     try:
         for key in _COLOR_PROPERTIES.intersection(state.properties):
             value = state.properties[key]
-            if value is None:
+            if value is None or isinstance(value, dict):
                 continue
             try:
                 normalize_color(value)
@@ -489,6 +497,21 @@ def _validate_data_references(
                     available_refs,
                     x_axis=False,
                 )
+        return
+    if state.kind is ComponentKind.FIELD_2D:
+        if set(state.data) != {"x_ref", "y_ref", "z_ref"}:
+            raise ValueError(
+                f"Invalid project field {path}.data: expected exactly "
+                "x_ref, y_ref, and z_ref."
+            )
+        for key in ("x_ref", "y_ref", "z_ref"):
+            _validate_reference(
+                state.data.get(key),
+                f"{path}.data.{key}",
+                project_id,
+                available_refs,
+                x_axis=False,
+            )
         return
     if state.role not in _DATA_ROLES:
         return
@@ -735,7 +758,15 @@ def _validate_figure(
             and state.kind is ComponentKind.REFERENCE_GUIDE
         ):
             raise ValueError(
-                f"Invalid project field {path}: Reference Guide is not part "
+                f"Invalid project field {path}: Reference Guides are not part "
+                f"of schema v{schema_version}."
+            )
+        if (
+            schema_version < 16
+            and state.kind is ComponentKind.FIELD_2D
+        ):
+            raise ValueError(
+                f"Invalid project field {path}: FIELD_2D is not part "
                 f"of schema v{schema_version}."
             )
         if state.id in by_id:
@@ -833,21 +864,42 @@ def _validate_figure(
             )
         source_id = state.data["source_component_id"]
         source = by_id.get(source_id)
-        if (
-            source is None
-            or source.kind is not ComponentKind.SCATTER
-            or source.role is not ComponentRole.SCATTER
-        ):
+        if source is None:
             raise ValueError(
                 f"Invalid project field {path}.data.source_component_id: "
-                "expected a Scatter component id."
+                "expected a Scatter or FIELD_2D component id."
+            )
+        scatter_source = (
+            source.kind is ComponentKind.SCATTER
+            and source.role is ComponentRole.SCATTER
+        )
+        field_source = (
+            schema_version >= 16
+            and source.kind is ComponentKind.FIELD_2D
+            and source.role
+            in {
+                ComponentRole.PSEUDOCOLOR,
+                ComponentRole.HEATMAP,
+                ComponentRole.CONTOUR,
+            }
+        )
+        if schema_version < 16:
+            if not scatter_source:
+                raise ValueError(
+                    f"Invalid project field {path}.data.source_component_id: "
+                    "expected a Scatter component id."
+                )
+        elif not scatter_source and not field_source:
+            raise ValueError(
+                f"Invalid project field {path}.data.source_component_id: "
+                "expected a Scatter or FIELD_2D component id."
             )
         if source.parent_id != state.parent_id:
             raise ValueError(
                 f"Invalid project field {path}: Colorbar and source must "
                 "share one owner Axes."
             )
-        if (
+        if scatter_source and (
             not source.properties.get("color_mapping", {}).get("enabled")
             or source.data.get("color_ref") is None
         ):
@@ -858,7 +910,7 @@ def _validate_figure(
         if source_id in colorbar_sources:
             raise ValueError(
                 f"Invalid project field {path}.data.source_component_id: "
-                "a Scatter may own at most one Colorbar."
+                "a source may own at most one Colorbar."
             )
         colorbar_sources.add(source_id)
     if project_name is not None and root.properties.get("name", "") != project_name:
@@ -956,7 +1008,7 @@ def validate_v15_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v15 Figure component tree."""
+    """Validate a predecessor schema-v15 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -964,4 +1016,21 @@ def validate_v15_figure(
         project_id,
         project_name,
         schema_version=15,
+    )
+
+
+def validate_v16_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v16 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=16,
     )

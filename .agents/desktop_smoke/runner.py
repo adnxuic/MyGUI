@@ -26,6 +26,17 @@ def run_smoke(
     matplotlib.use("QtAgg")
 
     from desktop_smoke.harness import SmokeHarness
+    from desktop_smoke.scenarios.charts_1d import run_charts_1d_scenarios
+    from desktop_smoke.scenarios.deletion_history import (
+        run_deletion_history_scenarios,
+    )
+    from desktop_smoke.scenarios.elements import run_elements_scenarios
+    from desktop_smoke.scenarios.field_2d import run_field_2d_scenarios
+    from desktop_smoke.scenarios.inspectors import run_inspectors_scenarios
+    from desktop_smoke.scenarios.layouts_xrd import run_layouts_xrd_scenarios
+    from desktop_smoke.scenarios.project_lifecycle import (
+        run_project_lifecycle_scenarios,
+    )
     from desktop_smoke.scenarios.settings import run_settings_scenarios
 
     selected = list(GROUPS) if not groups else list(groups)
@@ -47,6 +58,20 @@ def run_smoke(
         harness.start()
         if "settings" in selected:
             scenario_results.extend(run_settings_scenarios(harness))
+        if "field_2d" in selected:
+            scenario_results.extend(run_field_2d_scenarios(harness))
+        if "charts_1d" in selected:
+            scenario_results.extend(run_charts_1d_scenarios(harness))
+        if "elements" in selected:
+            scenario_results.extend(run_elements_scenarios(harness))
+        if "inspectors" in selected:
+            scenario_results.extend(run_inspectors_scenarios(harness))
+        if "layouts_xrd" in selected:
+            scenario_results.extend(run_layouts_xrd_scenarios(harness))
+        if "deletion_history" in selected:
+            scenario_results.extend(run_deletion_history_scenarios(harness))
+        if "project_lifecycle" in selected:
+            scenario_results.extend(run_project_lifecycle_scenarios(harness))
     except Exception as exc:  # noqa: BLE001 — required check surfaces the failure
         status = "failed"
         scenario_results.append(

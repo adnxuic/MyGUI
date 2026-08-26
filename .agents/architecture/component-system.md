@@ -38,6 +38,7 @@ Concrete Controllers live in `mygui/figuremodify/components/controllers/`:
 | `in_axes.py` | Zoom and Image insets |
 | `lines.py` | Line, Function Curve, Plot, Fit, Interpolation |
 | `collections.py` | Scatter, Reference Marks, Reference Line/Band |
+| `field_2d.py` | Pseudocolor, Heatmap, Contour |
 | `colorbar.py` | `ColorbarController` |
 | `registry_bridge.py` | `CONTROLLER_TYPES`, `controller_type_for`, `create_controller` |
 
@@ -48,6 +49,7 @@ Domain Services live in `mygui/figuremodify/services/`:
 | `axes_command.py` | `AxesCommandService` |
 | `chart_data.py` | `FunctionCurveService`, `ChartDataService`, `InterpolationService`, `FitService` |
 | `colorbar.py` | `ColorbarService` and source resolvers |
+| `field_2d.py` | `Field2DService` |
 | `reference_marks.py` | `ReferenceMarksService`, `ReferenceGuideService` |
 | `text_render.py` | `TextRenderService` |
 | `deletion.py` | deletion request/plan/handler types and `ComponentDeletionService` |

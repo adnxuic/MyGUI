@@ -44,7 +44,7 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 7, 5, 6])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 7, 8, 6])
             layout_bar = bars[1]
             presets = axes_layout_presets()
             self.assertEqual(

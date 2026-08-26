@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from PIL import Image
 from matplotlib.collections import LineCollection
 
-from mygui.database import ColumnRef
+from mygui.database import ColumnRef, ColumnType
 from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.components import (
     ComponentKind,
@@ -121,6 +121,12 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         sheet.set_block(0, 0, [[0, 1], [1, 2], [2, 4], [3, 8]])
         x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
         y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+        field_x = sheet.add_column("FieldX", ColumnType.NUMBER, values=[0.0, 1.0, 0.0, 1.0])
+        field_y = sheet.add_column("FieldY", ColumnType.NUMBER, values=[0.0, 0.0, 1.0, 1.0])
+        field_z = sheet.add_column("FieldZ", ColumnType.NUMBER, values=[1.0, 2.0, 3.0, 4.0])
+        field_x_ref = ColumnRef(canvas.project_id, sheet.id, field_x.id)
+        field_y_ref = ColumnRef(canvas.project_id, sheet.id, field_y.id)
+        field_z_ref = ColumnRef(canvas.project_id, sheet.id, field_z.id)
         line_pair = self.window.repository.line_pair(x_ref, y_ref)
         valid_pair = self.window.repository.valid_pair(x_ref, y_ref)
 
@@ -224,12 +230,33 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 linewidth=0.8,
             )
         )
+        canvas.add_pseudocolor(
+            field_x_ref,
+            field_y_ref,
+            field_z_ref,
+            object_id="roundtrip-pseudocolor",
+        )
+        canvas.add_heatmap(
+            field_x_ref,
+            field_y_ref,
+            field_z_ref,
+            object_id="roundtrip-heatmap",
+        )
+        canvas.add_contour(
+            field_x_ref,
+            field_y_ref,
+            field_z_ref,
+            object_id="roundtrip-contour",
+        )
 
         data_roles = {
             ComponentRole.DATA_PLOT,
             ComponentRole.SCATTER,
             ComponentRole.INTERPOLATION,
             ComponentRole.FIT_CURVE,
+            ComponentRole.PSEUDOCOLOR,
+            ComponentRole.HEATMAP,
+            ComponentRole.CONTOUR,
         }
         object_ids = {
             controller.component_id

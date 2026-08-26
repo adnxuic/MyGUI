@@ -42,6 +42,15 @@ class CanvasMaterializeHost(Protocol):
     def add_scatter(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
+    def add_pseudocolor(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+    def add_heatmap(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+    def add_contour(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
     def add_colorbar(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
@@ -82,6 +91,9 @@ class CanvasMaterializeHost(Protocol):
         ...
 
     def _materialize_scatter(self, state: Any, _transaction: Any) -> None:
+        ...
+
+    def _materialize_field_2d(self, state: Any, _transaction: Any) -> None:
         ...
 
     def _materialize_colorbar(self, state: Any, _transaction: Any) -> None:
@@ -275,6 +287,27 @@ def materialize_scatter(host: CanvasMaterializeHost, state, _transaction) -> Non
     )
 
 
+def materialize_field_2d(host: CanvasMaterializeHost, state, _transaction) -> None:
+    if state.kind is not ComponentKind.FIELD_2D:
+        raise ValueError("FIELD_2D materializer requires a field_2d state.")
+    adder = {
+        ComponentRole.PSEUDOCOLOR: host.add_pseudocolor,
+        ComponentRole.HEATMAP: host.add_heatmap,
+        ComponentRole.CONTOUR: host.add_contour,
+    }.get(state.role)
+    if adder is None:
+        raise ValueError(f"Unsupported FIELD_2D role {state.role!r}.")
+    adder(
+        ColumnRef.from_dict(state.data["x_ref"]),
+        ColumnRef.from_dict(state.data["y_ref"]),
+        ColumnRef.from_dict(state.data["z_ref"]),
+        state.properties,
+        object_id=state.id,
+        color_order=state.order,
+        announce=False,
+    )
+
+
 def materialize_colorbar(host: CanvasMaterializeHost, state, _transaction) -> None:
     if (
         state.kind is not ComponentKind.COLORBAR
@@ -461,6 +494,27 @@ def register_canvas_materializers(host: CanvasMaterializeHost, expected_phases) 
             host._materialize_scatter,
             expected_phases[
                 (ComponentKind.SCATTER, ComponentRole.SCATTER)
+            ],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.FIELD_2D, ComponentRole.PSEUDOCOLOR),
+            host._materialize_field_2d,
+            expected_phases[
+                (ComponentKind.FIELD_2D, ComponentRole.PSEUDOCOLOR)
+            ],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.FIELD_2D, ComponentRole.HEATMAP),
+            host._materialize_field_2d,
+            expected_phases[
+                (ComponentKind.FIELD_2D, ComponentRole.HEATMAP)
+            ],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.FIELD_2D, ComponentRole.CONTOUR),
+            host._materialize_field_2d,
+            expected_phases[
+                (ComponentKind.FIELD_2D, ComponentRole.CONTOUR)
             ],
         ),
         ComponentMaterializer(

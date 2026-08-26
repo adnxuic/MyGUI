@@ -29,6 +29,9 @@ class ResourceLocatorTests(unittest.TestCase):
             try:
                 os.chdir(directory)
                 self.assertTrue(Path(icon_path("chart_images/curve.svg")).is_file())
+                self.assertTrue(Path(icon_path("chart_images/pseudocolor.svg")).is_file())
+                self.assertTrue(Path(icon_path("chart_images/heatmap.svg")).is_file())
+                self.assertTrue(Path(icon_path("chart_images/contour.svg")).is_file())
                 self.assertIn(
                     "QFrame",
                     load_text_resource(

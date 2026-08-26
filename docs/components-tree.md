@@ -27,6 +27,7 @@ The presentation adds non-selectable, UI-only group nodes:
   virtual folders;
 - two or more removable siblings with the same `kind` and role are collected
   under a plural role group such as `Function Curves`, `Plots`, `Scatters`,
+  `Pseudocolor`, `Heatmaps`, `Contours`,
   or `Texts`;
 - a repeated-role group disappears again when fewer than two matching
   siblings remain.
@@ -106,7 +107,7 @@ model resets never select the first visible row as a side effect.
 Right-click actions are determined by the Controller deletion policy:
 
 - Figure and fixed semantic Components have no physical delete action.
-- Axes and removable Line, Scatter, and free Text Components use the same
+- Axes and removable Line, Scatter, FIELD_2D, and free Text Components use the same
   Canvas `DeletionCoordinator` entry.
 - `Batch Delete Same Type...` includes only removable siblings with the same
   `parent_id`, kind, role, and `REMOVE` policy. Search changes only what is

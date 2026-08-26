@@ -1,9 +1,9 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 15. One file contains one
+MyGUI project files use strict JSON schema version 16. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v15, strictly validated integer v14 for direct
-in-memory migration, integer v13 through v14, integer v12 through v13/v14, integer v11 through v12–v14, and
+The loader accepts exact integer v16, strictly validated integer v15 for direct
+in-memory migration, integer v14 through v15, integer v13 through v14/v15, integer v12 through v13–v15, integer v11 through v12–v15, and
 integer v10 through every intervening version. Schema v4-v9, non-integer values, and unknown versions are rejected before
 application state is published.
 
@@ -12,7 +12,7 @@ application state is published.
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 15,
+  "schema_version": 16,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -23,7 +23,7 @@ application state is published.
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `15`.
+- Newly saved `schema_version` is always the integer `16`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -66,7 +66,7 @@ Every entry in `figure.components` has exactly these fields:
 - `kind`: controlled component family.
 - `role`: controlled specialization valid for the selected `kind`.
 - `parent_id`: parent component ID, or JSON `null` only for the Figure root.
-- `order`: non-negative sibling/runtime ordering value. Chart component orders are unique across Line and Scatter records so color sequencing remains stable.
+- `order`: non-negative sibling/runtime ordering value. Chart component orders are unique across Line, Scatter, and FIELD_2D records so color sequencing remains stable. FIELD_2D charts participate in that order but do not consume the Axes color cycle.
 - `selector`: semantic identity used to resolve dynamic Matplotlib objects. Examples are `{"index": 0}` for an Axes, `{"axis": "x", "level": "major"}` for an axis group, and `{"object_id": "..."}` for a stable artist.
 - `properties`: visual and editable state using Controller property names.
 - `data`: non-visual, role-specific source data.
@@ -86,6 +86,7 @@ The controlled kind/role combinations are:
 | `legend` | `legend` |
 | `line` | `line`, `function_curve`, `data_plot`, `fit_curve`, `interpolation` |
 | `scatter` | `scatter` |
+| `field_2d` | `pseudocolor`, `heatmap`, `contour` |
 | `reference_marks` | `reflection_positions` |
 | `reference_guide` | `reference_line`, `reference_band` |
 | `colorbar` | `colorbar` |
@@ -134,7 +135,7 @@ component wire shape.
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. See [Component Properties (schema v15)](component-properties-v15.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v16)](component-properties-v16.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -144,6 +145,9 @@ Role-specific `data` fields are:
 | `function_curve` | `expression`, `x_start`, `x_stop` |
 | `data_plot` | `x_ref`, `y_ref`, `preprocess` |
 | `scatter` | `x_ref`, `y_ref`, optional `color_ref`, optional `size_ref`, `preprocess` |
+| `pseudocolor` | `x_ref`, `y_ref`, `z_ref` |
+| `heatmap` | `x_ref`, `y_ref`, `z_ref` |
+| `contour` | `x_ref`, `y_ref`, `z_ref` |
 | `reflection_positions` | ordered finite manual `positions`, nullable Number-column `position_ref`, and tagged `placement`; empty cells are skipped, duplicates remain valid |
 | `reference_line` | exactly `{}`; constant geometry is owned by `properties` |
 | `reference_band` | exactly `{}`; constant geometry is owned by `properties` |
@@ -221,20 +225,22 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v15.
+snapshot only and does not change schema v16.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v15 save/open round trip. Strict v14 input is
-validated completely and migrated in memory to v15. Strict v13 input is
-validated completely, deep-copied, and advanced through v14 to v15. Tick Label
+unchanged across every schema-v16 save/open round trip. Strict v15 input is
+validated completely and migrated in memory to v16 by advancing the version
+only. Strict v14 input is validated completely and migrated in memory through
+v15 to v16. Strict v13 input is
+validated completely, deep-copied, and advanced through v14 and v15 to v16. Tick Label
 `fontfamily` string values remain unchanged; non-empty string lists become only
 their first string. No other component or Table field is rewritten. Strict v12
-input migrates through v13 and v14 to v15, strict v11 through v12–v14, and
+input migrates through v13–v15 to v16, strict v11 through v12–v15, and
 strict v10 through every intervening version. v10 cannot
-contain Colorbar; v10/v11 cannot contain Reference Marks; and v10-v12 cannot
-contain Reference Guides. Malformed predecessors and versions v4 through v9
+contain Colorbar; v10/v11 cannot contain Reference Marks; v10-v12 cannot
+contain Reference Guides; and v10–v15 cannot contain FIELD_2D. Malformed predecessors and versions v4 through v9
 are rejected before Table or Figure state is published.
 
 After validation, restore enters `PyFigureCanvas.restore_component_tree` on
@@ -287,15 +293,15 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v15.
+are not added to schema v16.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v15 project stays clean through those UI-only interactions, and a
+schema-v16 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export
 
-- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v15.
+- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v16.
 - 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
 - PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

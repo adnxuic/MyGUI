@@ -38,7 +38,7 @@ from mygui.figuremodify.components import ComponentRole
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from main import MainWindow
-from tests.schema_helpers import as_schema_v14
+from tests.schema_helpers import as_schema_v14, as_schema_v15
 
 
 class ProjectIoTests(unittest.TestCase):
@@ -349,9 +349,12 @@ class ProjectIoTests(unittest.TestCase):
         schema_v14 = as_schema_v14(valid)
         self.path.write_text(json.dumps(schema_v14), encoding="utf-8")
         self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
+        schema_v15 = as_schema_v15(valid)
+        self.path.write_text(json.dumps(schema_v15), encoding="utf-8")
+        self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
         for version in (
-            3, 4, 5, 6, 7, 8, 9, 16, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            "10", "11", "12", "13", "14", "15", True, None,
+            3, 4, 5, 6, 7, 8, 9, 17, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+            "10", "11", "12", "13", "14", "15", "16", True, None,
         ):
             with self.subTest(version=version):
                 candidate = dict(valid)

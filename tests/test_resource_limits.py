@@ -88,6 +88,12 @@ class ResourceLimitTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "byte budget"):
                     embedded_image_data(path)
 
+    def test_field_grid_cell_budget_is_bounded(self):
+        limits = load_resource_limits({"MYGUI_MAX_FIELD_GRID_CELLS": "16"})
+        self.assertEqual(limits.max_field_grid_cells, 16)
+        with self.assertRaisesRegex(ValueError, "between"):
+            load_resource_limits({"MYGUI_MAX_FIELD_GRID_CELLS": "10000001"})
+
     def test_excel_zip_and_cell_budgets_are_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "data.xlsx"

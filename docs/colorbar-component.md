@@ -1,26 +1,29 @@
 # Colorbar Component
 
 Colorbar is a first-class persisted Element. It belongs to its owner Axes in
-the Components tree and references one scalar-mapped Scatter by stable
-Component ID:
+the Components tree and references one scalar-mapped Scatter or FIELD_2D
+chart (Pseudocolor, Heatmap, or Contour) by stable Component ID:
 
 ```text
 Axes
-├── Scatter
+├── Scatter or FIELD_2D
 └── Colorbars
     └── Colorbar — <source id preview>
 ```
 
 The Colorbar does not own a colormap, normalization, limits, or scalar data.
-Those remain authoritative in the source Scatter's `ScatterColorMapSpec` and
-`color_ref`. The first release supports only `scatter/scatter` sources with
-scalar color mapping enabled, a valid numeric `color_ref`, and an active
-Matplotlib `ScalarMappable`. One source may have at most one Colorbar.
+Those remain authoritative in the source Scatter `ScatterColorMapSpec` and
+`color_ref`, or in the FIELD_2D `ColorMapSpec` and Z grid. Eligible sources
+are `scatter/scatter` with scalar color mapping enabled, a valid numeric
+`color_ref`, and an active Matplotlib `ScalarMappable`, or a drawable
+`field_2d` Pseudocolor, Heatmap, or Contour. Empty FIELD_2D components keep
+an internal ScalarMappable so an existing Colorbar can refresh, but they
+cannot receive a new Colorbar. One source may have at most one Colorbar.
 
 ## Create a Colorbar
 
 Select the owner Axes, choose **Add Element → Colorbar...**, then select an
-eligible Scatter and its initial placement. The dialog lists only valid
+eligible Scatter or FIELD_2D source and its initial placement. The dialog lists only valid
 sources under that Axes that do not already have a Colorbar. If the list is
 empty, the OK button is disabled and the Message Bar reports a warning.
 
@@ -37,7 +40,7 @@ is the only Colorbar `data` field; all other rows are `properties` fields.
 
 | Section / field | Control | Meaning | Values and default | Persisted key |
 | --- | --- | --- | --- | --- |
-| Source | Read-only summary | Stable Scatter dependency and ownership reminder. | Selected at creation; cannot be rebound in this release. | `data.source_component_id` |
+| Source | Read-only summary | Stable Scatter or FIELD_2D dependency and ownership reminder. | Selected at creation; cannot be rebound in this release. | `data.source_component_id` |
 | Placement / Location | Choice | Side of the owner Axes; orientation is derived and is not persisted separately. See [`Figure.colorbar`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.figure.Figure.colorbar.html). | `left`, `right` (default), `top`, `bottom` | `properties.location` |
 | Placement / Fraction | Number | Fraction of the original Axes reserved for the Colorbar. See [`Figure.colorbar`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.figure.Figure.colorbar.html). | `0.001`–`1`; default `0.15` | `properties.fraction` |
 | Placement / Shrink | Number | Scale factor applied to Colorbar length. See [`Figure.colorbar`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.figure.Figure.colorbar.html). | `0.001`–`1`; default `1` | `properties.shrink` |
@@ -66,24 +69,25 @@ owner geometry/anchor, selection, and state without publishing an event.
 
 ## Source refresh and deletion
 
-Changes to Scatter scalar colors, colormap, normalization, or table data update
+Changes to Scatter scalar colors, colormap, normalization, or table data, and
+changes to FIELD_2D colormap or XYZ grids, update
 the existing Colorbar through `ColorbarService`; the Colorbar state does not
-copy those values. Scalar color mapping cannot be disabled while a dependent
+copy those values. Scatter scalar color mapping cannot be disabled while a dependent
 Colorbar exists. Delete the Colorbar first.
 
-- Deleting a Colorbar preserves its source Scatter.
-- Deleting the source Scatter plans and removes its Colorbar in the same
+- Deleting a Colorbar preserves its source chart.
+- Deleting the source Scatter or FIELD_2D component plans and removes its Colorbar in the same
   `DeletionCoordinator` transaction.
 - Deleting the owner Axes removes the Colorbar and its auxiliary Axes with the
   complete Axes subtree.
 
 ## Persistence
 
-Schema v15 stores Colorbar with the standard eight-field `ComponentState`
+Schema v16 stores Colorbar with the standard eight-field `ComponentState`
 record, owner Axes `parent_id`, `selector.object_id`, complete properties, and
-`data.source_component_id`. Restore materializes ordinary charts and Scatter
-sources before the later Colorbar phase. Missing, wrong-kind, cross-Axes,
-mapping-disabled, or duplicate source relationships are rejected before the
+`data.source_component_id`. Restore materializes ordinary charts, Scatter, and
+FIELD_2D sources before the later Colorbar phase. Missing, wrong-kind, cross-Axes,
+mapping-disabled, empty FIELD_2D, or duplicate source relationships are rejected before the
 project tab is published.
 
 ## Referenced Matplotlib 3.9.0 pages

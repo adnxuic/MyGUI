@@ -1,7 +1,8 @@
 # Component Properties (schema v14)
 
-Schema v14 is retained as the strict immediate migration source for current
-[schema v15](component-properties-v15.md) files. New saves no longer emit v14.
+Schema v14 is retained as a chained migration source toward current
+[schema v16](component-properties-v16.md) files through
+[schema v15](component-properties-v15.md). New saves no longer emit v14.
 
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
@@ -102,4 +103,4 @@ See [Project Files](project-files.md) for the file graph and restore order, and
 [Component Controllers](component-controllers.md) for runtime mutation and
 rollback contracts. [Component Properties (schema v13)](component-properties-v13.md)
 documents the previous migration source. Current saves use
-[Component Properties (schema v15)](component-properties-v15.md).
+[Component Properties (schema v16)](component-properties-v16.md).

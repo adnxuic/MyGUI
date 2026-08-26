@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -18,7 +19,9 @@ from PySide6.QtWidgets import (
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 from mygui.widgets.fig_control_window.component_editors import (
+    ColorMapSpecEditor,
     DataReferenceInput,
+    Field2DDataReferenceInput,
     InterpolationOptionsInput,
     LineAppearanceInput,
     MultiSeriesDataReferenceInput,
@@ -31,6 +34,13 @@ from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
     resolve_preprocessed_pair,
+)
+from mygui.figuremodify.components import ComponentRole
+from mygui.figuremodify.component_services import default_field_2d_properties
+from mygui.figuremodify.matplotlib_adapter import (
+    CONTOUR_MODE_CHOICES,
+    IMAGE_INTERPOLATION_CHOICES,
+    PSEUDOCOLOR_SHADING_CHOICES,
 )
 from mygui.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
@@ -813,10 +823,167 @@ class PyInterpolationDialog(QDialog):
         super().closeEvent(event)
 
 
+class _Field2DDialog(QDialog):
+    """Shared XYZ, colormap, and role-option dialog for FIELD_2D charts."""
+
+    ROLE = ComponentRole.PSEUDOCOLOR
+    DISPLAY_NAME = "Pseudocolor"
+    ICON_NAME = "pseudocolor"
+    ADDER_NAME = "add_pseudocolor"
+
+    def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("chart_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
+        self.setWindowTitle(dialog_name or self.DISPLAY_NAME)
+        self.setWindowIcon(QIcon(icon_path(f"chart_images/{self.ICON_NAME}.svg")))
+        self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+        style = canvas.component_style if canvas is not None else None
+        self._defaults = default_field_2d_properties(self.ROLE, style)
+        layout = QVBoxLayout(self)
+        self.data_reference_input = Field2DDataReferenceInput(
+            figure_window.repository,
+            canvas.project_id if canvas is not None else None,
+            parent=self,
+        )
+        layout.addWidget(self.data_reference_input)
+        self.colormap_input = ColorMapSpecEditor(
+            self._defaults["colormap"],
+            color_library=figure_window.color_library,
+            parent=self,
+        )
+        layout.addWidget(QLabel("Colormap:"))
+        layout.addWidget(self.colormap_input)
+        self._options = QFrame(self)
+        self._options_form = QFormLayout(self._options)
+        self._options_form.setContentsMargins(0, 0, 0, 0)
+        self._populate_role_options()
+        layout.addWidget(self._options)
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(self.ok_button)
+        buttons.addWidget(self.cancel_button)
+        layout.addLayout(buttons)
+        self.setLayout(layout)
+
+    def _populate_role_options(self) -> None:
+        return
+
+    def _role_properties(self) -> dict:
+        return {"colormap": self.colormap_input.value()}
+
+    def accept(self):
+        canvas = getattr(self.figure_window, "current_canva", None)
+        if canvas is None or canvas.current_axes is None:
+            QMessageBox.warning(
+                self,
+                f"Could not create {self.DISPLAY_NAME}",
+                f"Select an Axes before creating a {self.DISPLAY_NAME}.",
+            )
+            return
+        x_ref = self.data_reference_input.get_x_ref()
+        y_ref = self.data_reference_input.get_y_ref()
+        z_ref = self.data_reference_input.get_z_ref()
+        if x_ref is None or y_ref is None or z_ref is None:
+            QMessageBox.warning(
+                self,
+                f"Could not create {self.DISPLAY_NAME}",
+                "Please select numeric X, Y, and Z columns from the same worksheet.",
+            )
+            return
+        adder = getattr(canvas, self.ADDER_NAME)
+        try:
+            adder(x_ref, y_ref, z_ref, self._role_properties())
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                f"Could not create {self.DISPLAY_NAME}",
+                str(exc),
+            )
+            return
+        self.data_reference_input.dispose()
+        super().accept()
+
+    def reject(self):
+        self.data_reference_input.dispose()
+        super().reject()
+
+    def closeEvent(self, event):
+        self.data_reference_input.dispose()
+        super().closeEvent(event)
+
+
+class PyPseudocolorDialog(_Field2DDialog):
+    ROLE = ComponentRole.PSEUDOCOLOR
+    DISPLAY_NAME = "Pseudocolor"
+    ICON_NAME = "pseudocolor"
+    ADDER_NAME = "add_pseudocolor"
+
+    def _populate_role_options(self) -> None:
+        self.shading_input = QComboBox(self._options)
+        self.shading_input.addItems(PSEUDOCOLOR_SHADING_CHOICES)
+        self.shading_input.setCurrentText(str(self._defaults["shading"]))
+        self._options_form.addRow("Shading:", self.shading_input)
+
+    def _role_properties(self) -> dict:
+        properties = super()._role_properties()
+        properties["shading"] = self.shading_input.currentText()
+        return properties
+
+
+class PyHeatmapDialog(_Field2DDialog):
+    ROLE = ComponentRole.HEATMAP
+    DISPLAY_NAME = "Heatmap"
+    ICON_NAME = "heatmap"
+    ADDER_NAME = "add_heatmap"
+
+    def _populate_role_options(self) -> None:
+        self.interpolation_input = QComboBox(self._options)
+        self.interpolation_input.addItems(IMAGE_INTERPOLATION_CHOICES)
+        self.interpolation_input.setCurrentText(
+            str(self._defaults["interpolation"])
+        )
+        self._options_form.addRow("Interpolation:", self.interpolation_input)
+
+    def _role_properties(self) -> dict:
+        properties = super()._role_properties()
+        properties["interpolation"] = self.interpolation_input.currentText()
+        return properties
+
+
+class PyContourDialog(_Field2DDialog):
+    ROLE = ComponentRole.CONTOUR
+    DISPLAY_NAME = "Contour"
+    ICON_NAME = "contour"
+    ADDER_NAME = "add_contour"
+
+    def _populate_role_options(self) -> None:
+        self.mode_input = QComboBox(self._options)
+        self.mode_input.addItems(CONTOUR_MODE_CHOICES)
+        self.mode_input.setCurrentText(str(self._defaults["mode"]))
+        self._options_form.addRow("Mode:", self.mode_input)
+
+    def _role_properties(self) -> dict:
+        properties = super()._role_properties()
+        properties["mode"] = self.mode_input.currentText()
+        return properties
+
+
 chart_dialog_dict = {
     'curve': PyCurveDialog,
     'plot': PyPlotDialog,
     'scatter': PyScatterDialog,
+    'pseudocolor': PyPseudocolorDialog,
+    'heatmap': PyHeatmapDialog,
+    'contour': PyContourDialog,
     'fit': PyFitDialog,
     'interpolation': PyInterpolationDialog
 }

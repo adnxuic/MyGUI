@@ -26,6 +26,7 @@ from mygui.database.safe_expression import (
 from mygui.figuremodify.components import (
     ChangeStatus,
     ComponentChange,
+    ComponentKind,
     ComponentMutation,
     ComponentRegistry,
     ComponentRole,
@@ -386,6 +387,8 @@ class ChartDataService:
                         results.append(
                             self.interpolation_service.refresh(controller)
                         )
+                    continue
+                if controller.state.kind is ComponentKind.FIELD_2D:
                     continue
                 results.append(self.refresh(controller))
         return results

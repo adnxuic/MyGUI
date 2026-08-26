@@ -1,5 +1,8 @@
 # Component Properties (schema v15)
 
+Schema v15 is retained as the strict immediate migration source for current
+[schema v16](component-properties-v16.md) files. New saves no longer emit v15.
+
 MyGUI targets Matplotlib 3.9.0. Every production `(ComponentKind,
 ComponentRole)` has one Controller and one exact Inspector profile. Persistent
 properties are edited only through Controllers or domain Services, and every
@@ -40,6 +43,9 @@ colormap, norm, limits, and scalar data. Reference Marks owns the merged
 own their complete constant geometry in `properties` and keep `data` empty.
 Runtime Artists are never authoritative.
 
+FIELD_2D (Pseudocolor, Heatmap, Contour) records are not part of schema v15
+and are rejected by the v15 validator.
+
 Minor Tick, Tick Label, and Grid visibility remains owned by those semantic
 components. When visible minor output is requested and the owning Axis has a
 null minor locator, one Controller transaction installs the Matplotlib 3.9
@@ -51,7 +57,7 @@ pinned Matplotlib links are in [Reference Guides](reference-guides-component.md)
 Reference Marks fields are in
 [Reference Marks Component](reference-marks-component.md). Colorbar fields are
 in [Colorbar Component](colorbar-component.md). Modular component fields across
-all 27 profiles are documented in [Figure](editing-components/fixed-semantics/figure.md),
+the 27 v15 profiles are documented in [Figure](editing-components/fixed-semantics/figure.md),
 [Axes](editing-components/fixed-semantics/axes.md), and child component guides.
 
 ## Closed tagged values
@@ -76,14 +82,9 @@ project state.
 
 ## Schema v15 and migration
 
-Saving writes exact integer `schema_version: 15`. Schema v15 requires:
-
-- every Axes `properties.y_lower_reserve` to be a finite number
-  `0 <= value < 0.9`;
-- every Reference Marks `data` object to contain exactly `positions`, a
-  nullable `position_ref` Number-column reference in the current project, and
-  tagged `placement` (`{"kind": "fixed"}` or
-  `{"kind": "between_table_ranges", "lower_ref": ColumnRef, "upper_refs": [ColumnRef, ColumnRef]}`).
+Schema v15 is no longer written by the saver. Exact integer v15 input is
+validated completely, deep-copied, and advanced to 16 without rewriting
+component records. FIELD_2D records are not accepted in v15.
 
 Loading exact integer v14 first runs the independent strict v14 root, Table,
 component-graph, and property validator, including the v14 Reference Marks
@@ -93,16 +94,15 @@ Marks record receives `position_ref: null` and `placement: {"kind": "fixed"}`,
 and every Axes record receives
 `y_lower_reserve: 0.0`. Old projects are not inferred as XRD plots; IDs,
 order, hierarchy, ranges, and rendering stay unchanged. The root version then
-advances to 15 and the complete v15 snapshot is validated before any Table or
-Figure is published.
+advances to 15 and the complete v15 snapshot is validated before the v15-to-v16
+version bump.
 
 Exact integer v13 migrates through v14 to v15, v12 through v13/v14, v11
-through v12–v14, and v10 through every intervening version. Versions v4-v9,
-booleans, floats, strings, and unknown versions remain unsupported.
+through v12–v14, and v10 through every intervening version, then to v16.
+Versions v4-v9, booleans, floats, strings, and unknown versions remain
+unsupported.
 
-See [Project Files](project-files.md) for the file graph and restore order, and
-[Component Controllers](component-controllers.md) for runtime mutation,
-module layout, and rollback contracts. Parameter tables live under
-[Editing Components](components-tree.md).
+See [Project Files](project-files.md) and
+[Component Properties (schema v16)](component-properties-v16.md).
 [Component Properties (schema v14)](component-properties-v14.md)
-documents the immediate migration source.
+documents the previous migration source.

@@ -29,6 +29,7 @@ class ComponentKind(str, Enum):
     LEGEND = "legend"
     LINE = "line"
     SCATTER = "scatter"
+    FIELD_2D = "field_2d"
     COLORBAR = "colorbar"
     IN_AXES = "in_axes"
     REFERENCE_MARKS = "reference_marks"
@@ -59,6 +60,9 @@ class ComponentRole(str, Enum):
     FIT_CURVE = "fit_curve"
     INTERPOLATION = "interpolation"
     SCATTER = "scatter"
+    PSEUDOCOLOR = "pseudocolor"
+    HEATMAP = "heatmap"
+    CONTOUR = "contour"
     COLORBAR = "colorbar"
     IN_AXES_ZOOM = "in_axes_zoom"
     IN_AXES_IMAGE = "in_axes_image"
@@ -121,6 +125,10 @@ class EditorKind(StrEnum):
     CONNECTORS = "connectors"
     SCATTER_COLOR_MAP = "scatter_color_map"
     SCATTER_SIZE_MAP = "scatter_size_map"
+    COLOR_MAP_SPEC = "color_map_spec"
+    GRID_EDGE_SPEC = "grid_edge_spec"
+    CONTOUR_LEVELS_SPEC = "contour_levels_spec"
+    CONTOUR_LABEL_SPEC = "contour_label_spec"
     JSON = "json"
 
     @classmethod
@@ -178,6 +186,13 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
         }
     ),
     ComponentKind.SCATTER: frozenset({ComponentRole.SCATTER}),
+    ComponentKind.FIELD_2D: frozenset(
+        {
+            ComponentRole.PSEUDOCOLOR,
+            ComponentRole.HEATMAP,
+            ComponentRole.CONTOUR,
+        }
+    ),
     ComponentKind.COLORBAR: frozenset({ComponentRole.COLORBAR}),
     ComponentKind.IN_AXES: frozenset(
         {
@@ -277,6 +292,16 @@ class ScatterData:
     y: Any
     colors: Any = None
     sizes: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class Field2DData:
+    """Transient gridded Z values used by FIELD_2D transactions."""
+
+    x: Any
+    y: Any
+    z: Any
+    empty: bool = False
 
 
 @dataclass(frozen=True, slots=True)

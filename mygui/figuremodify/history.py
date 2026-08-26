@@ -31,6 +31,7 @@ from mygui.figuremodify.components import (
     ComponentState,
     FitCurveController,
     FunctionCurveController,
+    Field2DController,
     InterpolationController,
     LegendController,
     ScatterController,
@@ -651,6 +652,22 @@ class FigureHistoryService:
                 size_mapping=state.properties["size_mapping"],
             )
             self._require_result(result, "Could not restore Scatter mapping.")
+        elif isinstance(controller, Field2DController):
+            data = state.data
+            if current.data != state.data:
+                result = self.canvas.field_2d_service.set_refs(
+                    controller,
+                    data["x_ref"],
+                    data["y_ref"],
+                    data["z_ref"],
+                )
+                self._require_result(result, "Could not restore FIELD_2D data.")
+            if current.properties != state.properties:
+                result = self.canvas.field_2d_service.apply_properties(
+                    controller,
+                    state.properties,
+                )
+                self._require_result(result, "Could not restore FIELD_2D properties.")
         elif state.role is ComponentRole.DATA_PLOT:
             data = state.data
             result = self.canvas.chart_data_service.set_refs(

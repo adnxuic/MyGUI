@@ -31,6 +31,7 @@ class ResourceLimits:
     max_prf_reflections: int = 1_000_000
     max_external_input_bytes: int = 16 * _MIB
     max_external_output_bytes: int = 8 * _MIB
+    max_field_grid_cells: int = 2_000_000
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -58,6 +59,7 @@ _HARD_CAPS = ResourceLimits(
     max_prf_reflections=5_000_000,
     max_external_input_bytes=64 * _MIB,
     max_external_output_bytes=32 * _MIB,
+    max_field_grid_cells=10_000_000,
 )
 
 

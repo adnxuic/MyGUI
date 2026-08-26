@@ -12,6 +12,7 @@ from .property import (
 
 from .data import (
     DataReferenceSection,
+    Field2DDataSection,
     RawXYDataSection,
     ReferenceMarksDataSection,
     ScatterMappingSection,
@@ -53,6 +54,7 @@ __all__ = [
     "PropertySection",
     "ReferenceMarksPositionSection",
     "DataReferenceSection",
+    "Field2DDataSection",
     "RawXYDataSection",
     "ReferenceMarksDataSection",
     "ScatterMappingSection",

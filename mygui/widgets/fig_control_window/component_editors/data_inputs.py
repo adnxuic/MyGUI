@@ -796,3 +796,160 @@ class MultiSeriesDataReferenceInput(QFrame):
 
         self.dispose()
         super().closeEvent(event)
+
+
+class Field2DDataReferenceInput(QFrame):
+    """Controller-free same-sheet numeric X/Y/Z selector for FIELD_2D."""
+
+    refsChanged = Signal(object, object, object)
+
+    def __init__(
+        self,
+        repository: TableRepository,
+        project_id: str | None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.repository = repository
+        self.project_id = project_id
+        self._disposed = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.x_data_input = QComboBox(self)
+        self.y_data_input = QComboBox(self)
+        self.z_data_input = QComboBox(self)
+        x_row = QHBoxLayout()
+        y_row = QHBoxLayout()
+        z_row = QHBoxLayout()
+        x_row.addWidget(QLabel("X Data:", self))
+        x_row.addWidget(self.x_data_input)
+        y_row.addWidget(QLabel("Y Data:", self))
+        y_row.addWidget(self.y_data_input)
+        z_row.addWidget(QLabel("Z Data:", self))
+        z_row.addWidget(self.z_data_input)
+        layout.addLayout(x_row)
+        layout.addLayout(y_row)
+        layout.addLayout(z_row)
+        self.repository.transaction_committed.connect(self._repository_changed)
+        self.x_data_input.currentIndexChanged.connect(self._emit_refs_changed)
+        self.y_data_input.currentIndexChanged.connect(self._emit_refs_changed)
+        self.z_data_input.currentIndexChanged.connect(self._emit_refs_changed)
+        self.update_data()
+
+    def _repository_changed(self, changes: TableChangeSet) -> None:
+        if self._disposed:
+            return
+        if (
+            self.project_id is not None
+            and self.project_id not in self.repository.projects
+        ):
+            self.dispose()
+            return
+        if (
+            self.project_id is not None
+            and changes.project_id == self.project_id
+            and (changes.metadata_changed or changes.structure_changed)
+        ):
+            self.update_data()
+
+    @staticmethod
+    def _current_ref(combo: QComboBox) -> ColumnRef | None:
+        value = combo.currentData(Qt.UserRole)
+        return value if isinstance(value, ColumnRef) else None
+
+    def update_data(self) -> None:
+        """Refresh numeric column choices while preserving the current refs."""
+
+        current = (self.get_x_ref(), self.get_y_ref(), self.get_z_ref())
+        if self.project_id is None:
+            refs: list[ColumnRef] = []
+        else:
+            refs = list(
+                self.repository.iter_column_refs(
+                    self.project_id,
+                    {ColumnType.NUMBER},
+                )
+            )
+        sheet_id = None
+        if current[0] is not None:
+            sheet_id = current[0].sheet_id
+        filtered = [
+            ref for ref in refs if sheet_id is None or ref.sheet_id == sheet_id
+        ] or refs
+        for combo, selected in (
+            (self.x_data_input, current[0]),
+            (self.y_data_input, current[1]),
+            (self.z_data_input, current[2]),
+        ):
+            self._populate(combo, filtered, selected)
+
+    def _populate(
+        self,
+        combo: QComboBox,
+        refs: list[ColumnRef],
+        current: ColumnRef | None,
+    ) -> None:
+        blocker = QSignalBlocker(combo)
+        combo.clear()
+        for ref in refs:
+            combo.addItem(self.repository.ref_label(ref), ref)
+        if current is not None:
+            for index in range(combo.count()):
+                if combo.itemData(index, Qt.UserRole) == current:
+                    combo.setCurrentIndex(index)
+                    break
+        del blocker
+
+    def get_x_ref(self) -> ColumnRef | None:
+        return self._current_ref(self.x_data_input)
+
+    def get_y_ref(self) -> ColumnRef | None:
+        return self._current_ref(self.y_data_input)
+
+    def get_z_ref(self) -> ColumnRef | None:
+        return self._current_ref(self.z_data_input)
+
+    def set_refs(
+        self,
+        x_ref: ColumnRef | None,
+        y_ref: ColumnRef | None,
+        z_ref: ColumnRef | None,
+    ) -> None:
+        """Synchronize all three selectors without emitting edits."""
+
+        blockers = [
+            QSignalBlocker(self.x_data_input),
+            QSignalBlocker(self.y_data_input),
+            QSignalBlocker(self.z_data_input),
+        ]
+        self.update_data()
+        for combo, ref in (
+            (self.x_data_input, x_ref),
+            (self.y_data_input, y_ref),
+            (self.z_data_input, z_ref),
+        ):
+            if ref is None:
+                continue
+            for index in range(combo.count()):
+                if combo.itemData(index, Qt.UserRole) == ref:
+                    combo.setCurrentIndex(index)
+                    break
+        del blockers
+
+    def _emit_refs_changed(self, *_args) -> None:
+        self.refsChanged.emit(self.get_x_ref(), self.get_y_ref(), self.get_z_ref())
+
+    def refs_connect(self, handler) -> None:
+        self.refsChanged.connect(handler)
+
+    def dispose(self) -> None:
+        if self._disposed:
+            return
+        self._disposed = True
+        try:
+            self.repository.transaction_committed.disconnect(
+                self._repository_changed
+            )
+        except (RuntimeError, TypeError):
+            pass
+

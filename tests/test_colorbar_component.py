@@ -676,7 +676,7 @@ class ColorbarProjectTests(ColorbarRuntimeTests):
                         for item in snapshot["figure"]["components"]
                         if item["id"] == controller.component_id
                     )["data"].update(source_component_id="missing"),
-                    "expected a Scatter component id",
+                    "expected a Scatter or FIELD_2D component id",
                 ),
                 (
                     lambda snapshot: next(
@@ -698,7 +698,7 @@ class ColorbarProjectTests(ColorbarRuntimeTests):
                             if item["kind"] == "axes"
                         )
                     ),
-                    "expected a Scatter component id",
+                    "expected a Scatter or FIELD_2D component id",
                 ),
             ):
                 candidate = deepcopy(valid)

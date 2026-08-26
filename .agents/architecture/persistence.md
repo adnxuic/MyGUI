@@ -6,10 +6,12 @@ restart.
 
 ## Schema authority
 
-MyGUI saves and validates exact integer schema version 15. Component business
-state is the schema-v15 tree; profile selection, Section expansion, QWidget
+MyGUI saves and validates exact integer schema version 16. Component business
+state is the schema-v16 tree; profile selection, Section expansion, QWidget
 state, callbacks, typed tree projection keys, and other UI-only data are
-excluded. Strictly valid schema-v14 files migrate in memory to v15; strictly
+excluded. Strictly valid schema-v15 files migrate in memory to v16 by
+advancing the version only; strictly valid schema-v14 files migrate through
+v15 to v16; strictly
 valid schema-v13, schema-v12, schema-v11, and schema-v10 files migrate through every intervening version
 before any Table or Figure state is published; v4-v9 remain unsupported.
 Closed composite contracts reject unknown keys, non-finite values, invalid
@@ -66,7 +68,7 @@ Replay is recording-suspended and uses Controllers, domain Services,
 `DeletionCoordinator`, `AxesLayoutService`, and the declared component
 materializers. Structural replay restores original IDs and dependency order.
 After coalesced Matplotlib updates flush, replay performs one authoritative
-reconciliation pass before validating the Registry tree and schema-v15
+reconciliation pass before validating the Registry tree and schema-v16
 snapshot. A replay failure compensates toward the previous proven state,
 emits one error, and clears the uncertain history cursor. Project restore,
 table-dependency refresh, and command replay must never create nested commands.
@@ -79,6 +81,6 @@ load/save fingerprint, so undoing exactly to that state becomes clean.
 ## Project documentation
 
 Persisted changes update `docs/project-files.md`, the relevant parameter page,
-and `docs/component-properties-v15.md` (or its successor) in the same change.
+and `docs/component-properties-v16.md` (or its successor) in the same change.
 Keep migration plans and future formats out of user documentation until they
 are current behavior.

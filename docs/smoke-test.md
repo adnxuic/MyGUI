@@ -7,7 +7,7 @@ Run these checks from the repository root after GUI-facing changes.
 A code-driven Windows walk opens the real MainWindow and exercises **Settings
 Center plus NEXT_USE creation defaults only** (Components and Axes
 Components). It writes PNG evidence plus `summary.json`. It does **not**
-replace the interactive checks below, and it does not walk galleries, the 27
+replace the interactive checks below, and it does not walk galleries, the 30
 Inspectors, XRD, the table, Canvas popout, TeX/MATLAB Connect, or export
 encoding. Offscreen Qt tests still do not cover DPI, native file dialogs, drag
 and drop, or live TeX/MATLAB.
@@ -102,6 +102,11 @@ For a 6.4 x 4.8 inch, 100 DPI test figure, a default PNG export must be 640 x 48
    reciprocal-X data is drawn. Enter an unsafe or malformed expression and
    confirm all four source/formula controls and the artist roll back with one
    red result. Include X = 0 and confirm one yellow filtered-row warning.
+7a. Create Pseudocolor, Heatmap, and Contour from the same numeric X, Y, and Z
+   columns on one sheet. Confirm each gets its own Inspector profile, does not
+   take a color-cycle swatch, and can receive a Colorbar. Duplicate an (X, Y)
+   pair and confirm the create action rolls back. Save, close, and reopen;
+   confirm the three charts and any Colorbar restore.
 8. Create interpolation curves from one shared X and multiple Y columns,
    change their shared method and `Samples`, and confirm each resulting curve
    redraws independently. Include one Y column that cannot satisfy the method

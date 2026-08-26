@@ -466,9 +466,16 @@ class SheetDocument:
         if count <= self.row_count:
             return
         add_count = count - self.row_count
-        for column in self.columns:
-            padding = self._blank_series(column.type, add_count)
-            self.frame[column.id] = pd.concat([self.frame[column.id], padding], ignore_index=True)
+        if self.columns:
+            padding = pd.DataFrame(
+                {
+                    column.id: self._blank_series(column.type, add_count)
+                    for column in self.columns
+                }
+            )
+            self.frame = pd.concat([self.frame, padding], ignore_index=True)
+        else:
+            self.frame = pd.DataFrame(index=range(count))
         self.row_count = count
 
     def truncate_rows(self, count: int) -> None:

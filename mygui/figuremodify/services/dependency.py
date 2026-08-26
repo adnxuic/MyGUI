@@ -56,7 +56,7 @@ class ComponentDependencyService:
     @staticmethod
     def _refs(state: ComponentState) -> set[ColumnRef]:
         refs: set[ColumnRef] = set()
-        for key in ("x_ref", "y_ref", "color_ref", "size_ref", "position_ref"):
+        for key in ("x_ref", "y_ref", "z_ref", "color_ref", "size_ref", "position_ref"):
             try:
                 refs.add(_column_ref(state.data[key]))
             except (KeyError, ValueError, TypeError):

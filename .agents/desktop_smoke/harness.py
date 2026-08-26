@@ -383,3 +383,116 @@ class SmokeHarness:
             pass
         self.pump(40)
         return self.seed
+
+    def create_project(
+        self,
+        name: str = "TestProject",
+        style: str = "default",
+        width: float = 6.4,
+        height: float = 4.8,
+        dpi: int = 100,
+    ) -> Any:
+        """Create a new Figure canvas in the figure workspace."""
+        if self.window is None:
+            raise SmokeError("MainWindow is not started.")
+        figure_window = self.window.figure_window
+        figure_window.add_figure(
+            width=width,
+            height=height,
+            dpi=dpi,
+            style=style,
+            canva_name=name,
+        )
+        self.pump(80)
+        canvas = figure_window.current_canva
+        if canvas is None:
+            raise SmokeError(f"Failed to create project {name!r}.")
+        return canvas
+
+    def seed_field_2d_table(
+        self,
+        canvas: Any = None,
+        n_x: int = 5,
+        n_y: int = 5,
+    ) -> tuple[Any, Any, Any]:
+        """Populate a 2D regular grid (X, Y, Z) in the current table."""
+        from mygui.database import ColumnRef
+
+        if canvas is None:
+            canvas = self.window.figure_window.current_canva
+        subtable = self.window.table.current_subtable()
+        sheet = subtable.get_table(0).table_model.sheet
+        rows = []
+        for i in range(n_x):
+            for j in range(n_y):
+                x = float(i)
+                y = float(j)
+                z = float((i - n_x / 2.0) ** 2 + (j - n_y / 2.0) ** 2)
+                rows.append([x, y, z])
+        sheet.set_block(0, 0, rows)
+        x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+        z_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[2].id)
+        self.pump(40)
+        return x_ref, y_ref, z_ref
+
+    def seed_multi_column_table(
+        self,
+        canvas: Any = None,
+    ) -> tuple[Any, tuple[Any, ...]]:
+        """Populate a table sheet with X, Y1, Y2, Y3 columns."""
+        from mygui.database import ColumnRef
+
+        if canvas is None:
+            canvas = self.window.figure_window.current_canva
+        subtable = self.window.table.current_subtable()
+        sheet = subtable.get_table(0).table_model.sheet
+        rows = [
+            [1.0, 2.0, 5.0, 10.0],
+            [2.0, 4.0, 8.0, 14.0],
+            [3.0, 6.0, 11.0, 18.0],
+            [4.0, 8.0, 14.0, 22.0],
+            [5.0, 10.0, 17.0, 26.0],
+        ]
+        sheet.set_block(0, 0, rows)
+        x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+        y1_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+        y2_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[2].id)
+        y3_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[3].id)
+        self.pump(40)
+        return x_ref, (y1_ref, y2_ref, y3_ref)
+
+    def select_component(self, component_id: str) -> None:
+        """Select a component on the active canvas and pump the UI."""
+        canvas = self.window.figure_window.current_canva
+        if canvas is not None:
+            canvas.select_component(component_id)
+            self.pump(60)
+
+    def grab_inspector(self, name: str) -> Path:
+        """Capture screenshot of the active Inspector host."""
+        host = self.window.fig_control_window.figure_inspector_host
+        return self.grab(host, name)
+
+    def grab_canvas(self, name: str) -> Path:
+        """Capture screenshot of the active Figure canvas."""
+        canvas = self.window.figure_window.current_canva
+        return self.grab(canvas, name)
+
+    def dismiss_all_dialogs(self) -> None:
+        """Close any remaining open modal or modeless dialogs."""
+        from PySide6.QtWidgets import QDialog
+
+        app = self.app or QApplication.instance()
+        if app is None:
+            return
+        for widget in list(app.topLevelWidgets()):
+            if isinstance(widget, QDialog) and widget.isVisible():
+                try:
+                    widget.reject()
+                except Exception:
+                    try:
+                        widget.close()
+                    except Exception:
+                        pass
+        self.pump(30)

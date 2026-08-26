@@ -106,6 +106,26 @@ class ColorbarRemovalHandle:
 
 
 @dataclass(slots=True)
+class Field2DRemovalHandle:
+    """Pinned composite FIELD_2D artists for reversible removal."""
+
+    runtime: Any
+    artist_handles: tuple[RemovalHandle, ...]
+    detached: bool = False
+
+    @property
+    def subject(self) -> Axes | Figure | None:
+        if self.artist_handles:
+            return self.artist_handles[0].subject
+        axes = getattr(self.runtime, "axes", None)
+        return axes if isinstance(axes, Axes) else None
+
+    @property
+    def target(self) -> Any:
+        return self.runtime
+
+
+@dataclass(slots=True)
 class AxesSubtreeRemovalHandle:
     """Compose an owner Axes removal with external Colorbar auxiliary Axes."""
 
@@ -380,12 +400,35 @@ class MatplotlibRemovalAdapter:
             ),
         )
 
+    @staticmethod
+    def prepare_field_2d(runtime: Any) -> Field2DRemovalHandle:
+        """Capture every Axes artist owned by one FIELD_2D runtime."""
+
+        axes = getattr(runtime, "axes", None)
+        if not isinstance(axes, Axes):
+            raise ComponentValidationError(
+                "FIELD_2D runtime is not attached to an Axes."
+            )
+        artists = tuple(runtime.iter_artists())
+        handles = tuple(
+            MatplotlibRemovalAdapter.prepare_artist(artist, subject=axes)
+            for artist in artists
+        )
+        return Field2DRemovalHandle(runtime=runtime, artist_handles=handles)
+
     def commit(self, handle) -> None:
         if handle.detached:
             return
         handle.detached = True
         try:
-            if isinstance(handle, AxesSubtreeRemovalHandle):
+            if isinstance(handle, Field2DRemovalHandle):
+                try:
+                    for artist_handle in handle.artist_handles:
+                        self.commit(artist_handle)
+                except Exception:
+                    self.force_restore(handle)
+                    raise
+            elif isinstance(handle, AxesSubtreeRemovalHandle):
                 try:
                     for colorbar_handle in handle.colorbar_handles:
                         self.commit(colorbar_handle)
@@ -445,6 +488,11 @@ class MatplotlibRemovalAdapter:
 
     @staticmethod
     def force_restore(handle) -> None:
+        if isinstance(handle, Field2DRemovalHandle):
+            for artist_handle in reversed(handle.artist_handles):
+                MatplotlibRemovalAdapter.force_restore(artist_handle)
+            handle.detached = False
+            return
         if isinstance(handle, AxesSubtreeRemovalHandle):
             MatplotlibRemovalAdapter.force_restore(handle.axes_handle)
             for colorbar_handle in reversed(handle.colorbar_handles):
@@ -538,6 +586,10 @@ class MatplotlibRemovalAdapter:
 
     @staticmethod
     def finalize(handle) -> None:
+        if isinstance(handle, Field2DRemovalHandle):
+            for artist_handle in handle.artist_handles:
+                MatplotlibRemovalAdapter.finalize(artist_handle)
+            return
         if isinstance(handle, AxesSubtreeRemovalHandle):
             for colorbar_handle in handle.colorbar_handles:
                 MatplotlibRemovalAdapter.finalize(colorbar_handle)

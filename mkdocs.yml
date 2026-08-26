@@ -78,6 +78,9 @@ nav:
       - Function Curve: function-curve.md
       - Interpolation: interpolation.md
       - Fitting: fitting.md
+      - Pseudocolor: pseudocolor.md
+      - Heatmap: heatmap.md
+      - Contour: contour.md
       - In-Axes Elements: in-axes.md
       - Text Element: text-element.md
       - Reference Guides: reference-guides-component.md
@@ -121,6 +124,9 @@ nav:
                   - Fit Curves: editing-components/charts/fit-curve.md
                   - Interpolations: editing-components/charts/interpolation.md
                   - Scatters: editing-components/charts/scatter.md
+                  - Pseudocolor: editing-components/charts/pseudocolor.md
+                  - Heatmaps: editing-components/charts/heatmap.md
+                  - Contours: editing-components/charts/contour.md
               - Texts:
                   - Texts: editing-components/elements/text.md
               - Insets:
@@ -144,7 +150,8 @@ nav:
       - Component Inspector Architecture: component-inspector.md
       - Atomic Component Deletion: component-deletion.md
       - Component Extension Template: component-extension-template.md
-      - Component Properties (schema v15): component-properties-v15.md
+      - Component Properties (schema v16): component-properties-v16.md
+      - Legacy schema v15 migration properties: component-properties-v15.md
       - Legacy schema v14 migration properties: component-properties-v14.md
       - Legacy schema v13 migration properties: component-properties-v13.md
       - Legacy schema v12 migration properties: component-properties-v12.md

@@ -107,6 +107,13 @@ from .collections import (
     ScatterController,
 )
 
+from .field_2d import (
+    ContourController,
+    Field2DController,
+    HeatmapController,
+    PseudocolorController,
+)
+
 from .colorbar import (
     ColorbarController,
 )
@@ -202,6 +209,10 @@ __all__ = [
     "ReferenceLineController",
     "ReferenceBandController",
     "ScatterController",
+    "Field2DController",
+    "PseudocolorController",
+    "HeatmapController",
+    "ContourController",
     "ColorbarController",
     "CONTROLLER_TYPES",
     "validate_controller_contracts",

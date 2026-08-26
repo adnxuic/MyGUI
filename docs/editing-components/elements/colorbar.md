@@ -1,6 +1,6 @@
 # Colorbar Component
 
-The **Colorbar** component provides a visual color scale for colormapped chart series (such as Scatter plots). It owns placement, axis orientation, scalar formatting, custom locators, and bounding outline frame styling.
+The **Colorbar** component provides a visual color scale for colormapped chart series (Scatter and FIELD_2D Pseudocolor, Heatmap, and Contour). It owns placement, axis orientation, scalar formatting, custom locators, and bounding outline frame styling.
 
 For color selection and colormap configuration, see [Colorbar Component Guide](../../colorbar-component.md) and [Color Picker](../../color-picker.md).
 
@@ -8,7 +8,7 @@ For color selection and colormap configuration, see [Colorbar Component Guide](.
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
-| Source Component ID | Component chooser | Target mappable chart component (e.g. Scatter) providing the authoritative colormap and data limits. | Stable component ID | `data.source_component_id` |
+| Source Component ID | Component chooser | Target mappable chart component (Scatter or FIELD_2D) providing the authoritative colormap and data limits. | Stable component ID | `data.source_component_id` |
 
 ## Placement
 
@@ -56,7 +56,7 @@ For color selection and colormap configuration, see [Colorbar Component Guide](.
 
 ## Project record
 
-Schema v15 persists Colorbar as `kind: "colorbar"`, `role: "colorbar"`, with `selector: {"object_id": component_id}` under its parent Axes. The `data` object contains `source_component_id`.
+Schema v16 persists Colorbar as `kind: "colorbar"`, `role: "colorbar"`, with `selector: {"object_id": component_id}` under its parent Axes. The `data` object contains `source_component_id`.
 
 ## Referenced Matplotlib 3.9.0 URLs
 

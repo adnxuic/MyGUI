@@ -20,9 +20,11 @@ from mygui.figuremodify.components import (
     ComponentState,
     ComponentValidationError,
     ColorbarController,
+    Field2DController,
     ScatterController,
     UpdateImpact,
 )
+from mygui.figuremodify.field_2d_runtime import Field2DRuntime
 from mygui.figuremodify.components.matplotlib_removal import MATPLOTLIB_REMOVAL
 from ._helpers import (
     _controller,
@@ -33,7 +35,7 @@ from ._helpers import (
 class ColorbarSourceResolution:
     """Validated source/owner targets for one Colorbar operation."""
 
-    source_controller: ScatterController
+    source_controller: Any
     mappable: Any
     owner_axes_id: str
     owner_axes: Axes
@@ -61,7 +63,7 @@ class ColorbarSourceResolverRegistry:
             raise TypeError("Colorbar source resolver must be callable.")
         self._resolvers[key] = resolver
 
-    def resolve(self, component) -> ColorbarSourceResolution:
+    def resolve(self, component, *, allow_empty: bool = False) -> ColorbarSourceResolution:
         controller = _controller(self.registry, component)
         state = controller.state
         resolver = self._resolvers.get((state.kind, state.role))
@@ -70,6 +72,8 @@ class ColorbarSourceResolverRegistry:
                 f"{state.kind.value}/{state.role.value} cannot be used as a "
                 "Colorbar source."
             )
+        if isinstance(resolver, Field2DColorbarSourceResolver):
+            return resolver(controller, allow_empty=allow_empty)
         return resolver(controller)
 
 
@@ -115,17 +119,63 @@ class ScatterColorbarSourceResolver:
         )
 
 
+class Field2DColorbarSourceResolver:
+    """Resolver for Pseudocolor, Heatmap, and Contour ScalarMappable sources."""
+
+    def __init__(self, registry: ComponentRegistry) -> None:
+        self.registry = registry
+
+    def __call__(self, component, *, allow_empty: bool = False) -> ColorbarSourceResolution:
+        controller = _controller(self.registry, component, Field2DController)
+        runtime = controller.resolve_target()
+        if not isinstance(runtime, Field2DRuntime):
+            raise ComponentValidationError(
+                "FIELD_2D Colorbar source is missing its runtime."
+            )
+        if not allow_empty and not runtime.has_drawable:
+            raise ComponentValidationError(
+                "Empty FIELD_2D components cannot receive a new Colorbar."
+            )
+        mappable = runtime.mappable
+        if mappable is None or not hasattr(mappable, "get_array"):
+            raise ComponentValidationError(
+                "FIELD_2D source is not an active Matplotlib ScalarMappable."
+            )
+        owner_axes_id = controller.state.parent_id
+        if owner_axes_id is None:
+            raise ComponentValidationError("FIELD_2D source has no owner Axes.")
+        owner_axes = self.registry.resolve_target(owner_axes_id)
+        if not isinstance(owner_axes, Axes) or runtime.axes is not owner_axes:
+            raise ComponentValidationError(
+                "FIELD_2D source and owner Axes targets are inconsistent."
+            )
+        return ColorbarSourceResolution(
+            controller,
+            mappable,
+            owner_axes_id,
+            owner_axes,
+        )
+
+
 def production_colorbar_source_resolvers(
     registry: ComponentRegistry,
 ) -> ColorbarSourceResolverRegistry:
     """Build the closed first-party Colorbar source resolver registry."""
 
     resolvers = ColorbarSourceResolverRegistry(registry)
+    scatter = ScatterColorbarSourceResolver(registry)
     resolvers.register(
         ComponentKind.SCATTER,
         ComponentRole.SCATTER,
-        ScatterColorbarSourceResolver(registry),
+        scatter,
     )
+    field_resolver = Field2DColorbarSourceResolver(registry)
+    for role in (
+        ComponentRole.PSEUDOCOLOR,
+        ComponentRole.HEATMAP,
+        ComponentRole.CONTOUR,
+    ):
+        resolvers.register(ComponentKind.FIELD_2D, role, field_resolver)
     return resolvers
 
 
@@ -168,7 +218,7 @@ class ColorbarService:
             )
         if self.has_dependents(source_component_id):
             raise ComponentValidationError(
-                "The selected Scatter already has a Colorbar."
+                "The selected source already has a Colorbar."
             )
         return source
 
@@ -201,7 +251,14 @@ class ColorbarService:
     def source_preview(source: ColorbarSourceResolution) -> str:
         state = source.source_controller.state
         label = str(state.properties.get("label", "")).strip()
-        return label or f"Scatter {state.id[:8]}"
+        if label:
+            return label
+        role = state.role.value.replace("_", " ").title()
+        cmap = ""
+        if state.kind is ComponentKind.FIELD_2D:
+            cmap = str(state.properties.get("colormap", {}).get("cmap", "")).strip()
+        suffix = f" ({cmap})" if cmap else ""
+        return f"{role} {state.id[:8]}{suffix}"
 
     @staticmethod
     def _constructor_kwargs(properties: dict[str, Any]) -> dict[str, Any]:
@@ -345,7 +402,10 @@ class ColorbarService:
     def refresh_source(self, source_component_id: str) -> None:
         """Synchronize dependent Colorbars without copying source state."""
 
-        source = self.source_resolvers.resolve(source_component_id)
+        source = self.source_resolvers.resolve(
+            source_component_id,
+            allow_empty=True,
+        )
         for controller in self.dependents(source_component_id):
             target = controller.resolve_target()
             target.update_normal(source.mappable)
@@ -406,7 +466,8 @@ class ColorbarService:
             candidate = before.clone(properties=merged)
             controller._validate_replacement(candidate)
             source = self.source_resolvers.resolve(
-                before.data["source_component_id"]
+                before.data["source_component_id"],
+                allow_empty=True,
             )
             runtime_snapshot = (
                 deepcopy(controller._constructor_properties),

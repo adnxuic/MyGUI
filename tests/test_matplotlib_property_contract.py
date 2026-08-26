@@ -71,7 +71,7 @@ class MatplotlibExposureContractTests(unittest.TestCase):
             )
             self.assertTrue(all(contract.unsupported.values()))
 
-    def test_all_27_profiles_expose_exact_controller_contracts(self):
+    def test_all_30_profiles_expose_exact_controller_contracts(self):
         registry = EditorRegistry()
         register_production_profiles(registry)
         registry.freeze()
@@ -80,7 +80,7 @@ class MatplotlibExposureContractTests(unittest.TestCase):
             for kind, roles in ROLES_BY_KIND.items()
             for role in roles
         }
-        self.assertEqual(len(expected), 27)
+        self.assertEqual(len(expected), 30)
         self.assertTrue(
             all(registry.profile_for(kind, role) for kind, role in expected)
         )

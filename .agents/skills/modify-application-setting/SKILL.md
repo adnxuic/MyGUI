@@ -9,7 +9,7 @@ Read `.agents/architecture/application-settings.md` and
 `.agents/architecture/application-theme.md`. Preserve
 `CORE-APPLICATION-SETTINGS` and `CORE-THEME-OWNER`. Appearance keys also
 preserve `CORE-FONT-DIAGNOSTICS` and `CORE-MATPLOTLIB-BOUNDARY`. Do not
-weaken `CORE-PERSISTENCE-V15` or `CORE-PROJECT-HISTORY`.
+weaken `CORE-PERSISTENCE-V16` or `CORE-PROJECT-HISTORY`.
 
 This Skill is the only task flow for adding, modifying, renaming, or retiring
 an application setting.

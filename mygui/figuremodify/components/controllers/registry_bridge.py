@@ -31,6 +31,11 @@ from .collections import (
     ScatterController,
 )
 from .containers import AxesController, FigureController
+from .field_2d import (
+    ContourController,
+    HeatmapController,
+    PseudocolorController,
+)
 from .in_axes import ImageInAxesController, ZoomInAxesController
 from .legend import LegendController
 from .lines import (
@@ -79,6 +84,18 @@ CONTROLLER_TYPES: dict[
         ComponentRole.INTERPOLATION,
     ): InterpolationController,
     (ComponentKind.SCATTER, ComponentRole.SCATTER): ScatterController,
+    (
+        ComponentKind.FIELD_2D,
+        ComponentRole.PSEUDOCOLOR,
+    ): PseudocolorController,
+    (
+        ComponentKind.FIELD_2D,
+        ComponentRole.HEATMAP,
+    ): HeatmapController,
+    (
+        ComponentKind.FIELD_2D,
+        ComponentRole.CONTOUR,
+    ): ContourController,
     (
         ComponentKind.REFERENCE_MARKS,
         ComponentRole.REFLECTION_POSITIONS,

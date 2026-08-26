@@ -288,6 +288,13 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
     ):
         handlers.register(ComponentKind.LINE, role, palette_leaf)
     handlers.register(ComponentKind.SCATTER, ComponentRole.SCATTER, palette_leaf)
+    field_leaf = DeletionHandler()
+    for role in (
+        ComponentRole.PSEUDOCOLOR,
+        ComponentRole.HEATMAP,
+        ComponentRole.CONTOUR,
+    ):
+        handlers.register(ComponentKind.FIELD_2D, role, field_leaf)
     handlers.register(
         ComponentKind.REFERENCE_MARKS,
         ComponentRole.REFLECTION_POSITIONS,
@@ -493,14 +500,15 @@ def _expand_colorbar_source_deletions(
     registry: ComponentRegistry,
     component_ids: Iterable[str],
 ) -> tuple[str, ...]:
-    """Plan Colorbar cascades before a source Scatter deletion commits."""
+    """Plan Colorbar cascades before a scalar-mappable source deletion commits."""
 
     expanded = list(dict.fromkeys(str(item) for item in component_ids))
     removed_sources = {
         component_id
         for component_id in expanded
         if component_id in registry
-        and registry.get(component_id).state.kind is ComponentKind.SCATTER
+        and registry.get(component_id).state.kind
+        in {ComponentKind.SCATTER, ComponentKind.FIELD_2D}
     }
     if not removed_sources:
         return tuple(expanded)
