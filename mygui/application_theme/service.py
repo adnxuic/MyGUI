@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QEvent, QObject, QThread, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from .chrome import build_font, build_palette
 from .errors import ThemeApplyError, ThemeRollbackError, ThemeValidationError
@@ -16,6 +17,7 @@ from .metrics import build_density_metrics
 from .models import (
     APPLY_STEPS,
     AppearancePreferences,
+    DensityMetrics,
     EffectiveScheme,
     ThemeHealth,
     ThemeMode,
@@ -116,6 +118,8 @@ class ThemeService(QObject):
         self._in_transaction = False
         self._session_memento: _ChromeMemento | None = None
         self._session_snapshot: ThemeSnapshot | None = None
+        self._session_steps: list[str] = []
+        self.last_applied_steps: tuple[str, ...] = ()
         self._snapshot = self._compose_snapshot(
             initial if initial is not None else AppearancePreferences()
         )
@@ -169,39 +173,46 @@ class ThemeService(QObject):
     def preview(self, preferences: AppearancePreferences) -> None:
         """Apply chrome reversibly without writing settings storage."""
 
-        prepared = self._prepare(preferences)
+        snapshot = self._compose_snapshot(preferences)
+        steps = _plan_apply_steps(self._snapshot, snapshot)
+        prepared = self._prepare(preferences, snapshot=snapshot, steps=steps)
         entering = not self._in_preview
         if entering:
             self._session_memento = self._capture()
             self._session_snapshot = self._snapshot
+            self._session_steps = []
             self._in_preview = True
         try:
-            self._apply_prepared(prepared)
+            executed = self._apply_prepared(prepared, steps=steps)
         except ThemeRollbackError:
             if entering:
                 self._in_preview = False
                 self._session_memento = None
                 self._session_snapshot = None
+                self._session_steps = []
             raise
         except Exception as exc:
             if entering:
                 self._in_preview = False
                 self._session_memento = None
                 self._session_snapshot = None
+                self._session_steps = []
             raise ThemeApplyError(str(exc)) from exc
+        self._merge_session_steps(executed)
         self._snapshot = prepared.snapshot
         self._publish_hub_snapshot()
 
     def cancel_preview(self) -> None:
-        """Restore the exact chrome captured when preview began."""
+        """Restore the chrome steps actually applied during this preview."""
 
         if not self._in_preview:
             return
         memento = self._session_memento
         origin = self._session_snapshot
+        steps = tuple(self._session_steps)
         try:
             if memento is not None:
-                self._restore(memento)
+                self._restore(memento, steps)
         except Exception as exc:
             self._health = ThemeHealth.UNCERTAIN
             raise ThemeRollbackError((exc,)) from exc
@@ -210,6 +221,7 @@ class ThemeService(QObject):
         self._in_preview = False
         self._session_memento = None
         self._session_snapshot = None
+        self._session_steps = []
         self._publish_hub_snapshot()
 
     def rollback(self) -> None:
@@ -222,26 +234,55 @@ class ThemeService(QObject):
 
         self.cancel_preview()
 
+    def ensure_committed(self, preferences: AppearancePreferences) -> bool:
+        """Apply only when published chrome does not already match.
+
+        Returns True when a theme transaction ran. Same effective theme is a
+        no-event, no-redraw no-op. Used after Cancel so System Light/Dark
+        switches that happened during the session are honored once.
+        """
+
+        if self._health is ThemeHealth.UNCERTAIN:
+            return False
+        if self._in_preview:
+            self.cancel_preview()
+        snapshot = self._compose_snapshot(preferences)
+        if self._published and _same_chrome(self._snapshot, snapshot):
+            return False
+        self.apply_committed(preferences)
+        return True
+
     def apply_committed(self, preferences: AppearancePreferences) -> None:
         """Confirm chrome after a successful settings document commit."""
 
-        prepared = self._prepare(preferences)
+        snapshot = self._compose_snapshot(preferences)
         old = self._session_snapshot if self._in_preview else self._snapshot
         already_applied = self._in_preview and _same_chrome(
-            self._snapshot, prepared.snapshot
+            self._snapshot, snapshot
         )
         if not already_applied:
+            steps = (
+                None
+                if not self._published
+                else _plan_apply_steps(self._snapshot, snapshot)
+            )
+            prepared = self._prepare(
+                preferences, snapshot=snapshot, steps=steps
+            )
             try:
-                self._apply_prepared(prepared)
+                self._apply_prepared(prepared, steps=steps)
             except ThemeRollbackError:
                 raise
             except Exception as exc:
                 raise ThemeApplyError(str(exc)) from exc
             self._snapshot = prepared.snapshot
+        else:
+            self._snapshot = snapshot
         new = self._snapshot
         self._in_preview = False
         self._session_memento = None
         self._session_snapshot = None
+        self._session_steps = []
         self._published = True
         self._health = ThemeHealth.OK
         self._publish_hub_snapshot()
@@ -302,21 +343,32 @@ class ThemeService(QObject):
             return
         self.apply_committed(preferences)
 
-    def _prepare(self, preferences: AppearancePreferences) -> _PreparedTheme:
+    def _prepare(
+        self,
+        preferences: AppearancePreferences,
+        *,
+        snapshot: ThemeSnapshot | None = None,
+        steps: Sequence[str] | None = None,
+    ) -> _PreparedTheme:
         if not isinstance(preferences, AppearancePreferences):
             raise ThemeValidationError("preferences must be AppearancePreferences.")
-        snapshot = self._compose_snapshot(preferences)
+        composed = snapshot if snapshot is not None else self._compose_snapshot(preferences)
         hooks = self._fault_hooks
         if hooks is not None and hooks.fail_prerender:
             raise ThemeApplyError("theme prerender failed")
-        app_qss = self._qss.render_application(snapshot)
+        need_qss = steps is None or "qss" in steps
+        need_icons = steps is None or "icons" in steps
+        app_qss = self._qss.render_application(composed) if need_qss else ""
         local_qss: dict[str, str] = {}
-        for _widget, resource in binding_iter(self._bindings):
-            if resource not in local_qss:
-                local_qss[resource] = self._qss.render_resource(resource, snapshot)
-        icons = self._icons.prerender(snapshot)
+        if need_qss:
+            for _widget, resource in binding_iter(self._bindings):
+                if resource not in local_qss:
+                    local_qss[resource] = self._qss.render_resource(
+                        resource, composed
+                    )
+        icons = self._icons.prerender(composed) if need_icons else None
         return _PreparedTheme(
-            snapshot=snapshot,
+            snapshot=composed,
             app_qss=app_qss,
             local_qss=local_qss,
             icons=icons,
@@ -339,17 +391,23 @@ class ThemeService(QObject):
             icon_roles=dict(ICON_ROLES),
         )
 
-    def _capture(self) -> _ChromeMemento:
+    def _capture(self, steps: Sequence[str] | None = None) -> _ChromeMemento:
+        wanted = None if steps is None else set(steps)
+
+        def need(step: str) -> bool:
+            return wanted is None or step in wanted
+
         metrics_memento = None
-        if self._metrics_port is not None:
+        if need("metrics") and self._metrics_port is not None:
             metrics_memento = self._metrics_port.capture()
         qss_tokens: dict[str, str] = {}
-        try:
-            from .qss import current_qss_tokens
+        if need("qss"):
+            try:
+                from .qss import current_qss_tokens
 
-            qss_tokens = dict(current_qss_tokens())
-        except ImportError:
-            pass
+                qss_tokens = dict(current_qss_tokens())
+            except ImportError:
+                pass
         hub_snapshot = None
         try:
             from .runtime import current_theme_snapshot
@@ -359,24 +417,35 @@ class ThemeService(QObject):
             pass
         return _ChromeMemento(
             font=QFont(self._app.font()),
-            palette=QPalette(self._app.palette()),
-            stylesheet=self._app.styleSheet(),
-            local_styles=binding_capture(self._bindings),
+            palette=QPalette(self._app.palette()) if need("palette") else QPalette(),
+            stylesheet=self._app.styleSheet() if need("qss") else "",
+            local_styles=binding_capture(self._bindings) if need("qss") else {},
             metrics=metrics_memento,
-            icons=self._icons.capture(),
+            icons=self._icons.capture() if need("icons") else None,
             qss_tokens=qss_tokens,
             hub_snapshot=hub_snapshot,
         )
 
-    def _apply_prepared(self, prepared: _PreparedTheme) -> None:
+    def _apply_prepared(
+        self,
+        prepared: _PreparedTheme,
+        steps: Sequence[str] | None = None,
+    ) -> tuple[str, ...]:
         self._ensure_gui_thread()
-        memento = self._capture()
+        planned = (
+            APPLY_STEPS
+            if steps is None
+            else tuple(step for step in APPLY_STEPS if step in steps)
+        )
+        memento = self._capture(planned)
         self._in_transaction = True
         applied: list[str] = []
         try:
             self._set_hub_snapshot(prepared.snapshot)
-            for step in APPLY_STEPS:
+            for step in planned:
                 self._maybe_fail_apply(step)
+                if step == "qss" and not self._qss_documents_changed(prepared):
+                    continue
                 self._run_apply_step(step, prepared)
                 applied.append(step)
         except Exception as exc:
@@ -384,6 +453,30 @@ class ThemeService(QObject):
             raise
         finally:
             self._in_transaction = False
+        executed = tuple(applied)
+        self.last_applied_steps = executed
+        return executed
+
+    def _plan_steps(
+        self,
+        current: ThemeSnapshot,
+        prepared: _PreparedTheme,
+    ) -> tuple[str, ...]:
+        return _plan_apply_steps(current, prepared.snapshot)
+
+    def _merge_session_steps(self, executed: Sequence[str]) -> None:
+        merged = set(self._session_steps)
+        merged.update(executed)
+        self._session_steps = [step for step in APPLY_STEPS if step in merged]
+
+    def _qss_documents_changed(self, prepared: _PreparedTheme) -> bool:
+        if prepared.app_qss != self._app.styleSheet():
+            return True
+        for widget, resource in binding_iter(self._bindings):
+            expected = prepared.local_qss.get(resource)
+            if expected is not None and widget.styleSheet() != expected:
+                return True
+        return False
 
     def _rollback_applied(
         self,
@@ -408,7 +501,8 @@ class ThemeService(QObject):
     def _run_apply_step(self, step: str, prepared: _PreparedTheme) -> None:
         snapshot = prepared.snapshot
         if step == "font":
-            self._app.setFont(QFont(snapshot.font))
+            with _skip_hidden_font_events(self._app):
+                self._app.setFont(QFont(snapshot.font))
             return
         if step == "palette":
             self._app.setPalette(QPalette(snapshot.palette))
@@ -479,15 +573,23 @@ class ThemeService(QObject):
                 pass
             return
         if step == "font":
-            self._app.setFont(QFont(memento.font))
+            with _skip_hidden_font_events(self._app):
+                self._app.setFont(QFont(memento.font))
             return
         raise ThemeApplyError(f"Unknown theme restore step {step!r}.")
 
-    def _restore(self, memento: _ChromeMemento) -> None:
+    def _restore(
+        self,
+        memento: _ChromeMemento,
+        steps: Sequence[str] | None = None,
+    ) -> None:
         self._ensure_gui_thread()
         self._set_hub_snapshot(memento.hub_snapshot)
+        selected = APPLY_STEPS if steps is None else steps
+        wanted = set(selected)
         for step in reversed(APPLY_STEPS):
-            self._restore_step(step, memento)
+            if step in wanted:
+                self._restore_step(step, memento)
 
     def _maybe_fail_apply(self, step: str) -> None:
         hooks = self._fault_hooks
@@ -502,6 +604,82 @@ class ThemeService(QObject):
     def _ensure_gui_thread(self) -> None:
         if QThread.currentThread() is not self._app.thread():
             raise ThemeApplyError("Theme apply must run on the GUI thread.")
+
+
+class _SkipHiddenFontFilter(QObject):
+    """Drop FontChange on hidden widgets so cached Settings pages are not polished."""
+
+    _EVENTS = frozenset(
+        {
+            QEvent.Type.FontChange,
+            QEvent.Type.ApplicationFontChange,
+        }
+    )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() not in self._EVENTS:
+            return False
+        if not isinstance(watched, QWidget):
+            return False
+        try:
+            return not watched.isVisible()
+        except RuntimeError:
+            return True
+
+
+@contextmanager
+def _skip_hidden_font_events(app: QApplication) -> Iterator[None]:
+    filt = _SkipHiddenFontFilter(app)
+    app.installEventFilter(filt)
+    try:
+        yield
+    finally:
+        app.removeEventFilter(filt)
+        filt.deleteLater()
+
+
+def _layout_chrome_changed(left: DensityMetrics, right: DensityMetrics) -> bool:
+    """Return whether density or the font-metric size floor changed control sizes."""
+
+    return (
+        left.spacing_xs != right.spacing_xs
+        or left.spacing_sm != right.spacing_sm
+        or left.spacing_md != right.spacing_md
+        or left.spacing_lg != right.spacing_lg
+        or left.spacing_xl != right.spacing_xl
+        or left.rail != right.rail
+        or left.button != right.button
+        or left.bottom != right.bottom
+        or left.command != right.command
+        or left.gallery != right.gallery
+        or left.table_row != right.table_row
+        or left.table_header != right.table_header
+        or left.tree != right.tree
+        or left.control != right.control
+        or left.vertical_padding != right.vertical_padding
+    )
+
+
+def _plan_apply_steps(current: ThemeSnapshot, target: ThemeSnapshot) -> tuple[str, ...]:
+    """Choose widget steps from the actual preference/scheme/metrics delta."""
+
+    needed: set[str] = set()
+    old_prefs = current.preferences
+    new_prefs = target.preferences
+    if old_prefs.font_pt != new_prefs.font_pt:
+        needed.add("font")
+        # A 1 pt step is live preview; do not rebuild QSS/metrics when DPI
+        # makes the font-metric floor move by a pixel. Larger jumps still
+        # consult the size floor (9→16 pt).
+        if abs(int(old_prefs.font_pt) - int(new_prefs.font_pt)) > 1 and _layout_chrome_changed(
+            current.metrics, target.metrics
+        ):
+            needed.update({"qss", "metrics"})
+    if current.scheme is not target.scheme:
+        needed.update({"palette", "qss", "icons"})
+    if old_prefs.density != new_prefs.density:
+        needed.update({"qss", "metrics", "icons"})
+    return tuple(step for step in APPLY_STEPS if step in needed)
 
 
 def _same_chrome(left: ThemeSnapshot, right: ThemeSnapshot) -> bool:

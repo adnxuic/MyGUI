@@ -27,6 +27,10 @@ APPLICATION_SETTINGS_TEST_MODULES = [
     "tests.test_application_settings_pages",
     "tests.test_application_settings_center",
     "tests.test_application_settings_center_c",
+    "tests.test_application_settings_components",
+    "tests.test_application_settings_axes_components",
+    "tests.test_application_settings_component_creation",
+    "tests.test_application_settings_axes_creation",
     "tests.test_color_library",
     "tests.test_figure_export",
     "tests.test_gui_layout",
@@ -39,6 +43,8 @@ APPLICATION_SETTINGS_TEST_MODULES = [
 # GUI-heavy modules run in their own unittest processes so Qt/QApplication
 # state from Settings Center, export, layout, and theme tests cannot deadlock.
 APPLICATION_SETTINGS_ISOLATED_MODULES = frozenset({
+    "tests.test_application_settings_component_creation",
+    "tests.test_application_settings_axes_creation",
     "tests.test_color_library",
     "tests.test_figure_export",
     "tests.test_gui_layout",

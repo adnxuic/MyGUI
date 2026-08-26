@@ -20,9 +20,13 @@ Canvas publication. Place the Controller in
 the restore handler in `canvas_materialize_handlers.py` with a Canvas
 wrapper. UI Inputs remain Controller-free. Reusable Inspector sections live
 in `component_editors/sections/`; Function Curve, Interpolation, and Fit
-sections remain in `chart_sections.py` and `fit_sections.py`.
+sections remain in `chart_sections.py` and `fit_sections.py`. Line, Scatter,
+and free-Text creation merge style, palette, and `ComponentDefaultsProvider`
+in `creation_preferences.py`. Restore and materializers must not read that
+Provider. Do not encode application defaults in `PropertySpec.default`.
 
-Verify creation, empty valid data, style/palette precedence, data refresh,
+Verify creation, empty valid data, style/palette/Components precedence, data
+refresh,
 lazy Inspector reuse, deletion cohorts, failure rollback at every publication
 stage, and stable schema-v15 save/open. Update the routed parameter and feature
 documentation. Do not finish while a required check or manual smoke item is not

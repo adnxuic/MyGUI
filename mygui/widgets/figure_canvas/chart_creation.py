@@ -272,6 +272,8 @@ class ChartCreationStager:
         preprocess: DataPreprocessSpec,
         object_id: str | None = None,
         color_order: int | None = None,
+        marker=None,
+        markeredgewidth: float | None = None,
     ):
         host = self._host
         object_id = object_id or new_id()
@@ -283,6 +285,10 @@ class ChartCreationStager:
         }
         if linewidth is not None:
             plot_kwargs["linewidth"] = float(linewidth)
+        if marker is not None:
+            plot_kwargs["marker"] = marker
+        if markeredgewidth is not None:
+            plot_kwargs["markeredgewidth"] = float(markeredgewidth)
         with matplotlib_style_context(host.component_style):
             (line,) = host.current_axes.plot(series.x, series.y, **plot_kwargs)
         transaction.on_rollback(
@@ -295,12 +301,9 @@ class ChartCreationStager:
             ComponentRole.DATA_PLOT,
             line,
             component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "markersize": float(line.get_markersize()),
-                "color": series.color,
-                "label": series.label,
-            },
+            host._line_sync_properties(
+                line, color=series.color, label=series.label
+            ),
             {
                 "x_ref": series.x_ref.to_dict(),
                 "y_ref": series.y_ref.to_dict(),
@@ -324,17 +327,24 @@ class ChartCreationStager:
         size_mapping: dict[str, Any] | None = None,
         object_id: str | None = None,
         color_order: int | None = None,
+        linewidth: float | None = None,
     ):
         host = self._host
         object_id = object_id or new_id()
+        scatter_kwargs = {
+            "s": size,
+            "c": series.color,
+            "marker": marker,
+            "label": series.label,
+        }
+        if linewidth is not None:
+            scatter_kwargs["linewidths"] = float(linewidth)
+            scatter_kwargs["edgecolors"] = series.color
         with matplotlib_style_context(host.component_style):
             scatter = host.current_axes.scatter(
                 series.x,
                 series.y,
-                s=size,
-                c=series.color,
-                marker=marker,
-                label=series.label,
+                **scatter_kwargs,
             )
         transaction.on_rollback(
             lambda scatter=scatter: host._remove_created_artist(scatter)
@@ -347,6 +357,8 @@ class ChartCreationStager:
             "marker": marker,
             "label": series.label,
         }
+        if linewidth is not None:
+            properties["linewidth"] = float(linewidth)
         if color_mapping is not None:
             properties["color_mapping"] = deepcopy(color_mapping)
         if size_mapping is not None:
@@ -399,15 +411,33 @@ class ChartCreationStager:
         preprocess: DataPreprocessSpec,
         object_id: str | None = None,
         color_order: int | None = None,
+        linestyle=None,
+        linewidth: float | None = None,
+        marker=None,
+        markersize: float | None = None,
+        markeredgewidth: float | None = None,
     ):
         host = self._host
         object_id = object_id or new_id()
+        plot_kwargs = {
+            "color": series.color,
+            "label": series.label,
+        }
+        if linestyle is not None:
+            plot_kwargs["linestyle"] = linestyle
+        if linewidth is not None:
+            plot_kwargs["linewidth"] = float(linewidth)
+        if marker is not None:
+            plot_kwargs["marker"] = marker
+        if markersize is not None:
+            plot_kwargs["markersize"] = float(markersize)
+        if markeredgewidth is not None:
+            plot_kwargs["markeredgewidth"] = float(markeredgewidth)
         with matplotlib_style_context(host.component_style):
             (line,) = host.current_axes.plot(
                 series.x,
                 series.y,
-                color=series.color,
-                label=series.label,
+                **plot_kwargs,
             )
         transaction.on_rollback(
             lambda line=line: host._remove_created_artist(line)
@@ -419,11 +449,9 @@ class ChartCreationStager:
             ComponentRole.INTERPOLATION,
             line,
             component_order,
-            {
-                "linestyle": line.get_linestyle(),
-                "color": series.color,
-                "label": series.label,
-            },
+            host._line_sync_properties(
+                line, color=series.color, label=series.label
+            ),
             {
                 "x_ref": series.x_ref.to_dict(),
                 "y_ref": series.y_ref.to_dict(),

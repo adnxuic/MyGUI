@@ -80,7 +80,7 @@ class IntegrationsSettingsPage(QWidget):
 
         return integrations_page_spec()
 
-    def refresh_status(self) -> None:
+    def refresh_status(self, *_args: object) -> None:
         """Refresh the read-only TeX and MATLAB summaries."""
 
         tex = self._resolve_status(self._tex_status, tex_integration_status)

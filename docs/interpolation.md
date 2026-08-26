@@ -30,7 +30,7 @@ MyGUI creates interpolation curves from two saved table columns. The X column is
 | `k` | `B样条插值` | B-spline degree. Valid range is `1` to `5`, and `k` must be smaller than the number of source data points. |
 | `Auto lambda` | `平滑样条` | Lets SciPy choose the smoothing lambda automatically. |
 | `Lambda` | `平滑样条` | Manual non-negative smoothing lambda used when `Auto lambda` is disabled. Larger values produce smoother curves. |
-| `Color` | All interpolation curves | Line color for the interpolation curve. |
+| `Color` | All interpolation curves | Line color for the interpolation curve. Dialog inherit uses the Axes palette; a Components override does not consume the palette. |
 | `Legend` | All interpolation curves | Matplotlib label shown in the axes legend. |
 
 The Interpolation Inspector section exposes the same parameters and recomputes the curve after each change. Its controls are summarized in [Interpolation](editing-components/charts/interpolation.md).

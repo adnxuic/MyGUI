@@ -13,10 +13,12 @@ from typing import Any
 
 from .errors import SettingsValidationError
 from .models import (
+    DefaultValueMode,
     Density,
     ExportBBoxInches,
     ExportFormatPreference,
     ExportMetadata,
+    InheritableValue,
     JpegSubsampling,
     PadInchesKind,
     PadInchesValue,
@@ -544,3 +546,596 @@ def export_metadata_to_wire(value: ExportMetadata) -> dict[str, Any]:
 
 def always_true(_value: Any) -> bool:
     return True
+
+
+INHERITABLE_KIND = "kind"
+INHERITABLE_VALUE = "value"
+INHERITABLE_FIELDS = frozenset({INHERITABLE_KIND, INHERITABLE_VALUE})
+CLOSED_LINESTYLES = ("-", "--", "-.", ":", "None")
+CLOSED_LINE_MARKERS = (
+    "None",
+    ".",
+    ",",
+    "o",
+    "v",
+    "^",
+    "<",
+    ">",
+    "1",
+    "2",
+    "3",
+    "4",
+    "8",
+    "s",
+    "p",
+    "P",
+    "*",
+    "h",
+    "H",
+    "+",
+    "x",
+    "X",
+    "D",
+    "d",
+    "|",
+    "_",
+)
+CLOSED_FONT_WEIGHTS = (
+    "ultralight",
+    "light",
+    "normal",
+    "regular",
+    "book",
+    "medium",
+    "roman",
+    "semibold",
+    "demibold",
+    "demi",
+    "bold",
+    "heavy",
+    "extra bold",
+    "black",
+)
+CLOSED_FONT_STYLES = ("normal", "italic", "oblique")
+CLOSED_TICK_DIRECTIONS = ("in", "out", "inout")
+CLOSED_AXISBELOW = (True, False, "line")
+MIN_LINEWIDTH = 0.0
+MAX_LINEWIDTH = 100.0
+MIN_TICK_LENGTH = 0.0
+MAX_TICK_LENGTH = 100.0
+MIN_ROTATION = -360.0
+MAX_ROTATION = 360.0
+MIN_GRID_ALPHA = 0.0
+MAX_GRID_ALPHA = 1.0
+MIN_MARKERSIZE = 0.0
+MAX_MARKERSIZE = 100.0
+MIN_SCATTER_SIZE = 0.0
+MAX_SCATTER_SIZE = 10_000.0
+MIN_FONTSIZE = 1.0
+MAX_FONTSIZE = 1_000.0
+HEX_COMPONENT_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$")
+
+
+def inheritable_to_wire(value: InheritableValue) -> dict[str, Any]:
+    """Return the closed ``{kind, value}`` wire shape."""
+
+    inner = value.value
+    if isinstance(inner, float):
+        inner = float(inner)
+    return {"kind": value.mode.value, "value": inner}
+
+
+def _inheritable_mapping(value: Any, name: str) -> dict[str, Any]:
+    spec = _mapping(value, name)
+    extra = set(spec) - INHERITABLE_FIELDS
+    missing = INHERITABLE_FIELDS - set(spec)
+    if extra or missing:
+        raise SettingsValidationError(
+            f"{name} fields must be exactly {sorted(INHERITABLE_FIELDS)!r}."
+        )
+    return spec
+
+
+def _inheritable_mode(value: Any, name: str) -> DefaultValueMode:
+    if isinstance(value, DefaultValueMode):
+        return value
+    try:
+        return DefaultValueMode(str(value).strip().casefold())
+    except (TypeError, ValueError) as exc:
+        raise SettingsValidationError(
+            f"{name} kind must be 'inherit' or 'override'."
+        ) from exc
+
+
+def _normalize_inheritable(
+    value: Any,
+    *,
+    name: str,
+    inner_normalizer,
+) -> InheritableValue:
+    if isinstance(value, InheritableValue):
+        return InheritableValue(
+            mode=value.mode,
+            value=inner_normalizer(value.value),
+        )
+    spec = _inheritable_mapping(value, name)
+    return InheritableValue(
+        mode=_inheritable_mode(spec[INHERITABLE_KIND], name),
+        value=inner_normalizer(spec[INHERITABLE_VALUE]),
+    )
+
+
+def normalize_component_color(value: Any) -> str:
+    text = str(value or "").strip()
+    if not HEX_COMPONENT_COLOR.match(text):
+        raise SettingsValidationError(
+            "Component color must be #RRGGBB or #RRGGBBAA."
+        )
+    return text.upper()
+
+
+def validate_component_color(value: str) -> bool:
+    return bool(HEX_COMPONENT_COLOR.match(value))
+
+
+def normalize_inheritable_color(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Component color", inner_normalizer=normalize_component_color
+    )
+
+
+def validate_inheritable_color(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode
+        and validate_component_color(str(value.value))
+    )
+
+
+def normalize_linestyle_preset(value: Any) -> str:
+    if not isinstance(value, str):
+        raise SettingsValidationError("Line style must be a string.")
+    aliases = {
+        "solid": "-",
+        "dashed": "--",
+        "dashdot": "-.",
+        "dash-dot": "-.",
+        "dotted": ":",
+        "none": "None",
+    }
+    normalized = aliases.get(value.strip().casefold(), value)
+    if normalized not in CLOSED_LINESTYLES:
+        raise SettingsValidationError(
+            "Line style must be one of '-', '--', '-.', ':', or 'None'."
+        )
+    return normalized
+
+
+def validate_linestyle_preset(value: str) -> bool:
+    return value in CLOSED_LINESTYLES
+
+
+def normalize_inheritable_linestyle(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value,
+        name="Line style",
+        inner_normalizer=normalize_linestyle_preset,
+    )
+
+
+def validate_inheritable_linestyle(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode
+        and validate_linestyle_preset(str(value.value))
+    )
+
+
+def _positive_range(value: Any, minimum: float, maximum: float, name: str) -> float:
+    result = _finite(value, name)
+    if result < minimum or result > maximum:
+        raise SettingsValidationError(
+            f"{name} must be between {minimum:g} and {maximum:g}."
+        )
+    return result
+
+
+def normalize_linewidth(value: Any) -> float:
+    return _positive_range(value, MIN_LINEWIDTH, MAX_LINEWIDTH, "Line width")
+
+
+def validate_linewidth(value: float) -> bool:
+    return MIN_LINEWIDTH <= value <= MAX_LINEWIDTH
+
+
+def normalize_inheritable_linewidth(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Line width", inner_normalizer=normalize_linewidth
+    )
+
+
+def validate_inheritable_linewidth(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_linewidth(float(value.value))
+
+
+def normalize_markersize(value: Any) -> float:
+    return _positive_range(value, MIN_MARKERSIZE, MAX_MARKERSIZE, "Marker size")
+
+
+def validate_markersize(value: float) -> bool:
+    return MIN_MARKERSIZE <= value <= MAX_MARKERSIZE
+
+
+def normalize_inheritable_markersize(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Marker size", inner_normalizer=normalize_markersize
+    )
+
+
+def validate_inheritable_markersize(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_markersize(float(value.value))
+
+
+def normalize_markeredgewidth(value: Any) -> float:
+    return _positive_range(
+        value, MIN_LINEWIDTH, MAX_LINEWIDTH, "Marker edge width"
+    )
+
+
+def validate_markeredgewidth(value: float) -> bool:
+    return MIN_LINEWIDTH <= value <= MAX_LINEWIDTH
+
+
+def normalize_inheritable_markeredgewidth(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value,
+        name="Marker edge width",
+        inner_normalizer=normalize_markeredgewidth,
+    )
+
+
+def validate_inheritable_markeredgewidth(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode
+        and validate_markeredgewidth(float(value.value))
+    )
+
+
+def normalize_line_marker(value: Any) -> str:
+    if value is None:
+        return "None"
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise SettingsValidationError("Marker must be a closed Matplotlib preset.")
+    if isinstance(value, int):
+        raise SettingsValidationError("Marker must be a closed string preset.")
+    text = str(value).strip()
+    if not text or text.casefold() in {"none", "null"}:
+        return "None"
+    if text not in CLOSED_LINE_MARKERS:
+        raise SettingsValidationError(
+            f"Marker must be one of {list(CLOSED_LINE_MARKERS)!r}."
+        )
+    return text
+
+
+def validate_line_marker(value: str) -> bool:
+    return value in CLOSED_LINE_MARKERS
+
+
+def normalize_inheritable_line_marker(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Line marker", inner_normalizer=normalize_line_marker
+    )
+
+
+def validate_inheritable_line_marker(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_line_marker(str(value.value))
+
+
+def normalize_scatter_marker(value: Any) -> str:
+    marker = normalize_line_marker(value)
+    if marker == "None":
+        raise SettingsValidationError("Scatter marker cannot be None.")
+    return marker
+
+
+def validate_scatter_marker(value: str) -> bool:
+    return value in CLOSED_LINE_MARKERS and value != "None"
+
+
+def normalize_inheritable_scatter_marker(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value,
+        name="Scatter marker",
+        inner_normalizer=normalize_scatter_marker,
+    )
+
+
+def validate_inheritable_scatter_marker(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode
+        and validate_scatter_marker(str(value.value))
+    )
+
+
+def normalize_scatter_size(value: Any) -> float:
+    return _positive_range(value, MIN_SCATTER_SIZE, MAX_SCATTER_SIZE, "Scatter size")
+
+
+def validate_scatter_size(value: float) -> bool:
+    return MIN_SCATTER_SIZE <= value <= MAX_SCATTER_SIZE
+
+
+def normalize_inheritable_scatter_size(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Scatter size", inner_normalizer=normalize_scatter_size
+    )
+
+
+def validate_inheritable_scatter_size(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode and validate_scatter_size(float(value.value))
+    )
+
+
+def normalize_fontfamily(value: Any) -> str:
+    if not isinstance(value, str):
+        raise SettingsValidationError("Font family must be a string.")
+    text = value.strip()
+    if not text or "\x00" in text:
+        raise SettingsValidationError("Font family must be a non-empty string.")
+    return text
+
+
+def validate_fontfamily(value: str) -> bool:
+    return bool(value) and "\x00" not in value
+
+
+def normalize_inheritable_fontfamily(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Font family", inner_normalizer=normalize_fontfamily
+    )
+
+
+def validate_inheritable_fontfamily(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_fontfamily(str(value.value))
+
+
+def normalize_fontsize(value: Any) -> float:
+    return _positive_range(value, MIN_FONTSIZE, MAX_FONTSIZE, "Font size")
+
+
+def validate_fontsize(value: float) -> bool:
+    return MIN_FONTSIZE <= value <= MAX_FONTSIZE
+
+
+def normalize_inheritable_fontsize(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Font size", inner_normalizer=normalize_fontsize
+    )
+
+
+def validate_inheritable_fontsize(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_fontsize(float(value.value))
+
+
+def normalize_fontweight(value: Any) -> str | int:
+    if isinstance(value, bool):
+        raise SettingsValidationError("Font weight must be a name or integer.")
+    if isinstance(value, int):
+        if value < 1 or value > 1000:
+            raise SettingsValidationError("Numeric font weight must be 1–1000.")
+        return int(value)
+    if isinstance(value, float) and value.is_integer():
+        return normalize_fontweight(int(value))
+    if not isinstance(value, str):
+        raise SettingsValidationError("Font weight must be a name or integer.")
+    text = value.strip().casefold()
+    for name in CLOSED_FONT_WEIGHTS:
+        if name == text:
+            return name
+    raise SettingsValidationError(
+        "Font weight must be a Matplotlib named weight or 1–1000."
+    )
+
+
+def validate_fontweight(value: str | int) -> bool:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return 1 <= value <= 1000
+    return value in CLOSED_FONT_WEIGHTS
+
+
+def normalize_inheritable_fontweight(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Font weight", inner_normalizer=normalize_fontweight
+    )
+
+
+def validate_inheritable_fontweight(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_fontweight(value.value)
+
+
+def normalize_fontstyle(value: Any) -> str:
+    if not isinstance(value, str):
+        raise SettingsValidationError("Font style must be a string.")
+    text = value.strip().casefold()
+    if text not in CLOSED_FONT_STYLES:
+        raise SettingsValidationError(
+            "Font style must be 'normal', 'italic', or 'oblique'."
+        )
+    return text
+
+
+def validate_fontstyle(value: str) -> bool:
+    return value in CLOSED_FONT_STYLES
+
+
+def normalize_inheritable_fontstyle(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Font style", inner_normalizer=normalize_fontstyle
+    )
+
+
+def validate_inheritable_fontstyle(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_fontstyle(str(value.value))
+
+
+def validate_inheritable_value(value: InheritableValue) -> bool:
+    return isinstance(value, InheritableValue) and value.mode in DefaultValueMode
+
+
+def normalize_closed_bool(value: Any) -> bool:
+    if value is True or value is False:
+        return value
+    raise SettingsValidationError("Value must be a boolean.")
+
+
+def validate_closed_bool(value: bool) -> bool:
+    return value is True or value is False
+
+
+def normalize_inheritable_bool(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Boolean", inner_normalizer=normalize_closed_bool
+    )
+
+
+def validate_inheritable_bool(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_closed_bool(value.value)
+
+
+def normalize_axisbelow(value: Any) -> bool | str:
+    if value is True or value is False:
+        return value
+    if isinstance(value, str) and value.strip().casefold() == "line":
+        return "line"
+    raise SettingsValidationError("axisbelow must be True, False, or 'line'.")
+
+
+def validate_axisbelow(value: bool | str) -> bool:
+    return value in CLOSED_AXISBELOW
+
+
+def normalize_inheritable_axisbelow(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="axisbelow", inner_normalizer=normalize_axisbelow
+    )
+
+
+def validate_inheritable_axisbelow(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_axisbelow(value.value)
+
+
+def normalize_tick_direction(value: Any) -> str:
+    if not isinstance(value, str):
+        raise SettingsValidationError("Tick direction must be a string.")
+    text = value.strip().casefold()
+    if text not in CLOSED_TICK_DIRECTIONS:
+        raise SettingsValidationError(
+            "Tick direction must be 'in', 'out', or 'inout'."
+        )
+    return text
+
+
+def validate_tick_direction(value: str) -> bool:
+    return value in CLOSED_TICK_DIRECTIONS
+
+
+def normalize_inheritable_tick_direction(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value,
+        name="Tick direction",
+        inner_normalizer=normalize_tick_direction,
+    )
+
+
+def validate_inheritable_tick_direction(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode
+        and validate_tick_direction(str(value.value))
+    )
+
+
+def normalize_tick_length(value: Any) -> float:
+    return _positive_range(
+        value, MIN_TICK_LENGTH, MAX_TICK_LENGTH, "Tick length"
+    )
+
+
+def validate_tick_length(value: float) -> bool:
+    return MIN_TICK_LENGTH <= value <= MAX_TICK_LENGTH
+
+
+def normalize_inheritable_tick_length(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Tick length", inner_normalizer=normalize_tick_length
+    )
+
+
+def validate_inheritable_tick_length(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode and validate_tick_length(float(value.value))
+    )
+
+
+def normalize_tick_pad(value: Any) -> float:
+    return _positive_range(value, MIN_TICK_LENGTH, MAX_TICK_LENGTH, "Tick pad")
+
+
+def validate_tick_pad(value: float) -> bool:
+    return MIN_TICK_LENGTH <= value <= MAX_TICK_LENGTH
+
+
+def normalize_inheritable_tick_pad(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Tick pad", inner_normalizer=normalize_tick_pad
+    )
+
+
+def validate_inheritable_tick_pad(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_tick_pad(float(value.value))
+
+
+def normalize_rotation(value: Any) -> float:
+    return _positive_range(value, MIN_ROTATION, MAX_ROTATION, "Rotation")
+
+
+def validate_rotation(value: float) -> bool:
+    return MIN_ROTATION <= value <= MAX_ROTATION
+
+
+def normalize_inheritable_rotation(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value, name="Rotation", inner_normalizer=normalize_rotation
+    )
+
+
+def validate_inheritable_rotation(value: InheritableValue) -> bool:
+    return value.mode in DefaultValueMode and validate_rotation(float(value.value))
+
+
+def normalize_optional_grid_alpha(value: Any) -> float | None:
+    if value is None:
+        return None
+    return _positive_range(
+        value, MIN_GRID_ALPHA, MAX_GRID_ALPHA, "Grid alpha"
+    )
+
+
+def validate_optional_grid_alpha(value: float | None) -> bool:
+    if value is None:
+        return True
+    return MIN_GRID_ALPHA <= float(value) <= MAX_GRID_ALPHA
+
+
+def normalize_inheritable_optional_grid_alpha(value: Any) -> InheritableValue:
+    return _normalize_inheritable(
+        value,
+        name="Grid alpha",
+        inner_normalizer=normalize_optional_grid_alpha,
+    )
+
+
+def validate_inheritable_optional_grid_alpha(value: InheritableValue) -> bool:
+    return (
+        value.mode in DefaultValueMode
+        and validate_optional_grid_alpha(value.value)
+    )

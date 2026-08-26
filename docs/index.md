@@ -10,7 +10,7 @@ MyGUI is a PySide6 + matplotlib desktop GUI for working with tabular data and cr
 - Atomic component creation and deletion backed by project transactions.
 - Strict schema v15 project files with validated v14 migration, chained v13/v12/v11/v10 migration, and save/open round trips.
 - Optional TeX rendering and MATLAB curve fitting that do not block the base GUI.
-- Application Settings Center for Appearance, Workspace, New Figure, Export defaults, Integrations status, and Maintenance. UI theme is not Matplotlib Figure style.
+- Application Settings Center for Appearance, Workspace, New Figure, Components, Axes Components, Export defaults, Integrations status, and Maintenance. UI theme is not Matplotlib Figure style.
 
 ## Quick start
 

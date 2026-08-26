@@ -1,6 +1,6 @@
 # Color Picker
 
-MyGUI uses one color picker for Curve, Plot, Scatter, Fit, and Interpolation charts. Without an explicitly selected Axes palette, chart creation follows the current Figure style's `axes.prop_cycle`; a user-selected built-in or custom Axes palette takes precedence. Opening or cancelling a dialog only previews the next color, and the palette cursor advances after the chart is created successfully.
+MyGUI uses one color picker for Curve, Plot, Scatter, Fit, and Interpolation charts. Without an explicitly selected Axes palette, chart creation follows the current Figure style's `axes.prop_cycle`; a user-selected built-in or custom Axes palette takes precedence. A Settings → Components color override is a custom color and does not advance that cursor. Opening or cancelling a dialog only previews the next color, and the palette cursor advances after a palette-backed chart is created successfully.
 
 `MainWindow` owns one `ColorLibrary` and injects that exact object into the
 Figure window, every Canvas, Inspector editor, and creation dialog.

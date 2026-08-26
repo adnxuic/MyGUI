@@ -159,6 +159,15 @@ from mygui.figuremodify.style_base.creation_defaults import (
     ComponentCreationDefaults,
     resolve_component_creation_defaults,
 )
+from mygui.figuremodify.style_base.creation_preferences import (
+    ResolvedAxesAppearance,
+    ResolvedLineAppearance,
+    ResolvedScatterAppearance,
+    ResolvedTextAppearance,
+    resolve_line_appearance,
+    resolve_scatter_appearance,
+    resolve_text_appearance,
+)
 from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -664,6 +673,211 @@ class PyFigureCanvas(QWidget):
         """Resolve creation defaults from the current Figure style."""
 
         return resolve_component_creation_defaults(self.component_style)
+
+    def _component_defaults_provider(self):
+        window = self.figure_window
+        if window is None:
+            return None
+        return getattr(window, "component_defaults_provider", None)
+
+    def _read_component_defaults(self):
+        """Read Components defaults at use time. Restore paths never call this."""
+
+        if self._restoring_component_tree_now:
+            return None
+        provider = self._component_defaults_provider()
+        if provider is None:
+            return None
+        try:
+            return provider.current()
+        except Exception:
+            status_messages.show_warning(
+                "Component creation defaults could not be read; "
+                "using Figure style and Axes palette instead."
+            )
+            return None
+
+    def _palette_selection_for_creation(self) -> ColorSelection:
+        try:
+            return self.creation_color_cycle().peek()
+        except (TypeError, ValueError, AttributeError):
+            return ColorSelection("#1F77B4")
+
+    def _line_sync_properties(self, line, *, color: str, label: str) -> dict[str, Any]:
+        return {
+            "linestyle": line.get_linestyle(),
+            "linewidth": float(line.get_linewidth()),
+            "marker": line.get_marker(),
+            "markersize": float(line.get_markersize()),
+            "markeredgewidth": float(line.get_markeredgewidth()),
+            "color": color,
+            "label": label,
+        }
+
+    def _commit_resolved_line_color(
+        self,
+        resolved: ResolvedLineAppearance | ResolvedScatterAppearance,
+        color_selection: ColorSelection | None,
+        preview_cycle: ColorCycleState | None,
+    ) -> tuple[ColorSelection | None, ColorCycleState | None]:
+        commit_selection = color_selection
+        if commit_selection is None and resolved.consume_palette:
+            commit_selection = resolved.color_selection
+        cycle = preview_cycle
+        if cycle is None and resolved.consume_palette:
+            try:
+                cycle = self.creation_color_cycle()
+            except (TypeError, ValueError, AttributeError):
+                cycle = None
+        return commit_selection, cycle
+
+    def _user_line_plot_plan(
+        self,
+        *,
+        label: str,
+        color=None,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
+        linestyle=None,
+        linewidth=None,
+        marker=None,
+        markersize=None,
+        markeredgewidth=None,
+    ) -> tuple[dict[str, Any], str, ColorSelection | None, ColorCycleState | None]:
+        """Resolve user-creation Line kwargs. Restore omits unspecified fields."""
+
+        if self._restoring_component_tree_now:
+            kwargs: dict[str, Any] = {"label": label}
+            if linestyle is not None:
+                kwargs["linestyle"] = linestyle
+            if color is not None:
+                kwargs["color"] = normalize_color(color)
+            elif color_selection is not None:
+                kwargs["color"] = color_selection.color
+            if linewidth is not None:
+                kwargs["linewidth"] = float(linewidth)
+            if marker is not None:
+                kwargs["marker"] = marker
+            if markersize is not None:
+                kwargs["markersize"] = float(markersize)
+            if markeredgewidth is not None:
+                kwargs["markeredgewidth"] = float(markeredgewidth)
+            return kwargs, str(kwargs.get("color", "#000000")), color_selection, preview_cycle
+        resolved = self._resolve_line_creation(
+            settings=self._read_component_defaults(),
+            color=color,
+            color_selection=color_selection,
+            linestyle=linestyle,
+            linewidth=linewidth,
+            marker=marker,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
+        )
+        commit_selection, cycle = self._commit_resolved_line_color(
+            resolved, color_selection, preview_cycle
+        )
+        return resolved.plot_kwargs(label=label), resolved.color, commit_selection, cycle
+
+    def _shared_line_fields(
+        self,
+        *,
+        linestyle=None,
+        linewidth=None,
+        marker=None,
+        markersize=None,
+        markeredgewidth=None,
+    ) -> tuple[Any, float | None, Any, float | None, float | None]:
+        """Resolve shared non-color Line fields once for a batch."""
+
+        if self._restoring_component_tree_now:
+            return linestyle, linewidth, marker, markersize, markeredgewidth
+        resolved = self._resolve_line_creation(
+            settings=self._read_component_defaults(),
+            color="#000000",
+            linestyle=linestyle,
+            linewidth=linewidth,
+            marker=marker,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
+        )
+        return (
+            resolved.linestyle,
+            resolved.linewidth,
+            resolved.marker,
+            resolved.markersize,
+            resolved.markeredgewidth,
+        )
+
+    def _resolve_line_creation(
+        self,
+        *,
+        settings=None,
+        color=None,
+        color_selection: ColorSelection | None = None,
+        linestyle=None,
+        linewidth=None,
+        marker=None,
+        markersize=None,
+        markeredgewidth=None,
+    ) -> ResolvedLineAppearance:
+        style = self.component_creation_defaults().line
+        palette = self._palette_selection_for_creation()
+        return resolve_line_appearance(
+            style,
+            settings,
+            palette_selection=palette,
+            color=color,
+            color_selection=color_selection,
+            linestyle=linestyle,
+            linewidth=linewidth,
+            marker=marker,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
+        )
+
+    def _resolve_scatter_creation(
+        self,
+        *,
+        settings=None,
+        color=None,
+        color_selection: ColorSelection | None = None,
+        marker=None,
+        size=None,
+        linewidth=None,
+    ) -> ResolvedScatterAppearance:
+        style = self.component_creation_defaults().scatter
+        palette = self._palette_selection_for_creation()
+        return resolve_scatter_appearance(
+            style,
+            settings,
+            palette_selection=palette,
+            color=color,
+            color_selection=color_selection,
+            marker=marker,
+            size=size,
+            linewidth=linewidth,
+        )
+
+    def _resolve_text_creation(
+        self,
+        *,
+        settings=None,
+        fontfamily=None,
+        fontsize=None,
+        color=None,
+        fontweight=None,
+        fontstyle=None,
+    ) -> ResolvedTextAppearance:
+        style = self.component_creation_defaults().text
+        return resolve_text_appearance(
+            style,
+            settings,
+            fontfamily=fontfamily,
+            fontsize=fontsize,
+            color=color,
+            fontweight=fontweight,
+            fontstyle=fontstyle,
+        )
 
     def creation_color_cycle(self) -> ColorCycleState:
         """Preview the active user palette or current style color cycle."""
@@ -1265,6 +1479,8 @@ class PyFigureCanvas(QWidget):
         preprocess: DataPreprocessSpec,
         object_id: str | None = None,
         color_order: int | None = None,
+        marker=None,
+        markeredgewidth: float | None = None,
     ):
         return self._chart_stager.stage_plot(
             transaction,
@@ -1275,6 +1491,8 @@ class PyFigureCanvas(QWidget):
             preprocess=preprocess,
             object_id=object_id,
             color_order=color_order,
+            marker=marker,
+            markeredgewidth=markeredgewidth,
         )
 
     def _stage_scatter(
@@ -1291,6 +1509,7 @@ class PyFigureCanvas(QWidget):
         size_mapping: dict[str, Any] | None = None,
         object_id: str | None = None,
         color_order: int | None = None,
+        linewidth: float | None = None,
     ):
         return self._chart_stager.stage_scatter(
             transaction,
@@ -1304,6 +1523,7 @@ class PyFigureCanvas(QWidget):
             size_mapping=size_mapping,
             object_id=object_id,
             color_order=color_order,
+            linewidth=linewidth,
         )
 
     def _stage_interpolation(
@@ -1319,6 +1539,11 @@ class PyFigureCanvas(QWidget):
         preprocess: DataPreprocessSpec,
         object_id: str | None = None,
         color_order: int | None = None,
+        linestyle=None,
+        linewidth: float | None = None,
+        marker=None,
+        markersize: float | None = None,
+        markeredgewidth: float | None = None,
     ):
         return self._chart_stager.stage_interpolation(
             transaction,
@@ -1331,6 +1556,11 @@ class PyFigureCanvas(QWidget):
             preprocess=preprocess,
             object_id=object_id,
             color_order=color_order,
+            linestyle=linestyle,
+            linewidth=linewidth,
+            marker=marker,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
         )
 
     def _commit_chart_batch(
@@ -1429,10 +1659,15 @@ class PyFigureCanvas(QWidget):
         return self.figure_history.perform(text, operation)
 
     @_history_command("Create Axes Layout", scan_all=True)
-    def create_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
+    def create_axes_layout(
+        self,
+        spec: AxesLayoutSpec,
+        *,
+        appearance: ResolvedAxesAppearance | None = None,
+    ) -> tuple[str, ...]:
         """Create a validated Axes layout through the domain service."""
 
-        return self.axes_layout_service.create(spec)
+        return self.axes_layout_service.create(spec, appearance=appearance)
 
     @_history_command("Change Axes Layout", scan_all=True)
     def update_axes_layout(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
@@ -1455,18 +1690,32 @@ class PyFigureCanvas(QWidget):
         *,
         color_selection: ColorSelection | None = None,
         preview_cycle: ColorCycleState | None = None,
+        linewidth: float | None = None,
+        marker: str | None = None,
+        markersize: float | None = None,
+        markeredgewidth: float | None = None,
     ):
         """Add curve."""
 
-        color = normalize_color(color)
         object_id = object_id or new_id()
         x = np.linspace(x_start, x_stop, 1000)
         y = evaluate_curve_expression(func_text, x)
+        plot_kwargs, resolved_color, commit_selection, preview_cycle = (
+            self._user_line_plot_plan(
+                label=label,
+                color=color,
+                color_selection=color_selection,
+                preview_cycle=preview_cycle,
+                linestyle=style,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=markersize,
+                markeredgewidth=markeredgewidth,
+            )
+        )
         with self.component_registry.registration_transaction() as transaction:
             with matplotlib_style_context(self.component_style):
-                (line,) = self.current_axes.plot(
-                    x, y, ls=style, color=color, label=label
-                )
+                (line,) = self.current_axes.plot(x, y, **plot_kwargs)
             transaction.on_rollback(
                 lambda: self._remove_created_artist(line)
             )
@@ -1477,11 +1726,9 @@ class PyFigureCanvas(QWidget):
                 ComponentRole.FUNCTION_CURVE,
                 line,
                 component_order,
-                {
-                    "linestyle": line.get_linestyle(),
-                    "color": color,
-                    "label": label,
-                },
+                self._line_sync_properties(
+                    line, color=resolved_color, label=label
+                ),
                 {
                     "expression": func_text,
                     "x_start": float(x_start),
@@ -1491,7 +1738,7 @@ class PyFigureCanvas(QWidget):
             self._prepare_created_component(controller, transaction)
             color_transition = self._commit_single_creation_color(
                 transaction,
-                color_selection,
+                commit_selection,
                 preview_cycle,
             )
             axes_id = self.current_axes_component_id
@@ -1502,7 +1749,7 @@ class PyFigureCanvas(QWidget):
                 controller.component_id,
                 *color_transition,
             )
-            self.color_library.record_recent(color)
+            self.color_library.record_recent(resolved_color)
         return line
 
     @_history_command("Create Line")
@@ -1569,6 +1816,10 @@ class PyFigureCanvas(QWidget):
         *,
         linewidth: float | None = None,
         preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        marker=None,
+        markeredgewidth: float | None = None,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
     ):
         """Add plot."""
 
@@ -1580,13 +1831,38 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=True,
         )
+        if self._restoring_component_tree_now:
+            resolved_color = normalize_color(color)
+            resolved_style, resolved_size, resolved_lw = style, size, linewidth
+            resolved_marker, resolved_mew = marker, markeredgewidth
+            commit_selection = color_selection
+        else:
+            resolved = self._resolve_line_creation(
+                settings=self._read_component_defaults(),
+                color=color,
+                color_selection=color_selection,
+                linestyle=style,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=size,
+                markeredgewidth=markeredgewidth,
+            )
+            resolved_color = resolved.color
+            resolved_style = resolved.linestyle
+            resolved_size = resolved.markersize
+            resolved_lw = resolved.linewidth
+            resolved_marker = resolved.marker
+            resolved_mew = resolved.markeredgewidth
+            commit_selection, preview_cycle = self._commit_resolved_line_color(
+                resolved, color_selection, preview_cycle
+            )
         series = PreparedChartSeries(
             x_ref=x_ref,
             y_ref=y_ref,
             x=pair.x,
             y=pair.y,
             label=str(label),
-            color=normalize_color(color),
+            color=resolved_color,
             excluded_count=pair.excluded_count,
         )
         axes_id = self.current_axes_component_id
@@ -1597,14 +1873,28 @@ class PyFigureCanvas(QWidget):
             line, controller = self._stage_plot(
                 transaction,
                 series,
-                style=style,
-                size=size,
-                linewidth=linewidth,
+                style=resolved_style,
+                size=resolved_size,
+                linewidth=resolved_lw,
                 preprocess=preprocess,
                 object_id=object_id,
                 color_order=color_order,
+                marker=resolved_marker,
+                markeredgewidth=resolved_mew,
+            )
+            color_transition = self._commit_single_creation_color(
+                transaction,
+                commit_selection,
+                preview_cycle,
             )
         self._finish_created_component(controller)
+        if color_transition is not None and axes_id is not None:
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                *color_transition,
+            )
+            self.color_library.record_recent(resolved_color)
         return line
 
     @_history_command("Create Plots")
@@ -1619,10 +1909,21 @@ class PyFigureCanvas(QWidget):
         preprocess: DataPreprocessSpec | dict[str, Any] | None,
         color_selection: ColorSelection,
         record_recent: bool = True,
+        marker=None,
+        markeredgewidth: float | None = None,
     ) -> ChartBatchCreationResult:
         """Atomically create one Plot component for every selected Y column."""
 
         spec = DataPreprocessSpec.from_dict(preprocess)
+        line_style, line_width, line_marker, line_size, line_mew = (
+            self._shared_line_fields(
+                linestyle=style,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=size,
+                markeredgewidth=markeredgewidth,
+            )
+        )
         prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
@@ -1635,10 +1936,12 @@ class PyFigureCanvas(QWidget):
             lambda transaction, series: self._stage_plot(
                 transaction,
                 series,
-                style=style,
-                size=size,
-                linewidth=linewidth,
+                style=line_style,
+                size=line_size,
+                linewidth=line_width,
                 preprocess=spec,
+                marker=line_marker,
+                markeredgewidth=line_mew,
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
@@ -1666,6 +1969,9 @@ class PyFigureCanvas(QWidget):
         size_ref: ColumnRef | None = None,
         color_mapping: dict[str, Any] | None = None,
         size_mapping: dict[str, Any] | None = None,
+        linewidth: float | None = None,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
     ):
         """Add scatter."""
 
@@ -1677,13 +1983,39 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=False,
         )
+        mapping_enabled = False
+        if isinstance(color_mapping, dict):
+            mapping_enabled = bool(color_mapping.get("enabled"))
+        if self._restoring_component_tree_now:
+            resolved_color = normalize_color(color)
+            resolved_marker, resolved_size, resolved_lw = marker, size, linewidth
+            commit_selection = None if mapping_enabled else color_selection
+        else:
+            resolved = self._resolve_scatter_creation(
+                settings=self._read_component_defaults(),
+                color=color,
+                color_selection=None if mapping_enabled else color_selection,
+                marker=marker,
+                size=size,
+                linewidth=linewidth,
+            )
+            resolved_color = resolved.color
+            resolved_marker = resolved.marker
+            resolved_size = resolved.size
+            resolved_lw = resolved.linewidth
+            if mapping_enabled:
+                commit_selection = None
+            else:
+                commit_selection, preview_cycle = self._commit_resolved_line_color(
+                    resolved, color_selection, preview_cycle
+                )
         series = PreparedChartSeries(
             x_ref=x_ref,
             y_ref=y_ref,
             x=pair.x,
             y=pair.y,
             label=str(label),
-            color=normalize_color(color),
+            color=resolved_color,
             excluded_count=pair.excluded_count,
         )
         axes_id = self.current_axes_component_id
@@ -1694,8 +2026,8 @@ class PyFigureCanvas(QWidget):
             scatter, controller = self._stage_scatter(
                 transaction,
                 series,
-                size=size,
-                marker=marker,
+                size=resolved_size,
+                marker=resolved_marker,
                 preprocess=preprocess,
                 color_ref=color_ref,
                 size_ref=size_ref,
@@ -1703,8 +2035,21 @@ class PyFigureCanvas(QWidget):
                 size_mapping=size_mapping,
                 object_id=object_id,
                 color_order=color_order,
+                linewidth=resolved_lw,
+            )
+            color_transition = self._commit_single_creation_color(
+                transaction,
+                commit_selection,
+                preview_cycle,
             )
         self._finish_created_component(controller)
+        if color_transition is not None and axes_id is not None:
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                *color_transition,
+            )
+            self.color_library.record_recent(resolved_color)
         return scatter
 
     @_history_command("Create Scatters")
@@ -1722,6 +2067,7 @@ class PyFigureCanvas(QWidget):
         color_mapping: dict[str, Any] | None = None,
         size_mapping: dict[str, Any] | None = None,
         record_recent: bool = True,
+        linewidth: float | None = None,
     ) -> ChartBatchCreationResult:
         """Atomically create one Scatter component for every selected Y."""
 
@@ -1740,6 +2086,20 @@ class PyFigureCanvas(QWidget):
                 else ScatterController.default_properties()["size_mapping"]
             )
         )
+        if self._restoring_component_tree_now:
+            resolved_marker, resolved_size, resolved_lw = marker, size, linewidth
+        else:
+            resolved = self._resolve_scatter_creation(
+                settings=self._read_component_defaults(),
+                color=color_selection.color,
+                color_selection=color_selection,
+                marker=marker,
+                size=size,
+                linewidth=linewidth,
+            )
+            resolved_marker = resolved.marker
+            resolved_size = resolved.size
+            resolved_lw = resolved.linewidth
         prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
@@ -1753,13 +2113,14 @@ class PyFigureCanvas(QWidget):
             lambda transaction, series: self._stage_scatter(
                 transaction,
                 series,
-                size=size,
-                marker=marker,
+                size=resolved_size,
+                marker=resolved_marker,
                 preprocess=spec,
                 color_ref=color_ref,
                 size_ref=size_ref,
                 color_mapping=color_spec,
                 size_mapping=size_spec,
+                linewidth=resolved_lw,
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
@@ -1791,6 +2152,10 @@ class PyFigureCanvas(QWidget):
         *,
         color_selection: ColorSelection | None = None,
         preview_cycle: ColorCycleState | None = None,
+        linewidth: float | None = None,
+        marker: str | None = None,
+        markersize: float | None = None,
+        markeredgewidth: float | None = None,
     ):
         """Add fit curve."""
 
@@ -1810,7 +2175,6 @@ class PyFigureCanvas(QWidget):
                 f"Unsupported fitting engine: {engine}"
             ) from exc
 
-        color = normalize_color(color)
         object_id = object_id or new_id()
         x_array = np.asarray(x, dtype=float)
         y_array = np.asarray(y, dtype=float)
@@ -1837,9 +2201,19 @@ class PyFigureCanvas(QWidget):
                 status_messages.show_error("Saved fit expression could not be restored; showing source data.")
                 expression = ""
 
-        plot_kwargs = {"color": color, "label": label}
-        if style is not None:
-            plot_kwargs["linestyle"] = style
+        plot_kwargs, resolved_color, commit_selection, preview_cycle = (
+            self._user_line_plot_plan(
+                label=label,
+                color=color,
+                color_selection=color_selection,
+                preview_cycle=preview_cycle,
+                linestyle=style,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=markersize,
+                markeredgewidth=markeredgewidth,
+            )
+        )
         with self.component_registry.registration_transaction() as transaction:
             with matplotlib_style_context(self.component_style):
                 (line,) = self.current_axes.plot(
@@ -1857,11 +2231,9 @@ class PyFigureCanvas(QWidget):
                 ComponentRole.FIT_CURVE,
                 line,
                 component_order,
-                {
-                    "linestyle": line.get_linestyle(),
-                    "color": color,
-                    "label": label,
-                },
+                self._line_sync_properties(
+                    line, color=resolved_color, label=label
+                ),
                 {
                     "x_ref": x_ref.to_dict(),
                     "y_ref": y_ref.to_dict(),
@@ -1878,7 +2250,7 @@ class PyFigureCanvas(QWidget):
             self._prepare_created_component(controller, transaction)
             color_transition = self._commit_single_creation_color(
                 transaction,
-                color_selection,
+                commit_selection,
                 preview_cycle,
             )
             axes_id = self.current_axes_component_id
@@ -1889,7 +2261,7 @@ class PyFigureCanvas(QWidget):
                 controller.component_id,
                 *color_transition,
             )
-            self.color_library.record_recent(color)
+            self.color_library.record_recent(resolved_color)
         return line
 
     # Add interpolation curve
@@ -1912,6 +2284,14 @@ class PyFigureCanvas(QWidget):
         allow_empty: bool = False,
         preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
         announce: bool = True,
+        *,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
+        linestyle=None,
+        linewidth: float | None = None,
+        marker=None,
+        markersize: float | None = None,
+        markeredgewidth: float | None = None,
     ):
         """Add interpolate curve."""
 
@@ -1924,7 +2304,6 @@ class PyFigureCanvas(QWidget):
             preserve_gaps=False,
         )
         x, y = pair.x, pair.y
-        color = normalize_color(color)
         x_values = np.asarray(x)
         y_values = np.asarray(y)
         if allow_empty and (x_values.size == 0 or y_values.size == 0):
@@ -1952,13 +2331,38 @@ class PyFigureCanvas(QWidget):
                     f"current source data ({exc}); an empty component "
                     "was restored."
                 )
+        if self._restoring_component_tree_now:
+            resolved_color = normalize_color(color)
+            line_style, line_width = linestyle, linewidth
+            line_marker, line_ms, line_mew = marker, markersize, markeredgewidth
+            commit_selection = color_selection
+        else:
+            resolved = self._resolve_line_creation(
+                settings=self._read_component_defaults(),
+                color=color,
+                color_selection=color_selection,
+                linestyle=linestyle,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=markersize,
+                markeredgewidth=markeredgewidth,
+            )
+            resolved_color = resolved.color
+            line_style = resolved.linestyle
+            line_width = resolved.linewidth
+            line_marker = resolved.marker
+            line_ms = resolved.markersize
+            line_mew = resolved.markeredgewidth
+            commit_selection, preview_cycle = self._commit_resolved_line_color(
+                resolved, color_selection, preview_cycle
+            )
         series = PreparedChartSeries(
             x_ref=x_ref,
             y_ref=y_ref,
             x=x_new,
             y=y_new,
             label=str(label),
-            color=color,
+            color=resolved_color,
             excluded_count=pair.excluded_count,
         )
         axes_id = self.current_axes_component_id
@@ -1977,8 +2381,25 @@ class PyFigureCanvas(QWidget):
                 preprocess=preprocess,
                 object_id=object_id,
                 color_order=color_order,
+                linestyle=line_style,
+                linewidth=line_width,
+                marker=line_marker,
+                markersize=line_ms,
+                markeredgewidth=line_mew,
+            )
+            color_transition = self._commit_single_creation_color(
+                transaction,
+                commit_selection,
+                preview_cycle,
             )
         self._finish_created_component(controller)
+        if color_transition is not None and axes_id is not None:
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                *color_transition,
+            )
+            self.color_library.record_recent(resolved_color)
         if announce and not self._restoring_component_tree_now:
             if x_new.size:
                 status_messages.show_success("Interpolation curve created.")
@@ -2001,10 +2422,24 @@ class PyFigureCanvas(QWidget):
         lam: float | None = None,
         lam_auto: bool = True,
         preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        linestyle=None,
+        linewidth: float | None = None,
+        marker=None,
+        markersize: float | None = None,
+        markeredgewidth: float | None = None,
     ) -> ChartBatchCreationResult:
         """Atomically create one interpolation component for every Y."""
 
         spec = DataPreprocessSpec.from_dict(preprocess)
+        line_style, line_width, line_marker, line_ms, line_mew = (
+            self._shared_line_fields(
+                linestyle=linestyle,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=markersize,
+                markeredgewidth=markeredgewidth,
+            )
+        )
         sources, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
             x_ref,
             y_refs,
@@ -2048,6 +2483,11 @@ class PyFigureCanvas(QWidget):
                 lam=lam,
                 lam_auto=lam_auto,
                 preprocess=spec,
+                linestyle=line_style,
+                linewidth=line_width,
+                marker=line_marker,
+                markersize=line_ms,
+                markeredgewidth=line_mew,
             ),
             final_cycle=final_cycle,
             commit_cycle=commit_cycle,
@@ -2061,6 +2501,49 @@ class PyFigureCanvas(QWidget):
             return tex_config.is_tex_enabled()
         return bool(usetex) and tex_config.is_tex_enabled()
 
+    def _free_text_artist_kwargs(
+        self,
+        fontfamily: str,
+        fontsize: float,
+        *,
+        color=None,
+        fontweight=None,
+        fontstyle=None,
+    ) -> dict[str, Any]:
+        if self._restoring_component_tree_now:
+            kwargs: dict[str, Any] = {
+                "family": fontfamily,
+                "fontsize": fontsize,
+                "usetex": False,
+            }
+            if color is not None:
+                kwargs["color"] = color
+            if fontweight is not None:
+                kwargs["fontweight"] = fontweight
+            if fontstyle is not None:
+                kwargs["fontstyle"] = fontstyle
+            return kwargs
+        resolved = self._resolve_text_creation(
+            settings=self._read_component_defaults(),
+            fontfamily=fontfamily,
+            fontsize=fontsize,
+            color=color,
+            fontweight=fontweight,
+            fontstyle=fontstyle,
+        )
+        kwargs: dict[str, Any] = {
+            "family": resolved.fontfamily,
+            "fontsize": resolved.fontsize,
+            "usetex": False,
+        }
+        if resolved.color is not None:
+            kwargs["color"] = resolved.color
+        if resolved.fontweight is not None:
+            kwargs["fontweight"] = resolved.fontweight
+        if resolved.fontstyle is not None:
+            kwargs["fontstyle"] = resolved.fontstyle
+        return kwargs
+
     @_history_command("Create Text")
     def add_text(
         self,
@@ -2071,19 +2554,27 @@ class PyFigureCanvas(QWidget):
         fontsize: float,
         usetex: bool | None = None,
         object_id: str | None = None,
+        color=None,
+        fontweight=None,
+        fontstyle=None,
     ):
         """Add text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
+        text_kwargs = self._free_text_artist_kwargs(
+            fontfamily,
+            fontsize,
+            color=color,
+            fontweight=fontweight,
+            fontstyle=fontstyle,
+        )
         with matplotlib_style_context(self.component_style):
             text_artist = self.current_axes.text(
                 x,
                 y,
                 text,
-                family=fontfamily,
-                fontsize=fontsize,
                 transform=self.current_axes.transAxes,
-                usetex=False,
+                **text_kwargs,
             )
         object_id = object_id or new_id()
         parent_id = self.current_axes_component_id
@@ -2121,18 +2612,26 @@ class PyFigureCanvas(QWidget):
         fontsize: float,
         usetex: bool | None = None,
         object_id: str | None = None,
+        color=None,
+        fontweight=None,
+        fontstyle=None,
     ):
         """Add global text."""
 
         desired_usetex = self._resolve_text_usetex(usetex)
+        text_kwargs = self._free_text_artist_kwargs(
+            fontfamily,
+            fontsize,
+            color=color,
+            fontweight=fontweight,
+            fontstyle=fontstyle,
+        )
         with matplotlib_style_context(self.component_style):
             text_artist = self.fig.text(
                 x,
                 y,
                 text,
-                family=fontfamily,
-                fontsize=fontsize,
-                usetex=False,
+                **text_kwargs,
             )
         object_id = object_id or new_id()
         with self.component_registry.registration_transaction() as transaction:

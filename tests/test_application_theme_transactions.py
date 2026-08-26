@@ -24,6 +24,7 @@ from mygui.application_theme import (
     ThemeRollbackError,
     ThemeService,
 )
+from mygui.application_theme.ports import NullThemeIconProvider
 
 
 def _qapp() -> QApplication:
@@ -31,6 +32,40 @@ def _qapp() -> QApplication:
     if app is None:
         app = QApplication([])
     return app
+
+
+class _RecordingIcons:
+    def __init__(self) -> None:
+        self.prerender_calls = 0
+        self.apply_calls = 0
+        self._inner = NullThemeIconProvider()
+
+    def prerender(self, snapshot):
+        self.prerender_calls += 1
+        return self._inner.prerender(snapshot)
+
+    def apply(self, rendered: object) -> None:
+        self.apply_calls += 1
+        self._inner.apply(rendered)
+
+    def capture(self) -> object:
+        return self._inner.capture()
+
+    def restore(self, memento: object) -> None:
+        self._inner.restore(memento)
+
+
+class _RecordingQssRenderer:
+    def __init__(self) -> None:
+        self.render_calls = 0
+
+    def render_application(self, snapshot) -> str:
+        self.render_calls += 1
+        return ""
+
+    def render_resource(self, resource: str, snapshot) -> str:
+        self.render_calls += 1
+        return str(resource)
 
 
 class ThemeTransactionTests(unittest.TestCase):
@@ -144,6 +179,93 @@ class ThemeTransactionTests(unittest.TestCase):
         self.assertEqual(theme.snapshot().preferences.density, Density.COMFORTABLE)
         self.assertGreaterEqual(theme.snapshot().metrics.rail, 52)
         self.assertEqual(len(self.events), 1)
+
+    def test_small_font_change_skips_qss_palette_and_icons(self) -> None:
+        theme = self._service()
+        theme.apply_committed(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=9, density=Density.STANDARD)
+        )
+        theme.preview(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=10, density=Density.STANDARD)
+        )
+        self.assertEqual(theme.last_applied_steps, ("font",))
+        theme.cancel_preview()
+        self.assertEqual(theme.snapshot().preferences.font_pt, 9)
+
+    def test_small_font_change_skips_icon_and_qss_prerender(self) -> None:
+        icons = _RecordingIcons()
+        renderer = _RecordingQssRenderer()
+        theme = self._service(icon_provider=icons, qss_renderer=renderer)
+        theme.apply_committed(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=9, density=Density.STANDARD)
+        )
+        icons.prerender_calls = 0
+        icons.apply_calls = 0
+        renderer.render_calls = 0
+        theme.preview(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=10, density=Density.STANDARD)
+        )
+        self.assertEqual(theme.last_applied_steps, ("font",))
+        self.assertEqual(icons.prerender_calls, 0)
+        self.assertEqual(icons.apply_calls, 0)
+        self.assertEqual(renderer.render_calls, 0)
+        theme.cancel_preview()
+
+    def test_font_floor_theme_and_density_run_expected_steps(self) -> None:
+        theme = self._service()
+        theme.apply_committed(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=9, density=Density.STANDARD)
+        )
+        theme.preview(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=16, density=Density.STANDARD)
+        )
+        self.assertIn("font", theme.last_applied_steps)
+        self.assertIn("metrics", theme.last_applied_steps)
+        self.assertNotIn("palette", theme.last_applied_steps)
+        self.assertNotIn("icons", theme.last_applied_steps)
+        theme.cancel_preview()
+
+        theme.preview(
+            AppearancePreferences(mode=ThemeMode.DARK, font_pt=9, density=Density.STANDARD)
+        )
+        self.assertEqual(theme.last_applied_steps, ("palette", "qss", "icons"))
+        theme.cancel_preview()
+
+        theme.preview(
+            AppearancePreferences(
+                mode=ThemeMode.LIGHT, font_pt=9, density=Density.COMPACT
+            )
+        )
+        self.assertEqual(theme.last_applied_steps, ("qss", "metrics", "icons"))
+        theme.cancel_preview()
+
+    def test_ensure_committed_is_noop_until_system_scheme_changes(self) -> None:
+        theme = self._service()
+        prefs = AppearancePreferences(mode=ThemeMode.SYSTEM, font_pt=9)
+        theme.apply_committed(prefs)
+        steps_before = theme.last_applied_steps
+        self.events.clear()
+        self.assertFalse(theme.ensure_committed(prefs))
+        self.assertEqual(self.events, [])
+        self.assertEqual(theme.last_applied_steps, steps_before)
+
+        prepare_calls: list[int] = []
+        original_prepare = theme._prepare
+
+        def _record_prepare(*args, **kwargs):
+            prepare_calls.append(1)
+            return original_prepare(*args, **kwargs)
+
+        theme._prepare = _record_prepare  # type: ignore[method-assign]
+        self.assertFalse(theme.ensure_committed(prefs))
+        self.assertEqual(prepare_calls, [])
+
+        theme.shutdown()
+        theme._hints.set_color_scheme(Qt.ColorScheme.Dark)
+        self.events.clear()
+        self.assertTrue(theme.ensure_committed(prefs))
+        self.assertEqual(len(self.events), 1)
+        self.assertEqual(theme.snapshot().scheme, EffectiveScheme.DARK)
 
 
 if __name__ == "__main__":

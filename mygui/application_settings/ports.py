@@ -13,6 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 from .keys import WORKSPACE_LAYOUT
 from .models import (
     DEFAULT_WORKSPACE_LAYOUT,
+    ComponentDefaultsSettings,
     ExportSettings,
     NewFigureSettings,
     SettingsCommitResult,
@@ -65,6 +66,14 @@ class NewFigureDefaultsProvider(Protocol):
 
     def current(self) -> NewFigureSettings:
         """Return the application New Figure defaults."""
+
+
+@runtime_checkable
+class ComponentDefaultsProvider(Protocol):
+    """Narrow read port for component creation defaults. Not the settings service."""
+
+    def current(self) -> ComponentDefaultsSettings:
+        """Return the application Components defaults."""
 
 
 @runtime_checkable
@@ -131,6 +140,26 @@ class SnapshotNewFigureDefaults:
 
     def current(self) -> NewFigureSettings:
         return self._getter()
+
+
+class SnapshotComponentDefaults:
+    """Adapter that exposes only Components defaults from a getter."""
+
+    def __init__(self, getter: Any) -> None:
+        self._getter = getter
+
+    def current(self) -> ComponentDefaultsSettings:
+        return self._getter()
+
+
+class FixedComponentDefaults:
+    """Narrow adapter that always returns one ``ComponentDefaultsSettings``."""
+
+    def __init__(self, settings: ComponentDefaultsSettings) -> None:
+        self._settings = settings
+
+    def current(self) -> ComponentDefaultsSettings:
+        return self._settings
 
 
 class SnapshotExportPreferences:

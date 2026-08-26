@@ -327,6 +327,8 @@ class ColorPickerWidgetTests(unittest.TestCase):
             color_library=library,
         )
         self.assertEqual(widget.color(), "#1F77B4")
+        self.assertEqual(widget.color_button.text(), "Choose color…")
+        self.assertEqual(widget.color_button.accessibleName(), "Open color picker")
         self.assertEqual(emissions, [])
         self.assertEqual(len(widget.findChildren(QAction)), 0)
         widget.deleteLater()

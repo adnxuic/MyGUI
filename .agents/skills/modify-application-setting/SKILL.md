@@ -17,9 +17,10 @@ an application setting.
 ## When to use
 
 Use this Skill when the change is an application preference: Appearance,
-Workspace, New Figure defaults, Export defaults, Integrations actions, or
-Maintenance commands, including storage envelope fields, `SettingSpec`
-contracts, `SettingEffect`, and Settings Center editors.
+Workspace, New Figure defaults, Components creation defaults, Axes Components
+creation defaults, Export defaults, Integrations actions, or Maintenance
+commands, including storage envelope fields, `SettingSpec` contracts,
+`SettingEffect`, and Settings Center editors.
 
 Do not use this Skill for:
 
@@ -50,9 +51,15 @@ the application setting out of schema v15.
    Sessions keep a dirty patch plus base revision. Preview `LIVE_REVERSIBLE`
    inside the reversible apply transaction; commit the document only after
    preview succeeds; restore on storage failure.
-5. Figure creation and export consume `NewFigureDefaultsProvider` or
-   `ExportPreferencesPort`. Controllers, domain Services, Canvas helpers, and
-   `EditorContext` do not receive `ApplicationSettingsService`.
+5. Figure creation, export, and component creation consume
+   `NewFigureDefaultsProvider`, `ExportPreferencesPort`, or
+   `ComponentDefaultsProvider`. Controllers, domain Services, Canvas helpers,
+   `ChartCreationStager`, and `EditorContext` do not receive
+   `ApplicationSettingsService`. Components and Axes Components keys are
+   `NEXT_USE` inheritable values; they must not change Controller
+   `PropertySpec.default` or schema v15. A new Axes Inspector property must
+   decide whether it also belongs on the Axes Components creation-defaults
+   page. `_inherit_spec()` requires an explicit `page_id`.
 6. Color-library keys stay on the color dual-slot port. Reset-all application
    preferences must not delete that library.
 7. Update architecture pages in the same change. Update user Settings

@@ -50,6 +50,7 @@ from mygui.widgets.settings_center import (
 from mygui.widgets.settings_center.geometry import SCREEN_FRACTION
 from mygui.widgets.settings_center.pages import page_matches
 from mygui.application_settings.registry import production_settings_registry
+from mygui.application_settings.document import flatten_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 CENTER_PACKAGE = ROOT / "mygui" / "widgets" / "settings_center"
@@ -180,6 +181,12 @@ class SettingsCenterShellTests(unittest.TestCase):
         self.assertNotIn("integrations", window.created_page_ids())
 
     def test_search_filters_pages_and_registry_field_keywords(self) -> None:
+        self.host.register_page(
+            standard_page_spec(
+                "components",
+                _fake_factory("components", self.factory_calls),
+            )
+        )
         window = self._present()
         registry = production_settings_registry()
         appearance = standard_page_spec("appearance")
@@ -203,6 +210,14 @@ class SettingsCenterShellTests(unittest.TestCase):
         }
         self.assertTrue(hidden["Appearance"])
         self.assertFalse(hidden["New Figure"])
+        window.search_edit.setText("Line width")
+        self.app.processEvents()
+        hidden = {
+            window.nav_list.item(index).text(): window.nav_list.item(index).isHidden()
+            for index in range(window.nav_list.count())
+        }
+        self.assertTrue(hidden["Appearance"])
+        self.assertFalse(hidden["Components"])
 
     def test_focus_lands_on_search_or_nav(self) -> None:
         window = self._present()
@@ -409,6 +424,72 @@ class SettingsCenterShellTests(unittest.TestCase):
         self.assertFalse(window.restore_defaults_button.isEnabled())
         self.assertEqual(window._title.text(), "No matching settings")
 
+    def test_prepare_session_does_not_create_pages_when_clearing_search(self) -> None:
+        window = self._present("new_figure")
+        self.assertEqual(self.factory_calls, ["new_figure"])
+        self.assertEqual(window.created_page_ids(), frozenset({"new_figure"}))
+
+    def test_reopen_flattens_snapshot_once_for_cached_pages(self) -> None:
+        window = self._present("appearance")
+        window.nav_list.setCurrentRow(1)
+        self.app.processEvents()
+        window.close()
+        self.app.processEvents()
+        with patch(
+            "mygui.widgets.settings_center.session_glue.flatten_snapshot",
+            wraps=flatten_snapshot,
+        ) as flat:
+            self.host.present("appearance")
+            self.app.processEvents()
+            self.assertEqual(flat.call_count, 1)
+
+    def test_cancel_esc_close_and_ok_each_finish_the_session_once(self) -> None:
+        window = self._present()
+        with patch.object(window.glue, "abandon", wraps=window.glue.abandon) as abandon:
+            window.cancel_button.click()
+            self.app.processEvents()
+            self.assertEqual(abandon.call_count, 1)
+
+        window = self._present()
+        with patch.object(window.glue, "abandon", wraps=window.glue.abandon) as abandon:
+            QTest.keyClick(window, Qt.Key_Escape)
+            self.app.processEvents()
+            self.assertEqual(abandon.call_count, 1)
+
+        window = self._present()
+        with patch.object(window.glue, "abandon", wraps=window.glue.abandon) as abandon:
+            window.close()
+            self.app.processEvents()
+            self.assertEqual(abandon.call_count, 1)
+
+        window = self._present()
+        with patch.object(window.glue, "release", wraps=window.glue.release) as release:
+            window.ok_button.click()
+            self.app.processEvents()
+            self.assertEqual(release.call_count, 1)
+
+    def test_system_close_without_appearance_change_skips_theme_transaction(self) -> None:
+        window = self._present()
+        with patch.object(
+            self.theme, "_apply_prepared", wraps=self.theme._apply_prepared
+        ) as apply:
+            window.close()
+            self.app.processEvents()
+            apply.assert_not_called()
+
+    def test_system_scheme_change_during_preview_applies_once_on_cancel(self) -> None:
+        window = self._present()
+        window.stage_value(APPEARANCE_UI_FONT_POINT_SIZE, 10)
+        self.theme._hints.set_color_scheme(Qt.ColorScheme.Dark)
+        self.app.processEvents()
+        with patch.object(
+            self.theme, "_apply_prepared", wraps=self.theme._apply_prepared
+        ) as apply:
+            window.reject()
+            self.app.processEvents()
+            self.assertEqual(apply.call_count, 1)
+            self.assertEqual(self.theme.snapshot().scheme.value, "dark")
+
 
 class SettingsCenterProductionPagesTests(unittest.TestCase):
     @classmethod
@@ -530,6 +611,46 @@ class SettingsCenterProductionPagesTests(unittest.TestCase):
         dirty = dict(window.glue.session.dirty_patch())
         self.assertNotIn(WORKSPACE_LAYOUT, dirty)
         self.assertEqual(dirty.get(WORKSPACE_REMEMBER_LAYOUT), True)
+
+    def test_export_and_axes_edits_batch_stage_without_reload(self) -> None:
+        from mygui.widgets.settings_center.export_page import ExportSettingsPage
+        from mygui.widgets.settings_center.inheritable_editors import (
+            InheritableSettingRow,
+        )
+
+        window = self.host.present("export")
+        self.app.processEvents()
+        page = window.findChild(ExportSettingsPage, "export_settings_page")
+        self.assertIsNotNone(page)
+        with (
+            patch.object(window, "stage_values", wraps=window.stage_values) as staged,
+            patch.object(window, "_notify_reload") as reload,
+        ):
+            page.panel.custom_dpi.setChecked(True)
+            self.app.processEvents()
+            self.assertEqual(staged.call_count, 1)
+            reload.assert_not_called()
+
+        window = self.host.present("axes_components")
+        self.app.processEvents()
+        row = window.findChild(
+            InheritableSettingRow,
+            "settings_inheritable_components.axes.facecolor",
+        )
+        self.assertIsNotNone(row)
+        with (
+            patch(
+                "mygui.widgets.settings_center.session_glue.flatten_snapshot",
+                wraps=flatten_snapshot,
+            ) as flat,
+            patch.object(window, "stage_values", wraps=window.stage_values) as staged,
+            patch.object(window, "_notify_reload") as reload,
+        ):
+            row.inherit_box.setChecked(False)
+            self.app.processEvents()
+            self.assertEqual(staged.call_count, 1)
+            self.assertEqual(flat.call_count, 1)
+            reload.assert_not_called()
 
 
 class SettingsCenterFutureSchemaTests(unittest.TestCase):

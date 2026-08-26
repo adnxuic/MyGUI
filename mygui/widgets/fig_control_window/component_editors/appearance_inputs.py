@@ -58,6 +58,7 @@ class LineAppearanceInput(QFrame):
         show_style: bool = True,
         show_linewidth: bool = True,
         parent=None,
+        color_selection=None,
     ):
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -83,6 +84,7 @@ class LineAppearanceInput(QFrame):
             colorselector=colorselector,
             color_library=color_library,
             auto_record_recent=False,
+            selection=color_selection,
             parent=self,
         )
         layout.addWidget(QLabel("Color:", self))

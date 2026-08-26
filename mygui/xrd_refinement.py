@@ -638,6 +638,7 @@ class XrdRefinementImportService:
             (plan.yobs_ref,),
             size=observed_style.size,
             marker=observed_style.marker,
+            linewidth=observed_style.linewidth,
             preprocess=preprocess,
             color_selection=ColorSelection(observed_style.color),
             record_recent=False,
@@ -738,10 +739,11 @@ class XrdRefinementImportService:
         request: XrdRefinementImportRequest,
         plan: XrdTableImportPlan,
         before_layout_ids: set[str],
+        appearance=None,
     ) -> XrdRefinementImportOutcome:
         canvas = self.canvas
         observed, calculated = None, None
-        canvas.create_axes_layout(layout_spec)
+        canvas.create_axes_layout(layout_spec, appearance=appearance)
         layout_id, main_id, residual_axes_id = self._resolve_new_axes(before_layout_ids)
         observed, calculated = self._create_observed_calculated(
             main_id, plan, request
@@ -813,12 +815,13 @@ class XrdRefinementImportService:
         request: XrdRefinementImportRequest,
         plan: XrdTableImportPlan,
         before_layout_ids: set[str],
+        appearance=None,
     ) -> XrdRefinementImportOutcome:
         canvas = self.canvas
         draw_residual = bool(request.draw_single_residual)
         if draw_residual:
             validate_prf_residual_display_gap(request.result)
-        canvas.create_axes_layout(layout_spec)
+        canvas.create_axes_layout(layout_spec, appearance=appearance)
         layout_id, axes_id = self._resolve_single_axes(before_layout_ids)
         observed, calculated = self._create_observed_calculated(
             axes_id, plan, request
@@ -904,6 +907,8 @@ class XrdRefinementImportService:
         layout_spec: AxesLayoutSpec,
         request: XrdRefinementImportRequest,
         plan: XrdTableImportPlan,
+        *,
+        appearance=None,
     ) -> XrdRefinementImportOutcome:
         canvas = self.canvas
         before_layout_ids = {
@@ -921,12 +926,14 @@ class XrdRefinementImportService:
                         request,
                         plan,
                         before_layout_ids,
+                        appearance,
                     )
                 return self._create_main_residual_figure(
                     layout_spec,
                     request,
                     plan,
                     before_layout_ids,
+                    appearance,
                 )
         except Exception:
             self._rollback_figure(
@@ -940,6 +947,8 @@ class XrdRefinementImportService:
         self,
         layout_spec: AxesLayoutSpec,
         request: XrdRefinementImportRequest,
+        *,
+        appearance=None,
     ) -> XrdRefinementImportOutcome:
         """Run the validated Table command followed by one Figure intent."""
 
@@ -960,7 +969,9 @@ class XrdRefinementImportService:
         try:
             return self.canvas.figure_history.perform(
                 FIGURE_COMMAND_TEXT,
-                lambda: self._create_figure(layout_spec, request, plan),
+                lambda: self._create_figure(
+                    layout_spec, request, plan, appearance=appearance
+                ),
                 scan_all=True,
             )
         except Exception as exc:

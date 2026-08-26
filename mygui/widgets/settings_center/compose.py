@@ -1,4 +1,4 @@
-"""Compose the production Settings Center host and register all six pages."""
+"""Compose the production Settings Center host and register all eight pages."""
 
 from __future__ import annotations
 
@@ -10,6 +10,14 @@ from PySide6.QtWidgets import QWidget
 from mygui.application_settings.service import ApplicationSettingsService
 from mygui.application_theme.service import ThemeService
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.settings_center.axes_components_page import (
+    axes_components_page_spec,
+    make_axes_components_factory,
+)
+from mygui.widgets.settings_center.components_page import (
+    components_page_spec,
+    make_components_factory,
+)
 from mygui.widgets.settings_center.host import SettingsCenterHost
 from mygui.widgets.settings_center.register import register_c_pages
 from mygui.widgets.settings_center.session_glue import MessageCallback
@@ -40,6 +48,18 @@ def register_all_pages(
             layout_port=layout_port,
         )
     )
+    register = getattr(center, "register_page", None)
+    if callable(register):
+        components = components_page_spec(
+            make_components_factory(color_library)
+        )
+        register(components)
+        specs.append(components)
+        axes_components = axes_components_page_spec(
+            make_axes_components_factory(color_library)
+        )
+        register(axes_components)
+        specs.append(axes_components)
     specs.extend(
         register_c_pages(
             center,
@@ -69,7 +89,7 @@ def compose_settings_center(
     on_open_tex_panel: Callable[[], None] | None = None,
     on_open_matlab_panel: Callable[[], None] | None = None,
 ) -> SettingsCenterHost:
-    """Build the lazy Settings Center host with all six production pages."""
+    """Build the lazy Settings Center host with all eight production pages."""
 
     host = SettingsCenterHost(
         parent,

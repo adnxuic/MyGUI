@@ -68,6 +68,151 @@ document DPI and does not overwrite them.
 | Default Figure height | Number | Height in inches for new Figures. | `0.1`–`100`; default `4.8` in | `new_figure.height_in` |
 | Default document DPI | Number | Document DPI for new Figures. See [`Figure.dpi`](https://matplotlib.org/3.9.0/api/figure_api.html#matplotlib.figure.Figure.dpi). | `1`–`2400`; default `100` | `new_figure.document_dpi` |
 
+## Components
+
+These defaults apply only to components created after Apply. They do not
+change existing Artists, the open project, Undo/Redo, or schema-v15 files.
+Opening a project restores persisted component properties and does not apply
+this page. Restore page defaults and Reset all restore every field to
+**inherit** (the last custom value is kept but unused until you uncheck
+inherit). Color editors on this page do not write the color library. Line,
+Scatter, and Text sit on separate tabs so the default 840×620 window shows one
+complete group.
+
+Precedence for a new component: this creation's explicit dialog input >
+Components override > current Axes palette (Line/Scatter color) or Figure
+style (other fields) > Matplotlib 3.9 built-in fallbacks. See
+[Style Creation Defaults](style-creation-defaults.md).
+
+Inherit color for Line and Scatter continues to use the current Axes palette
+cursor, not the first style-probe color. An override color is a custom
+selection: it does not advance the palette. Mapped Scatter and XRD fields
+that the request sets explicitly still win; unset appearance fields use this
+page.
+
+| Parameter | Control | Meaning | Values / default | Key |
+| --- | --- | --- | --- | --- |
+| Line color | Inherit checkbox + color | Function Curve, Plot, Fit, and Interpolation. Inherit uses the Axes palette. | Inherit; inactive `#1F77B4` | `components.line.color` |
+| Line style | Inherit checkbox + preset | Closed presets only. See [linestyles](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | Inherit; inactive `-` | `components.line.linestyle` |
+| Line width | Inherit checkbox + number | Line width in points. See [`Line2D.set_linewidth`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.lines.Line2D.html#matplotlib.lines.Line2D.set_linewidth). | Inherit; inactive `1.5` | `components.line.linewidth` |
+| Line marker | Inherit checkbox + marker | Marker symbol. See [markers](https://matplotlib.org/3.9.0/api/markers_api.html). | Inherit; inactive `None` | `components.line.marker` |
+| Marker size | Inherit checkbox + number | Marker size in points. | Inherit; inactive `6.0` | `components.line.markersize` |
+| Marker edge width | Inherit checkbox + number | Marker edge width in points. | Inherit; inactive `1.0` | `components.line.markeredgewidth` |
+| Scatter color | Inherit checkbox + color | Ordinary Scatter fill (edge follows color). Inherit uses the Axes palette. | Inherit; inactive `#1F77B4` | `components.scatter.color` |
+| Scatter marker | Inherit checkbox + marker | Ordinary Scatter marker. | Inherit; inactive `o` | `components.scatter.marker` |
+| Scatter size | Inherit checkbox + number | Marker area in points-squared. See [`Axes.scatter` s](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.scatter.html). | Inherit; inactive `36.0` | `components.scatter.size` |
+| Scatter line width | Inherit checkbox + number | Marker outline width. | Inherit; inactive `1.0` | `components.scatter.linewidth` |
+| Text font family | Inherit checkbox + font | Free axes/figure Text only, not Title or axis labels. See [fonts](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | Inherit; inactive `sans-serif` | `components.text.fontfamily` |
+| Text font size | Inherit checkbox + number | Free Text size in points. | Inherit; inactive `10.0` | `components.text.fontsize` |
+| Text color | Inherit checkbox + color | Free Text color. Inherit uses Figure style. | Inherit; inactive `#000000` | `components.text.color` |
+| Text font weight | Inherit checkbox + enum | `normal` or `bold`. | Inherit; inactive `normal` | `components.text.fontweight` |
+| Text font style | Inherit checkbox + enum | `normal` or `italic`. | Inherit; inactive `normal` | `components.text.fontstyle` |
+
+## Axes Components
+
+These defaults apply only to ordinary Axes created after Apply. They do not
+change existing Artists, Colorbar auxiliary Axes, In-Axes, project restore,
+Undo/Redo, or schema-v15 files. Opening a project restores persisted Axes
+properties and does not apply this page. Restore page defaults and Reset all
+restore every field to **inherit** (the last custom value is kept but unused
+until you uncheck inherit). Color editors on this page do not write the color
+library.
+
+The page sits after Components: New Figure → Components → Axes Components →
+Export. Its four tabs are General, Spines, X Axis, and Y Axis. Each tab body
+scrolls internally so the tab bar stays visible at the default 840×620 window.
+X and Y each
+group Major and Minor independently; there is no implicit coupling. Draft
+**Copy X → Y**, **Copy Y → X**, **Copy Major → Minor**, and **Copy Minor →
+Major** copy mode and the hidden value into the other group without committing
+until Apply.
+
+Title, Axis Label, Legend, limits, scale, locator, formatter, aspect, and
+margins are not stored here. Later Axes Inspector properties must decide
+whether they also belong on this creation-defaults page.
+
+Precedence for a new ordinary Axes: this layout dialog's explicit values
+(including XRD scientific rules) > Axes Components override > current Figure
+style > Matplotlib 3.9 built-in fallbacks. See
+[Style Creation Defaults](style-creation-defaults.md) and
+[Axes Layout Templates](axes-layouts.md). Right-Y transparent background,
+shared outer labels, and XRD range/reserve rules still win after appearance
+is applied. The layout dialog freezes one resolved snapshot when it opens;
+later Settings Apply does not rewrite that open dialog.
+
+Numeric ranges: line/tick width `0`–`100`, tick length and pad `0`–`100`,
+font size `1`–`1000`, rotation `-360`–`360`, grid alpha `None` or `0`–`1`.
+Colors are stored as hex. `axisbelow` keeps the raw values `True`, `False`,
+and `"line"`. Envelope v1 payloads that omit `components.axes` load as all
+inherit.
+
+### General
+
+| Parameter | Control | Meaning | Values / default | Key |
+| --- | --- | --- | --- | --- |
+| Facecolor | Inherit checkbox + color | Axes patch color. See [`Axes.set_facecolor`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_facecolor.html). | Inherit; inactive `#FFFFFF` | `components.axes.facecolor` |
+| Frame on | Inherit checkbox + checkbox | Draw the Axes frame. See [`Axes.set_frame_on`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_frame_on.html). | Inherit; inactive on | `components.axes.frameon` |
+| Axis below | Inherit checkbox + enum | Whether axis spines/ticks draw below plots. See [`Axes.set_axisbelow`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_axisbelow.html). | Inherit; inactive `line`; choices `True`, `False`, `line` | `components.axes.axisbelow` |
+
+### Spines
+
+Each of left, right, top, and bottom is an independent key group. See
+[`Spine`](https://matplotlib.org/3.9.0/api/spines_api.html).
+
+| Parameter | Control | Meaning | Values / default | Key |
+| --- | --- | --- | --- | --- |
+| Visible | Inherit checkbox + checkbox | Show that spine. | Inherit; inactive on | `components.axes.spines.<left/right/top/bottom>.visible` |
+| Color | Inherit checkbox + color | Spine edge color. | Inherit; inactive `#000000` | `components.axes.spines.<side>.color` |
+| Line width | Inherit checkbox + number | Spine width in points. | Inherit; inactive `0.8` | `components.axes.spines.<side>.linewidth` |
+| Line style | Inherit checkbox + preset | Spine pattern. See [linestyles](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | Inherit; inactive `-` | `components.axes.spines.<side>.linestyle` |
+
+Concrete keys: `components.axes.spines.left.visible`,
+`components.axes.spines.left.color`, `components.axes.spines.left.linewidth`,
+`components.axes.spines.left.linestyle`, and the same four fields for
+`right`, `top`, and `bottom` (16 keys).
+
+### Ticks
+
+X/Y and Major/Minor are independent. See
+[`Axes.tick_params`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.tick_params.html).
+
+| Parameter | Control | Meaning | Values / default | Key |
+| --- | --- | --- | --- | --- |
+| Primary visible | Inherit checkbox + checkbox | Bottom ticks (X) or left ticks (Y). Major inactive on; minor inactive off. | Inherit | `components.axes.<x/y>.<major/minor>.ticks.primary_visible` |
+| Secondary visible | Inherit checkbox + checkbox | Top ticks (X) or right ticks (Y). | Inherit; inactive off | `components.axes.<x/y>.<major/minor>.ticks.secondary_visible` |
+| Direction | Inherit checkbox + enum | `in`, `out`, or `inout`. | Inherit; inactive `out` | `components.axes.<x/y>.<major/minor>.ticks.direction` |
+| Length | Inherit checkbox + number | Tick length in points. Major inactive `3.5`; minor `2.0`. | Inherit | `components.axes.<x/y>.<major/minor>.ticks.length` |
+| Width | Inherit checkbox + number | Tick width in points. Major inactive `0.8`; minor `0.6`. | Inherit | `components.axes.<x/y>.<major/minor>.ticks.width` |
+| Color | Inherit checkbox + color | Tick color. | Inherit; inactive `#000000` | `components.axes.<x/y>.<major/minor>.ticks.color` |
+
+### Tick labels
+
+| Parameter | Control | Meaning | Values / default | Key |
+| --- | --- | --- | --- | --- |
+| Primary visible | Inherit checkbox + checkbox | Bottom labels (X) or left labels (Y). Major inactive on; minor inactive off. | Inherit | `components.axes.<x/y>.<major/minor>.tick_labels.primary_visible` |
+| Secondary visible | Inherit checkbox + checkbox | Top labels (X) or right labels (Y). | Inherit; inactive off | `components.axes.<x/y>.<major/minor>.tick_labels.secondary_visible` |
+| Color | Inherit checkbox + color | Label color. | Inherit; inactive `#000000` | `components.axes.<x/y>.<major/minor>.tick_labels.color` |
+| Font family | Inherit checkbox + font | Label family. See [fonts](https://matplotlib.org/3.9.0/users/explain/text/fonts.html). | Inherit; inactive `sans-serif` | `components.axes.<x/y>.<major/minor>.tick_labels.fontfamily` |
+| Font size | Inherit checkbox + number | Label size in points. | Inherit; inactive `10.0` | `components.axes.<x/y>.<major/minor>.tick_labels.fontsize` |
+| Font weight | Inherit checkbox + enum | Closed weight tokens. | Inherit; inactive `normal` | `components.axes.<x/y>.<major/minor>.tick_labels.fontweight` |
+| Font style | Inherit checkbox + enum | `normal`, `italic`, or `oblique`. | Inherit; inactive `normal` | `components.axes.<x/y>.<major/minor>.tick_labels.fontstyle` |
+| Rotation | Inherit checkbox + number | Label rotation in degrees. | Inherit; inactive `0` | `components.axes.<x/y>.<major/minor>.tick_labels.rotation` |
+| Pad | Inherit checkbox + number | Padding from the axis. Major inactive `3.5`; minor `3.4`. | Inherit | `components.axes.<x/y>.<major/minor>.tick_labels.pad` |
+
+### Grid
+
+See [`Axes.grid`](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.grid.html).
+
+| Parameter | Control | Meaning | Values / default | Key |
+| --- | --- | --- | --- | --- |
+| Visible | Inherit checkbox + checkbox | Show that grid. | Inherit; inactive off | `components.axes.<x/y>.<major/minor>.grid.visible` |
+| Color | Inherit checkbox + color | Grid line color. | Inherit; inactive `#B0B0B0` | `components.axes.<x/y>.<major/minor>.grid.color` |
+| Line style | Inherit checkbox + preset | Grid pattern. See [linestyles](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html). | Inherit; inactive `-` | `components.axes.<x/y>.<major/minor>.grid.linestyle` |
+| Line width | Inherit checkbox + number | Grid width in points. | Inherit; inactive `0.8` | `components.axes.<x/y>.<major/minor>.grid.linewidth` |
+| Alpha | Inherit checkbox + None checkbox + number | Grid opacity. `None` leaves Matplotlib's unset alpha. | Inherit; inactive `None` | `components.axes.<x/y>.<major/minor>.grid.alpha` |
+
+Together these tables are 99 independent persisted keys.
+
 ## Export
 
 The Export page reuses the same options editor as
@@ -141,7 +286,7 @@ commands. Reset-all application preferences never deletes the color library.
 | --- | --- | --- | --- | --- |
 | Application preferences health | Read-only | Dual-slot health of application settings. | Normal; Degraded; Read-only future; Recovery required; Write uncertain | runtime |
 | Color library health | Read-only | Dual-slot health of the color library. | Same closed set | runtime |
-| Reset all application preferences… | Button | Stages built-in Appearance, Workspace, New Figure, and Export defaults. Apply commits. Hidden when storage is not writable. | Confirmation, then draft | session draft |
+| Reset all application preferences… | Button | Stages built-in Appearance, Workspace, New Figure, Components (all inherit), Axes Components (all inherit), and Export defaults. Apply commits. Hidden when storage is not writable. Never deletes the color library. | Confirmation, then draft | session draft |
 | Reset incompatible storage now… | Button | Immediate recovery: clears application dual-slot keys and leftover `workspaceLayout` / `figureExport` / `colorLibrary` legacy groups, then restores writable defaults. Not Apply. Shown only for Read-only future, Recovery required, or Write uncertain. | Separate confirmation | immediate command |
 | Color library counts | Read-only | Persisted recents, favorite colors, favorite palettes, and custom palettes. Built-in palettes are not counted. Recovery/future storage that was not loaded does not show zeros as an empty library. | `0` on a fresh library | runtime |
 | Clear recent colors… | Button | Immediate clear of recent colors. Favorites and custom palettes stay. Disabled until color storage is Normal or Degraded. | Separate confirmation | color-library command |
@@ -159,6 +304,17 @@ new-slot commit, the older `workspaceLayout`, `figureExport`, and
 ## Matplotlib reference
 
 - [Figure.dpi](https://matplotlib.org/3.9.0/api/figure_api.html#matplotlib.figure.Figure.dpi): document DPI used by New Figure defaults.
+- [Linestyles gallery](https://matplotlib.org/3.9.0/gallery/lines_bars_and_markers/linestyles.html): Line style presets on the Components and Axes Components pages.
+- [Markers API](https://matplotlib.org/3.9.0/api/markers_api.html): Line and Scatter marker catalogs.
+- [Line2D.set_linewidth](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.lines.Line2D.html#matplotlib.lines.Line2D.set_linewidth): Line width.
+- [Axes.scatter](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.scatter.html): Scatter size and linewidth.
+- [Fonts explainer](https://matplotlib.org/3.9.0/users/explain/text/fonts.html): free-Text and Axes tick-label font family.
+- [Axes.set_facecolor](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_facecolor.html): Axes Components facecolor.
+- [Axes.set_frame_on](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_frame_on.html): Axes Components frameon.
+- [Axes.set_axisbelow](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.set_axisbelow.html): Axes Components axisbelow.
+- [Spine](https://matplotlib.org/3.9.0/api/spines_api.html): Axes Components spines.
+- [Axes.tick_params](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.tick_params.html): Axes Components ticks and tick labels.
+- [Axes.grid](https://matplotlib.org/3.9.0/api/_as_gen/matplotlib.axes.Axes.grid.html): Axes Components grid.
 - [Figure.savefig](https://matplotlib.org/3.9.0/api/figure_api.html#matplotlib.figure.Figure.savefig): format, DPI, transparency, face/edge color, bounding box, padding, and metadata.
 - [FigureCanvasBase.print_figure](https://matplotlib.org/3.9.0/api/backend_bases_api.html#matplotlib.backend_bases.FigureCanvasBase.print_figure): print pipeline, `bbox_inches='tight'`, and `pad_inches='layout'`.
 - [Agg print_png](https://matplotlib.org/3.9.0/api/backend_agg_api.html#matplotlib.backends.backend_agg.FigureCanvasAgg.print_png): PNG metadata and Pillow kwargs.

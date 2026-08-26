@@ -60,12 +60,23 @@ def available_marker_definitions() -> tuple[tuple[Any, str], ...]:
     return tuple(definitions)
 
 
-def available_font_families() -> tuple[str, ...]:
-    """Return the installed font families Matplotlib can identify."""
+_FONT_FAMILY_CATALOG: tuple[str, ...] | None = None
 
-    paths = font_manager.findSystemFonts()
-    families = {
-        font_manager.FontProperties(fname=path).get_name()
-        for path in paths
-    }
-    return tuple(sorted(families))
+
+def available_font_families() -> tuple[str, ...]:
+    """Return installed font families Matplotlib 3.9 can identify.
+
+    The catalog is deduplicated, sorted, immutable, and cached for the
+    process so Settings pages do not rescan system fonts.
+    """
+
+    global _FONT_FAMILY_CATALOG
+    cached = _FONT_FAMILY_CATALOG
+    if cached is not None:
+        return cached
+    names = font_manager.fontManager.get_font_names()
+    catalog = tuple(
+        sorted({str(name).strip() for name in names if str(name).strip()})
+    )
+    _FONT_FAMILY_CATALOG = catalog
+    return catalog

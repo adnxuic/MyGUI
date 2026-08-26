@@ -52,6 +52,7 @@ class ExportSettingsPage(QWidget):
         self._host = host
         self._session = session
         self._staging = False
+        self._last_host_patch: dict[str, Any] | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -100,6 +101,7 @@ class ExportSettingsPage(QWidget):
         self._staging = True
         try:
             self.panel.set_export_settings(settings)
+            self._last_host_patch = self.collect_patch()
         finally:
             self._staging = blocked
 
@@ -120,6 +122,7 @@ class ExportSettingsPage(QWidget):
         """Write the current export values into the session or shell host."""
 
         patch = self.collect_patch()
+        self._last_host_patch = dict(patch)
         self._apply_patch(patch)
         target = self._session if session is None else session
         if self._host is None and target is not None:
@@ -130,6 +133,9 @@ class ExportSettingsPage(QWidget):
         if self._staging:
             return
         patch = self.collect_patch()
+        if patch == self._last_host_patch:
+            return
+        self._last_host_patch = dict(patch)
         self._apply_patch(patch)
         if self._host is None and self._session is not None:
             self._session.stage_many(patch)
@@ -138,19 +144,40 @@ class ExportSettingsPage(QWidget):
         host = self._host
         if host is None:
             return
+        stage_values = getattr(host, "stage_values", None)
+        if callable(stage_values):
+            stage_values(patch)
+            return
         for key, value in patch.items():
             host.stage_value(key, value)
 
-    def _reload_from_host(self) -> None:
+    def _reload_from_host(self, values: Mapping[str, Any] | None = None) -> None:
         host = self._host
         if host is None:
             return
-        self.set_export_settings(_export_from_host(host))
+        self.set_export_settings(_export_from_host(host, values))
 
 
-def _export_from_host(host: SettingsPageHost) -> ExportSettings:
+def _export_from_host(
+    host: SettingsPageHost,
+    values: Mapping[str, Any] | None = None,
+) -> ExportSettings:
     registry = production_settings_registry()
-    values = dict(registry.defaults())
-    for key in KEYS_BY_PAGE[PAGE_EXPORT]:
-        values[key] = host.draft_value(key)
-    return snapshot_from_values(values, revision=0).export
+    merged = dict(registry.defaults())
+    keys = KEYS_BY_PAGE[PAGE_EXPORT]
+    if values is None:
+        draft_values = getattr(host, "draft_values", None)
+        if callable(draft_values):
+            try:
+                merged.update(dict(draft_values(keys)))
+            except TypeError:
+                for key in keys:
+                    merged[key] = host.draft_value(key)
+        else:
+            for key in keys:
+                merged[key] = host.draft_value(key)
+    else:
+        for key in keys:
+            if key in values:
+                merged[key] = values[key]
+    return snapshot_from_values(merged, revision=0).export

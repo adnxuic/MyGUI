@@ -19,7 +19,7 @@ subprocesses through their current `sys.executable`. Qt tests run with
 | Materialization/schema/IO | `test_component_materializers`, `test_project_schema`, `test_project_io`, `test_project_object_roundtrip` |
 | Deletion/project publication | `test_component_deletion_and_project_close` |
 | Optional TeX/MATLAB/font paths | `test_optional_dependencies`, `test_font_diagnostics`, `test_scipy_fit_adapter` |
-| Application settings / dual-slot storage | `test_application_settings_storage`, `test_application_settings_service`, `test_application_settings_session`, `test_application_settings_contracts`, `test_application_settings_new_figure`, `test_application_settings_pages`, `test_application_settings_center`, `test_application_settings_center_c`, `test_color_library`, `test_figure_export`, `test_gui_layout` |
+| Application settings / dual-slot storage | `test_application_settings_storage`, `test_application_settings_service`, `test_application_settings_session`, `test_application_settings_contracts`, `test_application_settings_new_figure`, `test_application_settings_pages`, `test_application_settings_center`, `test_application_settings_center_c`, `test_application_settings_components`, `test_application_settings_axes_components`, `test_application_settings_component_creation`, `test_application_settings_axes_creation`, `test_color_library`, `test_figure_export`, `test_gui_layout` |
 | Application theme / QSS / chrome | `test_application_theme`, `test_application_theme_transactions`, `test_application_theme_chrome`, `test_application_theme_qss` |
 | MkDocs component contract | `test_component_documentation` |
 
@@ -82,10 +82,14 @@ not claimed by offscreen automation.
 
 ## Desktop smoke walk
 
-`.agents/checks/verify_desktop_smoke.py` is a local Windows check. It constructs
-`MainWindow`, clicks command-bar, Settings, gallery, Inspector, table, and
-optional TeX/MATLAB panel controls, and writes PNG evidence under
-`build/agent-results/desktop-smoke/`. It is **not** part of
+`.agents/checks/verify_desktop_smoke.py` is a local Windows check. The
+implemented walk is **Settings Center + NEXT_USE only** (Components / Axes
+Components pages, Cancel/Apply restore, a minimum new Curve / Scatter / Text
+creation, and a new Figure for Axes). It is not a full-application walk:
+galleries, 27
+Inspectors, XRD, table, Canvas popout, TeX/MATLAB Connect, and export encoding
+remain on the manual smoke page. Evidence is PNG screenshots plus
+`summary.json` under `build/agent-results/desktop-smoke/`. It is **not** part of
 `APPLICATION_TEST_MODULES` or `verify_full`. Do not set
 `QT_QPA_PLATFORM=offscreen`. Pixel-golden comparison is not used; assertions
 are structural. Native file dialogs, drag/drop, and multi-monitor DPI remain

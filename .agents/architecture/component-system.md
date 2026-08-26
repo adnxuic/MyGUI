@@ -83,11 +83,32 @@ through the Canvas.
 - Derive applicable line, marker, fill, text, and cycle defaults from the
   current Figure style through the shared style-creation service. Display those
   defaults in Controller-free creation Inputs and create the Artist under the
-  same style context.
+  same style context. Do not treat a style probe as the effective creation
+  default once Components overrides exist.
+- Effective Line/Scatter/free-Text creation uses explicit input >
+  `ComponentDefaultsProvider` (`NEXT_USE`) > Axes palette (Line/Scatter
+  color) or Figure style (other fields) > Matplotlib 3.9 fallback. Merge in
+  `creation_preferences.py`. Dialogs freeze one snapshot at open. Restore,
+  materializers, history replay, `add_component_line`, and Reference Guide
+  must not read the Provider. Do not change Controller `PropertySpec.default`
+  to express application defaults.
+- Effective ordinary Axes creation uses explicit layout/XRD values >
+  Axes Components `NEXT_USE` override > current Figure style > Matplotlib 3.9
+  fallback. Merge in `resolve_axes_appearance()`. `AxesLayoutService.create()`
+  applies resolved appearance, then the view spec, then right-Y / shared-label
+  / XRD structure, then registers the fixed semantic subtree. Colorbar
+  auxiliary Axes, In-Axes, restore, materialize, history replay, and layout
+  geometry updates must not read the Provider. Title, Axis Label, Legend,
+  limits, scale, locator, formatter, aspect, and margins are not stored as
+  Axes Components defaults; a later Axes property must decide whether it
+  joins that page. Do not change Controller `PropertySpec.default`.
 - Explicit user choices and an active Axes palette override style defaults.
-  Style changes affect future components only unless the user reapplies them.
+  Style or Components changes affect future components only unless the user
+  reapplies them.
 - Use the injected `ColorLibrary`. Preview ordered colors with
   `ColorCycleState.peek()` and commit only after full publication succeeds.
+  Palette-backed colors commit after the registration transaction; custom
+  Components override colors must not advance the cycle.
 - Create the Artist, synchronize the Controller from it, register Controller,
   Locator, materializer/deletion/editor declarations, then publish through one
   registration transaction. Do not expose partial events or selection.
@@ -98,7 +119,8 @@ through the Canvas.
   `ChartCreationStager` inside one `registration_transaction()`, then
   commits the Axes color cycle and ledger only after that transaction
   succeeds. Public `add_plot` / `add_plots` (and scatter/interpolation
-  equivalents) stay on `PyFigureCanvas`.
+  equivalents) stay on `PyFigureCanvas`. The stager must not receive
+  `ApplicationSettingsService`.
 
 ## Data semantics
 

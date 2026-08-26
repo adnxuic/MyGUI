@@ -70,8 +70,8 @@ class ColorChoiceWidget(QFrame):
         layout.addWidget(self.color_display)
 
         controls = QVBoxLayout()
-        self.color_button = QPushButton("选择颜色…", self)
-        self.color_button.setAccessibleName("打开颜色选择器")
+        self.color_button = QPushButton("Choose color…", self)
+        self.color_button.setAccessibleName("Open color picker")
         self.color_button.clicked.connect(self.showColorDialog)
         controls.addWidget(self.color_button)
 
@@ -105,7 +105,11 @@ class ColorChoiceWidget(QFrame):
     def _sync_favorite(self):
         favorite = self.color_library.is_favorite_color(self._selection.color)
         self.favorite_button.setText("★" if favorite else "☆")
-        self.favorite_button.setToolTip("取消收藏当前颜色" if favorite else "收藏当前颜色")
+        self.favorite_button.setToolTip(
+            "Remove current color from favorites"
+            if favorite
+            else "Add current color to favorites"
+        )
         self.favorite_button.setAccessibleName(self.favorite_button.toolTip())
 
     def _toggle_favorite(self):

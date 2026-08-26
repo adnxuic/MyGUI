@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
+from types import MappingProxyType
 from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -88,11 +90,12 @@ class SettingsCenterWindow(QDialog):
         )
         self._page_widgets: dict[str, QWidget] = {}
         self._page_scrolls: dict[str, QScrollArea] = {}
-        self._reload_hooks: dict[str, list[Callable[[], None]]] = {}
+        self._reload_hooks: dict[str, list[Callable[[Mapping[str, Any]], None]]] = {}
         self._building_page_id: str | None = None
         self._current_page_id: str | None = None
         self._message_emitted = False
         self._syncing_nav = False
+        self._session_closed = True
 
         self.setObjectName("setting_dialog")
         self.setWindowTitle("Settings")
@@ -154,19 +157,25 @@ class SettingsCenterWindow(QDialog):
     def prepare_session(self, page_id: str | None = None) -> None:
         """Begin a settings session if needed and reload created pages from draft."""
 
+        self._session_closed = False
         started = self._glue.session is None
         if started:
             self._glue.start()
             self._search.blockSignals(True)
             self._search.clear()
             self._search.blockSignals(False)
-            self._apply_search("")
-        self._reload_all_created_pages()
+            self._syncing_nav = True
+            try:
+                self._apply_search("", select=False)
+            finally:
+                self._syncing_nav = False
+        values = MappingProxyType(self._glue.draft_values())
+        self._reload_all_created_pages(values)
         target = page_id or self._current_page_id
         if target and target in self._pages:
-            self._select_page(target)
+            self._select_page(target, reload_created=False)
         else:
-            self._select_first_visible()
+            self._select_first_visible(reload_created=False)
         self._update_footer()
 
     def on_pages_changed(self) -> None:
@@ -192,10 +201,16 @@ class SettingsCenterWindow(QDialog):
     def draft_value(self, key: str) -> Any:
         return self._glue.draft_value(key)
 
+    def draft_values(self, keys: Iterable[str] | None = None) -> Mapping[str, Any]:
+        return self._glue.draft_values(keys)
+
     def stage_value(self, key: str, value: Any) -> None:
+        self.stage_values({key: value})
+
+    def stage_values(self, mapping: Mapping[str, Any]) -> None:
         self._begin_action()
         try:
-            self._glue.stage_value(key, value)
+            self._glue.stage_values(mapping)
         except SettingsValidationError as exc:
             self.emit_message(str(exc), "error")
             self._reload_all_created_pages()
@@ -206,7 +221,6 @@ class SettingsCenterWindow(QDialog):
             self._reload_all_created_pages()
             self._update_footer()
             return
-        self._notify_reload(self._current_page_id)
         self._update_footer()
 
     def request_immediate_command(
@@ -291,7 +305,7 @@ class SettingsCenterWindow(QDialog):
         if self._on_message is not None:
             self._on_message(message, str(level))
 
-    def bind_draft_reloaded(self, callback: Callable[[], None]) -> None:
+    def bind_draft_reloaded(self, callback: Callable[[Mapping[str, Any]], None]) -> None:
         page_id = self._building_page_id or self._current_page_id
         if page_id is None:
             return
@@ -305,28 +319,40 @@ class SettingsCenterWindow(QDialog):
         self._search.setFocus(Qt.OtherFocusReason)
 
     def closeEvent(self, event) -> None:  # noqa: N802 — Qt
-        if self.result() != int(QDialog.Accepted):
-            try:
-                self._glue.abandon()
-            except (ThemeApplyError, ThemeRollbackError) as exc:
-                self._begin_action()
-                self.emit_message(str(exc), "error")
-        else:
-            self._glue.release()
+        accepted = int(self.result()) == int(QDialog.Accepted)
+        if not self._complete_session(accepted):
+            event.ignore()
+            return
         super().closeEvent(event)
 
-    def reject(self) -> None:
-        try:
-            self._glue.abandon()
-        except (ThemeApplyError, ThemeRollbackError) as exc:
-            self._begin_action()
-            self.emit_message(str(exc), "error")
+    def done(self, result: int) -> None:  # noqa: N802 — Qt
+        accepted = int(result) == int(QDialog.Accepted)
+        if not self._complete_session(accepted):
             return
+        super().done(result)
+
+    def reject(self) -> None:
         super().reject()
 
     def accept(self) -> None:
-        self._glue.release()
         super().accept()
+
+    def _complete_session(self, accepted: bool) -> bool:
+        """Finish Accept/Reject/X/Esc once. Return False to keep the window open."""
+
+        if self._session_closed:
+            return True
+        try:
+            if accepted:
+                self._glue.release()
+            else:
+                self._glue.abandon()
+        except (ThemeApplyError, ThemeRollbackError) as exc:
+            self._begin_action()
+            self.emit_message(str(exc), "error")
+            return False
+        self._session_closed = True
+        return True
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 — Qt
         if event.key() == Qt.Key_Escape:
@@ -439,28 +465,33 @@ class SettingsCenterWindow(QDialog):
             self._nav.addItem(item)
         self._nav.blockSignals(False)
         self._syncing_nav = False
-        self._apply_search(self._search.text())
+        self._apply_search(self._search.text(), select=False)
         if prefer and prefer in self._pages:
             self._select_page(prefer)
 
-    def _apply_search(self, text: str) -> None:
+    def _apply_search(self, text: str, *, select: bool = True) -> None:
         query = str(text)
         first_visible: QListWidgetItem | None = None
+        was_syncing = self._syncing_nav
         self._syncing_nav = True
-        for index in range(self._nav.count()):
-            item = self._nav.item(index)
-            page_id = item.data(Qt.UserRole)
-            spec = self._pages.get(page_id)
-            visible = page_matches(spec, query, self._settings_registry)
-            item.setHidden(not visible)
-            if visible and first_visible is None:
-                first_visible = item
-        current = self._nav.currentItem()
-        self._syncing_nav = False
+        try:
+            for index in range(self._nav.count()):
+                item = self._nav.item(index)
+                page_id = item.data(Qt.UserRole)
+                spec = self._pages.get(page_id)
+                visible = page_matches(spec, query, self._settings_registry)
+                item.setHidden(not visible)
+                if visible and first_visible is None:
+                    first_visible = item
+            current = self._nav.currentItem()
+        finally:
+            self._syncing_nav = was_syncing
         if first_visible is None:
             self._show_empty_filter()
             return
         self._stack.setVisible(True)
+        if not select:
+            return
         if current is None or current.isHidden():
             self._nav.setCurrentItem(first_visible)
 
@@ -490,15 +521,19 @@ class SettingsCenterWindow(QDialog):
         if page_id:
             self._select_page(str(page_id))
 
-    def _select_first_visible(self) -> None:
+    def _select_first_visible(self, *, reload_created: bool = True) -> None:
         for index in range(self._nav.count()):
             item = self._nav.item(index)
             if item is not None and not item.isHidden():
+                page_id = item.data(Qt.UserRole)
+                if page_id:
+                    self._select_page(str(page_id), reload_created=reload_created)
+                    return
                 self._nav.setCurrentItem(item)
                 return
         self._show_empty_filter()
 
-    def _select_page(self, page_id: str) -> None:
+    def _select_page(self, page_id: str, *, reload_created: bool = True) -> None:
         if page_id not in self._pages:
             return
         spec = self._pages.get(page_id)
@@ -511,6 +546,8 @@ class SettingsCenterWindow(QDialog):
         self._title.setText(spec.title)
         self._description.setText(spec.description)
         self._stack.setCurrentWidget(scroll)
+        if created:
+            self._adopt_application_font(scroll)
         self._restore_button.setEnabled(page_id in persisted_page_ids())
         self._relink_tab_order(widget)
         self._syncing_nav = True
@@ -520,7 +557,7 @@ class SettingsCenterWindow(QDialog):
                 self._nav.setCurrentItem(item)
                 break
         self._syncing_nav = False
-        if created:
+        if created and reload_created:
             self._notify_reload(page_id)
         self._update_footer()
 
@@ -532,19 +569,27 @@ class SettingsCenterWindow(QDialog):
         try:
             factory = spec.factory or empty_page_factory
             widget = factory(self)
+            if widget is None:
+                widget = empty_page_factory(self)
+            self._page_widgets[spec.page_id] = widget
+            scroll = QScrollArea()
+            scroll.setObjectName(f"settings_page_scroll_{spec.page_id}")
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setWidget(widget)
+            self._page_scrolls[spec.page_id] = scroll
+            self._stack.addWidget(scroll)
+            return widget
         finally:
             self._building_page_id = None
-        if widget is None:
-            widget = empty_page_factory(self)
-        self._page_widgets[spec.page_id] = widget
-        scroll = QScrollArea()
-        scroll.setObjectName(f"settings_page_scroll_{spec.page_id}")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(widget)
-        self._page_scrolls[spec.page_id] = scroll
-        self._stack.addWidget(scroll)
-        return widget
+
+    def _adopt_application_font(self, widget: QWidget) -> None:
+        """Apply the live app font to a page that skipped hidden FontChange."""
+
+        app_font = QApplication.font()
+        if widget.font().pointSize() == app_font.pointSize():
+            return
+        widget.setFont(app_font)
 
     def _on_restore_defaults(self) -> None:
         self._begin_action()
@@ -602,18 +647,31 @@ class SettingsCenterWindow(QDialog):
         self._update_footer(status_already_set=not close_after and had_dirty)
         return True
 
-    def _notify_reload(self, page_id: str | None) -> None:
+    def _notify_reload(
+        self,
+        page_id: str | None,
+        values: Mapping[str, Any] | None = None,
+    ) -> None:
         if page_id is None:
             return
+        if values is None:
+            values = MappingProxyType(self._glue.draft_values())
         for callback in list(self._reload_hooks.get(page_id, ())):
             try:
+                callback(values)
+            except TypeError:
                 callback()
             except Exception:
                 continue
 
-    def _reload_all_created_pages(self) -> None:
+    def _reload_all_created_pages(
+        self,
+        values: Mapping[str, Any] | None = None,
+    ) -> None:
+        if values is None:
+            values = MappingProxyType(self._glue.draft_values())
         for page_id in list(self._page_widgets):
-            self._notify_reload(page_id)
+            self._notify_reload(page_id, values)
 
     def _update_footer(self, *, status_already_set: bool = False) -> None:
         dirty = self._glue.is_dirty()

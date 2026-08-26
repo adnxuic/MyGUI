@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
 
@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from mygui.application_settings.keys import (
     PAGE_APPEARANCE,
+    PAGE_AXES_COMPONENTS,
+    PAGE_COMPONENTS,
     PAGE_EXPORT,
     PAGE_IDS,
     PAGE_INTEGRATIONS,
@@ -27,8 +29,14 @@ class SettingsPageHost(Protocol):
     def draft_value(self, key: str) -> Any:
         """Return the committed value with the session dirty patch applied."""
 
+    def draft_values(self, keys: Iterable[str]) -> Mapping[str, Any]:
+        """Return one flattened draft mapping sliced to ``keys``."""
+
     def stage_value(self, key: str, value: Any) -> None:
         """Stage one persisted key on the open session and preview LIVE keys."""
+
+    def stage_values(self, mapping: Mapping[str, Any]) -> None:
+        """Normalize and stage many keys atomically; preview LIVE keys once."""
 
     def request_immediate_command(
         self,
@@ -44,8 +52,8 @@ class SettingsPageHost(Protocol):
     def emit_message(self, text: str, level: str = "info") -> None:
         """Forward at most one Message Bar result for the current user action."""
 
-    def bind_draft_reloaded(self, callback: Callable[[], None]) -> None:
-        """Register a reload hook for the page currently being constructed."""
+    def bind_draft_reloaded(self, callback: Callable[[Mapping[str, Any]], None]) -> None:
+        """Register a reload hook. The hook receives one shared draft mapping."""
 
     def reset_all_preferences(self) -> None:
         """Stage built-in defaults once and reload every created page."""
@@ -86,6 +94,8 @@ SHELL_PAGE_ORDER = (
     PAGE_APPEARANCE,
     PAGE_WORKSPACE,
     PAGE_NEW_FIGURE,
+    PAGE_COMPONENTS,
+    PAGE_AXES_COMPONENTS,
     PAGE_EXPORT,
     PAGE_INTEGRATIONS,
     PAGE_MAINTENANCE,
@@ -106,6 +116,16 @@ SHELL_PAGE_METADATA: Mapping[str, SettingsCenterPageSpec] = {
         page_id=PAGE_NEW_FIGURE,
         title="New Figure",
         description="Default Figure size and document DPI.",
+    ),
+    PAGE_COMPONENTS: SettingsCenterPageSpec(
+        page_id=PAGE_COMPONENTS,
+        title="Components",
+        description="Default appearance for later Line, Scatter, and Text creation.",
+    ),
+    PAGE_AXES_COMPONENTS: SettingsCenterPageSpec(
+        page_id=PAGE_AXES_COMPONENTS,
+        title="Axes Components",
+        description="Default appearance for later ordinary Axes creation.",
     ),
     PAGE_EXPORT: SettingsCenterPageSpec(
         page_id=PAGE_EXPORT,

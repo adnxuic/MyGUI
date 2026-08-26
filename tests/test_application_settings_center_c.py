@@ -16,6 +16,8 @@ from PySide6.QtWidgets import QApplication
 from mygui.application_settings import (
     APPEARANCE_THEME_MODE,
     ApplicationSettingsService,
+    COMPONENTS_LINE_LINEWIDTH,
+    DefaultValueMode,
     EXPORT_CUSTOM_DPI,
     EXPORT_FORMAT,
     EXPORT_USE_PROJECT_DPI,
@@ -23,6 +25,7 @@ from mygui.application_settings import (
     ExportFormatPreference,
     ExportMetadata,
     ExportSettings,
+    InheritableValue,
     JpegSubsampling,
     PadInchesKind,
     PadInchesValue,
@@ -89,14 +92,25 @@ class _FakeHost:
         self.messages: list[tuple[str, str]] = []
         self.reload_hooks: list = []
         self.commands: list[str] = []
+        self.stage_batches: list[dict] = []
 
     def draft_value(self, key: str):
+        return self.draft_values((key,))[key]
+
+    def draft_values(self, keys=None):
         values = flatten_snapshot(self.service.snapshot())
         values.update(self.session.dirty_patch())
-        return values[key]
+        if keys is None:
+            return values
+        return {key: values[key] for key in keys}
 
     def stage_value(self, key: str, value) -> None:
-        self.session.stage(key, value)
+        self.stage_values({key: value})
+
+    def stage_values(self, mapping) -> None:
+        self.stage_batches.append(dict(mapping))
+        for key, value in mapping.items():
+            self.session.stage(key, value)
 
     def request_immediate_command(
         self,
@@ -201,6 +215,8 @@ class ExportSettingsPageTests(unittest.TestCase):
         self.assertFalse(page.panel.dpi_spin.isEnabled())
 
         page.panel.custom_dpi.setChecked(True)
+        self.assertEqual(len(host.stage_batches), 1)
+        self.assertIn(EXPORT_USE_PROJECT_DPI, host.stage_batches[0])
         page.panel.format_combo.setCurrentIndex(
             page.panel.format_combo.findData("png")
         )
@@ -326,7 +342,13 @@ class MaintenanceSettingsPageTests(unittest.TestCase):
         self.library.toggle_favorite_color("#00FF00")
         self.service.commit_patch(
             self.service.begin_session(),
-            {APPEARANCE_THEME_MODE: ThemeMode.DARK, EXPORT_FORMAT: "jpeg"},
+            {
+                APPEARANCE_THEME_MODE: ThemeMode.DARK,
+                EXPORT_FORMAT: "jpeg",
+                COMPONENTS_LINE_LINEWIDTH: InheritableValue(
+                    DefaultValueMode.OVERRIDE, 4.0
+                ),
+            },
         )
         session = self.service.begin_session()
         confirm = _Confirm(allowed=(RESET_ALL_TITLE,))
@@ -349,6 +371,10 @@ class MaintenanceSettingsPageTests(unittest.TestCase):
             ThemeMode.SYSTEM,
         )
         self.assertEqual(session.dirty_patch()[EXPORT_FORMAT], ExportFormatPreference.PNG)
+        self.assertEqual(
+            session.dirty_patch()[COMPONENTS_LINE_LINEWIDTH].mode,
+            DefaultValueMode.INHERIT,
+        )
 
     def test_color_library_commands_require_independent_confirmation(self):
         self.library.record_recent("#ABCDEF")
@@ -591,7 +617,7 @@ class SettingsPageRegistrationTests(unittest.TestCase):
             tex_status=UNAVAILABLE,
             matlab_status=UNAVAILABLE,
         )
-        self.assertEqual(len(returned), 6)
+        self.assertEqual(len(returned), 8)
         self.assertEqual(list(host_pages.page_ids()), list(SHELL_PAGE_ORDER))
 
     def test_c_page_controls_are_keyboard_reachable(self):

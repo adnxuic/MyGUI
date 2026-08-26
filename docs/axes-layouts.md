@@ -99,10 +99,12 @@ The Axes tab applies creation values to every primary Axes in the selected templ
 - `linear`, `log`, `symlog`, or `logit` scales;
 - X/Y inversion;
 - `auto` or `equal` aspect;
-- optional style-background override through the shared `ColorChoiceWidget` and application `ColorLibrary`;
-- independent X/Y major and minor grid visibility.
+- optional background override through the shared `ColorChoiceWidget` and application `ColorLibrary`. Unchecked keeps the resolved Axes Components / Figure style facecolor (`None` in the view spec);
+- independent X/Y major and minor grid visibility. The checkboxes are initialized from the frozen Axes Components + Figure style snapshot; changing them is an explicit layout value.
 
-Only Primary + Right Y displays right-Y creation controls. They provide automatic or explicit Y range, Y scale, and inversion. The right-Y X state is inherited from the primary Axes.
+The layout dialog freezes one resolved Axes appearance when it opens and uses it to initialize background and grid controls. Settings Apply after that open does not rewrite the dialog. Create applies that appearance, then the dialog's explicit view values, then right-Y / shared-label / XRD structural rules. Editing geometry does not reread Axes Components settings.
+
+Only Primary + Right Y displays right-Y creation controls. They provide automatic or explicit Y range, Y scale, and inversion. The right-Y X state is inherited from the primary Axes. Right-Y Axes still receive General, Spine, and Y appearance from Axes Components, then the transparent background and left/right spine topology of the twin pair.
 
 ## Twin legends and deletion
 

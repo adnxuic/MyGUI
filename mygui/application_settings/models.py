@@ -6,7 +6,7 @@ enter schema v15 project files.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -50,6 +50,40 @@ class SettingEditorKind(StrEnum):
     PAD_INCHES = "pad_inches"
     EXPORT_METADATA = "export_metadata"
     ACTION = "action"
+    INHERITABLE_COLOR = "inheritable_color"
+    INHERITABLE_ENUM = "inheritable_enum"
+    INHERITABLE_NUMBER = "inheritable_number"
+    INHERITABLE_TEXT = "inheritable_text"
+    INHERITABLE_BOOL = "inheritable_bool"
+    INHERITABLE_OPTIONAL_NUMBER = "inheritable_optional_number"
+
+
+class DefaultValueMode(StrEnum):
+    """Whether a Components default inherits or overrides the style/palette."""
+
+    INHERIT = "inherit"
+    OVERRIDE = "override"
+
+
+class InheritSource(StrEnum):
+    """Where an inherited Components default is resolved at creation time."""
+
+    FIGURE_STYLE = "figure_style"
+    AXES_PALETTE = "axes_palette"
+    NONE = "none"
+
+
+@dataclass(frozen=True, slots=True)
+class InheritableValue:
+    """One Components default. Inherit still stores the last custom value."""
+
+    mode: DefaultValueMode = DefaultValueMode.INHERIT
+    value: Any = None
+
+    def __post_init__(self) -> None:
+        mode = self.mode
+        if not isinstance(mode, DefaultValueMode):
+            object.__setattr__(self, "mode", DefaultValueMode(mode))
 
 
 class SettingsHealth(StrEnum):
@@ -189,6 +223,305 @@ class NewFigureSettings:
     document_dpi: float = 100.0
 
 
+def _inherit(value: Any) -> InheritableValue:
+    return InheritableValue(mode=DefaultValueMode.INHERIT, value=value)
+
+
+@dataclass(frozen=True, slots=True)
+class LineComponentDefaults:
+    """NEXT_USE Line appearance for Function Curve, Plot, Fit, Interpolation."""
+
+    color: InheritableValue = field(default_factory=lambda: _inherit("#1F77B4"))
+    linestyle: InheritableValue = field(default_factory=lambda: _inherit("-"))
+    linewidth: InheritableValue = field(default_factory=lambda: _inherit(1.5))
+    marker: InheritableValue = field(default_factory=lambda: _inherit("None"))
+    markersize: InheritableValue = field(default_factory=lambda: _inherit(6.0))
+    markeredgewidth: InheritableValue = field(
+        default_factory=lambda: _inherit(1.0)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ScatterComponentDefaults:
+    """NEXT_USE Scatter appearance for ordinary Scatter creation."""
+
+    color: InheritableValue = field(default_factory=lambda: _inherit("#1F77B4"))
+    marker: InheritableValue = field(default_factory=lambda: _inherit("o"))
+    size: InheritableValue = field(default_factory=lambda: _inherit(36.0))
+    linewidth: InheritableValue = field(default_factory=lambda: _inherit(1.0))
+
+
+@dataclass(frozen=True, slots=True)
+class TextComponentDefaults:
+    """NEXT_USE free-Text appearance. Title and axis labels are excluded."""
+
+    fontfamily: InheritableValue = field(
+        default_factory=lambda: _inherit("sans-serif")
+    )
+    fontsize: InheritableValue = field(default_factory=lambda: _inherit(10.0))
+    color: InheritableValue = field(default_factory=lambda: _inherit("#000000"))
+    fontweight: InheritableValue = field(
+        default_factory=lambda: _inherit("normal")
+    )
+    fontstyle: InheritableValue = field(
+        default_factory=lambda: _inherit("normal")
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SpineSideDefaults:
+    """NEXT_USE appearance for one Axes spine."""
+
+    visible: InheritableValue = field(default_factory=lambda: _inherit(True))
+    color: InheritableValue = field(default_factory=lambda: _inherit("#000000"))
+    linewidth: InheritableValue = field(default_factory=lambda: _inherit(0.8))
+    linestyle: InheritableValue = field(default_factory=lambda: _inherit("-"))
+
+
+@dataclass(frozen=True, slots=True)
+class AxesSpineDefaults:
+    """NEXT_USE appearance for the four standard Axes spines."""
+
+    left: SpineSideDefaults = field(default_factory=SpineSideDefaults)
+    right: SpineSideDefaults = field(default_factory=SpineSideDefaults)
+    top: SpineSideDefaults = field(default_factory=SpineSideDefaults)
+    bottom: SpineSideDefaults = field(default_factory=SpineSideDefaults)
+
+
+def _tick_defaults(*, major: bool) -> "TickDefaults":
+    return TickDefaults(
+        primary_visible=_inherit(major),
+        secondary_visible=_inherit(False),
+        direction=_inherit("out"),
+        length=_inherit(3.5 if major else 2.0),
+        width=_inherit(0.8 if major else 0.6),
+        color=_inherit("#000000"),
+    )
+
+
+def _tick_label_defaults(*, major: bool) -> "TickLabelDefaults":
+    return TickLabelDefaults(
+        primary_visible=_inherit(major),
+        secondary_visible=_inherit(False),
+        color=_inherit("#000000"),
+        fontfamily=_inherit("sans-serif"),
+        fontsize=_inherit(10.0),
+        fontweight=_inherit("normal"),
+        fontstyle=_inherit("normal"),
+        rotation=_inherit(0.0),
+        pad=_inherit(3.5 if major else 3.4),
+    )
+
+
+def _grid_defaults() -> "GridDefaults":
+    return GridDefaults(
+        visible=_inherit(False),
+        color=_inherit("#B0B0B0"),
+        linestyle=_inherit("-"),
+        linewidth=_inherit(0.8),
+        alpha=_inherit(None),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class TickDefaults:
+    """NEXT_USE Tick group appearance for one axis level."""
+
+    primary_visible: InheritableValue = field(
+        default_factory=lambda: _inherit(True)
+    )
+    secondary_visible: InheritableValue = field(
+        default_factory=lambda: _inherit(False)
+    )
+    direction: InheritableValue = field(default_factory=lambda: _inherit("out"))
+    length: InheritableValue = field(default_factory=lambda: _inherit(3.5))
+    width: InheritableValue = field(default_factory=lambda: _inherit(0.8))
+    color: InheritableValue = field(default_factory=lambda: _inherit("#000000"))
+
+
+@dataclass(frozen=True, slots=True)
+class TickLabelDefaults:
+    """NEXT_USE Tick Label appearance for one axis level."""
+
+    primary_visible: InheritableValue = field(
+        default_factory=lambda: _inherit(True)
+    )
+    secondary_visible: InheritableValue = field(
+        default_factory=lambda: _inherit(False)
+    )
+    color: InheritableValue = field(default_factory=lambda: _inherit("#000000"))
+    fontfamily: InheritableValue = field(
+        default_factory=lambda: _inherit("sans-serif")
+    )
+    fontsize: InheritableValue = field(default_factory=lambda: _inherit(10.0))
+    fontweight: InheritableValue = field(
+        default_factory=lambda: _inherit("normal")
+    )
+    fontstyle: InheritableValue = field(
+        default_factory=lambda: _inherit("normal")
+    )
+    rotation: InheritableValue = field(default_factory=lambda: _inherit(0.0))
+    pad: InheritableValue = field(default_factory=lambda: _inherit(3.5))
+
+
+@dataclass(frozen=True, slots=True)
+class GridDefaults:
+    """NEXT_USE Grid appearance for one axis level."""
+
+    visible: InheritableValue = field(default_factory=lambda: _inherit(False))
+    color: InheritableValue = field(default_factory=lambda: _inherit("#B0B0B0"))
+    linestyle: InheritableValue = field(default_factory=lambda: _inherit("-"))
+    linewidth: InheritableValue = field(default_factory=lambda: _inherit(0.8))
+    alpha: InheritableValue = field(default_factory=lambda: _inherit(None))
+
+
+@dataclass(frozen=True, slots=True)
+class AxisLevelDefaults:
+    """Ticks, tick labels, and grid for one major/minor level."""
+
+    ticks: TickDefaults = field(default_factory=TickDefaults)
+    tick_labels: TickLabelDefaults = field(default_factory=TickLabelDefaults)
+    grid: GridDefaults = field(default_factory=GridDefaults)
+
+
+def _axis_level_defaults(*, major: bool) -> AxisLevelDefaults:
+    return AxisLevelDefaults(
+        ticks=_tick_defaults(major=major),
+        tick_labels=_tick_label_defaults(major=major),
+        grid=_grid_defaults(),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AxisAppearanceDefaults:
+    """NEXT_USE X or Y appearance. Major and minor are independent."""
+
+    major: AxisLevelDefaults = field(
+        default_factory=lambda: _axis_level_defaults(major=True)
+    )
+    minor: AxisLevelDefaults = field(
+        default_factory=lambda: _axis_level_defaults(major=False)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AxesComponentDefaults:
+    """Settings → Axes Components. Affects later ordinary Axes creation only."""
+
+    facecolor: InheritableValue = field(
+        default_factory=lambda: _inherit("#FFFFFF")
+    )
+    frameon: InheritableValue = field(default_factory=lambda: _inherit(True))
+    axisbelow: InheritableValue = field(
+        default_factory=lambda: _inherit("line")
+    )
+    spines: AxesSpineDefaults = field(default_factory=AxesSpineDefaults)
+    x: AxisAppearanceDefaults = field(default_factory=AxisAppearanceDefaults)
+    y: AxisAppearanceDefaults = field(default_factory=AxisAppearanceDefaults)
+
+
+def axes_defaults_to_values(
+    axes: AxesComponentDefaults,
+) -> dict[str, InheritableValue]:
+    """Flatten nested Axes defaults onto dotted ``components.axes.*`` keys."""
+
+    values: dict[str, InheritableValue] = {
+        "components.axes.facecolor": axes.facecolor,
+        "components.axes.frameon": axes.frameon,
+        "components.axes.axisbelow": axes.axisbelow,
+    }
+    for side in ("left", "right", "top", "bottom"):
+        spine = getattr(axes.spines, side)
+        for item in fields(SpineSideDefaults):
+            values[f"components.axes.spines.{side}.{item.name}"] = getattr(
+                spine, item.name
+            )
+    for axis_name in ("x", "y"):
+        axis = getattr(axes, axis_name)
+        for level_name in ("major", "minor"):
+            level = getattr(axis, level_name)
+            for group_name in ("ticks", "tick_labels", "grid"):
+                group = getattr(level, group_name)
+                prefix = f"components.axes.{axis_name}.{level_name}.{group_name}"
+                for item in fields(type(group)):
+                    values[f"{prefix}.{item.name}"] = getattr(group, item.name)
+    return values
+
+
+def _group_from_values(cls, prefix: str, values: Mapping[str, Any]):
+    return cls(
+        **{item.name: values[f"{prefix}.{item.name}"] for item in fields(cls)}
+    )
+
+
+def axes_defaults_from_values(values: Mapping[str, Any]) -> AxesComponentDefaults:
+    """Rebuild nested Axes defaults from a complete dotted-key mapping."""
+
+    def axis(name: str) -> AxisAppearanceDefaults:
+        return AxisAppearanceDefaults(
+            major=AxisLevelDefaults(
+                ticks=_group_from_values(
+                    TickDefaults, f"components.axes.{name}.major.ticks", values
+                ),
+                tick_labels=_group_from_values(
+                    TickLabelDefaults,
+                    f"components.axes.{name}.major.tick_labels",
+                    values,
+                ),
+                grid=_group_from_values(
+                    GridDefaults, f"components.axes.{name}.major.grid", values
+                ),
+            ),
+            minor=AxisLevelDefaults(
+                ticks=_group_from_values(
+                    TickDefaults, f"components.axes.{name}.minor.ticks", values
+                ),
+                tick_labels=_group_from_values(
+                    TickLabelDefaults,
+                    f"components.axes.{name}.minor.tick_labels",
+                    values,
+                ),
+                grid=_group_from_values(
+                    GridDefaults, f"components.axes.{name}.minor.grid", values
+                ),
+            ),
+        )
+
+    return AxesComponentDefaults(
+        facecolor=values["components.axes.facecolor"],
+        frameon=values["components.axes.frameon"],
+        axisbelow=values["components.axes.axisbelow"],
+        spines=AxesSpineDefaults(
+            left=_group_from_values(
+                SpineSideDefaults, "components.axes.spines.left", values
+            ),
+            right=_group_from_values(
+                SpineSideDefaults, "components.axes.spines.right", values
+            ),
+            top=_group_from_values(
+                SpineSideDefaults, "components.axes.spines.top", values
+            ),
+            bottom=_group_from_values(
+                SpineSideDefaults, "components.axes.spines.bottom", values
+            ),
+        ),
+        x=axis("x"),
+        y=axis("y"),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentDefaultsSettings:
+    """Settings → Components and Axes Components. Affects later creation only."""
+
+    line: LineComponentDefaults = field(default_factory=LineComponentDefaults)
+    scatter: ScatterComponentDefaults = field(
+        default_factory=ScatterComponentDefaults
+    )
+    text: TextComponentDefaults = field(default_factory=TextComponentDefaults)
+    axes: AxesComponentDefaults = field(default_factory=AxesComponentDefaults)
+
+
 @dataclass(frozen=True, slots=True)
 class ExportSettings:
     """figureExport/v1 preferences. ``use_project_dpi`` is a strategy flag."""
@@ -224,6 +557,9 @@ class ApplicationSettingsSnapshot:
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
     workspace: WorkspaceSettings = field(default_factory=WorkspaceSettings)
     new_figure: NewFigureSettings = field(default_factory=NewFigureSettings)
+    components: ComponentDefaultsSettings = field(
+        default_factory=ComponentDefaultsSettings
+    )
     export: ExportSettings = field(default_factory=ExportSettings)
     revision: int = 0
 

@@ -262,9 +262,13 @@ class MainWindow(QMainWindow):
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         new_figure_defaults = None
+        component_defaults = None
         if self.settings_service is not None:
             new_figure_defaults = (
                 self.settings_service.new_figure_defaults_provider()
+            )
+            component_defaults = (
+                self.settings_service.component_defaults_provider()
             )
         self.figure_window = PyFigureWindow(
             figure_inspector_host=(
@@ -274,6 +278,7 @@ class MainWindow(QMainWindow):
             color_library=self.color_library,
             component_tree_host=self.component_tree_host,
             new_figure_defaults=new_figure_defaults,
+            component_defaults=component_defaults,
         )
         self.figure_window.setMinimumWidth(self.MIN_CANVAS_WIDTH)
         self.figure_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

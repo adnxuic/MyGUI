@@ -140,26 +140,42 @@ the transaction; rollback restores the captured hub snapshot.
 
 ## Theme transaction
 
-Apply, including Settings preview, is one reversible transaction:
+Apply, including Settings preview, is one reversible transaction. Widget steps
+are chosen from the actual delta after pre-render:
 
 1. Strictly validate preferences and resolve System to `EffectiveScheme`.
-2. Pre-render every QSS document, QPalette, font, metric, and icon with no
-   widget side effects.
+2. Pre-render only the artifacts required by the planned steps: QPalette,
+   font, and metrics always; QSS documents and icons only when those steps
+   will run. Font-only previews must not rasterize chrome icons or expand
+   stylesheets.
 3. Capture mementos for `QApplication`, each bound widget, structural sizes,
    and icons.
-4. On the GUI thread apply font, palette, application QSS, local QSS
-   (then unpolish/polish), metrics, then icons. Publish the in-flight
-   snapshot to the runtime hub before those widget steps so token readers
-   see the new scheme.
-5. On any failure, roll back in reverse order. Keep the current
-   `ThemeSnapshot` and emit no event.
+4. On the GUI thread apply only the steps that changed. The font step
+   filters `FontChange` on hidden widgets so cached Settings pages are not
+   polished during a 1 pt preview:
+   - A 1 pt font change is always the font step only, even when high-DPI
+     font metrics would move the size floor by a pixel. Larger jumps also
+     run QSS and density metrics when the font-metric size floor actually
+     changes control heights.
+   - Effective Light/Dark changes run Palette, QSS, and Icon.
+   - Density changes run QSS, Metrics, and Icon.
+   Compare pre-rendered QSS with the applied sheets. Unchanged documents
+   publish the new snapshot and tokens without `setStyleSheet`.
+   Publish the in-flight snapshot to the runtime hub before those widget
+   steps so token readers see the new scheme.
+5. On any failure, roll back in reverse order of the steps that actually ran.
+   Keep the current `ThemeSnapshot` and emit no event.
 6. Settings Apply finishes the reversible preview first, then the dual-slot
    document commit. Storage failure restores both the persisted values and the
    pre-window appearance.
 7. Success publishes one `themeChanged(old, new)`.
 
 Preview of `LIVE_REVERSIBLE` appearance follows the same rollback rules.
-Cancel, Esc, and dialog close must restore the exact pre-session snapshot.
+A preview session records the union of steps it actually executed. Cancel,
+Esc, and dialog close restore those steps in reverse from the pre-session
+memento. `ThemeService.ensure_committed(preferences)` is a no-event, no-redraw
+no-op when the published effective theme already matches; it runs one apply
+when System Light/Dark changed during the session.
 
 ## UI theme versus Figure style
 
@@ -197,9 +213,10 @@ The composition root applies `ThemeSnapshot` after settings load and before
 any `QWidget`. Appearance `SettingSpec`s stay on `application_settings`;
 `ThemeService` remains the only chrome publisher. The Settings Center shell
 previews appearance through `ThemeService.preview` / `cancel_preview` /
-`restore_pre_session_appearance`. Theme apply/rollback errors surface as one
-Message Bar result; widgets reload so they stay aligned with chrome. After
-Cancel, if the committed mode is System, `apply_committed` runs once more so
-an OS Light/Dark switch during the session is honored. Successful incompatible
+`restore_pre_session_appearance` / `ensure_committed`. Theme apply/rollback
+errors surface as one Message Bar result; widgets reload so they stay aligned
+with chrome. After Cancel, if the committed mode is System,
+`ensure_committed` runs so an OS Light/Dark switch during the session is
+honored without repeating an identical transaction. Successful incompatible
 storage reset uses the same `apply_committed_appearance` path as startup.
 `ARCH-UI-THEME-BYPASS` is promoted.

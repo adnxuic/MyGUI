@@ -20,3 +20,6 @@ Update Matplotlib exposure classification and exact profile coverage. Test
 normalization, editor round trip, cancellation/no-op, rejection rollback,
 Artist/Controller synchronization, and save/open when applicable. Update every
 affected Editing Components parameter table and the schema-v15 summary.
+Application Settings → Components defaults are not Inspector properties: do
+not change `PropertySpec.default` to express them, and do not add those keys
+to schema v15.

@@ -18,6 +18,8 @@ from mygui.application_settings import (
     NEW_FIGURE_HEIGHT_IN,
     NEW_FIGURE_WIDTH_IN,
     PAGE_APPEARANCE,
+    PAGE_AXES_COMPONENTS,
+    PAGE_COMPONENTS,
     PAGE_EXPORT,
     PAGE_NEW_FIGURE,
     PAGE_WORKSPACE,
@@ -461,12 +463,16 @@ class ApplicationSettingsServiceTests(unittest.TestCase):
             {NEW_FIGURE_WIDTH_IN: 7.2, EXPORT_FORMAT: "svg"},
         )
         figure = service.new_figure_defaults_provider()
+        components = service.component_defaults_provider()
         export = service.export_preferences_port()
         workspace = service.workspace_layout_port()
         self.assertEqual(figure.current().width_in, 7.2)
+        self.assertEqual(components.current().line.color.mode.value, "inherit")
         self.assertEqual(export.current().format, ExportFormatPreference.SVG)
         self.assertTrue(workspace.remember_layout())
         self.assertFalse(hasattr(figure, "commit_patch"))
+        self.assertFalse(hasattr(components, "commit_patch"))
+        self.assertFalse(hasattr(components, "begin_session"))
         self.assertFalse(hasattr(export, "begin_session"))
         self.assertTrue(callable(getattr(export, "commit")))
         self.assertFalse(hasattr(workspace, "commit_patch"))
@@ -504,11 +510,18 @@ class ApplicationSettingsServiceTests(unittest.TestCase):
         self.assertEqual(export.current().format, ExportFormatPreference.SVG)
         self.assertEqual(service.snapshot().export.format, ExportFormatPreference.SVG)
 
-    def test_production_registry_covers_four_pages(self):
+    def test_production_registry_covers_persisted_pages(self):
         registry = production_settings_registry()
         self.assertEqual(
             [page.page_id for page in registry.pages],
-            [PAGE_APPEARANCE, PAGE_WORKSPACE, PAGE_NEW_FIGURE, PAGE_EXPORT],
+            [
+                PAGE_APPEARANCE,
+                PAGE_WORKSPACE,
+                PAGE_NEW_FIGURE,
+                PAGE_COMPONENTS,
+                PAGE_AXES_COMPONENTS,
+                PAGE_EXPORT,
+            ],
         )
         live = {
             spec.key

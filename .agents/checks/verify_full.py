@@ -88,6 +88,10 @@ APPLICATION_TEST_MODULES = {
     "test_application_settings_pages": (ISOLATION_GUI_MODULE, 2.0),
     "test_application_settings_center": (ISOLATION_GUI_MODULE, 4.0),
     "test_application_settings_center_c": (ISOLATION_GUI_MODULE, 3.0),
+    "test_application_settings_components": (ISOLATION_CORE, 0.3),
+    "test_application_settings_axes_components": (ISOLATION_CORE, 1.0),
+    "test_application_settings_component_creation": (ISOLATION_GUI_MODULE, 12.0),
+    "test_application_settings_axes_creation": (ISOLATION_GUI_MODULE, 25.0),
     "test_application_theme": (ISOLATION_GUI_MODULE, 3.0),
     "test_application_theme_transactions": (ISOLATION_GUI_MODULE, 3.0),
     "test_application_theme_chrome": (ISOLATION_GUI_MODULE, 8.0),
@@ -816,11 +820,17 @@ def _application_steps() -> list[dict]:
         "status": "failed" if errors else "passed", "required": True,
         "durationMs": 0, "evidence": "\n".join(errors) if errors else "Runtime versions match.",
     })
+    compile_targets = ["mygui", "tests", "main.py"]
+    ruff_targets = ["mygui", "tests", ".agents/checks", "main.py"]
+    smoke = Path(".agents/desktop_smoke")
+    if smoke.is_dir():
+        compile_targets.append(str(smoke))
+        ruff_targets.insert(-1, str(smoke))
     verification.append(run_step(
-        "compileall", [sys.executable, "-m", "compileall", "-q", "mygui", "tests", "main.py", ".agents/desktop_smoke"]
+        "compileall", [sys.executable, "-m", "compileall", "-q", *compile_targets]
     ))
     verification.append(run_step(
-        "ruff", [sys.executable, "-m", "ruff", "check", "mygui", "tests", ".agents/checks", ".agents/desktop_smoke", "main.py"]
+        "ruff", [sys.executable, "-m", "ruff", "check", *ruff_targets]
     ))
     try:
         requested_workers = default_test_shards()

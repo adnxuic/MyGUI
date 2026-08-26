@@ -137,6 +137,10 @@ tasks:
       - tests.test_application_settings_pages
       - tests.test_application_settings_center
       - tests.test_application_settings_center_c
+      - tests.test_application_settings_components
+      - tests.test_application_settings_axes_components
+      - tests.test_application_settings_component_creation
+      - tests.test_application_settings_axes_creation
       - tests.test_color_library
       - tests.test_figure_export
       - tests.test_gui_layout
@@ -151,6 +155,7 @@ tasks:
       - docs/color-picker.md
       - docs/tex-integration.md
       - docs/style-creation-defaults.md
+      - docs/axes-layouts.md
       - docs/documentation-site.md
       - docs/keyboard-and-mouse-reference.md
       - docs/smoke-test.md

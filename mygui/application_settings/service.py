@@ -21,7 +21,10 @@ from .errors import (
 from .keys import PAGE_IDS, PERSISTENT_KEYS
 from .models import (
     ApplicationSettingsSnapshot,
+    ComponentDefaultsSettings,
+    DefaultValueMode,
     ExportSettings,
+    InheritableValue,
     NewFigureSettings,
     SettingEffect,
     SettingsCommitResult,
@@ -29,12 +32,14 @@ from .models import (
     SettingsHealth,
 )
 from .ports import (
+    ComponentDefaultsProvider,
     ExportPreferencesPort,
     MemorySettingsDocumentPort,
     NewFigureDefaultsProvider,
     ServiceStorageCommitResult,
     ServiceWorkspaceLayoutPort,
     SettingsDocumentPort,
+    SnapshotComponentDefaults,
     SnapshotExportPreferences,
     SnapshotNewFigureDefaults,
     WorkspaceLayoutPort,
@@ -44,6 +49,14 @@ from .runtime import RuntimeBindingTransaction, SettingsRuntimeApplier
 from .session import SettingsSession
 
 SettingsListener = Callable[[ApplicationSettingsSnapshot], None]
+
+
+def _restore_inheritable(current: Any, default: Any) -> Any:
+    """Restore inherit mode while keeping the last hidden override value."""
+
+    if isinstance(current, InheritableValue) and isinstance(default, InheritableValue):
+        return InheritableValue(DefaultValueMode.INHERIT, current.value)
+    return default
 
 
 class ApplicationSettingsService:
@@ -292,9 +305,11 @@ class ApplicationSettingsService:
         defaults = self._registry.restore_defaults_for_page(section_id)
         current = flatten_snapshot(self._snapshot)
         dirty = dict(session.dirty_patch())
+        live = {**current, **dirty}
         for key, default in defaults.items():
-            if current[key] != default:
-                dirty[key] = default
+            target = _restore_inheritable(live.get(key, current[key]), default)
+            if current[key] != target:
+                dirty[key] = target
             else:
                 dirty.pop(key, None)
         session._replace_dirty(dirty)
@@ -311,9 +326,11 @@ class ApplicationSettingsService:
         defaults = self._registry.reset_all_defaults()
         current = flatten_snapshot(self._snapshot)
         dirty = dict(session.dirty_patch())
+        live = {**current, **dirty}
         for key, default in defaults.items():
-            if current[key] != default:
-                dirty[key] = default
+            target = _restore_inheritable(live.get(key, current[key]), default)
+            if current[key] != target:
+                dirty[key] = target
             else:
                 dirty.pop(key, None)
         session._replace_dirty(dirty)
@@ -333,6 +350,11 @@ class ApplicationSettingsService:
         """Narrow port for Style creation/import. Do not pass this service."""
 
         return SnapshotNewFigureDefaults(lambda: self.snapshot().new_figure)
+
+    def component_defaults_provider(self) -> ComponentDefaultsProvider:
+        """Narrow port for component creation. Do not pass this service."""
+
+        return SnapshotComponentDefaults(lambda: self.snapshot().components)
 
     def export_preferences_port(self) -> ExportPreferencesPort:
         """Narrow port for export defaults. Do not pass this service."""
@@ -355,6 +377,9 @@ class ApplicationSettingsService:
 
     def new_figure_defaults(self) -> NewFigureSettings:
         return self._snapshot.new_figure
+
+    def component_defaults(self) -> ComponentDefaultsSettings:
+        return self._snapshot.components
 
     def export_preferences(self) -> ExportSettings:
         return self._snapshot.export

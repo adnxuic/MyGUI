@@ -118,22 +118,37 @@ through `bind_qss` and `subscribe_theme_window` so a hidden dialog still
 follows Dark/Light.
 
 On each open the window calls `begin_session()`, reloads every already-created
-page from `draft_value`, centers within 90% of the current screen
-`availableGeometry` (initial 840×620, minimum 720×520 logical pixels; smaller
-screens scale to 90%), and does not write window geometry to QSettings.
-Switching back to a created page also reloads it. Search Enter/Return is
-swallowed and OK is not the default button, so the search box cannot commit.
+page from one shared `draft_values` mapping, centers within 90% of the current
+screen `availableGeometry` (initial 840×620, minimum 720×520 logical pixels;
+smaller screens scale to 90%), and does not write window geometry to QSettings.
+Clearing search on session start does not implicitly create pages. Session
+start, cached-page refresh, and target selection each run once; the current
+page is not loaded a second time on reopen. Switching back to a created page
+also reloads it from that mapping. Search Enter/Return is swallowed and OK is
+not the default button, so the search box cannot commit.
 A search with no matches hides the page stack. Search haystack includes
 `SettingSpec` enum choice values/names and Maintenance command keywords.
 
+`SettingsPageHost` exposes `draft_values(keys)` and `stage_values(mapping)` as
+the page data path. Single-key `draft_value` / `stage_value` wrap those batch
+methods. Export's option group, Appearance's three live values, and Axes Copy
+each stage once, update the footer once, and preview appearance at most once.
+Successful edits do not reload the page; failures reload widgets from the
+authoritative draft. Page switches, Apply resync, and reopen still refresh.
+Font-family combos share one process-level catalog model from the Matplotlib
+adapter so Axes Components does not insert the family list once per editor.
+
 Appearance draft changes call `ThemeService.preview`. Theme apply/rollback
 errors emit one Message Bar result and reload widgets so they stay aligned
-with chrome. Cancel, Esc, and window close call
-`restore_pre_session_appearance` and discard the session without writing; if
-the committed theme is System, Cancel then `apply_committed` once more so an
-OS Light/Dark switch during the session is honored. Apply and OK run
-`commit_patch` after a rollback-capable preview and are disabled when the
-service is not writable (`READ_ONLY_FUTURE`, recovery, write-uncertain).
+with chrome. Accept, Reject, Esc, and the window X finish the session in
+`QDialog.done()`; `abandon()` and `release()` are idempotent. Cancel, Esc, and
+window close restore pre-session appearance and discard the session without
+writing. If the committed theme is System, Cancel then `ensure_committed` so
+an OS Light/Dark switch during the session is honored without a no-op theme
+transaction. Rollback failure keeps the window open and reports one error.
+Apply and OK run `commit_patch` after a rollback-capable preview and are
+disabled when the service is not writable (`READ_ONLY_FUTURE`, recovery,
+write-uncertain).
 `SettingsHealth` keeps those states independent of `DEGRADED`. Storage
 failure restores persisted values and the pre-window appearance.
 `reset_section` is draft-only (`Restore page defaults`) and excludes hidden
@@ -142,7 +157,12 @@ failure restores persisted values and the pre-window appearance.
 commands use `request_immediate_command` with their own confirmation and never
 ride the Apply patch. Each user action emits at most one Message Bar result
 through the host `on_message` callback; Integrator wires that to MainWindow.
-Each page lives in its own `QScrollArea`.
+Each page lives in its own `QScrollArea`. Hosted pages omit the in-page
+intro label because the shell already shows `SettingsCenterPageSpec.description`.
+Components uses Line / Scatter / Text tabs, and Axes Components uses General /
+Spines / X Axis / Y Axis tabs; each tab body scrolls internally so the tab bar
+stays visible at 840×620. Hosted Axes Components builds General first and
+realizes the other tabs on first visit so the initial page open stays cheap.
 
 B and C register pages with `SettingsCenterHost.register_page(SettingsCenterPageSpec)`.
 Factories run once on first visit. Search uses page title, description, and
@@ -164,9 +184,12 @@ Closed `SettingEffect` values:
 | `NEXT_USE` | Takes effect on the next creation or export; live Figures stay unchanged |
 | `RESTART_REQUIRED` | Persist now; tell the user a restart is required; do not half-apply |
 
-Persisted pages: `appearance`, `workspace`, `new_figure`, `export`.
+Persisted pages: `appearance`, `workspace`, `new_figure`, `components`,
+`axes_components`, `export`.
 Integrations and Maintenance are read-only status, navigation actions, or
-immediate commands, not extra snapshot sections.
+immediate commands, not extra snapshot sections. Navigation order is
+Appearance, Workspace, New Figure, Components, Axes Components, Export,
+Integrations, Maintenance.
 
 Fresh install defaults: theme System, 9 pt, Standard density. Detectable
 legacy migration defaults: Light, 9 pt, Standard, so existing visual chrome
@@ -185,6 +208,9 @@ export consume only:
 
 - `NewFigureDefaultsProvider` for Style creation and first-time text/Excel
   Figure size and document DPI
+- `ComponentDefaultsProvider` for Line/Scatter/free-Text and ordinary Axes
+  creation appearance (`current()` returns `ComponentDefaultsSettings` with
+  nested `axes: AxesComponentDefaults`; do not inject the Settings Service)
 - `ExportPreferencesPort` for default export options
 - `WorkspaceLayoutPort` for MainWindow remember/restore, immediate reset, and
   close-save. Reset is a confirmed command, not an Apply draft. A close-save
@@ -198,14 +224,37 @@ export dialog, and ColorLibrary do not wrap again. MainWindow must not
 
 The composition root injects the New Figure port into `PyFigureWindow`
 (`new_figure_defaults=` or `set_new_figure_defaults_provider`) from
-`service.new_figure_defaults_provider()`. Style creation, first-time text
+`service.new_figure_defaults_provider()`, and the Components port
+(`component_defaults=` or `set_component_defaults_provider`) from
+`service.component_defaults_provider()`. Style creation, first-time text
 import, and first-time Excel import call `current()` at use time through
 `creation_figure_size()` or `resolve_new_figure_defaults`; they must not
-cache a snapshot. `load_project_figure_snapshot` and schema-v15 open never
-call this port and keep the persisted figure size and document DPI.
+cache a snapshot. Line/Scatter/free-Text creation merges style, palette, and
+Components overrides in `creation_preferences.py` at use time. Ordinary Axes
+creation merges Figure style, Axes Components overrides, and Matplotlib 3.9
+fallbacks in `resolve_axes_appearance()`; Settings/UI must not import
+Matplotlib. Creation dialogs freeze one snapshot in `__init__` and ignore
+later Apply until a new dialog opens. `AxesLayoutService.create()` accepts
+that frozen `ResolvedAxesAppearance` or reads the provider once at the start
+of a programmatic create. `load_project_figure_snapshot`, schema-v15 open,
+materializers, Undo/Redo replay, layout geometry updates, Colorbar auxiliary
+Axes, In-Axes, `add_component_line`, and Reference Guide restore never
+call `ComponentDefaultsProvider`. `ChartCreationStager` receives resolved
+kwargs only.
 
 Once a Figure exists, later edits stay on Controllers, domain Services, and
-project history.
+project history. Components and Axes Components keys use
+`SettingEffect.NEXT_USE`. Wire shape is
+`{"kind": "inherit"|"override", "value": ...}`; inherit still stores the last
+custom value. Envelope `schema_version` stays `1`: a missing `components`
+or `components.axes` section loads as all inherit; same-version unknown
+fields stay `READ_ONLY_FUTURE`. Do not put these keys in schema v15 or
+`docs/component-properties-v15.md`. Title, Axis Label, Legend, limits, scale,
+locator, formatter, aspect, and margins are not Axes Components defaults; a
+later Axes Inspector property must decide whether it also joins that page.
+`ARCH-COMPONENT-DEFAULTS-BYPASS` remains
+a planned gray candidate for `evolve-architecture-rule`; this task does not
+add a Scanner rule.
 
 ## Color library
 

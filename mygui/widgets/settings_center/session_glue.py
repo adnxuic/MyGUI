@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from mygui.application_settings.document import flatten_snapshot
@@ -77,45 +77,64 @@ class SettingsCenterSession:
         self._shell_previewing = False
         return self._session
 
-    def draft_values(self) -> dict[str, Any]:
-        """Committed snapshot values with the dirty patch overlaid."""
+    def draft_values(self, keys: Iterable[str] | None = None) -> dict[str, Any]:
+        """Committed snapshot values with the dirty patch overlaid.
+
+        Flatten the snapshot once. When ``keys`` is given, return only those
+        entries. Unknown keys raise ``SettingsValidationError``.
+        """
 
         values = flatten_snapshot(self._service.snapshot())
         if self._session is not None:
             values.update(self._session.dirty_patch())
-        return values
+        if keys is None:
+            return values
+        result: dict[str, Any] = {}
+        for key in keys:
+            if key not in values:
+                raise SettingsValidationError(f"Unknown setting {key!r}.")
+            result[key] = values[key]
+        return result
 
     def draft_value(self, key: str) -> Any:
-        values = self.draft_values()
-        if key not in values:
-            raise SettingsValidationError(f"Unknown setting {key!r}.")
-        return values[key]
+        return self.draft_values((key,))[key]
 
     def stage_value(self, key: str, value: Any) -> None:
         """Normalize, stage, and preview LIVE_REVERSIBLE appearance keys."""
 
+        self.stage_values({key: value})
+
+    def stage_values(self, mapping: Mapping[str, Any]) -> None:
+        """Normalize and stage many keys atomically. Preview LIVE keys once."""
+
         session = self._require_session()
-        normalized = self._registry.spec(key).normalize(value)
-        current = flatten_snapshot(self._service.snapshot()).get(key)
-        if current == normalized:
-            session._drop_keys({key})
-        else:
-            session.stage(key, normalized)
-        if appearance_live_keys((key,)):
-            try:
+        if not mapping:
+            return
+        normalized: dict[str, Any] = {}
+        for key, value in mapping.items():
+            normalized[str(key)] = self._registry.spec(str(key)).normalize(value)
+        committed = flatten_snapshot(self._service.snapshot())
+        previous = dict(session.dirty_patch())
+        try:
+            for key, value in normalized.items():
+                if committed.get(key) == value:
+                    session._drop_keys({key})
+                else:
+                    session.stage(key, value)
+            if appearance_live_keys(normalized):
                 if appearance_live_keys(session.dirty_patch()):
                     self.preview_appearance()
                 else:
                     self._theme.restore_pre_session_appearance()
                     self._shell_previewing = False
+        except (ThemeApplyError, ThemeRollbackError):
+            session._replace_dirty(previous)
+            try:
+                self._theme.restore_pre_session_appearance()
             except (ThemeApplyError, ThemeRollbackError):
-                session._drop_keys({key})
-                try:
-                    self._theme.restore_pre_session_appearance()
-                except (ThemeApplyError, ThemeRollbackError):
-                    pass
-                self._shell_previewing = False
-                raise
+                pass
+            self._shell_previewing = False
+            raise
 
     def preview_appearance(self) -> None:
         """Apply draft appearance through ThemeService without writing storage."""
@@ -177,34 +196,42 @@ class SettingsCenterSession:
         return result
 
     def abandon(self) -> None:
-        """Cancel/Esc/close: restore pre-window appearance and drop the session."""
+        """Cancel/Esc/close: restore pre-window appearance and drop the session.
 
+        Idempotent. System mode then ``ensure_committed`` so an OS Light/Dark
+        switch during the session is honored without a no-op theme transaction.
+        """
+
+        session = self._session
+        previewing = self._theme_is_previewing() or self._shell_previewing
+        if session is None and not previewing:
+            self._honor_system_scheme()
+            return
         try:
             self._theme.restore_pre_session_appearance()
+            self._honor_system_scheme()
         except (ThemeApplyError, ThemeRollbackError):
-            self._session = None
-            self._shell_previewing = False
             raise
-        appearance = self._service.snapshot().appearance
-        if appearance.theme_mode is ThemeMode.SYSTEM:
-            try:
-                self._theme.apply_committed(preferences_from_appearance(appearance))
-            except (ThemeApplyError, ThemeRollbackError):
-                self._session = None
-                self._shell_previewing = False
-                raise
         self._session = None
         self._shell_previewing = False
 
     def release(self) -> None:
         """OK after a successful commit: drop the session without rolling back chrome."""
 
+        if self._session is None and not self._theme_is_previewing():
+            self._shell_previewing = False
+            return
         if self._theme_is_previewing():
             self._theme.apply_committed(
                 preferences_from_appearance(self._service.snapshot().appearance)
             )
         self._session = None
         self._shell_previewing = False
+
+    def _honor_system_scheme(self) -> None:
+        appearance = self._service.snapshot().appearance
+        if appearance.theme_mode is ThemeMode.SYSTEM:
+            self._theme.ensure_committed(preferences_from_appearance(appearance))
 
     def _confirm_preview(self, snapshot: ApplicationSettingsSnapshot) -> None:
         if self._theme_is_previewing():

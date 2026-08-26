@@ -35,6 +35,12 @@ from mygui.database import (
 from mygui.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
 )
+from mygui.figuremodify.style_base.creation_preferences import (
+    is_override,
+    resolve_line_appearance,
+    resolve_scatter_appearance,
+)
+from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui import status_messages
 from mygui.resources import icon_path
 
@@ -94,11 +100,15 @@ def _update_batch_button(button: QPushButton, data_input) -> None:
     button.setText(f"Create ({count})")
 
 
-def _new_color_input(figure_window: PyFigureWindow) -> ColorChoiceWidget:
+def _new_color_input(
+    figure_window: PyFigureWindow,
+    selection: ColorSelection | None = None,
+) -> ColorChoiceWidget:
     return ColorChoiceWidget(
         colorselector=figure_window.get_current_canvas_axes_colorselector(),
         color_library=figure_window.color_library,
         auto_record_recent=False,
+        selection=selection,
     )
 
 
@@ -107,6 +117,52 @@ def _creation_defaults(figure_window: PyFigureWindow):
     if canvas is None:
         return resolve_component_creation_defaults("default")
     return canvas.component_creation_defaults()
+
+
+def _settings_snapshot(figure_window: PyFigureWindow):
+    snapshot = getattr(figure_window, "snapshot_component_defaults", None)
+    if not callable(snapshot):
+        return None
+    return snapshot()
+
+
+def _palette_selection(figure_window: PyFigureWindow) -> ColorSelection:
+    selector = figure_window.get_current_canvas_axes_colorselector()
+    if selector is None:
+        return ColorSelection("#1F77B4")
+    return selector.peek()
+
+
+def _line_dialog_plan(figure_window: PyFigureWindow):
+    """Freeze Components defaults when a creation dialog opens."""
+
+    style = _creation_defaults(figure_window)
+    settings = _settings_snapshot(figure_window)
+    resolved = resolve_line_appearance(
+        style.line,
+        settings,
+        palette_selection=_palette_selection(figure_window),
+    )
+    color_setting = None if settings is None else settings.line.color
+    color_selection = (
+        ColorSelection(resolved.color) if is_override(color_setting) else None
+    )
+    return resolved, color_selection
+
+
+def _scatter_dialog_plan(figure_window: PyFigureWindow):
+    style = _creation_defaults(figure_window)
+    settings = _settings_snapshot(figure_window)
+    resolved = resolve_scatter_appearance(
+        style.scatter,
+        settings,
+        palette_selection=_palette_selection(figure_window),
+    )
+    color_setting = None if settings is None else settings.scatter.color
+    color_selection = (
+        ColorSelection(resolved.color) if is_override(color_setting) else None
+    )
+    return resolved, color_selection
 
 
 def _new_data_reference_input(
@@ -172,11 +228,12 @@ class PyCurveDialog(QDialog):
 
         self.figure_window: PyFigureWindow = figure_window
         self.creation_defaults = _creation_defaults(figure_window)
+        self._resolved_line, line_color_selection = _line_dialog_plan(figure_window)
 
         self.layout = QVBoxLayout()
 
         # Function expression input
-        self.expression_label = QLabel("函数表达式")
+        self.expression_label = QLabel("Function expression")
         self.expression_edit = QLineEdit()
         self.expression_edit.setText("x")
         # Update legend label when expression changes
@@ -185,7 +242,7 @@ class PyCurveDialog(QDialog):
         self.layout.addWidget(self.expression_edit)
 
         # X range input
-        self.x_range_label = QLabel("x的范围")
+        self.x_range_label = QLabel("X range")
         self.x_range_layout = QHBoxLayout()
         self.x_start_input = QDoubleSpinBox(self)
         self.x_start_input.setValue(0)
@@ -204,9 +261,10 @@ class PyCurveDialog(QDialog):
             figure_window,
             parent=self,
             label="x",
-            style=self.creation_defaults.line.linestyle,
-            linewidth=self.creation_defaults.line.linewidth,
+            style=self._resolved_line.linestyle,
+            linewidth=self._resolved_line.linewidth,
             show_linewidth=False,
+            color_selection=line_color_selection,
         )
         self.style_input = self.appearance_input.style_input
         self.color_input = self.appearance_input.color_input
@@ -214,8 +272,8 @@ class PyCurveDialog(QDialog):
         self.layout.addWidget(self.appearance_input)
 
         # OK and Cancel buttons
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -247,7 +305,11 @@ class PyCurveDialog(QDialog):
                                                        color=self.color_input.color(),
                                                        label=self.label_input.text(),
                                                        color_selection=self.color_input.selection(),
-                                                       preview_cycle=self.color_input.colorselector)
+                                                       preview_cycle=self.color_input.colorselector,
+                                                       linewidth=self._resolved_line.linewidth,
+                                                       marker=self._resolved_line.marker,
+                                                       markersize=self._resolved_line.markersize,
+                                                       markeredgewidth=self._resolved_line.markeredgewidth)
         except ValueError as exc:
             QMessageBox.warning(self, 'Invalid Expression', str(exc))
             return
@@ -276,6 +338,7 @@ class PyPlotDialog(QDialog):
 
         self.figure_window: PyFigureWindow = figure_window
         self.creation_defaults = _creation_defaults(figure_window)
+        self._resolved_line, line_color_selection = _line_dialog_plan(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -293,9 +356,10 @@ class PyPlotDialog(QDialog):
             figure_window,
             parent=self,
             label="plot",
-            style=self.creation_defaults.line.linestyle,
-            linewidth=self.creation_defaults.line.linewidth,
+            style=self._resolved_line.linestyle,
+            linewidth=self._resolved_line.linewidth,
             show_label=False,
+            color_selection=line_color_selection,
         )
         self.line_style_editor = self.appearance_input.line_style_editor
         self.style_input = self.appearance_input.style_input
@@ -307,8 +371,8 @@ class PyPlotDialog(QDialog):
         self.layout.addWidget(self.appearance_input)
 
         # OK and Cancel buttons
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -344,10 +408,12 @@ class PyPlotDialog(QDialog):
                 self.data_reference_input.get_x_ref(),
                 self.data_reference_input.get_y_refs(),
                 style=self.line_style_editor.style(),
-                size=self.creation_defaults.line.markersize,
+                size=self._resolved_line.markersize,
                 linewidth=self.linewidth_input.value(),
                 preprocess=self.data_reference_input.preprocess_values(),
                 color_selection=self.color_input.selection(),
+                marker=self._resolved_line.marker,
+                markeredgewidth=self._resolved_line.markeredgewidth,
             )
         except Exception as exc:
             status_messages.show_error(str(exc))
@@ -387,6 +453,9 @@ class PyScatterDialog(QDialog):
 
         self.figure_window: PyFigureWindow = figure_window
         self.creation_defaults = _creation_defaults(figure_window)
+        self._resolved_scatter, scatter_color_selection = _scatter_dialog_plan(
+            figure_window
+        )
 
         self.layout = QVBoxLayout()
 
@@ -401,8 +470,8 @@ class PyScatterDialog(QDialog):
         self.layout.addWidget(self.data_reference_input)
 
         self.scatter_style_editor = ScatterStyleEditor(
-            marker=self.creation_defaults.scatter.marker,
-            size=self.creation_defaults.scatter.size,
+            marker=self._resolved_scatter.marker,
+            size=self._resolved_scatter.size,
             parent=self,
         )
         self.size_input = self.scatter_style_editor.size_input
@@ -418,7 +487,7 @@ class PyScatterDialog(QDialog):
         self.layout.addWidget(self.scatter_mapping_input)
 
         # Color selection and preview
-        self.color_input = _new_color_input(figure_window)
+        self.color_input = _new_color_input(figure_window, scatter_color_selection)
         self.layout.addWidget(QLabel('Color:'))
         self.layout.addWidget(self.color_input)
         self.scatter_mapping_input.mappingChanged.connect(
@@ -428,8 +497,8 @@ class PyScatterDialog(QDialog):
         )
 
         # OK and Cancel buttons
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -466,6 +535,7 @@ class PyScatterDialog(QDialog):
                 self.data_reference_input.get_y_refs(),
                 size=self.size_input.value(),
                 marker=self.scatter_style_editor.marker(),
+                linewidth=self._resolved_scatter.linewidth,
                 preprocess=self.data_reference_input.preprocess_values(),
                 color_selection=self.color_input.selection(),
                 color_ref=self.scatter_mapping_input.color_ref(),
@@ -514,6 +584,7 @@ class PyFitDialog(QDialog):
 
         self.figure_window: PyFigureWindow = figure_window
         self.creation_defaults = _creation_defaults(figure_window)
+        self._resolved_line, line_color_selection = _line_dialog_plan(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -530,18 +601,19 @@ class PyFitDialog(QDialog):
         self.appearance_input = _new_line_appearance_input(
             figure_window,
             parent=self,
-            style=self.creation_defaults.line.linestyle,
-            linewidth=self.creation_defaults.line.linewidth,
+            style=self._resolved_line.linestyle,
+            linewidth=self._resolved_line.linewidth,
             show_label=False,
             show_style=False,
             show_linewidth=False,
+            color_selection=line_color_selection,
         )
         self.color_input = self.appearance_input.color_input
         self.layout.addWidget(self.appearance_input)
 
         # OK and Cancel buttons
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -586,6 +658,11 @@ class PyFitDialog(QDialog):
             preprocess=preprocess,
             color_selection=self.color_input.selection(),
             preview_cycle=self.color_input.colorselector,
+            style=self._resolved_line.linestyle,
+            linewidth=self._resolved_line.linewidth,
+            marker=self._resolved_line.marker,
+            markersize=self._resolved_line.markersize,
+            markeredgewidth=self._resolved_line.markeredgewidth,
         )
 
         _show_creation_result("Fit curve", pair)
@@ -613,6 +690,7 @@ class PyInterpolationDialog(QDialog):
 
         self.figure_window: PyFigureWindow = figure_window
         self.creation_defaults = _creation_defaults(figure_window)
+        self._resolved_line, line_color_selection = _line_dialog_plan(figure_window)
 
         self.layout = QVBoxLayout()
 
@@ -629,11 +707,12 @@ class PyInterpolationDialog(QDialog):
         self.appearance_input = _new_line_appearance_input(
             figure_window,
             parent=self,
-            style=self.creation_defaults.line.linestyle,
-            linewidth=self.creation_defaults.line.linewidth,
+            style=self._resolved_line.linestyle,
+            linewidth=self._resolved_line.linewidth,
             show_label=False,
             show_style=False,
             show_linewidth=False,
+            color_selection=line_color_selection,
         )
         self.color_input = self.appearance_input.color_input
         self.layout.addWidget(self.appearance_input)
@@ -650,8 +729,8 @@ class PyInterpolationDialog(QDialog):
 
         # OK and Cancel buttons
         self.button_bar = QFrame()
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
 
@@ -706,6 +785,11 @@ class PyInterpolationDialog(QDialog):
                 self.data_reference_input.get_y_refs(),
                 preprocess=self.data_reference_input.preprocess_values(),
                 color_selection=self.color_input.selection(),
+                linestyle=self._resolved_line.linestyle,
+                linewidth=self._resolved_line.linewidth,
+                marker=self._resolved_line.marker,
+                markersize=self._resolved_line.markersize,
+                markeredgewidth=self._resolved_line.markeredgewidth,
                 **options,
             )
         except Exception as exc:

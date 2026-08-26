@@ -56,6 +56,11 @@ class StyleCreationDefaultsTests(unittest.TestCase):
         self.assertEqual(classic.reference_marks.linewidth, 0.5)
         self.assertEqual(dark.reference_marks.color, "#FFFFFF")
         self.assertEqual(dark.reference_marks.linewidth, 0.8)
+        self.assertEqual(classic.axes.facecolor, "#FFFFFF")
+        self.assertTrue(classic.axes.frameon)
+        self.assertFalse(classic.axes.x.major.grid.visible)
+        ggplot = resolve_component_creation_defaults("ggplot")
+        self.assertTrue(ggplot.axes.x.major.grid.visible)
 
     def test_style_palette_identity_is_deterministic_and_tagged(self):
         first = resolve_component_creation_defaults("ggplot")
@@ -119,10 +124,34 @@ class StyleCreationDefaultsTests(unittest.TestCase):
         fonts = available_font_families()
         self.assertIsInstance(fonts, tuple)
         self.assertEqual(fonts, tuple(sorted(set(fonts))))
+        self.assertIs(available_font_families(), fonts)
         first = copy_colormap("viridis")
         second = copy_colormap("viridis")
         self.assertIsNot(first, second)
         self.assertEqual(first.name, "viridis")
+
+    def test_font_catalog_does_not_rescan_system_fonts(self):
+        from unittest.mock import patch
+
+        from matplotlib import font_manager
+
+        import mygui.figuremodify.matplotlib_adapter as adapter
+
+        adapter._FONT_FAMILY_CATALOG = None
+        with (
+            patch.object(
+                font_manager.fontManager,
+                "get_font_names",
+                wraps=font_manager.fontManager.get_font_names,
+            ) as get_names,
+            patch.object(font_manager, "findSystemFonts") as scan,
+        ):
+            first = available_font_families()
+            second = available_font_families()
+        self.assertIs(first, second)
+        self.assertEqual(get_names.call_count, 1)
+        scan.assert_not_called()
+        self.assertEqual(first, tuple(sorted(set(first))))
 
     def test_custom_compound_cycle_consumes_only_color_key(self):
         with tempfile.TemporaryDirectory() as directory:

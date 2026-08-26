@@ -26,6 +26,7 @@ from mygui.figuremodify.matplotlib_adapter import available_font_families
 from mygui.figuremodify.style_base.creation_defaults import (
     resolve_component_creation_defaults,
 )
+from mygui.figuremodify.style_base.creation_preferences import resolve_text_appearance
 from mygui import status_messages
 from mygui.widgets.fig_control_window.component_editors import (
     ColorbarInput,
@@ -59,13 +60,21 @@ class PyTextDialog(QDialog):
             if canvas is not None
             else resolve_component_creation_defaults("default")
         )
+        snapshot = None
+        getter = getattr(figure_window, "snapshot_component_defaults", None)
+        if callable(getter):
+            snapshot = getter()
+        self._resolved_text = resolve_text_appearance(
+            self.creation_defaults.text,
+            snapshot,
+        )
 
         self.layout = QVBoxLayout()
 
         # 选择是全局还是局部选择框
         self.global_local_layout = QHBoxLayout()
-        self.global_button = QRadioButton('全局')
-        self.local_button = QRadioButton('局部')
+        self.global_button = QRadioButton("Figure")
+        self.local_button = QRadioButton("Axes")
         self.local_button.setChecked(True)
         self.global_local_layout.addWidget(self.global_button)
         self.global_local_layout.addWidget(self.local_button)
@@ -122,9 +131,7 @@ class PyTextDialog(QDialog):
         for font in font_list:
             self.font_input.addItem(font)
 
-        self.font_input.setCurrentText(
-            self.creation_defaults.text.fontfamily
-        )
+        self.font_input.setCurrentText(self._resolved_text.fontfamily)
         self.layout.addWidget(self.font_input)
 
         # 选择输入文本的字体大小
@@ -132,15 +139,13 @@ class PyTextDialog(QDialog):
         self.font_size_input.setRange(1.0, 1000.0)
         self.font_size_input.setDecimals(2)
         self.font_size_input.setSingleStep(0.5)
-        self.font_size_input.setValue(
-            self.creation_defaults.text.fontsize
-        )
+        self.font_size_input.setValue(self._resolved_text.fontsize)
         self.layout.addWidget(QLabel('Font Size:'))
         self.layout.addWidget(self.font_size_input)
 
         # 确定和取消按钮
-        self.ok_button = QPushButton("确定")
-        self.cancel_button = QPushButton("取消")
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -164,17 +169,27 @@ class PyTextDialog(QDialog):
             if not self.figure_window.current_canva.has_current_axes:
                 QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
                 return
-            self.figure_window.current_canva.add_text(text=self.text_edit.text(),
-                                                      x=self.x_input.value(),
-                                                      y=self.y_input.value(),
-                                                      fontfamily=self.font_input.currentText(),
-                                                      fontsize=self.font_size_input.value())
+            self.figure_window.current_canva.add_text(
+                text=self.text_edit.text(),
+                x=self.x_input.value(),
+                y=self.y_input.value(),
+                fontfamily=self.font_input.currentText(),
+                fontsize=self.font_size_input.value(),
+                color=self._resolved_text.color,
+                fontweight=self._resolved_text.fontweight,
+                fontstyle=self._resolved_text.fontstyle,
+            )
         else:
-            self.figure_window.current_canva.add_global_text(text=self.text_edit.text(),
-                                                             x=self.x_input.value(),
-                                                             y=self.y_input.value(),
-                                                             fontfamily=self.font_input.currentText(),
-                                                             fontsize=self.font_size_input.value())
+            self.figure_window.current_canva.add_global_text(
+                text=self.text_edit.text(),
+                x=self.x_input.value(),
+                y=self.y_input.value(),
+                fontfamily=self.font_input.currentText(),
+                fontsize=self.font_size_input.value(),
+                color=self._resolved_text.color,
+                fontweight=self._resolved_text.fontweight,
+                fontstyle=self._resolved_text.fontstyle,
+            )
         super().accept()
 
     def reject(self):

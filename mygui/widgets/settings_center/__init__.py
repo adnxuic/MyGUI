@@ -3,7 +3,8 @@
 Integrator holds :class:`SettingsCenterHost`, registers B/C pages with
 :meth:`SettingsCenterHost.register_page`, and opens the window from the gear
 or Settings ``QAction``. Appearance/Workspace/New Figure forms belong to B;
-Export/Integrations/Maintenance belong to C.
+Components sits between New Figure and Axes Components; Axes Components sits
+between Components and Export; Export/Integrations/Maintenance belong to C.
 """
 
 from .geometry import (

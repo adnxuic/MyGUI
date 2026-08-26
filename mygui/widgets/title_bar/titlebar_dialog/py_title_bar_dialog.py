@@ -19,6 +19,9 @@ from mygui.application_settings import (
     format_new_figure_field,
     resolve_new_figure_defaults,
 )
+from mygui.figuremodify.style_base.creation_preferences import (
+    resolve_axes_appearance,
+)
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 from mygui.resources import icon_path
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
@@ -160,6 +163,20 @@ class PyLayoutDialog(QDialog):
         )
 
         canvas = getattr(figure_window, "current_canva", None)
+        self._frozen_appearance = None
+        default_view = None
+        if canvas is not None and self.layout_id is None:
+            snapshot = None
+            getter = getattr(figure_window, "snapshot_component_defaults", None)
+            if callable(getter):
+                snapshot = getter()
+            self._frozen_appearance = resolve_axes_appearance(
+                canvas.component_creation_defaults().axes,
+                snapshot,
+            )
+            default_view = canvas.axes_layout_service.creation_view_defaults(
+                self._frozen_appearance
+            )
         definition = None
         occupied = None
         twins = None
@@ -202,11 +219,7 @@ class PyLayoutDialog(QDialog):
         self.input = AxesLayoutInput(
             color_library=figure_window.color_library,
             preset_key=self.preset_key,
-            default_view=(
-                canvas.axes_layout_service.creation_view_defaults()
-                if canvas is not None
-                else None
-            ),
+            default_view=default_view,
             edit_definition=definition,
             occupied_cells=occupied,
             twin_cells=twins,
@@ -280,13 +293,19 @@ class PyLayoutDialog(QDialog):
                     None if self.xrd_input is None else self.xrd_input.request()
                 )
                 if request is None:
-                    component_ids = canvas.create_axes_layout(spec)
+                    component_ids = canvas.create_axes_layout(
+                        spec, appearance=self._frozen_appearance
+                    )
                     message = f"Created layout with {len(component_ids)} Axes."
                 else:
                     outcome = XrdRefinementImportService(
                         canvas=canvas,
                         table_view=self.figure_window.table,
-                    ).execute(spec, request)
+                    ).execute(
+                        spec,
+                        request,
+                        appearance=self._frozen_appearance,
+                    )
                     message = (
                         "Imported XRD refinement data into "
                         f"{outcome.table.profile_sheet.name} and "

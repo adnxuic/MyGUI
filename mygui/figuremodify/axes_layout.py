@@ -73,10 +73,10 @@ class AxesViewSpec:
     invert_y: bool = False
     aspect: str | float = "auto"
     facecolor: str | None = None
-    x_major_grid: bool = False
-    x_minor_grid: bool = False
-    y_major_grid: bool = False
-    y_minor_grid: bool = False
+    x_major_grid: bool | None = None
+    x_minor_grid: bool | None = None
+    y_major_grid: bool | None = None
+    y_minor_grid: bool | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "xlim", _limit(self.xlim, "X range"))

@@ -203,7 +203,7 @@ class MaintenanceSettingsPage(QWidget):
 
         self._session = session
 
-    def refresh(self) -> None:
+    def refresh(self, *_args: object) -> None:
         """Refresh health labels, command enablement, and color counts."""
 
         app_health = self._resolve_application_health()

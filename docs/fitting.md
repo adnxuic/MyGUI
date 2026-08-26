@@ -23,7 +23,7 @@ This document describes the fitting feature and its user-facing parameters.
 
 The fit options dialog is non-modal. If the dialog is closed before a background fit returns, the result is ignored.
 
-The Fit creation dialog collects X Data, Y Data, the X/Y preprocessing expressions, and the initial Color. The new curve starts with the label `fitting` and shows no result until an engine runs. The Fit Curve Inspector sections are summarized in [Fit Curve](editing-components/charts/fit-curve.md).
+The Fit creation dialog collects X Data, Y Data, the X/Y preprocessing expressions, and the initial Color. Line style, width, and marker follow Settings → Components when the dialog opens. The new curve starts with the label `fitting` and shows no result until an engine runs. The Fit Curve Inspector sections are summarized in [Fit Curve](editing-components/charts/fit-curve.md).
 
 ## Data Parameters
 

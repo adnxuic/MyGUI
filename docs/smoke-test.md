@@ -4,20 +4,22 @@ Run these checks from the repository root after GUI-facing changes.
 
 ## Automated desktop walk
 
-A code-driven Windows walk opens the real MainWindow, clicks command-bar
-controls, Settings pages, creation dialogs, and Inspectors, and writes PNG
-evidence plus `summary.json`. It does **not** replace the interactive checks
-below. Offscreen Qt tests still do not cover DPI, native file dialogs, drag
+A code-driven Windows walk opens the real MainWindow and exercises **Settings
+Center plus NEXT_USE creation defaults only** (Components and Axes
+Components). It writes PNG evidence plus `summary.json`. It does **not**
+replace the interactive checks below, and it does not walk galleries, the 27
+Inspectors, XRD, the table, Canvas popout, TeX/MATLAB Connect, or export
+encoding. Offscreen Qt tests still do not cover DPI, native file dialogs, drag
 and drop, or live TeX/MATLAB.
 
 ```powershell
-E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py
+E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only settings
 ```
 
-Optional: `--only shell,settings,inspectors` limits groups; `--all-styles`
-opens every Style gallery dialog. Evidence lands under
+`--all-styles` is ignored. Evidence lands under
 `build/agent-results/desktop-smoke/`. Do not set `QT_QPA_PLATFORM=offscreen`.
-This check is local-only and is not part of `verify_full`.
+This check is local-only and is not part of `verify_full`. Remaining Start,
+Window, Core Workflow, and integration checks on this page stay manual.
 
 Still sit at a display for 100/125/150/200% scaling, moving the window between
 monitors, native Save/Open dialogs, drag/drop, and real TeX or MATLAB
@@ -39,10 +41,22 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
 4. Drag both workbench splitters. Switch between Table and Components,
    click the active page again to hide the Explorer, restart, and confirm the
    splitter, page, and visibility preferences restore.
-5. Open Settings (gear, **Edit > Settings**, or Ctrl+,). On Workspace, use
-   `Reset workspace layout now…`, confirm, and confirm the default proportions
-   return and the Message Bar reports success in green. Cancel/Esc must restore
-   an uncommitted Appearance preview.
+5. Open Settings (gear, **Edit > Settings**, or Ctrl+,). Confirm the page
+   order is Appearance, Workspace, New Figure, Components, Axes Components, Export,
+   Integrations, Maintenance. Search `Line width` and confirm Components is
+   the visible page. Search `spine` and confirm Axes Components is visible.
+   On Workspace, use `Reset workspace layout now…`, confirm,
+   and confirm the default proportions return and the Message Bar reports
+   success in green. Cancel/Esc must restore an uncommitted Appearance
+   preview. On Components, Line / Scatter / Text are separate tabs; toggle a
+   Line width override, Cancel, reopen the
+   cached window, and confirm inherit is restored. Apply an override, create
+   a Curve, confirm the new width, then confirm an existing curve is
+   unchanged. On Axes Components, override Facecolor, Apply, confirm an
+   existing Axes is unchanged, then create a new Axes on a new Figure and
+   confirm the new face. Restore page defaults and Reset all both return inherit
+   and do
+   not clear the color library. Restart and confirm the last Apply persisted.
 6. With no project, confirm the figure empty state directs the user to Style; create a project and confirm the empty state is replaced by its canvas tab.
 7. Resize a restored window through 960x600, 1280x720, 1366x768, and 1920x1080; confirm the command gallery uses overflow instead of clipping and the canvas remains visible.
 8. Switch repeatedly between the figure inspector, TeX, and MATLAB pages; confirm the main layout does not jump or grow.
@@ -239,6 +253,17 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    Palette switch, while later Style-default creations use the new style.
 7. Save and reopen the project. Confirm existing component properties, Figure
    style, active palette source, and next color position are restored.
+8. In Settings → Components, override Line width and Scatter marker, Apply,
+   then create a Curve and a Scatter. Confirm only new components use those
+   values. Reopen the project and confirm the saved properties did not pick
+   up later Settings changes. Confirm a failed or cancelled creation does not
+   advance the palette or write recents.
+9. In Settings → Axes Components, override Facecolor and a spine color, Apply,
+   confirm an already created Axes is unchanged, then create a main Axes on a
+   new Figure, a right-Y pair, and an XRD Axes. Confirm new Axes pick up the
+   defaults,
+   explicit dialog/XRD values still win, and Cancel in Settings discards the
+   draft. Reopen Settings and confirm Apply persisted.
 
 ## Reference Marks
 

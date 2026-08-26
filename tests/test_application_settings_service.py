@@ -153,8 +153,13 @@ class ApplicationSettingsServiceModuleTests(unittest.TestCase):
             service.snapshot(),
             production_settings_registry(),
         )
-        self.assertNotIn("components", payload)
         self.assertNotIn("id", payload)
+        self.assertIn("components", payload)
+        self.assertNotIn("id", payload["components"])
+        self.assertEqual(
+            payload["components"]["line"]["color"],
+            {"kind": "inherit", "value": "#1F77B4"},
+        )
         self.assertEqual(payload["new_figure"]["width_in"], 10.0)
         self.assertEqual(
             service.new_figure_defaults().document_dpi,

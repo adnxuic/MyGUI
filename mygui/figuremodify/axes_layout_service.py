@@ -32,6 +32,13 @@ from mygui.figuremodify.components.base import _refresh_legend
 from mygui.figuremodify.components.property_values import (
     default_minor_locator_for_scale,
 )
+from mygui.figuremodify.style_base.axes_appearance import (
+    apply_resolved_axes_appearance,
+)
+from mygui.figuremodify.style_base.creation_preferences import (
+    ResolvedAxesAppearance,
+    resolve_axes_appearance,
+)
 
 
 _UNSET = object()
@@ -226,8 +233,11 @@ class AxesLayoutService:
     def _root(self):
         return self.registry.get(self.canvas.root_component_id)
 
-    def creation_view_defaults(self) -> AxesViewSpec:
-        """Resolve exposed Axes creation defaults from the Figure style."""
+    def creation_view_defaults(
+        self,
+        appearance: ResolvedAxesAppearance | None = None,
+    ) -> AxesViewSpec:
+        """Resolve exposed Axes creation defaults from style, then appearance."""
 
         with matplotlib_style_context(self.canvas.component_style):
             figure = Figure()
@@ -243,16 +253,26 @@ class AxesLayoutService:
                 tick.gridline.get_visible()
                 for tick in axes.yaxis.get_minor_ticks()
             )
-            return AxesViewSpec(
-                xscale=axes.get_xscale(),
-                yscale=axes.get_yscale(),
-                aspect=axes.get_aspect(),
-                facecolor=to_hex(axes.get_facecolor(), keep_alpha=True),
-                x_major_grid=x_major,
-                x_minor_grid=x_minor,
-                y_major_grid=y_major,
-                y_minor_grid=y_minor,
-            )
+            facecolor = to_hex(axes.get_facecolor(), keep_alpha=True)
+            xscale = axes.get_xscale()
+            yscale = axes.get_yscale()
+            aspect = axes.get_aspect()
+        if appearance is not None:
+            facecolor = appearance.facecolor
+            x_major = bool(appearance.x.major.grid.visible)
+            x_minor = bool(appearance.x.minor.grid.visible)
+            y_major = bool(appearance.y.major.grid.visible)
+            y_minor = bool(appearance.y.minor.grid.visible)
+        return AxesViewSpec(
+            xscale=xscale,
+            yscale=yscale,
+            aspect=aspect,
+            facecolor=facecolor,
+            x_major_grid=x_major,
+            x_minor_grid=x_minor,
+            y_major_grid=y_major,
+            y_minor_grid=y_minor,
+        )
 
     def constrained_layout_enabled(self) -> bool:
         """Return constrained/compressed layout from Figure Controller state."""
@@ -413,10 +433,14 @@ class AxesLayoutService:
         if view.y_minor_grid:
             target.yaxis.minorticks_on()
         if not right_y:
-            target.grid(view.x_major_grid, axis="x", which="major")
-            target.grid(view.x_minor_grid, axis="x", which="minor")
-        target.grid(view.y_major_grid, axis="y", which="major")
-        target.grid(view.y_minor_grid, axis="y", which="minor")
+            if view.x_major_grid is not None:
+                target.grid(view.x_major_grid, axis="x", which="major")
+            if view.x_minor_grid is not None:
+                target.grid(view.x_minor_grid, axis="x", which="minor")
+        if view.y_major_grid is not None:
+            target.grid(view.y_major_grid, axis="y", which="major")
+        if view.y_minor_grid is not None:
+            target.grid(view.y_minor_grid, axis="y", which="minor")
 
     def _apply_outer_labels(
         self,
@@ -562,9 +586,39 @@ class AxesLayoutService:
                     raise ValueError(change.message)
         return tuple(component_ids)
 
-    def create(self, spec: AxesLayoutSpec, *, select: bool = True) -> tuple[str, ...]:
+    def _resolve_appearance_once(self) -> ResolvedAxesAppearance:
+        """Read Components defaults once for programmatic create without a snapshot."""
+
+        style = self.canvas.component_creation_defaults().axes
+        settings = None
+        reader = getattr(self.canvas, "_read_component_defaults", None)
+        if callable(reader):
+            settings = reader()
+        return resolve_axes_appearance(style, settings)
+
+    @staticmethod
+    def _apply_right_y_structure(primary: Axes, secondary: Axes) -> None:
+        secondary.set_facecolor("none")
+        secondary.patch.set_visible(False)
+        secondary.xaxis.set_visible(False)
+        primary.spines["right"].set_visible(False)
+        secondary.spines["left"].set_visible(False)
+        secondary.yaxis.tick_right()
+        secondary.yaxis.set_label_position("right")
+        primary.yaxis.tick_left()
+
+    def create(
+        self,
+        spec: AxesLayoutSpec,
+        *,
+        select: bool = True,
+        appearance: ResolvedAxesAppearance | None = None,
+    ) -> tuple[str, ...]:
         """Create one complete layout as one registration transaction."""
 
+        frozen = (
+            appearance if appearance is not None else self._resolve_appearance_once()
+        )
         layout_id = spec.resolved_layout_id()
         if any(item["id"] == layout_id for item in self.layout_definitions()):
             raise ValueError(f"Figure layout already exists: {layout_id}")
@@ -610,6 +664,7 @@ class AxesLayoutService:
                         lambda target=primary:
                         self.canvas._remove_created_artist(target)
                     )
+                    apply_resolved_axes_appearance(primary, frozen, right_y=False)
                     self._apply_view(primary, cell.primary)
                     descriptors.append(
                         _AxesDescriptor(
@@ -635,7 +690,11 @@ class AxesLayoutService:
                             lambda target=secondary:
                             self.canvas._remove_created_artist(target)
                         )
+                        apply_resolved_axes_appearance(
+                            secondary, frozen, right_y=True
+                        )
                         self._apply_view(secondary, cell.right_y, right_y=True)
+                        self._apply_right_y_structure(primary, secondary)
                         descriptors.append(
                             _AxesDescriptor(
                                 secondary,

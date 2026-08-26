@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QLabel,
+    QScrollArea,
     QSpinBox,
     QWidget,
 )
@@ -129,6 +131,22 @@ def make_intro_label(text: str, parent: QWidget | None = None) -> QLabel:
     label.setFocusPolicy(Qt.NoFocus)
     label.setAccessibleName("Page description")
     return label
+
+
+def make_tab_scroll(
+    page: QWidget,
+    object_name: str,
+    parent: QWidget | None = None,
+) -> QScrollArea:
+    """Scrollable tab body so long groups do not grow the Settings shell."""
+
+    scroll = QScrollArea(parent)
+    scroll.setObjectName(object_name)
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    scroll.setWidget(page)
+    return scroll
 
 
 def add_buddy_row(
@@ -255,25 +273,37 @@ class SettingsPageWidget(QWidget):
                 bind(self._reload_from_host)
 
     def hosted_draft_keys(self) -> tuple[str, ...]:
-        """Persisted keys this page reads from ``host.draft_value``."""
+        """Persisted keys this page reads from ``host.draft_values``."""
 
         return tuple(self.editors())
 
-    def _reload_from_host(self) -> None:
+    def _reload_from_host(self, values: Mapping[str, Any] | None = None) -> None:
         host = self._host
         if host is None:
             return
-        values = {
-            key: host.draft_value(key) for key in self.hosted_draft_keys()
-        }
-        self.load_values(values, preview=False)
+        keys = self.hosted_draft_keys()
+        payload = self._hosted_values(host, keys, values)
+        self.load_values(payload, preview=False)
+
+    def _hosted_values(
+        self,
+        host: Any,
+        keys: tuple[str, ...],
+        values: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if values is not None:
+            return {key: values[key] for key in keys if key in values}
+        draft_values = getattr(host, "draft_values", None)
+        if callable(draft_values):
+            try:
+                return dict(draft_values(keys))
+            except TypeError:
+                pass
+        return {key: host.draft_value(key) for key in keys}
 
     def _initial_values(self) -> Mapping[str, Any]:
         if self._host is not None:
-            return {
-                key: self._host.draft_value(key)
-                for key in self.hosted_draft_keys()
-            }
+            return self._hosted_values(self._host, self.hosted_draft_keys())
         return self._registry.defaults_for_page(self.PAGE_ID)
 
     def load_values(
@@ -324,10 +354,14 @@ class SettingsPageWidget(QWidget):
         self._staging = True
         try:
             if self._host is not None:
-                for key, value in values.items():
-                    current = self._host.draft_value(key)
-                    if current != value:
-                        self._host.stage_value(key, value)
+                stage_values = getattr(self._host, "stage_values", None)
+                if callable(stage_values):
+                    stage_values(values)
+                else:
+                    for key, value in values.items():
+                        current = self._host.draft_value(key)
+                        if current != value:
+                            self._host.stage_value(key, value)
                 self.valuesChanged.emit(dict(values))
                 return
             if self._session is not None:

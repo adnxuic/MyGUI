@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 from mygui import status_messages
 from mygui.application_settings import (
+    ComponentDefaultsProvider,
     NewFigureDefaultsProvider,
     resolve_new_figure_defaults,
 )
@@ -152,6 +153,7 @@ class PyFigureWindow(QFrame):
         component_tree_host=None,
         *,
         new_figure_defaults: NewFigureDefaultsProvider | None = None,
+        component_defaults: ComponentDefaultsProvider | None = None,
     ):
         super().__init__()
 
@@ -167,6 +169,7 @@ class PyFigureWindow(QFrame):
             raise ValueError("PyFigureWindow requires the shared ColorLibrary.")
         self.color_library = color_library
         self._new_figure_defaults = new_figure_defaults
+        self._component_defaults = component_defaults
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
         self._clean_fingerprints: dict[str, str] = {}
@@ -217,11 +220,39 @@ class PyFigureWindow(QFrame):
 
         self._new_figure_defaults = provider
 
+    def set_component_defaults_provider(
+        self,
+        provider: ComponentDefaultsProvider | None,
+    ) -> None:
+        """Inject the component-creation port. Do not pass the settings service."""
+
+        self._component_defaults = provider
+
     @property
     def new_figure_defaults_provider(self) -> NewFigureDefaultsProvider | None:
         """Return the injected New Figure defaults port, if any."""
 
         return self._new_figure_defaults
+
+    @property
+    def component_defaults_provider(self) -> ComponentDefaultsProvider | None:
+        """Return the injected Components defaults port, if any."""
+
+        return self._component_defaults
+
+    def snapshot_component_defaults(self):
+        """Return one immutable Components snapshot for an open creation dialog.
+
+        Failures return ``None`` so the caller can fall back to style/palette.
+        """
+
+        provider = self._component_defaults
+        if provider is None:
+            return None
+        try:
+            return provider.current()
+        except Exception:
+            return None
 
     def creation_figure_size(self) -> tuple[float, float, float]:
         """Return width, height, and document DPI for a newly created Figure.

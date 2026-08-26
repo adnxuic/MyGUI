@@ -33,7 +33,13 @@ PACKAGE_CANDIDATES = (
     "mygui.application_settings.document",
 )
 
-REQUIRED_SNAPSHOT_FIELDS = ("appearance", "workspace", "new_figure", "export")
+REQUIRED_SNAPSHOT_FIELDS = (
+    "appearance",
+    "workspace",
+    "new_figure",
+    "components",
+    "export",
+)
 FORBIDDEN_SNAPSHOT_FIELDS = frozenset({
     "color_library",
     "colorlibrary",
@@ -297,7 +303,7 @@ class ApplicationSettingsFacadeTests(unittest.TestCase):
         enum_cls = _skip_unless_symbol(self, "DocumentHealth")
         self.assertEqual(_enum_member_names(enum_cls), DOCUMENT_HEALTH_NAMES)
 
-    def test_snapshot_exposes_the_four_persisted_sections(self):
+    def test_snapshot_exposes_the_persisted_sections(self):
         snapshot_cls = _skip_unless_symbol(self, "ApplicationSettingsSnapshot")
         names = _type_field_names(snapshot_cls)
         missing = [field for field in REQUIRED_SNAPSHOT_FIELDS if field not in names]
@@ -340,7 +346,12 @@ class ApplicationSettingsFacadeTests(unittest.TestCase):
             )
 
     def test_narrow_ports_exist_and_are_types(self):
-        for name in ("NewFigureDefaultsProvider", "ExportPreferencesPort", "WorkspaceLayoutPort"):
+        for name in (
+            "NewFigureDefaultsProvider",
+            "ComponentDefaultsProvider",
+            "ExportPreferencesPort",
+            "WorkspaceLayoutPort",
+        ):
             port = _skip_unless_symbol(self, name)
             self.assertTrue(inspect.isclass(port), name)
 

@@ -5,6 +5,9 @@ Composition (Integrator): inject DualSlotDocumentPort from
 ``ApplicationSettingsService(document=port)``. The service duck-types storage
 ``DocumentLoadResult`` / ``StorageCommitResult`` (``payload``, ``revision``,
 ``ok`` / ``success``). Do not construct a second QSettings here.
+
+Nested conversion is driven by SettingsRegistry dotted keys. Composite leaves
+such as ``workspace.layout`` and ``export.metadata`` are closed values.
 """
 
 from __future__ import annotations
@@ -17,6 +20,21 @@ from .keys import (
     APPEARANCE_DENSITY,
     APPEARANCE_THEME_MODE,
     APPEARANCE_UI_FONT_POINT_SIZE,
+    COMPONENTS_LINE_COLOR,
+    COMPONENTS_LINE_LINESTYLE,
+    COMPONENTS_LINE_LINEWIDTH,
+    COMPONENTS_LINE_MARKER,
+    COMPONENTS_LINE_MARKEREDGEWIDTH,
+    COMPONENTS_LINE_MARKERSIZE,
+    COMPONENTS_SCATTER_COLOR,
+    COMPONENTS_SCATTER_LINEWIDTH,
+    COMPONENTS_SCATTER_MARKER,
+    COMPONENTS_SCATTER_SIZE,
+    COMPONENTS_TEXT_COLOR,
+    COMPONENTS_TEXT_FONTFAMILY,
+    COMPONENTS_TEXT_FONTSIZE,
+    COMPONENTS_TEXT_FONTSTYLE,
+    COMPONENTS_TEXT_FONTWEIGHT,
     EXPORT_BBOX_INCHES,
     EXPORT_CUSTOM_DPI,
     EXPORT_EDGECOLOR,
@@ -39,13 +57,11 @@ from .keys import (
     EXPORT_WEBP_LOSSLESS,
     EXPORT_WEBP_METHOD,
     EXPORT_WEBP_QUALITY,
+    KEYS_BY_PAGE,
     NEW_FIGURE_DOCUMENT_DPI,
     NEW_FIGURE_HEIGHT_IN,
     NEW_FIGURE_WIDTH_IN,
-    PAGE_APPEARANCE,
     PAGE_EXPORT,
-    PAGE_NEW_FIGURE,
-    PAGE_WORKSPACE,
     PERSISTENT_KEYS,
     WORKSPACE_LAYOUT,
     WORKSPACE_REMEMBER_LAYOUT,
@@ -53,82 +69,19 @@ from .keys import (
 from .models import (
     AppearanceSettings,
     ApplicationSettingsSnapshot,
+    ComponentDefaultsSettings,
     ExportSettings,
+    LineComponentDefaults,
     NewFigureSettings,
+    ScatterComponentDefaults,
+    TextComponentDefaults,
     WorkspaceSettings,
+    axes_defaults_from_values,
+    axes_defaults_to_values,
 )
-from .registry import SettingsRegistry
+from .registry import SettingsRegistry, production_settings_registry
 
-_SECTION_KEYS = {
-    PAGE_APPEARANCE: (
-        APPEARANCE_THEME_MODE,
-        APPEARANCE_UI_FONT_POINT_SIZE,
-        APPEARANCE_DENSITY,
-    ),
-    PAGE_WORKSPACE: (WORKSPACE_REMEMBER_LAYOUT, WORKSPACE_LAYOUT),
-    PAGE_NEW_FIGURE: (
-        NEW_FIGURE_WIDTH_IN,
-        NEW_FIGURE_HEIGHT_IN,
-        NEW_FIGURE_DOCUMENT_DPI,
-    ),
-    PAGE_EXPORT: (
-        EXPORT_FORMAT,
-        EXPORT_LAST_DIRECTORY,
-        EXPORT_USE_PROJECT_DPI,
-        EXPORT_CUSTOM_DPI,
-        EXPORT_TRANSPARENT,
-        EXPORT_FACECOLOR,
-        EXPORT_EDGECOLOR,
-        EXPORT_BBOX_INCHES,
-        EXPORT_PAD_INCHES,
-        EXPORT_PNG_COMPRESS_LEVEL,
-        EXPORT_PNG_OPTIMIZE,
-        EXPORT_JPEG_QUALITY,
-        EXPORT_JPEG_OPTIMIZE,
-        EXPORT_JPEG_PROGRESSIVE,
-        EXPORT_JPEG_SUBSAMPLING,
-        EXPORT_TIFF_COMPRESSION,
-        EXPORT_WEBP_LOSSLESS,
-        EXPORT_WEBP_QUALITY,
-        EXPORT_WEBP_ALPHA_QUALITY,
-        EXPORT_WEBP_METHOD,
-        EXPORT_WEBP_EXACT,
-        EXPORT_METADATA,
-    ),
-}
-
-_FIELD_BY_KEY = {
-    APPEARANCE_THEME_MODE: "theme_mode",
-    APPEARANCE_UI_FONT_POINT_SIZE: "ui_font_point_size",
-    APPEARANCE_DENSITY: "density",
-    WORKSPACE_REMEMBER_LAYOUT: "remember_layout",
-    WORKSPACE_LAYOUT: "layout",
-    NEW_FIGURE_WIDTH_IN: "width_in",
-    NEW_FIGURE_HEIGHT_IN: "height_in",
-    NEW_FIGURE_DOCUMENT_DPI: "document_dpi",
-    EXPORT_FORMAT: "format",
-    EXPORT_LAST_DIRECTORY: "last_directory",
-    EXPORT_USE_PROJECT_DPI: "use_project_dpi",
-    EXPORT_CUSTOM_DPI: "custom_dpi",
-    EXPORT_TRANSPARENT: "transparent",
-    EXPORT_FACECOLOR: "facecolor",
-    EXPORT_EDGECOLOR: "edgecolor",
-    EXPORT_BBOX_INCHES: "bbox_inches",
-    EXPORT_PAD_INCHES: "pad_inches",
-    EXPORT_PNG_COMPRESS_LEVEL: "png_compress_level",
-    EXPORT_PNG_OPTIMIZE: "png_optimize",
-    EXPORT_JPEG_QUALITY: "jpeg_quality",
-    EXPORT_JPEG_OPTIMIZE: "jpeg_optimize",
-    EXPORT_JPEG_PROGRESSIVE: "jpeg_progressive",
-    EXPORT_JPEG_SUBSAMPLING: "jpeg_subsampling",
-    EXPORT_TIFF_COMPRESSION: "tiff_compression",
-    EXPORT_WEBP_LOSSLESS: "webp_lossless",
-    EXPORT_WEBP_QUALITY: "webp_quality",
-    EXPORT_WEBP_ALPHA_QUALITY: "webp_alpha_quality",
-    EXPORT_WEBP_METHOD: "webp_method",
-    EXPORT_WEBP_EXACT: "webp_exact",
-    EXPORT_METADATA: "metadata",
-}
+REVISION_KEY = "revision"
 
 FORBIDDEN_PAYLOAD_KEYS = frozenset(
     {
@@ -149,7 +102,7 @@ def export_settings_to_patch(settings: ExportSettings) -> dict[str, Any]:
     """Return the export-page patch for ``commit_patch`` / ``ExportPreferencesPort``."""
 
     values = flatten_snapshot(ApplicationSettingsSnapshot(export=settings))
-    return {key: values[key] for key in _SECTION_KEYS[PAGE_EXPORT]}
+    return {key: values[key] for key in KEYS_BY_PAGE[PAGE_EXPORT]}
 
 
 def flatten_snapshot(
@@ -166,6 +119,22 @@ def flatten_snapshot(
         NEW_FIGURE_WIDTH_IN: snapshot.new_figure.width_in,
         NEW_FIGURE_HEIGHT_IN: snapshot.new_figure.height_in,
         NEW_FIGURE_DOCUMENT_DPI: snapshot.new_figure.document_dpi,
+        COMPONENTS_LINE_COLOR: snapshot.components.line.color,
+        COMPONENTS_LINE_LINESTYLE: snapshot.components.line.linestyle,
+        COMPONENTS_LINE_LINEWIDTH: snapshot.components.line.linewidth,
+        COMPONENTS_LINE_MARKER: snapshot.components.line.marker,
+        COMPONENTS_LINE_MARKERSIZE: snapshot.components.line.markersize,
+        COMPONENTS_LINE_MARKEREDGEWIDTH: snapshot.components.line.markeredgewidth,
+        COMPONENTS_SCATTER_COLOR: snapshot.components.scatter.color,
+        COMPONENTS_SCATTER_MARKER: snapshot.components.scatter.marker,
+        COMPONENTS_SCATTER_SIZE: snapshot.components.scatter.size,
+        COMPONENTS_SCATTER_LINEWIDTH: snapshot.components.scatter.linewidth,
+        COMPONENTS_TEXT_FONTFAMILY: snapshot.components.text.fontfamily,
+        COMPONENTS_TEXT_FONTSIZE: snapshot.components.text.fontsize,
+        COMPONENTS_TEXT_COLOR: snapshot.components.text.color,
+        COMPONENTS_TEXT_FONTWEIGHT: snapshot.components.text.fontweight,
+        COMPONENTS_TEXT_FONTSTYLE: snapshot.components.text.fontstyle,
+        **axes_defaults_to_values(snapshot.components.axes),
         EXPORT_FORMAT: snapshot.export.format,
         EXPORT_LAST_DIRECTORY: snapshot.export.last_directory,
         EXPORT_USE_PROJECT_DPI: snapshot.export.use_project_dpi,
@@ -198,25 +167,118 @@ def snapshot_from_values(
 ) -> ApplicationSettingsSnapshot:
     """Build a snapshot from a complete persisted-key mapping."""
 
-    appearance = {
-        _FIELD_BY_KEY[key]: values[key] for key in _SECTION_KEYS[PAGE_APPEARANCE]
-    }
-    workspace = {
-        _FIELD_BY_KEY[key]: values[key] for key in _SECTION_KEYS[PAGE_WORKSPACE]
-    }
-    new_figure = {
-        _FIELD_BY_KEY[key]: values[key] for key in _SECTION_KEYS[PAGE_NEW_FIGURE]
-    }
-    export = {
-        _FIELD_BY_KEY[key]: values[key] for key in _SECTION_KEYS[PAGE_EXPORT]
-    }
     return ApplicationSettingsSnapshot(
-        appearance=AppearanceSettings(**appearance),
-        workspace=WorkspaceSettings(**workspace),
-        new_figure=NewFigureSettings(**new_figure),
-        export=ExportSettings(**export),
+        appearance=AppearanceSettings(
+            theme_mode=values[APPEARANCE_THEME_MODE],
+            ui_font_point_size=values[APPEARANCE_UI_FONT_POINT_SIZE],
+            density=values[APPEARANCE_DENSITY],
+        ),
+        workspace=WorkspaceSettings(
+            remember_layout=values[WORKSPACE_REMEMBER_LAYOUT],
+            layout=values[WORKSPACE_LAYOUT],
+        ),
+        new_figure=NewFigureSettings(
+            width_in=values[NEW_FIGURE_WIDTH_IN],
+            height_in=values[NEW_FIGURE_HEIGHT_IN],
+            document_dpi=values[NEW_FIGURE_DOCUMENT_DPI],
+        ),
+        components=ComponentDefaultsSettings(
+            line=LineComponentDefaults(
+                color=values[COMPONENTS_LINE_COLOR],
+                linestyle=values[COMPONENTS_LINE_LINESTYLE],
+                linewidth=values[COMPONENTS_LINE_LINEWIDTH],
+                marker=values[COMPONENTS_LINE_MARKER],
+                markersize=values[COMPONENTS_LINE_MARKERSIZE],
+                markeredgewidth=values[COMPONENTS_LINE_MARKEREDGEWIDTH],
+            ),
+            scatter=ScatterComponentDefaults(
+                color=values[COMPONENTS_SCATTER_COLOR],
+                marker=values[COMPONENTS_SCATTER_MARKER],
+                size=values[COMPONENTS_SCATTER_SIZE],
+                linewidth=values[COMPONENTS_SCATTER_LINEWIDTH],
+            ),
+            text=TextComponentDefaults(
+                fontfamily=values[COMPONENTS_TEXT_FONTFAMILY],
+                fontsize=values[COMPONENTS_TEXT_FONTSIZE],
+                color=values[COMPONENTS_TEXT_COLOR],
+                fontweight=values[COMPONENTS_TEXT_FONTWEIGHT],
+                fontstyle=values[COMPONENTS_TEXT_FONTSTYLE],
+            ),
+            axes=axes_defaults_from_values(values),
+        ),
+        export=ExportSettings(
+            format=values[EXPORT_FORMAT],
+            last_directory=values[EXPORT_LAST_DIRECTORY],
+            use_project_dpi=values[EXPORT_USE_PROJECT_DPI],
+            custom_dpi=values[EXPORT_CUSTOM_DPI],
+            transparent=values[EXPORT_TRANSPARENT],
+            facecolor=values[EXPORT_FACECOLOR],
+            edgecolor=values[EXPORT_EDGECOLOR],
+            bbox_inches=values[EXPORT_BBOX_INCHES],
+            pad_inches=values[EXPORT_PAD_INCHES],
+            png_compress_level=values[EXPORT_PNG_COMPRESS_LEVEL],
+            png_optimize=values[EXPORT_PNG_OPTIMIZE],
+            jpeg_quality=values[EXPORT_JPEG_QUALITY],
+            jpeg_optimize=values[EXPORT_JPEG_OPTIMIZE],
+            jpeg_progressive=values[EXPORT_JPEG_PROGRESSIVE],
+            jpeg_subsampling=values[EXPORT_JPEG_SUBSAMPLING],
+            tiff_compression=values[EXPORT_TIFF_COMPRESSION],
+            webp_lossless=values[EXPORT_WEBP_LOSSLESS],
+            webp_quality=values[EXPORT_WEBP_QUALITY],
+            webp_alpha_quality=values[EXPORT_WEBP_ALPHA_QUALITY],
+            webp_method=values[EXPORT_WEBP_METHOD],
+            webp_exact=values[EXPORT_WEBP_EXACT],
+            metadata=values[EXPORT_METADATA],
+        ),
         revision=int(revision),
     )
+
+
+def _key_segments(key: str) -> tuple[str, ...]:
+    return tuple(part for part in key.split(".") if part)
+
+
+def registry_leaf_paths(
+    registry: SettingsRegistry,
+) -> tuple[tuple[str, ...], ...]:
+    """Return dotted-key paths that are closed payload leaves."""
+
+    return tuple(_key_segments(spec.key) for spec in registry.persistent_specs())
+
+
+_MISSING = object()
+
+
+def build_path_trie(
+    registry: SettingsRegistry | None = None,
+) -> dict[str, Any]:
+    """Build a nested dict of known payload segments. Leaves map to ``None``."""
+
+    catalog = registry or production_settings_registry()
+    trie: dict[str, Any] = {}
+    for path in registry_leaf_paths(catalog):
+        node = trie
+        for index, part in enumerate(path):
+            is_leaf = index == len(path) - 1
+            existing = node.get(part, _MISSING)
+            if is_leaf:
+                if existing is not _MISSING and existing is not None:
+                    raise SettingsValidationError(
+                        f"Settings key path conflicts at {'.'.join(path)}."
+                    )
+                node[part] = None
+                continue
+            if existing is None:
+                raise SettingsValidationError(
+                    f"Settings key path conflicts at {'.'.join(path[: index + 1])}."
+                )
+            if existing is _MISSING:
+                child: dict[str, Any] = {}
+                node[part] = child
+            else:
+                child = existing
+            node = child
+    return trie
 
 
 def snapshot_to_payload(
@@ -227,54 +289,78 @@ def snapshot_to_payload(
 
     values = flatten_snapshot(snapshot)
     payload: dict[str, Any] = {}
-    for page_id, keys in _SECTION_KEYS.items():
-        section: dict[str, Any] = {}
-        for key in keys:
-            field_name = _FIELD_BY_KEY[key]
-            section[field_name] = registry.spec(key).wire_value(values[key])
-        payload[page_id] = section
-    payload["revision"] = int(snapshot.revision)
+    for spec in registry.persistent_specs():
+        parts = _key_segments(spec.key)
+        node = payload
+        for part in parts[:-1]:
+            child = node.get(part)
+            if child is None:
+                child = {}
+                node[part] = child
+            node = child
+        node[parts[-1]] = registry.spec(spec.key).wire_value(values[spec.key])
+    payload[REVISION_KEY] = int(snapshot.revision)
     _assert_payload_is_data(payload)
     return payload
 
 
-def payload_has_unknown_current_fields(payload: Mapping[str, Any] | None) -> bool:
+def payload_has_unknown_current_fields(
+    payload: Mapping[str, Any] | None,
+    registry: SettingsRegistry | None = None,
+) -> bool:
     """Return whether a current-schema payload has fields this version does not own.
 
     Same-version unknown fields are treated as a future document: read-only,
     never rewritten by close-save after normalize-to-default. Incompatible
-    stored shapes must bump ``schema_version``.
+    stored shapes must bump ``schema_version``. Composite leaves are not
+    inspected internally.
     """
 
     if not payload:
         return False
-    known_top = set(_SECTION_KEYS) | {"revision"}
-    if set(payload) - known_top:
-        return True
-    for page_id, keys in _SECTION_KEYS.items():
-        section = payload.get(page_id)
-        if not isinstance(section, Mapping):
+    trie = build_path_trie(registry)
+    return _payload_has_unknown(payload, trie, ())
+
+
+def _payload_has_unknown(
+    node: Any,
+    trie_node: dict[str, Any] | None,
+    path: tuple[str, ...],
+) -> bool:
+    if trie_node is None:
+        return False
+    if not isinstance(node, Mapping):
+        return False
+    for key, value in node.items():
+        if not path and key == REVISION_KEY:
             continue
-        known_fields = {_FIELD_BY_KEY[key] for key in keys}
-        if set(section) - known_fields:
+        if key not in trie_node:
+            return True
+        child_trie = trie_node[key]
+        if _payload_has_unknown(value, child_trie, (*path, key)):
             return True
     return False
 
 
-def flatten_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+def flatten_payload(
+    payload: Mapping[str, Any] | None,
+    registry: SettingsRegistry | None = None,
+) -> dict[str, Any]:
     """Extract dotted keys from a nested document. Unknown keys are ignored."""
 
     if not payload:
         return {}
+    catalog = registry or production_settings_registry()
     flat: dict[str, Any] = {}
-    for page_id, keys in _SECTION_KEYS.items():
-        section = payload.get(page_id)
-        if not isinstance(section, Mapping):
-            continue
-        for key in keys:
-            field_name = _FIELD_BY_KEY[key]
-            if field_name in section:
-                flat[key] = section[field_name]
+    for spec in catalog.persistent_specs():
+        parts = _key_segments(spec.key)
+        node: Any = payload
+        for part in parts:
+            if not isinstance(node, Mapping) or part not in node:
+                break
+            node = node[part]
+        else:
+            flat[spec.key] = node
     return flat
 
 
@@ -287,14 +373,14 @@ def values_from_payload(
     values = dict(registry.defaults())
     revision = 0
     if payload:
-        raw_revision = payload.get("revision", 0)
+        raw_revision = payload.get(REVISION_KEY, 0)
         try:
             revision = int(raw_revision)
         except (TypeError, ValueError, OverflowError):
             revision = 0
         if revision < 0:
             revision = 0
-    for key, raw in flatten_payload(payload).items():
+    for key, raw in flatten_payload(payload, registry).items():
         try:
             values[key] = registry.spec(key).normalize(raw)
         except SettingsValidationError:

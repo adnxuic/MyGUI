@@ -1,26 +1,47 @@
 # Style Creation Defaults
 
-New chart and free-Text components derive their initial appearance from the
-current Figure `style`. The defaults are resolved when the creation dialog is
-opened, so changing the Figure style affects later components without
-rewriting existing artists.
+New chart, free-Text, and ordinary Axes components resolve their initial
+appearance when the creation dialog opens. Changing Figure style, Settings →
+Components, or Settings → Axes Components after that open does not rewrite
+the open dialog or existing artists.
+
+Creation appearance is not the same as a raw Matplotlib style probe.
+Precedence is:
+
+1. Explicit values in this creation (dialog, layout request, or XRD rule)
+2. Settings → Components or Axes Components override (`NEXT_USE`; see [Application Settings](settings.md))
+3. Current Axes palette for Line/Scatter color, or current Figure `style` for other fields
+4. Matplotlib 3.9 built-in fallbacks
+
+Inherit Line/Scatter color still uses the Axes palette cursor, not the first
+color from a style probe. Restore, Undo/Redo, and project open use persisted
+schema-v15 properties and do not read Components or Axes Components settings.
 
 ## Resolved parameters
 
 | Component | Creation defaults |
 | --- | --- |
-| Curve | line style, implicit line width/marker settings, chart color |
-| Plot | line style, line width, marker size, chart color |
-| Scatter | marker, floating-point size, implicit edge/line width, chart color |
-| Fit | implicit line style, line width/marker settings, chart color |
-| Interpolation | implicit line style, line width/marker settings, chart color |
-| Text | font family, font size, implicit text color/weight/style |
+| Curve | line style, line width, marker, marker size, marker edge width, chart color |
+| Plot | line style, line width, marker, marker size, marker edge width, chart color |
+| Scatter | marker, size, line width, chart color; mapped/XRD explicit fields still win |
+| Fit | line style, line width, marker, marker size, marker edge width, chart color |
+| Interpolation | line style, line width, marker, marker size, marker edge width, chart color |
+| Text | font family, font size, color, weight, and style (free Text only) |
+| Ordinary Axes | facecolor, frameon, axisbelow, four spines, X/Y major/minor ticks, tick labels, and grid |
 | In-Axes | child-Axes background/border, indicator line, image interpolation |
 | Reference Marks | X major-tick color and tick-line width; does not consume the chart color sequence |
 | Reference Line | Reference Marks color and tick-line width; does not consume the chart color sequence |
 | Reference Band | Reference Marks color for its face and edge plus tick-line width; does not consume the chart color sequence |
 
-The resolver creates temporary Matplotlib Line, Scatter, Text, child-Axes,
+Settings → Components does not cover In-Axes, Reference Marks/Line/Band,
+Colorbar, Title, or axis labels. Settings → Axes Components covers later
+ordinary Axes (main, shared, right Y, and XRD layout Axes) only. It does not
+cover Colorbar auxiliary Axes, In-Axes, restore, or history replay. Title,
+Axis Label, Legend, limits, scale, locator, formatter, aspect, and margins
+are not stored as Axes Components defaults. A later Axes Inspector property
+must decide whether it also belongs on that creation-defaults page.
+
+The style resolver creates temporary Matplotlib Line, Scatter, Text, child-Axes,
 and inset-indicator artists
 inside a short `matplotlib.style.context`. Reading the resulting artists
 preserves Matplotlib-specific behavior such as Classic scatter size. The

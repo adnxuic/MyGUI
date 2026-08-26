@@ -6,16 +6,16 @@ The Text action on the Element command bar adds a free Text component. A Text ca
 
 | Parameter | Control | Meaning | Default |
 | --- | --- | --- | --- |
-| 全局 / 局部 | Two radio buttons | The component scope. 局部 places the Text inside the selected Axes; 全局 attaches it to the Figure. | 局部 |
+| Axes / Figure | Two radio buttons | The component scope. **Axes** (default) places the Text inside the selected Axes; **Figure** attaches it to the Figure. | Axes |
 | Text | Text field | The text content. | Empty |
 | x / y | Two spin boxes | The text position. Local Text uses Axes-relative coordinates: (0, 0) is the lower-left corner and (1, 1) the upper-right corner of the Axes area. Global Text uses Figure-relative coordinates with the same 0 to 1 convention. The spin range -1 to 2 allows placing the text outside the Axes or Figure area; the step is 0.01. | 0.5 / 0.5 |
-| Font | Editable dropdown | The font family. The list contains the installed system fonts and Matplotlib fonts, each item rendered in its own font, with case-insensitive auto-completion. | Current Figure style text font |
-| Font Size | Spin box | The font size in points. | Current Figure style text size |
+| Font | Editable dropdown | The font family. The list contains the installed system fonts and Matplotlib fonts, each item rendered in its own font, with case-insensitive auto-completion. | Settings → Components, then current Figure style |
+| Font Size | Spin box | The font size in points. | Settings → Components, then current Figure style |
 
 ## Creation workflow
 
 - A project with a Figure must exist. Local Text additionally requires a selected Axes; the dialog refuses with a warning otherwise.
-- The initial font family and size are resolved from the current Figure style defaults. See [Style Creation Defaults](style-creation-defaults.md).
+- The initial font family, size, color, weight, and style follow explicit dialog input, then Settings → Components, then the current Figure style. Title and axis labels do not use this page. See [Style Creation Defaults](style-creation-defaults.md) and [Application Settings](settings.md).
 - Creation registers the artist, Controller, Components-tree node, and Inspector in one transaction. The Text appears in the tree under its Axes (local) or the Figure root (global) and can be selected for editing.
 
 ## Inspector sections

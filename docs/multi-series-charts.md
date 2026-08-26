@@ -28,16 +28,18 @@ structure and metadata updates retain still-valid selections by stable
 ## Chart parameters
 
 - **Plot**: line style, line width, and marker size are shared by all new Plot
-  components. Missing or invalid row pairs remain gaps.
+  components. Missing or invalid row pairs remain gaps. Unspecified fields
+  follow Settings → Components, then Figure style.
 - **Scatter**: marker and size are shared by all new Scatter components.
   Missing or invalid row pairs are filtered independently per Y column. An
   optional color column with a colormap and normalization mapping, and an
   optional size column with an input/output size range mapping, can be
   enabled per batch; while the color mapping is checked, the batch color
-  picker is disabled.
+  picker is disabled. Mapped fields beat Components defaults.
 - **Interpolation**: method, Samples, spline order, and smoothing-lambda
   options are shared. Each selected source pair is validated and interpolated
-  independently before any component is published.
+  independently before any component is published. Line appearance follows
+  the same Components/style precedence as Plot.
 - **Color**: the default or another palette-backed choice is the first color
   in a sequence assigned across the checked Y columns. A one-off custom color
   is applied to every component and does not advance the Axes palette cursor.

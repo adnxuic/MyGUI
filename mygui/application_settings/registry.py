@@ -11,6 +11,22 @@ from .keys import (
     APPEARANCE_DENSITY,
     APPEARANCE_THEME_MODE,
     APPEARANCE_UI_FONT_POINT_SIZE,
+    AXES_COMPONENT_KEYS,
+    COMPONENTS_LINE_COLOR,
+    COMPONENTS_LINE_LINESTYLE,
+    COMPONENTS_LINE_LINEWIDTH,
+    COMPONENTS_LINE_MARKER,
+    COMPONENTS_LINE_MARKEREDGEWIDTH,
+    COMPONENTS_LINE_MARKERSIZE,
+    COMPONENTS_SCATTER_COLOR,
+    COMPONENTS_SCATTER_LINEWIDTH,
+    COMPONENTS_SCATTER_MARKER,
+    COMPONENTS_SCATTER_SIZE,
+    COMPONENTS_TEXT_COLOR,
+    COMPONENTS_TEXT_FONTFAMILY,
+    COMPONENTS_TEXT_FONTSIZE,
+    COMPONENTS_TEXT_FONTSTYLE,
+    COMPONENTS_TEXT_FONTWEIGHT,
     EXPORT_BBOX_INCHES,
     EXPORT_CUSTOM_DPI,
     EXPORT_EDGECOLOR,
@@ -38,6 +54,8 @@ from .keys import (
     NEW_FIGURE_HEIGHT_IN,
     NEW_FIGURE_WIDTH_IN,
     PAGE_APPEARANCE,
+    PAGE_AXES_COMPONENTS,
+    PAGE_COMPONENTS,
     PAGE_EXPORT,
     PAGE_IDS,
     PAGE_NEW_FIGURE,
@@ -48,28 +66,56 @@ from .keys import (
 )
 from .models import (
     DEFAULT_WORKSPACE_LAYOUT,
+    AxesComponentDefaults,
     Density,
     ExportBBoxInches,
     ExportFormatPreference,
     ExportMetadata,
+    InheritableValue,
+    InheritSource,
     JpegSubsampling,
+    LineComponentDefaults,
     PadInchesValue,
+    ScatterComponentDefaults,
     SettingEditorKind,
     SettingEffect,
+    TextComponentDefaults,
     ThemeMode,
     TiffCompression,
     WorkspaceLayoutPayload,
+    axes_defaults_to_values,
 )
 from .values import (
     DEFAULT_UI_FONT_PT,
     MAX_DOCUMENT_DPI,
     MAX_FIGURE_INCHES,
+    MAX_FONTSIZE,
+    MAX_LINEWIDTH,
+    MAX_MARKERSIZE,
+    MAX_SCATTER_SIZE,
+    MAX_TICK_LENGTH,
+    MAX_ROTATION,
+    MAX_GRID_ALPHA,
     MAX_UI_FONT_PT,
     MIN_DOCUMENT_DPI,
     MIN_FIGURE_INCHES,
+    MIN_FONTSIZE,
+    MIN_LINEWIDTH,
+    MIN_MARKERSIZE,
+    MIN_SCATTER_SIZE,
+    MIN_TICK_LENGTH,
+    MIN_ROTATION,
+    MIN_GRID_ALPHA,
     MIN_UI_FONT_PT,
+    CLOSED_FONT_STYLES,
+    CLOSED_FONT_WEIGHTS,
+    CLOSED_LINESTYLES,
+    CLOSED_LINE_MARKERS,
+    CLOSED_TICK_DIRECTIONS,
+    CLOSED_AXISBELOW,
     always_true,
     export_metadata_to_wire,
+    inheritable_to_wire,
     normalize_bbox_inches,
     normalize_bool,
     normalize_density,
@@ -79,6 +125,25 @@ from .values import (
     normalize_export_format,
     normalize_export_metadata,
     normalize_figure_inches,
+    normalize_inheritable_color,
+    normalize_inheritable_fontfamily,
+    normalize_inheritable_fontsize,
+    normalize_inheritable_fontstyle,
+    normalize_inheritable_fontweight,
+    normalize_inheritable_line_marker,
+    normalize_inheritable_linestyle,
+    normalize_inheritable_linewidth,
+    normalize_inheritable_markeredgewidth,
+    normalize_inheritable_markersize,
+    normalize_inheritable_scatter_marker,
+    normalize_inheritable_scatter_size,
+    normalize_inheritable_bool,
+    normalize_inheritable_axisbelow,
+    normalize_inheritable_tick_direction,
+    normalize_inheritable_tick_length,
+    normalize_inheritable_tick_pad,
+    normalize_inheritable_rotation,
+    normalize_inheritable_optional_grid_alpha,
     normalize_jpeg_quality,
     normalize_jpeg_subsampling,
     normalize_pad_inches,
@@ -104,6 +169,25 @@ from .values import (
     validate_png_compress_level,
     validate_theme_mode,
     validate_tiff_compression,
+    validate_inheritable_color,
+    validate_inheritable_fontfamily,
+    validate_inheritable_fontsize,
+    validate_inheritable_fontstyle,
+    validate_inheritable_fontweight,
+    validate_inheritable_line_marker,
+    validate_inheritable_linestyle,
+    validate_inheritable_linewidth,
+    validate_inheritable_markeredgewidth,
+    validate_inheritable_markersize,
+    validate_inheritable_scatter_marker,
+    validate_inheritable_scatter_size,
+    validate_inheritable_bool,
+    validate_inheritable_axisbelow,
+    validate_inheritable_tick_direction,
+    validate_inheritable_tick_length,
+    validate_inheritable_tick_pad,
+    validate_inheritable_rotation,
+    validate_inheritable_optional_grid_alpha,
     validate_ui_font_point_size,
     validate_webp_method,
     validate_webp_quality,
@@ -138,6 +222,7 @@ class SettingSpec:
     to_wire: Callable[[Any], Any] | None = None
     include_in_page_restore: bool = True
     include_in_reset_all: bool = True
+    inherit_source: InheritSource | None = None
 
     def __post_init__(self) -> None:
         if not self.key or not isinstance(self.key, str):
@@ -161,6 +246,12 @@ class SettingSpec:
             object.__setattr__(self, "effect", SettingEffect(self.effect))
         if not isinstance(self.editor, SettingEditorKind):
             object.__setattr__(self, "editor", SettingEditorKind(self.editor))
+        if self.inherit_source is not None and not isinstance(
+            self.inherit_source, InheritSource
+        ):
+            object.__setattr__(
+                self, "inherit_source", InheritSource(self.inherit_source)
+            )
 
     def normalize(self, value: Any) -> Any:
         """Normalize and validate one value for this specification."""
@@ -201,7 +292,12 @@ class SettingSpec:
                 f"Setting {self.key!r} must be {expected_names}; "
                 f"got {type(normalized).__name__}."
             )
-        if self.choices is not None and normalized not in self.choices:
+        choice_value = (
+            normalized.value
+            if isinstance(normalized, InheritableValue)
+            else normalized
+        )
+        if self.choices is not None and choice_value not in self.choices:
             raise SettingsValidationError(
                 f"Setting {self.key!r} must be one of {self.choices!r}."
             )
@@ -278,6 +374,8 @@ def _spec(
     to_wire: Callable[[Any], Any] | None = None,
     include_in_page_restore: bool = True,
     include_in_reset_all: bool = True,
+    inherit_source: InheritSource | None = None,
+    tooltip: str | None = None,
 ) -> SettingSpec:
     return SettingSpec(
         key=key,
@@ -293,10 +391,515 @@ def _spec(
         minimum=minimum,
         maximum=maximum,
         label=label,
+        tooltip=tooltip,
         to_wire=to_wire,
         include_in_page_restore=include_in_page_restore,
         include_in_reset_all=include_in_reset_all,
+        inherit_source=inherit_source,
     )
+
+
+def _inherit_spec(
+    key: str,
+    default: InheritableValue,
+    *,
+    editor: SettingEditorKind,
+    normalizer: Normalizer,
+    validator: Validator,
+    inherit_source: InheritSource,
+    label: str,
+    tooltip: str,
+    page_id: str,
+    choices: tuple[Any, ...] | None = None,
+    minimum: float | int | None = None,
+    maximum: float | int | None = None,
+) -> SettingSpec:
+    return _spec(
+        key,
+        InheritableValue,
+        default,
+        page_id=page_id,
+        effect=SettingEffect.NEXT_USE,
+        editor=editor,
+        normalizer=normalizer,
+        validator=validator,
+        migration="identity; missing v1 components section is all inherit",
+        choices=choices,
+        minimum=minimum,
+        maximum=maximum,
+        label=label,
+        tooltip=tooltip,
+        to_wire=inheritable_to_wire,
+        inherit_source=inherit_source,
+    )
+
+
+def _component_specs() -> tuple[SettingSpec, ...]:
+    line = LineComponentDefaults()
+    scatter = ScatterComponentDefaults()
+    text = TextComponentDefaults()
+    figure_style = InheritSource.FIGURE_STYLE
+    axes_palette = InheritSource.AXES_PALETTE
+    use_style = "Use Figure style"
+    use_palette = "Use Axes palette"
+    scatter_markers = tuple(
+        marker for marker in CLOSED_LINE_MARKERS if marker != "None"
+    )
+
+    def inherit(key: str, default: InheritableValue, **kwargs: Any) -> SettingSpec:
+        return _inherit_spec(
+            key, default, page_id=PAGE_COMPONENTS, **kwargs
+        )
+
+    return (
+        inherit(
+            COMPONENTS_LINE_COLOR,
+            line.color,
+            editor=SettingEditorKind.INHERITABLE_COLOR,
+            normalizer=normalize_inheritable_color,
+            validator=validate_inheritable_color,
+            inherit_source=axes_palette,
+            label="Line color",
+            tooltip=use_palette,
+        ),
+        inherit(
+            COMPONENTS_LINE_LINESTYLE,
+            line.linestyle,
+            editor=SettingEditorKind.INHERITABLE_ENUM,
+            normalizer=normalize_inheritable_linestyle,
+            validator=validate_inheritable_linestyle,
+            inherit_source=figure_style,
+            label="Line style",
+            tooltip=use_style,
+            choices=CLOSED_LINESTYLES,
+        ),
+        inherit(
+            COMPONENTS_LINE_LINEWIDTH,
+            line.linewidth,
+            editor=SettingEditorKind.INHERITABLE_NUMBER,
+            normalizer=normalize_inheritable_linewidth,
+            validator=validate_inheritable_linewidth,
+            inherit_source=figure_style,
+            label="Line width",
+            tooltip=use_style,
+            minimum=MIN_LINEWIDTH,
+            maximum=MAX_LINEWIDTH,
+        ),
+        inherit(
+            COMPONENTS_LINE_MARKER,
+            line.marker,
+            editor=SettingEditorKind.INHERITABLE_ENUM,
+            normalizer=normalize_inheritable_line_marker,
+            validator=validate_inheritable_line_marker,
+            inherit_source=figure_style,
+            label="Line marker",
+            tooltip=use_style,
+            choices=CLOSED_LINE_MARKERS,
+        ),
+        inherit(
+            COMPONENTS_LINE_MARKERSIZE,
+            line.markersize,
+            editor=SettingEditorKind.INHERITABLE_NUMBER,
+            normalizer=normalize_inheritable_markersize,
+            validator=validate_inheritable_markersize,
+            inherit_source=figure_style,
+            label="Marker size",
+            tooltip=use_style,
+            minimum=MIN_MARKERSIZE,
+            maximum=MAX_MARKERSIZE,
+        ),
+        inherit(
+            COMPONENTS_LINE_MARKEREDGEWIDTH,
+            line.markeredgewidth,
+            editor=SettingEditorKind.INHERITABLE_NUMBER,
+            normalizer=normalize_inheritable_markeredgewidth,
+            validator=validate_inheritable_markeredgewidth,
+            inherit_source=figure_style,
+            label="Marker edge width",
+            tooltip=use_style,
+            minimum=MIN_LINEWIDTH,
+            maximum=MAX_LINEWIDTH,
+        ),
+        inherit(
+            COMPONENTS_SCATTER_COLOR,
+            scatter.color,
+            editor=SettingEditorKind.INHERITABLE_COLOR,
+            normalizer=normalize_inheritable_color,
+            validator=validate_inheritable_color,
+            inherit_source=axes_palette,
+            label="Scatter color",
+            tooltip=use_palette,
+        ),
+        inherit(
+            COMPONENTS_SCATTER_MARKER,
+            scatter.marker,
+            editor=SettingEditorKind.INHERITABLE_ENUM,
+            normalizer=normalize_inheritable_scatter_marker,
+            validator=validate_inheritable_scatter_marker,
+            inherit_source=figure_style,
+            label="Scatter marker",
+            tooltip=use_style,
+            choices=scatter_markers,
+        ),
+        inherit(
+            COMPONENTS_SCATTER_SIZE,
+            scatter.size,
+            editor=SettingEditorKind.INHERITABLE_NUMBER,
+            normalizer=normalize_inheritable_scatter_size,
+            validator=validate_inheritable_scatter_size,
+            inherit_source=figure_style,
+            label="Scatter size",
+            tooltip=use_style,
+            minimum=MIN_SCATTER_SIZE,
+            maximum=MAX_SCATTER_SIZE,
+        ),
+        inherit(
+            COMPONENTS_SCATTER_LINEWIDTH,
+            scatter.linewidth,
+            editor=SettingEditorKind.INHERITABLE_NUMBER,
+            normalizer=normalize_inheritable_linewidth,
+            validator=validate_inheritable_linewidth,
+            inherit_source=figure_style,
+            label="Scatter line width",
+            tooltip=use_style,
+            minimum=MIN_LINEWIDTH,
+            maximum=MAX_LINEWIDTH,
+        ),
+        inherit(
+            COMPONENTS_TEXT_FONTFAMILY,
+            text.fontfamily,
+            editor=SettingEditorKind.INHERITABLE_TEXT,
+            normalizer=normalize_inheritable_fontfamily,
+            validator=validate_inheritable_fontfamily,
+            inherit_source=figure_style,
+            label="Text font family",
+            tooltip=use_style,
+        ),
+        inherit(
+            COMPONENTS_TEXT_FONTSIZE,
+            text.fontsize,
+            editor=SettingEditorKind.INHERITABLE_NUMBER,
+            normalizer=normalize_inheritable_fontsize,
+            validator=validate_inheritable_fontsize,
+            inherit_source=figure_style,
+            label="Text font size",
+            tooltip=use_style,
+            minimum=MIN_FONTSIZE,
+            maximum=MAX_FONTSIZE,
+        ),
+        inherit(
+            COMPONENTS_TEXT_COLOR,
+            text.color,
+            editor=SettingEditorKind.INHERITABLE_COLOR,
+            normalizer=normalize_inheritable_color,
+            validator=validate_inheritable_color,
+            inherit_source=figure_style,
+            label="Text color",
+            tooltip=use_style,
+        ),
+        inherit(
+            COMPONENTS_TEXT_FONTWEIGHT,
+            text.fontweight,
+            editor=SettingEditorKind.INHERITABLE_ENUM,
+            normalizer=normalize_inheritable_fontweight,
+            validator=validate_inheritable_fontweight,
+            inherit_source=figure_style,
+            label="Text font weight",
+            tooltip=use_style,
+            choices=CLOSED_FONT_WEIGHTS,
+        ),
+        inherit(
+            COMPONENTS_TEXT_FONTSTYLE,
+            text.fontstyle,
+            editor=SettingEditorKind.INHERITABLE_ENUM,
+            normalizer=normalize_inheritable_fontstyle,
+            validator=validate_inheritable_fontstyle,
+            inherit_source=figure_style,
+            label="Text font style",
+            tooltip=use_style,
+            choices=CLOSED_FONT_STYLES,
+        ),
+    )
+
+
+_AXES_FIELD_LABELS = {
+    "facecolor": "Face color",
+    "frameon": "Frame on",
+    "axisbelow": "Axis below",
+    "visible": "visible",
+    "color": "color",
+    "linewidth": "line width",
+    "linestyle": "line style",
+    "primary_visible": "primary visible",
+    "secondary_visible": "secondary visible",
+    "direction": "direction",
+    "length": "length",
+    "width": "width",
+    "fontfamily": "font family",
+    "fontsize": "font size",
+    "fontweight": "font weight",
+    "fontstyle": "font style",
+    "rotation": "rotation",
+    "pad": "pad",
+    "alpha": "alpha",
+}
+
+
+def _axes_setting_label(key: str) -> str:
+    parts = key.split(".")[2:]
+    if len(parts) == 1:
+        return _AXES_FIELD_LABELS[parts[0]]
+    if parts[0] == "spines":
+        return f"{parts[1].title()} spine {_AXES_FIELD_LABELS[parts[2]]}"
+    group = {"ticks": "ticks", "tick_labels": "tick labels", "grid": "grid"}[
+        parts[2]
+    ]
+    return (
+        f"{parts[0].upper()} {parts[1]} {group} {_AXES_FIELD_LABELS[parts[3]]}"
+    )
+
+
+def _axes_component_specs() -> tuple[SettingSpec, ...]:
+    defaults = axes_defaults_to_values(AxesComponentDefaults())
+    figure_style = InheritSource.FIGURE_STYLE
+    use_style = "Use Figure style"
+    specs: list[SettingSpec] = []
+    for key in AXES_COMPONENT_KEYS:
+        field = key.rsplit(".", 1)[-1]
+        label = _axes_setting_label(key)
+        if key == "components.axes.axisbelow" or field == "axisbelow":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_ENUM,
+                    normalizer=normalize_inheritable_axisbelow,
+                    validator=validate_inheritable_axisbelow,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    choices=CLOSED_AXISBELOW,
+                )
+            )
+            continue
+        if field in {"visible", "primary_visible", "secondary_visible", "frameon"}:
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_BOOL,
+                    normalizer=normalize_inheritable_bool,
+                    validator=validate_inheritable_bool,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                )
+            )
+            continue
+        if field in {"color", "facecolor"}:
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_COLOR,
+                    normalizer=normalize_inheritable_color,
+                    validator=validate_inheritable_color,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                )
+            )
+            continue
+        if field == "linestyle":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_ENUM,
+                    normalizer=normalize_inheritable_linestyle,
+                    validator=validate_inheritable_linestyle,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    choices=CLOSED_LINESTYLES,
+                )
+            )
+            continue
+        if field in {"linewidth", "width"}:
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_NUMBER,
+                    normalizer=normalize_inheritable_linewidth,
+                    validator=validate_inheritable_linewidth,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    minimum=MIN_LINEWIDTH,
+                    maximum=MAX_LINEWIDTH,
+                )
+            )
+            continue
+        if field == "length":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_NUMBER,
+                    normalizer=normalize_inheritable_tick_length,
+                    validator=validate_inheritable_tick_length,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    minimum=MIN_TICK_LENGTH,
+                    maximum=MAX_TICK_LENGTH,
+                )
+            )
+            continue
+        if field == "pad":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_NUMBER,
+                    normalizer=normalize_inheritable_tick_pad,
+                    validator=validate_inheritable_tick_pad,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    minimum=MIN_TICK_LENGTH,
+                    maximum=MAX_TICK_LENGTH,
+                )
+            )
+            continue
+        if field == "fontsize":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_NUMBER,
+                    normalizer=normalize_inheritable_fontsize,
+                    validator=validate_inheritable_fontsize,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    minimum=MIN_FONTSIZE,
+                    maximum=MAX_FONTSIZE,
+                )
+            )
+            continue
+        if field == "rotation":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_NUMBER,
+                    normalizer=normalize_inheritable_rotation,
+                    validator=validate_inheritable_rotation,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    minimum=MIN_ROTATION,
+                    maximum=MAX_ROTATION,
+                )
+            )
+            continue
+        if field == "alpha":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_OPTIONAL_NUMBER,
+                    normalizer=normalize_inheritable_optional_grid_alpha,
+                    validator=validate_inheritable_optional_grid_alpha,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    minimum=MIN_GRID_ALPHA,
+                    maximum=MAX_GRID_ALPHA,
+                )
+            )
+            continue
+        if field == "direction":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_ENUM,
+                    normalizer=normalize_inheritable_tick_direction,
+                    validator=validate_inheritable_tick_direction,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    choices=CLOSED_TICK_DIRECTIONS,
+                )
+            )
+            continue
+        if field == "fontfamily":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_TEXT,
+                    normalizer=normalize_inheritable_fontfamily,
+                    validator=validate_inheritable_fontfamily,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                )
+            )
+            continue
+        if field == "fontweight":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_ENUM,
+                    normalizer=normalize_inheritable_fontweight,
+                    validator=validate_inheritable_fontweight,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    choices=CLOSED_FONT_WEIGHTS,
+                )
+            )
+            continue
+        if field == "fontstyle":
+            specs.append(
+                _inherit_spec(
+                    key,
+                    defaults[key],
+                    page_id=PAGE_AXES_COMPONENTS,
+                    editor=SettingEditorKind.INHERITABLE_ENUM,
+                    normalizer=normalize_inheritable_fontstyle,
+                    validator=validate_inheritable_fontstyle,
+                    inherit_source=figure_style,
+                    label=label,
+                    tooltip=use_style,
+                    choices=CLOSED_FONT_STYLES,
+                )
+            )
+            continue
+        raise SettingsValidationError(f"Unsupported Axes Components key {key!r}.")
+    if len(specs) != 99:
+        raise SettingsValidationError(
+            f"Axes Components must declare 99 specs; got {len(specs)}."
+        )
+    return tuple(specs)
 
 
 def _production_specs() -> tuple[SettingSpec, ...]:
@@ -414,6 +1017,8 @@ def _production_specs() -> tuple[SettingSpec, ...]:
             maximum=MAX_DOCUMENT_DPI,
             label="Default document DPI",
         ),
+        *_component_specs(),
+        *_axes_component_specs(),
         _spec(
             EXPORT_FORMAT,
             ExportFormatPreference,
@@ -789,6 +1394,8 @@ def production_settings_pages() -> tuple[SettingsPageSpec, ...]:
         PAGE_APPEARANCE: "Appearance",
         PAGE_WORKSPACE: "Workspace",
         PAGE_NEW_FIGURE: "New Figure",
+        PAGE_COMPONENTS: "Components",
+        PAGE_AXES_COMPONENTS: "Axes Components",
         PAGE_EXPORT: "Export",
     }
     return tuple(
@@ -802,7 +1409,7 @@ def production_settings_pages() -> tuple[SettingsPageSpec, ...]:
 
 
 def production_settings_registry() -> SettingsRegistry:
-    """Return the frozen production catalog for the four persisted pages."""
+    """Return the frozen production catalog for persisted Settings pages."""
 
     registry = SettingsRegistry(
         pages=production_settings_pages(),

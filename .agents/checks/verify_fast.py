@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 
 from _runner import finish, load_task_map, python_unittest_step, run_step, runtime_errors, task_result
@@ -11,6 +12,8 @@ from _runner import finish, load_task_map, python_unittest_step, run_step, runti
 # GUI-heavy modules keep process isolation. Packing them with Settings Center
 # or each other in one unittest process can hang Qt offscreen runs.
 _ISOLATED_FOCUSED_MODULES = frozenset({
+    "tests.test_application_settings_component_creation",
+    "tests.test_application_settings_axes_creation",
     "tests.test_color_library",
     "tests.test_figure_export",
     "tests.test_gui_layout",
@@ -37,11 +40,17 @@ def main() -> int:
         "status": "failed" if errors else "passed", "required": True,
         "durationMs": 0, "evidence": "\n".join(errors) if errors else "Runtime versions match.",
     })
+    compile_targets = ["mygui", "tests", "main.py"]
+    ruff_targets = ["mygui", "tests", ".agents/checks", "main.py"]
+    smoke = Path(".agents/desktop_smoke")
+    if smoke.is_dir():
+        compile_targets.append(str(smoke))
+        ruff_targets.insert(-1, str(smoke))
     verification.append(run_step(
-        "compileall", [sys.executable, "-m", "compileall", "-q", "mygui", "tests", "main.py", ".agents/desktop_smoke"]
+        "compileall", [sys.executable, "-m", "compileall", "-q", *compile_targets]
     ))
     verification.append(run_step(
-        "ruff", [sys.executable, "-m", "ruff", "check", "mygui", "tests", ".agents/checks", ".agents/desktop_smoke", "main.py"]
+        "ruff", [sys.executable, "-m", "ruff", "check", *ruff_targets]
     ))
     modules = tasks[args.task]["focused_tests"]
     if modules:
