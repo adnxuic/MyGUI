@@ -179,7 +179,6 @@ class XrdRefinementInput(QWidget):
         self.validation_label = QLabel(self.contents)
         self.validation_label.setObjectName("xrd_refinement_validation")
         self.validation_label.setWordWrap(True)
-        self.validation_label.setStyleSheet("color: #c0392b;")
         contents_layout.addWidget(self.validation_label)
         contents_layout.addStretch(1)
         root.addWidget(self.contents)

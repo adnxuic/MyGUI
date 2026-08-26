@@ -2,7 +2,7 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QFrame, QGroupBox, QPlainTextEdit, QPushButton, QVBoxLayout
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 from mygui.widgets.fig_control_window.background_task import (
     cancel_background_tasks,
     start_background_task,
@@ -22,11 +22,7 @@ class PyTexWindow(QFrame):
         self.setObjectName("tex_window")
         self._validation_request_id = 0
 
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/fig_control_window/style.qss"
-            )
-        )
+        bind_widget_qss(self, "mygui/widgets/fig_control_window/style.qss")
 
         self.layout = QVBoxLayout()
 

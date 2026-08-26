@@ -5,6 +5,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { createArchitectureScanner } from '../src/scanners/architecture/scanner.ts';
@@ -20,7 +21,7 @@ test('full scan of the positive workspace returns a valid, deterministic result'
 
   assert.equal(first.contractVersion, 2);
   assert.equal(first.scanner.id, 'mygui.architecture');
-  assert.equal(first.scanner.version, '0.3.0');
+  assert.equal(first.scanner.version, '0.4.0');
   assert.equal(first.scope.workspace, workspace);
   assert.ok(first.coverage.filesVisited.length > 0);
   assert.ok(Number.isFinite(first.durationMs) && first.durationMs >= 0);
@@ -103,4 +104,12 @@ test('missing workspace directory yields diagnostics, not a crash', async () => 
   assert.equal(result.summary.findings, 0);
   assert.equal(result.status, 'failed');
   assert.equal(result.verdict, 'unknown');
+});
+
+test('scan.js exits non-zero when the workspace has a violation', () => {
+  const cli = resolve(import.meta.dirname, '../dist/cli/scan.js');
+  const workspace = resolve(FIXTURES, 'ws_basic');
+  const result = spawnSync(process.execPath, [cli, workspace], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /verdict\s+:\s+violation/);
 });

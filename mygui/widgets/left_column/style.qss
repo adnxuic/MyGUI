@@ -1,6 +1,6 @@
 QFrame#left_column
 {
-    background-color: #f8fafc;
+    background-color: {{COLOR_SURFACE_ALT}};
     min-width: {{SIZE_ACTIVITY_RAIL}}px;
     max-width: {{SIZE_ACTIVITY_RAIL}}px;
     border: 0px;

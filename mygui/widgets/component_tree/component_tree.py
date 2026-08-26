@@ -20,13 +20,17 @@ from mygui.figuremodify.components import (
     DeletionPolicy,
 )
 from mygui import status_messages
-from mygui.resources import load_qss_resource
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 
 from .dialogs import ComponentBatchDeleteDialog, DeleteCandidate
 from .model import ComponentTreeFilterProxyModel, ComponentTreeModel
 from .nodes import ComponentNodeKey, TreeNodeKey
 from .view import ComponentTreeView
+from mygui.application_theme import (
+    bind_widget_qss,
+    current_density_metrics,
+    subscribe_theme_window,
+)
 
 
 @dataclass(slots=True)
@@ -40,9 +44,7 @@ class ComponentTreeHost(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("component_tree_host")
-        self.setStyleSheet(
-            load_qss_resource("mygui/widgets/component_tree/style.qss")
-        )
+        bind_widget_qss(self, "mygui/widgets/component_tree/style.qss")
         self._canvas = None
         self._canvas_selection_connection = None
         self._project_id: str | None = None
@@ -78,12 +80,25 @@ class ComponentTreeHost(QFrame):
         layout.addWidget(self.content_stack, 1)
 
         self.search_input.textChanged.connect(self._filter_changed)
+        subscribe_theme_window(self)
+        self.apply_theme_metrics(current_density_metrics())
         self.tree.componentSelected.connect(self._tree_selected)
         self.tree.componentContextMenuRequested.connect(
             self._show_context_menu
         )
         self.model.aboutToRefresh.connect(self._before_model_refresh)
         self.model.refreshed.connect(self._after_model_refresh)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply tree-host padding and search-field height from density metrics."""
+
+        layout = self.layout()
+        if layout is not None:
+            pad = metrics.spacing_sm
+            layout.setContentsMargins(pad, pad, pad, pad)
+            layout.setSpacing(pad)
+        self.search_input.setMinimumHeight(metrics.control)
+        self.search_input.setMaximumHeight(metrics.control)
 
     @property
     def canvas(self):

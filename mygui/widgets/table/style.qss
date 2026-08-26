@@ -9,7 +9,7 @@ QFrame#table
 QTableView
 {
     background-color: {{COLOR_SURFACE}};
-    alternate-background-color: #f8fafc;
+    alternate-background-color: {{COLOR_SURFACE_ALT}};
     gridline-color: {{COLOR_HOVER_LIGHT}};
     selection-background-color: {{COLOR_ACCENT}};
     selection-color: {{COLOR_TEXT_ON_DARK}};

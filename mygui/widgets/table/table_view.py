@@ -33,6 +33,7 @@ from mygui.database.table_document import (
     new_id,
 )
 from .table_model import DependencyHandler, TableModel, TypedItemDelegate
+from mygui.application_theme import current_density_metrics, subscribe_theme_window
 
 if TYPE_CHECKING:
     from .py_subtable import PySubTable
@@ -56,6 +57,7 @@ class TableView(QTableView):
         self.setWordWrap(False)
         self.setSortingEnabled(False)
         self._disposed = False
+        self.setObjectName("sheet_table_view")
 
         horizontal = self.horizontalHeader()
         horizontal.setMinimumSectionSize(60)
@@ -75,6 +77,8 @@ class TableView(QTableView):
 
         self._applying_widths = False
         self._apply_column_widths()
+        subscribe_theme_window(self)
+        self.apply_theme_metrics(current_density_metrics())
         self.repository.transaction_committed.connect(self._repository_changed)
         self._init_actions()
 
@@ -83,6 +87,12 @@ class TableView(QTableView):
         """Return the sheet."""
 
         return self.repository.sheet(self.project_id, self.sheet_id)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply table row and header heights from the published density metrics."""
+
+        self.horizontalHeader().setFixedHeight(metrics.table_header)
+        self.verticalHeader().setDefaultSectionSize(metrics.table_row)
 
     def _init_actions(self):
         copy_action = QAction("Copy", self)

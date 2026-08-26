@@ -25,7 +25,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     ScatterMappingInput,
     ScatterStyleEditor,
 )
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 
 from mygui.database import (
     ColumnRef,
@@ -162,10 +162,10 @@ class PyCurveDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
-        qss_file = load_qss_resource(
-            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("chart_images/curve.svg")))
@@ -266,10 +266,10 @@ class PyPlotDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
-        qss_file = load_qss_resource(
-            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("chart_images/plot.svg")))
@@ -377,10 +377,10 @@ class PyScatterDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("chart_dialog")
-        qss_file = load_qss_resource(
-            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("chart_images/scatter.svg")))
@@ -503,13 +503,14 @@ class PyFitDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("fit_dialog")
-        qss_file = load_qss_resource(
-            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("chart_images/fit.svg")))
+        subscribe_theme_window(self)
 
         self.figure_window: PyFigureWindow = figure_window
         self.creation_defaults = _creation_defaults(figure_window)
@@ -602,10 +603,10 @@ class PyInterpolationDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window: PyFigureWindow = None, parent=None):
         super().__init__(parent)
         self.setObjectName("interpolation_dialog")
-        qss_file = load_qss_resource(
-            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("chart_images/interpolation.svg")))

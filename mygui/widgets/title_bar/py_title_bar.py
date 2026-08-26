@@ -3,7 +3,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QStackedLayout, QVBoxLayout
 
-from mygui.resources import load_qss_resource
 from mygui.widgets.table.py_table import PyTable
 from mygui.widgets.title_bar.py_title_button import ChangeButton
 from mygui.widgets.title_bar.py_title_menu import (
@@ -13,6 +12,11 @@ from mygui.widgets.title_bar.py_title_menu import (
     SelectorLayoutMenuBar,
     SelectorMenuBar,
     SelectorStyleMenuBar,
+)
+from mygui.application_theme import (
+    bind_widget_qss,
+    current_density_metrics,
+    subscribe_theme_window,
 )
 
 
@@ -24,14 +28,13 @@ class PyTitleBar(QFrame):
         parent=None,
         figure_window=None,
         table: PyTable | None = None,
+        export_preferences=None,
     ):
         super().__init__(parent)
         self.parent = parent
         self.figure_window = figure_window
         self.setObjectName("title_bar")
-        self.setStyleSheet(
-            load_qss_resource("mygui/widgets/title_bar/style.qss")
-        )
+        bind_widget_qss(self, "mygui/widgets/title_bar/style.qss")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.layout = QVBoxLayout(self)
@@ -67,7 +70,11 @@ class PyTitleBar(QFrame):
             self.stacklayout_bottom,
             figure_window=figure_window,
         )
-        self.menu_bar = MenuBar(table, figure_window, settings=getattr(parent, "settings", None))
+        self.menu_bar = MenuBar(
+            table,
+            figure_window,
+            export_preferences=export_preferences,
+        )
         self.stacklayout_top.addWidget(self.selector_menu_bar)
         self.stacklayout_top.addWidget(self.menu_bar)
 
@@ -79,6 +86,13 @@ class PyTitleBar(QFrame):
 
         self.layout.addLayout(self.sublayout)
         self.layout.addLayout(self.stacklayout_bottom)
+        subscribe_theme_window(self)
+        self.apply_theme_metrics(current_density_metrics())
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply command+gallery height from the published density metrics."""
+
+        self.setFixedHeight(metrics.command + metrics.gallery)
 
     def the_button_was_toggled(self, checked):
         """Synchronize the button appearance after its checked state changes."""

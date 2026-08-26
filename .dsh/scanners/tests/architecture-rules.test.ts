@@ -175,6 +175,58 @@ test('ARCH-CONTROLLER-BYPASS: positive fixture hits; reads and domain writes do 
   assert.ok(findings.every((finding) => finding.severity === 'high'));
 });
 
+test('ARCH-QSETTINGS-BACKEND-BYPASS: positive fixture hits; storage adapter and annotations do not', async () => {
+  const files = loadWorkspace('ws_basic');
+  const findings = await findingsFor(files, 'ARCH-QSETTINGS-BACKEND-BYPASS');
+  const evidence = findings.map((finding) => finding.evidence);
+  const byLine = new Map(findings.map((finding) => [`${finding.file}:${finding.line}`, finding]));
+
+  assert.ok(byLine.has('mygui/widgets/ui/qsettings_bypass.py:7'), 'QSettings() construction');
+  assert.ok(byLine.has('mygui/widgets/ui/qsettings_bypass.py:8'), 'beginGroup mutation');
+  assert.ok(byLine.has('mygui/widgets/ui/qsettings_bypass.py:9'), 'setValue mutation');
+  assert.ok(byLine.has('mygui/widgets/ui/qsettings_bypass.py:10'), 'endGroup mutation');
+  assert.ok(byLine.has('mygui/figuremodify/qsettings_bypass.py:6'), 'non-widget QSettings construction');
+  assert.ok(
+    evidence.some((text) => text.includes('QS()') || text.includes('return QS()')),
+    'QS = QSettings alias construction',
+  );
+  assert.ok(
+    evidence.some((text) => text.includes('prefs.setValue')),
+    'prefs = settings alias setValue',
+  );
+  assert.ok(!byLine.has('mygui/widgets/ui/qsettings_bypass.py:12'), 'QSettings type annotation is not a construction');
+  assert.ok(evidence.every((text) => !text.includes('QSettings | None')), 'annotations are not findings');
+  assert.ok(findings.every((finding) => finding.severity === 'high'));
+  assert.ok(findings.every((finding) => finding.tags.includes('qsettings-backend-bypass')));
+});
+
+test('ARCH-UI-THEME-BYPASS: positive fixture hits; widget-local setFont does not', async () => {
+  const files = loadWorkspace('ws_basic');
+  const findings = await findingsFor(files, 'ARCH-UI-THEME-BYPASS');
+  const evidence = findings.map((finding) => finding.evidence);
+  const byLine = new Map(findings.map((finding) => [`${finding.file}:${finding.line}`, finding]));
+
+  assert.ok(byLine.has('mygui/widgets/ui/theme_bypass.py:7'), 'app.setFont');
+  assert.ok(byLine.has('mygui/widgets/ui/theme_bypass.py:8'), 'app.setPalette');
+  assert.ok(byLine.has('mygui/widgets/ui/theme_bypass.py:9'), 'app.setStyleSheet');
+  assert.ok(byLine.has('mygui/widgets/ui/theme_bypass.py:10'), 'QApplication.setFont');
+  assert.ok(
+    evidence.some((text) => text.includes('QApplication.instance().setFont')),
+    'QApplication.instance().setFont is visible after call-chain continuation',
+  );
+  assert.ok(!byLine.has('mygui/widgets/ui/theme_bypass.py:18'), 'title.setFont is widget-local');
+  assert.ok(!evidence.some((text) => text.includes('title.setFont')));
+  assert.ok(findings.every((finding) => finding.severity === 'high'));
+  assert.ok(findings.every((finding) => finding.tags.includes('ui-theme-bypass')));
+});
+
+test('QSS color completeness is not a lexical architecture rule', async () => {
+  assert.ok(
+    !ARCHITECTURE_RULES.some((rule) => /qss|color-complete|hex/i.test(rule.id)),
+    'bundled QSS hex completeness stays a Python contract test',
+  );
+});
+
 test('negative workspace produces zero findings', async () => {
   const files = loadWorkspace('ws_negative');
   const findings = await runAllRules(files);

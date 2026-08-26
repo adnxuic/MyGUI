@@ -51,9 +51,14 @@ Selecting a style in the gallery opens the Style dialog, which creates a new pro
 
 | Parameter | Meaning | Default |
 | --- | --- | --- |
-| Width / Height | The Figure size in inches. | 6.4 by 4.8 |
-| DPI | The document resolution used for exports. | 100 |
+| Width / Height | The Figure size in inches. | Application New Figure defaults (fresh install: 6.4 by 4.8). An explicit value in this dialog wins. Opening a project keeps the schema v15 size. |
+| DPI | The document resolution used for exports. | Application New Figure defaults (fresh install: 100). An explicit value in this dialog wins. Opening a project keeps the schema v15 DPI. |
 | Figure name | The project name; non-empty and unique among open projects. | The style name |
+
+UI theme is not Matplotlib Figure style. Settings Appearance (theme, UI font
+size, density) changes application chrome only. It does not change the
+Figure `style` list above, `axes.prop_cycle`, or export appearance. See
+[Application Settings](settings.md).
 
 ## Chart color sequence
 

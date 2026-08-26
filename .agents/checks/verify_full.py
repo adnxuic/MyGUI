@@ -29,6 +29,8 @@ CRITICAL_FILES = [
     "mygui/widgets/figure_canvas/component_materializers.py",
     "mygui/widgets/figure_canvas/project_metadata.py",
     "mygui/widgets/figure_canvas/py_figure_canves.py",
+    "mygui/application_settings/service.py",
+    "mygui/application_theme/service.py",
 ]
 APPLICATION_TEST_TIMEOUT_SECONDS = 3600
 APPLICATION_BATCH_TIMEOUT_SECONDS = 1200
@@ -81,6 +83,15 @@ APPLICATION_TEST_MODULES = {
     "test_component_editors": (ISOLATION_GUI_MODULE, 2.6),
     "test_resource_locator": (ISOLATION_GUI_MODULE, 2.4),
     "test_gui_file_flow": (ISOLATION_GUI_MODULE, 2.0),
+    "test_application_settings_storage": (ISOLATION_GUI_MODULE, 2.5),
+    "test_application_settings_new_figure": (ISOLATION_GUI_MODULE, 10.0),
+    "test_application_settings_pages": (ISOLATION_GUI_MODULE, 2.0),
+    "test_application_settings_center": (ISOLATION_GUI_MODULE, 4.0),
+    "test_application_settings_center_c": (ISOLATION_GUI_MODULE, 3.0),
+    "test_application_theme": (ISOLATION_GUI_MODULE, 3.0),
+    "test_application_theme_transactions": (ISOLATION_GUI_MODULE, 3.0),
+    "test_application_theme_chrome": (ISOLATION_GUI_MODULE, 8.0),
+    "test_application_theme_qss": (ISOLATION_GUI_MODULE, 3.0),
     "test_font_diagnostics": (ISOLATION_GUI_MODULE, 1.5),
     "test_component_inspector": (ISOLATION_GUI_MODULE, 1.4),
     "test_command_gallery": (ISOLATION_GUI_MODULE, 1.3),
@@ -89,6 +100,9 @@ APPLICATION_TEST_MODULES = {
     "test_component_controllers": (ISOLATION_GUI_MODULE, 1.0),
     "test_bounded_process": (ISOLATION_CORE, 0.7),
     "test_component_documentation": (ISOLATION_CORE, 0.5),
+    "test_application_settings_service": (ISOLATION_CORE, 0.5),
+    "test_application_settings_session": (ISOLATION_CORE, 0.4),
+    "test_application_settings_contracts": (ISOLATION_CORE, 0.2),
     "test_package_boundary": (ISOLATION_CORE, 0.4),
     "test_color_library": (ISOLATION_GUI_MODULE, 0.4),
     "test_style_creation_defaults": (ISOLATION_GUI_MODULE, 0.4),
@@ -803,10 +817,10 @@ def _application_steps() -> list[dict]:
         "durationMs": 0, "evidence": "\n".join(errors) if errors else "Runtime versions match.",
     })
     verification.append(run_step(
-        "compileall", [sys.executable, "-m", "compileall", "-q", "mygui", "tests", "main.py"]
+        "compileall", [sys.executable, "-m", "compileall", "-q", "mygui", "tests", "main.py", ".agents/desktop_smoke"]
     ))
     verification.append(run_step(
-        "ruff", [sys.executable, "-m", "ruff", "check", "mygui", "tests", ".agents/checks", "main.py"]
+        "ruff", [sys.executable, "-m", "ruff", "check", "mygui", "tests", ".agents/checks", ".agents/desktop_smoke", "main.py"]
     ))
     try:
         requested_workers = default_test_shards()

@@ -25,7 +25,7 @@ The picker contains all existing 296 single colors and 77 built-in palettes in t
 
 ## Custom palettes
 
-A custom palette has a stable UUID, a unique non-empty name, and 2–12 ordered colors. The palette editor supports adding, editing, removing, and reordering colors. Custom palettes, favorites, and recent colors are stored in the versioned `colorLibrary` `QSettings` group.
+A custom palette has a stable UUID, a unique non-empty name, and 2–12 ordered colors. The palette editor supports adding, editing, removing, and reordering colors. Custom palettes, favorites, and recent colors are stored in the color-library dual-slot application document, not in `.mygui.json`. Settings → Maintenance shows the persisted data counts and offers confirmed `Clear recent colors…` and `Reset color library…` commands. Reset-all application preferences does not delete the color library. See [Application Settings](settings.md).
 
 Deleting a custom palette from the application library does not affect open charts or saved projects. A project stores the active palette's complete color snapshot and can continue its sequence without the application-level entry.
 

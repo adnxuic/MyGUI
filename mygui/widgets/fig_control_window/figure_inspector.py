@@ -25,7 +25,7 @@ from mygui.widgets.fig_control_window.component_editors.containers import (
     InspectorRemoval,
     InspectorToolBox,
 )
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 
 
 @dataclass(slots=True)
@@ -749,11 +749,7 @@ class FigureInspectorHost(QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("figure_inspector_host")
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/fig_control_window/style.qss"
-            )
-        )
+        bind_widget_qss(self, "mygui/widgets/fig_control_window/style.qss")
 
         self._figure_stack = QStackedWidget(self)
         self.empty_state = PyEmptyState(
@@ -767,6 +763,7 @@ class FigureInspectorHost(QFrame):
         layout.setSpacing(0)
         layout.addWidget(self._figure_stack)
         self._disposed = False
+        subscribe_theme_window(self)
 
     def add_figure_inspector(
         self,

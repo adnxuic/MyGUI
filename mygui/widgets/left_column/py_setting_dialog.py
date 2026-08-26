@@ -2,9 +2,9 @@
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout
-from mygui.resources import icon_path, load_qss_resource
-
-from mygui import status_messages
+from mygui.application_theme import bind_widget_qss
+from mygui.resources import icon_path
+from mygui.application_theme import subscribe_theme_window
 
 
 class PySettingDialog(QDialog):
@@ -14,13 +14,13 @@ class PySettingDialog(QDialog):
         super().__init__(parent)
         self._reset_layout_callback = reset_layout_callback
         self.setObjectName("setting_dialog")
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/left_column/setting_dialog_style.qss"
-            )
+        bind_widget_qss(
+            self,
+            "mygui/widgets/left_column/setting_dialog_style.qss",
         )
         self.setWindowTitle("Settings")
         self.setWindowIcon(QIcon(icon_path("setting.svg")))
+        self.setProperty("themeChromeWindowIcon", icon_path("setting.svg"))
 
         layout = QVBoxLayout(self)
         title = QLabel("Workspace")
@@ -36,6 +36,7 @@ class PySettingDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        subscribe_theme_window(self)
 
     def set_reset_layout_callback(self, callback):
         """Set reset layout callback."""
@@ -44,9 +45,8 @@ class PySettingDialog(QDialog):
         self.reset_layout_button.setEnabled(callback is not None)
 
     def reset_workspace_layout(self):
-        """Reset workspace layout."""
+        """Ask MainWindow to reset. Confirmation and Message Bar stay there."""
 
         if self._reset_layout_callback is None:
             return
         self._reset_layout_callback()
-        status_messages.show_success("Workspace layout reset.")

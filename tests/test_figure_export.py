@@ -12,23 +12,38 @@ from PIL import Image
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
+from mygui import status_messages
+from mygui.application_settings.models import (
+    ExportBBoxInches,
+    ExportFormatPreference,
+    ExportMetadata,
+    ExportSettings,
+    JpegSubsampling,
+    PadInchesKind,
+    PadInchesValue,
+    TiffCompression,
+)
+from mygui.application_settings import ApplicationSettingsService
+from mygui.application_settings.ports import MemoryExportPreferences
+from mygui.application_settings.storage import create_settings_backend
 from mygui.figure_export import (
     ExportFormat,
     FigureExportContext,
     FigureExportOptions,
-    FigureExportPreferences,
     FigureExportRequest,
     compatible_export_request,
     extension_error,
-    load_figure_export_preferences,
+    options_from_export_settings,
     path_matches_format,
     publish_export_file,
-    save_figure_export_preferences,
     with_format_extension,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.title_bar.titlebar_dialog.figure_export_dialog import (
     FigureExportDialog,
+)
+from mygui.widgets.title_bar.titlebar_dialog.figure_export_options_panel import (
+    FigureExportOptionsPanel,
 )
 from main import MainWindow
 from tests.axes_helpers import create_regular_axes
@@ -175,47 +190,53 @@ class ExportModelTests(unittest.TestCase):
         self.assertEqual(request.options.jpeg_quality, 75)
         self.assertIsNone(request.options.bbox_inches)
 
-    def test_preferences_fall_back_field_by_field(self):
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        path = Path(directory.name) / "export.ini"
-        settings = QSettings(str(path), QSettings.IniFormat)
-        save_figure_export_preferences(
-            settings,
-            FigureExportPreferences(
-                last_directory=directory.name,
-                format=ExportFormat.WEBP,
-                options=FigureExportOptions(
-                    dpi=180,
-                    use_project_dpi=False,
-                    jpeg_quality=40,
-                    webp_quality=60,
-                    metadata={"Title": "Kept"},
-                ),
-            ),
+    def test_use_project_dpi_binds_live_project_dpi_not_custom(self):
+        settings = ExportSettings(
+            use_project_dpi=True,
+            custom_dpi=220.0,
+            format=ExportFormatPreference.PNG,
         )
-        settings.beginGroup("figureExport")
-        settings.setValue("dpi", "nope")
-        settings.setValue("jpegQuality", 400)
-        settings.setValue("format", "gif")
-        settings.endGroup()
-        settings.sync()
-        loaded = load_figure_export_preferences(settings, document_dpi=100)
-        self.assertEqual(loaded.format, ExportFormat.PNG)
-        self.assertEqual(loaded.options.dpi, 100.0)
-        self.assertEqual(loaded.options.jpeg_quality, 75)
-        self.assertEqual(loaded.options.webp_quality, 60)
-        self.assertEqual(loaded.options.metadata["Title"], "Kept")
-        self.assertEqual(loaded.last_directory, directory.name)
+        options = options_from_export_settings(settings, document_dpi=100.0)
+        self.assertTrue(options.use_project_dpi)
+        self.assertEqual(options.dpi, 100.0)
+        custom = options_from_export_settings(
+            ExportSettings(use_project_dpi=False, custom_dpi=180.0),
+            document_dpi=100.0,
+        )
+        self.assertFalse(custom.use_project_dpi)
+        self.assertEqual(custom.dpi, 180.0)
 
-        settings.beginGroup("figureExport")
-        settings.setValue("version", 99)
-        settings.endGroup()
-        settings.sync()
-        stale = load_figure_export_preferences(settings, document_dpi=120)
-        self.assertEqual(stale.format, ExportFormat.PNG)
-        self.assertTrue(stale.options.use_project_dpi)
-        self.assertEqual(stale.options.webp_quality, 80)
+    def test_production_export_modules_do_not_import_qsettings(self):
+        import ast
+
+        root = Path(__file__).resolve().parents[1]
+        files = [
+            root / "mygui" / "figure_export.py",
+            root / "mygui" / "text_io.py",
+            root / "mygui" / "excel_io.py",
+            root / "mygui" / "widgets" / "title_bar" / "py_title_bar.py",
+            root / "mygui" / "widgets" / "title_bar" / "py_title_menu.py",
+            root / "mygui" / "widgets" / "title_bar" / "titlebar_dialog" / "figure_export_dialog.py",
+            root / "mygui" / "widgets" / "title_bar" / "titlebar_dialog" / "figure_export_options_panel.py",
+            root / "mygui" / "widgets" / "title_bar" / "titlebar_dialog" / "py_title_bar_dialog.py",
+            root / "mygui" / "widgets" / "common_widget" / "min_widget" / "color_library.py",
+        ]
+        for path in files:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            imported = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom):
+                    imported.append(node.module or "")
+                    imported.extend(
+                        f"{node.module}.{alias.name}" if node.module else alias.name
+                        for alias in node.names
+                    )
+            self.assertFalse(
+                any("QSettings" in name for name in imported),
+                f"{path.name} still imports QSettings: {imported}",
+            )
 
 
 class FigureExportDialogTests(unittest.TestCase):
@@ -228,6 +249,7 @@ class FigureExportDialogTests(unittest.TestCase):
         self.settings_path = Path(self.directory.name) / "prefs.ini"
         self.settings = QSettings(str(self.settings_path), QSettings.IniFormat)
         self.library = ColorLibrary()
+        self.export_port = MemoryExportPreferences()
         self.context = FigureExportContext(
             project_name="ProjectA",
             document_dpi=100.0,
@@ -241,11 +263,11 @@ class FigureExportDialogTests(unittest.TestCase):
         self.settings.sync()
         self.directory.cleanup()
 
-    def _dialog(self, export_callable=None):
+    def _dialog(self, export_callable=None, export_preferences=None):
         dialog = FigureExportDialog(
             context=self.context,
             color_library=self.library,
-            settings=self.settings,
+            export_preferences=export_preferences or self.export_port,
             export_callable=export_callable or self.exported.append,
         )
         self.addCleanup(dialog.deleteLater)
@@ -298,17 +320,8 @@ class FigureExportDialogTests(unittest.TestCase):
         failing._export()
         failing.close()
         self.assertFalse(target.exists())
-        self.settings.sync()
-        self.assertNotEqual(
-            load_figure_export_preferences(self.settings, document_dpi=100).format,
-            ExportFormat.JPEG,
-        )
-        self.settings.beginGroup("figureExport")
-        try:
-            stored_version = self.settings.value("version")
-        finally:
-            self.settings.endGroup()
-        self.assertIn(stored_version, (None, "", 0, "0"))
+        self.assertEqual(self.export_port.commit_calls, 0)
+        self.assertEqual(self.export_port.current().format, ExportFormatPreference.PNG)
 
         dialog = self._dialog()
         dialog.format_combo.setCurrentIndex(dialog.format_combo.findData("jpeg"))
@@ -317,9 +330,39 @@ class FigureExportDialogTests(unittest.TestCase):
         dialog._export()
         self.assertEqual(len(self.exported), 1)
         self.assertEqual(self.exported[0].format, ExportFormat.JPEG)
-        loaded = load_figure_export_preferences(self.settings, document_dpi=100)
-        self.assertEqual(loaded.format, ExportFormat.JPEG)
+        loaded = self.export_port.current()
+        self.assertEqual(loaded.format, ExportFormatPreference.JPEG)
         self.assertEqual(loaded.last_directory, str(jpeg_path.parent.resolve()))
+
+    def test_preference_write_failure_keeps_exported_file(self):
+        target = Path(self.directory.name) / "kept.png"
+        port = MemoryExportPreferences()
+        port.fail_commit = True
+
+        def write_ok(request):
+            request.path.write_bytes(b"PNG-BYTES")
+            self.exported.append(request)
+
+        dialog = self._dialog(write_ok, export_preferences=port)
+        dialog.path_edit.setText(str(target))
+        with patch.object(status_messages, "show_warning") as warning:
+            with patch.object(status_messages, "show_success") as success:
+                dialog._export()
+        self.assertTrue(target.exists())
+        self.assertEqual(target.read_bytes(), b"PNG-BYTES")
+        self.assertEqual(len(self.exported), 1)
+        self.assertEqual(port.commit_calls, 1)
+        self.assertEqual(port.current().format, ExportFormatPreference.PNG)
+        warning.assert_called_once()
+        self.assertIn("could not be saved", warning.call_args[0][0])
+        success.assert_not_called()
+        self.settings.sync()
+        self.settings.beginGroup("figureExport")
+        try:
+            stored_version = self.settings.value("version")
+        finally:
+            self.settings.endGroup()
+        self.assertIn(stored_version, (None, "", 0, "0"))
 
     def test_declined_overwrite_does_not_write(self):
         target = Path(self.directory.name) / "exists.png"
@@ -332,6 +375,43 @@ class FigureExportDialogTests(unittest.TestCase):
             dialog._export()
         self.assertEqual(target.read_bytes(), b"original-bytes")
         self.assertEqual(self.exported, [])
+        self.assertEqual(self.export_port.commit_calls, 0)
+
+    def test_export_port_does_not_write_legacy_figure_export(self):
+        target = Path(self.directory.name) / "legacy.png"
+        backend = create_settings_backend(settings=self.settings)
+        service = ApplicationSettingsService(
+            document=backend.application_settings_port()
+        )
+
+        def write_ok(request):
+            request.path.write_bytes(b"PNG")
+
+        dialog = FigureExportDialog(
+            context=self.context,
+            color_library=self.library,
+            export_preferences=service.export_preferences_port(),
+            export_callable=write_ok,
+        )
+        self.addCleanup(dialog.deleteLater)
+        dialog._generated_path = False
+        dialog.path_edit.setText(str(target))
+        dialog.format_combo.setCurrentIndex(dialog.format_combo.findData("webp"))
+        dialog._export()
+        self.settings.sync()
+        self.settings.beginGroup("figureExport")
+        try:
+            self.assertIn(self.settings.value("version"), (None, "", 0, "0"))
+            self.assertIn(self.settings.value("format"), (None, "", 0, "0"))
+        finally:
+            self.settings.endGroup()
+        self.settings.beginGroup("applicationSettings")
+        try:
+            self.assertTrue(
+                list(self.settings.childKeys()) or list(self.settings.childGroups())
+            )
+        finally:
+            self.settings.endGroup()
 
 
 class FigureExportExecutionTests(unittest.TestCase):
@@ -525,3 +605,67 @@ class FigureExportDialogControlTests(unittest.TestCase):
         dialog.pad_layout.setChecked(True)
         self.assertFalse(dialog.pad_spin.isEnabled())
         self.assertIn("640 × 480 px at 100 DPI", dialog.size_label.text())
+
+
+class FigureExportOptionsPanelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_export_settings_round_trip_keeps_custom_dpi_strategy(self):
+        panel = FigureExportOptionsPanel(
+            ColorLibrary(),
+            document_dpi=150.0,
+            width_inches=6.4,
+            height_inches=4.8,
+        )
+        self.addCleanup(panel.deleteLater)
+        original = ExportSettings(
+            format=ExportFormatPreference.PDF,
+            last_directory=str(Path.cwd()),
+            use_project_dpi=True,
+            custom_dpi=220.0,
+            transparent=True,
+            facecolor="#112233",
+            edgecolor="auto",
+            bbox_inches=ExportBBoxInches.TIGHT,
+            pad_inches=PadInchesValue(kind=PadInchesKind.LAYOUT, inches=None),
+            png_compress_level=3,
+            png_optimize=True,
+            jpeg_quality=40,
+            jpeg_optimize=True,
+            jpeg_progressive=True,
+            jpeg_subsampling=JpegSubsampling.FOUR_TWO_ZERO,
+            tiff_compression=TiffCompression.LZW,
+            webp_lossless=True,
+            webp_quality=70,
+            webp_alpha_quality=80,
+            webp_method=2,
+            webp_exact=True,
+            metadata=ExportMetadata(fields={"Title": "Chart", "Creator": "MyGUI"}),
+        )
+        panel.set_export_settings(original)
+        loaded = panel.export_settings()
+        self.assertEqual(loaded.format, original.format)
+        self.assertEqual(loaded.last_directory, original.last_directory)
+        self.assertTrue(loaded.use_project_dpi)
+        self.assertEqual(loaded.custom_dpi, 220.0)
+        self.assertTrue(loaded.transparent)
+        self.assertEqual(loaded.facecolor, "#112233")
+        self.assertEqual(loaded.edgecolor, "auto")
+        self.assertEqual(loaded.bbox_inches, ExportBBoxInches.TIGHT)
+        self.assertEqual(loaded.pad_inches.kind, PadInchesKind.LAYOUT)
+        self.assertEqual(loaded.png_compress_level, 3)
+        self.assertTrue(loaded.png_optimize)
+        self.assertEqual(loaded.jpeg_quality, 40)
+        self.assertEqual(loaded.jpeg_subsampling, JpegSubsampling.FOUR_TWO_ZERO)
+        self.assertEqual(loaded.tiff_compression, TiffCompression.LZW)
+        self.assertTrue(loaded.webp_lossless)
+        self.assertEqual(loaded.webp_method, 2)
+        self.assertEqual(loaded.metadata.fields["Title"], "Chart")
+        self.assertEqual(loaded.metadata.fields["Creator"], "MyGUI")
+        options = panel.figure_export_options()
+        self.assertEqual(options.dpi, 150.0)
+        self.assertTrue(options.use_project_dpi)
+        self.assertEqual(options.pad_inches, "layout")
+        self.assertEqual(options.bbox_inches, "tight")

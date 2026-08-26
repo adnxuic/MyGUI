@@ -1,7 +1,7 @@
 """Build file, chart, layout, and element menus for the title bar."""
 
-from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFileDialog,
@@ -31,6 +31,7 @@ from mygui.excel_io import EXCEL_FILE_FILTER, import_excel_into_workspace
 from mygui.text_io import import_text_into_workspace
 from mygui.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
 from mygui.resources import icon_path, load_json_resource
+from mygui.application_theme import current_density_metrics
 from mygui import status_messages
 
 import os
@@ -108,6 +109,11 @@ class SelectorMenuBar(QFrame):
         elif self.element_button.isChecked():
             self.stacklayout_bottom.setCurrentIndex(3)
 
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply command-row height from the published density metrics."""
+
+        self.setFixedHeight(metrics.command)
+
 
 def load_excel_into_table(file_name: str, table: PyTable, figure_window=None, parent=None):
     """Load excel into table."""
@@ -128,12 +134,17 @@ def load_text_into_table(file_name: str, table: PyTable, figure_window=None, par
 class MenuBar(QFrame):
     """Provide the menu bar title-bar menu."""
 
-    def __init__(self, table: PyTable, figure_window=None, settings: QSettings | None = None):
+    def __init__(
+        self,
+        table: PyTable,
+        figure_window=None,
+        export_preferences=None,
+    ):
         super().__init__()
 
         self.table = table
         self.figure_window = figure_window
-        self.settings = settings
+        self._export_preferences = export_preferences
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
@@ -148,7 +159,7 @@ class MenuBar(QFrame):
         # 添加分割线
         self.separator = QFrame(self)
         self.separator.setObjectName("command_separator")
-        self.separator.setFixedSize(1, 28)
+        self.separator.setFixedSize(1, current_density_metrics().bottom)
         self.layout.addWidget(self.separator, alignment=Qt.AlignVCenter)
 
         # 创建触发编辑菜单的按钮
@@ -169,9 +180,40 @@ class MenuBar(QFrame):
 
         # 设置编辑菜单
         self.edit_menu = QMenu(self)
-        self.edit_menu.addAction('copy')
-        self.edit_menu.addAction('paste')
-        self.edit_menu.addAction('cut')
+        self.edit_menu.addAction("copy")
+        self.edit_menu.addAction("paste")
+        self.edit_menu.addAction("cut")
+        self.edit_menu.addSeparator()
+        self.settings_action = QAction("Settings", self)
+        self.settings_action.setObjectName("settings_action")
+        self.settings_action.setIcon(QIcon(icon_path("setting.svg")))
+        self.settings_action.setData("setting.svg")
+        self.settings_action.setShortcut(QKeySequence("Ctrl+,"))
+        self.settings_action.setMenuRole(QAction.MenuRole.NoRole)
+        self.settings_action.setToolTip("Open Settings")
+        self.edit_menu.addAction(self.settings_action)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply command-row height and separator size from density metrics."""
+
+        self.setFixedHeight(metrics.command)
+        self.separator.setFixedSize(1, metrics.bottom)
+
+    def apply_theme_icons(self, snapshot, provider) -> None:
+        """Retint file-menu and Settings chrome icons for the published scheme."""
+
+        for menu in (self.file_menu, self.edit_menu):
+            for action in menu.actions():
+                source = action.data()
+                if not source:
+                    continue
+                action.setIcon(
+                    provider.icon(
+                        icon_path(str(source)),
+                        snapshot=snapshot,
+                        widget=self,
+                    )
+                )
 
     def show_menu(self, menu_name, button_name):
         # 显示菜单
@@ -183,18 +225,23 @@ class MenuBar(QFrame):
         """Initialize actions."""
 
         file_open_action = QAction(QIcon(icon_path("open.svg")), "打开 Excel...", self.file_menu)
+        file_open_action.setData("open.svg")
         file_open_action.triggered.connect(self.open_file)
 
         file_open_text_action = QAction(QIcon(icon_path("open.svg")), "打开文本数据...", self.file_menu)
+        file_open_text_action.setData("open.svg")
         file_open_text_action.triggered.connect(self.open_text_file)
 
         file_open_project_action = QAction(QIcon(icon_path("open.svg")), "打开项目...", self.file_menu)
+        file_open_project_action.setData("open.svg")
         file_open_project_action.triggered.connect(self.open_project)
 
         file_save_action = QAction(QIcon(icon_path("save.svg")), "保存项目...", self.file_menu)
+        file_save_action.setData("save.svg")
         file_save_action.triggered.connect(self.save_file)
 
         file_save_as_action = QAction(QIcon(icon_path("save.svg")), "Project Save As...", self.file_menu)
+        file_save_as_action.setData("save.svg")
         file_save_as_action.triggered.connect(self.save_file_as)
 
         file_export_figure_action = QAction("导出当前图片...", self.file_menu)
@@ -240,7 +287,7 @@ class MenuBar(QFrame):
         dialog = FigureExportDialog(
             context=canvas.export_context(),
             color_library=color_library,
-            settings=self.settings,
+            export_preferences=self._export_preferences,
             export_callable=canvas.export_figure,
             parent=self.window(),
         )

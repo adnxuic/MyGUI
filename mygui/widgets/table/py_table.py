@@ -5,8 +5,8 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QStackedWidget, QVBoxLayout
 
+from mygui.application_theme import bind_widget_qss
 from mygui.database import TableRepository, validate_component_name
-from mygui.resources import load_qss_resource
 from mygui.widgets.table.py_subtable import PySubTable
 
 
@@ -21,7 +21,7 @@ class PyTable(QFrame):
         self._current_project_id: str | None = None
 
         self.setObjectName("table")
-        self.setStyleSheet(load_qss_resource("mygui/widgets/table/style.qss"))
+        bind_widget_qss(self, "mygui/widgets/table/style.qss")
         self.setMinimumWidth(240)
 
         self.stack = QStackedWidget(self)

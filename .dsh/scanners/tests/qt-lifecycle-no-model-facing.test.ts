@@ -47,7 +47,7 @@ test('registry discovers architecture + qt-lifecycle; unload unregisters; remoun
   // Both scanners are visible, sorted deterministically.
   assert.deepEqual(
     ctx.myguiScanners.list().map((entry) => `${entry.id}@${entry.version}`),
-    ['mygui.architecture@0.3.0', 'mygui.qt-lifecycle@0.2.0'],
+    ['mygui.architecture@0.4.0', 'mygui.qt-lifecycle@0.2.0'],
   );
 
   // The qt scanner runs and produces the expected contract.

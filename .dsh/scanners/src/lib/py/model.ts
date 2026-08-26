@@ -314,6 +314,56 @@ function extractChains(line: PyLine): AttrChain[] {
       while (s < n && (code[s] === ' ' || code[s] === '\t')) s += 1;
       isCall = s < n && code[s] === '(';
     }
+    // Walk call suffixes that continue the chain: `QApplication.instance().setFont`.
+    for (;;) {
+      let s = k;
+      while (s < n && (code[s] === ' ' || code[s] === '\t')) s += 1;
+      if (s >= n || code[s] !== '(') break;
+      let depth = 1;
+      let t = s + 1;
+      while (t < n && depth > 0) {
+        const c = code[t]!;
+        if (c === '(') depth += 1;
+        else if (c === ')') depth -= 1;
+        t += 1;
+      }
+      let u = t;
+      while (u < n && (code[u] === ' ' || code[u] === '\t')) u += 1;
+      if (u < n && (code[u] === '.' || code[u] === '[')) {
+        k = t;
+        sawAttribute = true;
+        // Consume the following `.name` / `[...]` using the same walk as above.
+        if (code[u] === '.') {
+          let v = u + 1;
+          while (v < n && (code[v] === ' ' || code[v] === '\t')) v += 1;
+          if (v < n && /[A-Za-z_]/.test(code[v]!)) {
+            let w = v;
+            while (w < n && /[A-Za-z0-9_]/.test(code[w]!)) w += 1;
+            segments.push({ name: code.slice(v, w), isIndex: false, col: v + 1 });
+            k = w;
+            continue;
+          }
+        } else {
+          let depth2 = 1;
+          let v = u + 1;
+          while (v < n && depth2 > 0) {
+            const c = code[v]!;
+            if (c === '[') depth2 += 1;
+            else if (c === ']') depth2 -= 1;
+            v += 1;
+          }
+          segments.push({ name: '', isIndex: true, col: u + 1 });
+          k = v;
+          continue;
+        }
+      }
+      break;
+    }
+    {
+      let s = k;
+      while (s < n && (code[s] === ' ' || code[s] === '\t')) s += 1;
+      isCall = s < n && code[s] === '(';
+    }
     if (segments.length >= 2 || sawAttribute || isCall) {
       chains.push({
         segments,
@@ -368,6 +418,18 @@ function extractAssignments(
           c.segments.length >= 2,
       );
       if (chain !== undefined) valueChain = chain;
+      if (valueChain === undefined) {
+        const ident = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(value);
+        if (ident !== null) {
+          valueChain = {
+            segments: [{ name: ident[1]!, isIndex: false, col: valueStartCol }],
+            line: line.number,
+            startCol: valueStartCol,
+            endCol: valueEndCol,
+            isCall: false,
+          };
+        }
+      }
       assignments.push({ name, valueChain, line: line.number });
       continue;
     }

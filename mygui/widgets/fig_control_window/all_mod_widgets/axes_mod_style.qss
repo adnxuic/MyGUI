@@ -1,44 +1,26 @@
-QFrame#common_mod_widget
-{
-    background-color:#EBECF0;
-    border-radius: 5px;
-}
-
-QFrame#bottom_spine_mod_widget
-{
-    background-color:#EBECF0;
-    border-radius: 5px;
-}
-
-
-QFrame#top_spine_mod_widget
-{
-    background-color:#EBECF0;
-    border-radius: 5px;
-}
-
-QFrame#left_spine_mod_widget
-{
-    background-color:#EBECF0;
-    border-radius: 5px;
-}
-
-QFrame#right_spine_mod_widget
-{
-    background-color:#EBECF0;
-    border-radius: 5px;
-}
-
+QFrame#common_mod_widget,
+QFrame#bottom_spine_mod_widget,
+QFrame#top_spine_mod_widget,
+QFrame#left_spine_mod_widget,
+QFrame#right_spine_mod_widget,
 QFrame#axe_legend_mod_widget
 {
-    background-color:#EBECF0;
-    border-radius: 5px;
+    background-color: {{COLOR_SURFACE_ALT}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border-radius: {{RADIUS_MD}}px;
+}
+
+QLabel, QCheckBox, QRadioButton, QGroupBox
+{
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 
 QDoubleSpinBox {
-    border : 1px solid #000000;
-    border-radius: 5px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_MD}}px;
     width: 50px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 QDoubleSpinBox::up-button {
     subcontrol-origin: border;
@@ -53,4 +35,3 @@ QDoubleSpinBox::down-button {
     border-width: 1px;
     border-top-width: 0;
 }
-

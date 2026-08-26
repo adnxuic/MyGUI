@@ -1,32 +1,41 @@
 QFrame
 {
-    background-color:#EBECF0;
-    border-radius: 5px;
+    background-color: {{COLOR_SURFACE_ALT}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border-radius: {{RADIUS_MD}}px;
+}
+
+QLabel, QCheckBox, QRadioButton, QGroupBox
+{
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 
 QPlainTextEdit
 {
-    background-color:#ffffff;
-    border-radius: 5px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border-radius: {{RADIUS_MD}}px;
 }
 
 QToolBox::tab {
-    background: #EBECF0;
-    border-radius: 5px;
+    background: {{COLOR_SURFACE_ALT}};
+    border-radius: {{RADIUS_MD}}px;
     font-size: 16px;
-    color: #6d6868;
+    color: {{COLOR_TEXT_MUTED}};
 }
 
 QToolBox::tab:selected {
-    background: #0281ff;
+    background: {{COLOR_ACCENT}};
     font: bold;
-    color: white;
+    color: {{COLOR_TEXT_ON_DARK}};
 }
 
 QDoubleSpinBox {
-    border : 1px solid #000000;
-    border-radius: 5px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_MD}}px;
     width: 30px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 QDoubleSpinBox::up-button {
     subcontrol-origin: border;

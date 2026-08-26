@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mygui.application_theme import current_density_metrics, subscribe_theme_window
+
 
 DialogFactory = Callable[[QWidget | None], QDialog]
 IconSource = str | QIcon
@@ -60,6 +62,7 @@ class LazyDialogAction(QAction):
         dialog = self._dialog
         if dialog is None:
             dialog = self._dialog_factory(self._dialog_parent())
+            subscribe_theme_window(dialog)
             if self._reuse_dialog:
                 self._dialog = dialog
         dialog.exec()
@@ -80,7 +83,8 @@ class ResponsiveActionGallery(QFrame):
         self.toolbar.setMovable(False)
         self.toolbar.setFloatable(False)
         self.toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        self.toolbar.setIconSize(QSize(40, 40))
+        metrics = current_density_metrics()
+        self.toolbar.setIconSize(QSize(metrics.button, metrics.button))
         self.toolbar.setMinimumWidth(0)
         self.toolbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.overflow_button = self.toolbar.findChild(
@@ -96,6 +100,14 @@ class ResponsiveActionGallery(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.toolbar)
+        subscribe_theme_window(self)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply gallery height and icon size from the published density metrics."""
+
+        self.setMinimumHeight(metrics.gallery)
+        self.setMaximumHeight(metrics.gallery)
+        self.toolbar.setIconSize(QSize(metrics.button, metrics.button))
 
     def showEvent(self, event):
         """Refresh the widget when Qt makes it visible."""

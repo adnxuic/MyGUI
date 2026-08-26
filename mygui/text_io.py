@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from mygui.application_theme import bind_widget_qss
 from mygui.excel_io import (
     EXCEL_PREVIEW_ROWS,
     ExcelColumnSpec,
@@ -312,6 +313,10 @@ class TextImportDialog(QDialog):
         self.preview: ExcelSheetPreview | None = None
         self._accepted_specs: list[ExcelSheetSpec] | None = None
         self.setWindowTitle("Import Text Data")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         self.resize(960, 680)
         self.setMinimumSize(760, 520)
 
@@ -335,6 +340,7 @@ class TextImportDialog(QDialog):
         form.addRow("Column-name line:", self.header_line_spin)
 
         self.summary_label = QLabel(self)
+        self.summary_label.setObjectName("import_summary_label")
         self.preview_layout = QVBoxLayout()
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
         self.buttons.accepted.connect(self._validate_and_accept)
@@ -350,6 +356,13 @@ class TextImportDialog(QDialog):
         self.data_start_spin.valueChanged.connect(self._source_lines_changed)
         self.header_line_spin.valueChanged.connect(self._rebuild_preview)
         self._rebuild_preview()
+
+    def _set_summary_level(self, level: str) -> None:
+        self.summary_label.setProperty("level", level)
+        style = self.summary_label.style()
+        if style is not None:
+            style.unpolish(self.summary_label)
+            style.polish(self.summary_label)
 
     def _redetect_delimiter(self, delimiter: str):
         try:
@@ -375,7 +388,7 @@ class TextImportDialog(QDialog):
 
     def _show_error(self, error: Exception):
         self.summary_label.setText(str(error))
-        self.summary_label.setStyleSheet("color: #dc2626;")
+        self._set_summary_level("error")
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
 
     def _rebuild_preview(self):
@@ -404,7 +417,7 @@ class TextImportDialog(QDialog):
             f"Detected {row_count} data rows × {self.preview.columns.columnCount()} columns; "
             f"removed {skipped} leading lines."
         )
-        self.summary_label.setStyleSheet("color: #166534;")
+        self._set_summary_level("success")
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
 
     def specs(self) -> list[ExcelSheetSpec]:
@@ -444,7 +457,7 @@ class TextImportDialog(QDialog):
 
     def _validate_and_accept(self):
         self.summary_label.setText("Preparing full data for import...")
-        self.summary_label.setStyleSheet("color: #1d4ed8;")
+        self._set_summary_level("info")
         QApplication.processEvents()
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
@@ -515,10 +528,11 @@ def import_text_into_workspace(file_name: str, table, figure_window=None, parent
         return None
     if create_canvas:
         try:
+            width, height, dpi = figure_window.creation_figure_size()
             figure_window.add_figure(
-                width=6.4,
-                height=4.8,
-                dpi=100,
+                width=width,
+                height=height,
+                dpi=dpi,
                 style="default",
                 canva_name=subtable.project.name,
                 create_table=False,

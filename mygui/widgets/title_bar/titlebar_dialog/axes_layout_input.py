@@ -345,7 +345,6 @@ class AxesLayoutInput(QWidget):
         self.validation_label = QLabel(layout_page)
         self.validation_label.setObjectName("layout_validation_message")
         self.validation_label.setWordWrap(True)
-        self.validation_label.setStyleSheet("color: #c0392b;")
         layout_body.addWidget(self.validation_label)
         layout_body.addStretch(1)
 

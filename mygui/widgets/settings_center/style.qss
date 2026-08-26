@@ -1,0 +1,135 @@
+QDialog#setting_dialog
+{
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border: 1px solid {{COLOR_BORDER}};
+}
+
+QFrame#settings_nav_pane
+{
+    background-color: {{COLOR_SURFACE_ALT}};
+    border-right: 1px solid {{COLOR_BORDER}};
+}
+
+QLineEdit#settings_search
+{
+    min-height: 28px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    padding: 2px {{SPACE_SM}}px;
+}
+
+QLineEdit#settings_search:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QListWidget#settings_nav
+{
+    background-color: transparent;
+    border: 0px;
+    color: {{COLOR_TEXT_PRIMARY}};
+    outline: none;
+}
+
+QListWidget#settings_nav::item
+{
+    min-height: 28px;
+    padding: {{SPACE_SM}}px {{SPACE_MD}}px;
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QListWidget#settings_nav::item:selected
+{
+    background-color: {{COLOR_ACCENT}};
+    color: {{COLOR_TEXT_ON_DARK}};
+}
+
+QListWidget#settings_nav::item:selected:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QListWidget#settings_nav::item:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QLabel#settings_page_title
+{
+    font-weight: 600;
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel#settings_page_description,
+QLabel#settings_status,
+QLabel#export_settings_dpi_hint,
+QLabel#integrations_intro
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QScrollArea#settings_page_scroll
+{
+    background-color: {{COLOR_SURFACE}};
+    border: 0px;
+}
+
+QFrame#settings_footer
+{
+    background-color: {{COLOR_SURFACE}};
+    border-top: 1px solid {{COLOR_BORDER}};
+}
+
+QPushButton#settings_restore_defaults,
+QPushButton#settings_cancel,
+QPushButton#settings_apply,
+QPushButton#settings_ok
+{
+    min-height: 32px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    padding: 0px {{SPACE_MD}}px;
+}
+
+QPushButton#settings_ok
+{
+    background-color: {{COLOR_ACCENT}};
+    color: {{COLOR_TEXT_ON_DARK}};
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton#settings_restore_defaults:hover,
+QPushButton#settings_cancel:hover,
+QPushButton#settings_apply:hover
+{
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton#settings_ok:hover
+{
+    background-color: {{COLOR_ACCENT_HOVER}};
+    border-color: {{COLOR_ACCENT_HOVER}};
+}
+
+QPushButton#settings_restore_defaults:focus,
+QPushButton#settings_cancel:focus,
+QPushButton#settings_apply:focus,
+QPushButton#settings_ok:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QPushButton#settings_restore_defaults:disabled,
+QPushButton#settings_cancel:disabled,
+QPushButton#settings_apply:disabled,
+QPushButton#settings_ok:disabled
+{
+    color: {{COLOR_BORDER_STRONG}};
+    background-color: {{COLOR_SURFACE_ALT}};
+    border-color: {{COLOR_BORDER}};
+}

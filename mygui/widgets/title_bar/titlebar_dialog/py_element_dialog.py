@@ -35,7 +35,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     ReferenceMarksInput,
 )
 
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 
 
 class PyTextDialog(QDialog):
@@ -44,10 +44,10 @@ class PyTextDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("text_dialog")
-        qss_file = load_qss_resource(
-            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("element_images/Text.svg")))
@@ -191,6 +191,10 @@ class PyInAxesDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("in_axes_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         self.setWindowTitle(dialog_name or "in_axes")
         self.setWindowIcon(QIcon(self.ICON_PATH))
         self.figure_window: PyFigureWindow = figure_window
@@ -247,6 +251,10 @@ class PyColorbarDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("colorbar_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         self.setWindowTitle(dialog_name or "Colorbar")
         self.setWindowIcon(QIcon(self.ICON_PATH))
         self.figure_window: PyFigureWindow = figure_window
@@ -301,6 +309,10 @@ class PyReferenceMarksDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName("reference_marks_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         self.setWindowTitle(dialog_name or "Reflection Positions")
         self.setWindowIcon(QIcon(self.ICON_PATH))
         self.figure_window: PyFigureWindow = figure_window
@@ -364,6 +376,10 @@ class _PyReferenceGuideDialog(QDialog):
     def __init__(self, dialog_name=None, figure_window=None, parent=None):
         super().__init__(parent)
         self.setObjectName(f"{self.CREATE_METHOD}_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         self.setWindowTitle(dialog_name or f"Add {self.GUIDE_LABEL}")
         self.setWindowIcon(QIcon(self.ICON_PATH))
         self.figure_window: PyFigureWindow = figure_window

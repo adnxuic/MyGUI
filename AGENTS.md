@@ -50,12 +50,12 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   it after `QApplication` and before fonts/widgets. A missing glyph rejects the
   edit, atomically restores UI/Controller/Artist state, and emits one red
   result.
-- MATLAB and TeX are optional integrations. Their failure must not block basic
-  GUI maintenance. `mygui.database.matlab_adapter` is the MATLAB process
-  boundary; pure-Python expression fallbacks live in `matlab_fallbacks.py`
-  and must not start MATLAB or MCR. User-entered expression evaluation
-  remains high risk and any replacement of evaluation machinery is a dedicated
-  task.
+- **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot QSettings is the only persistent application-preference store. Sessions keep a dirty patch plus base revision; commit is atomic. Controllers receive only narrow ports. Settings never enter schema v15, Undo/Redo, dirty fingerprints, ComponentState, or Canvas materialization.
+- **CORE-THEME-OWNER:** `ThemeService` is the sole publisher of application font, palette, bundled QSS, and density. Apply `ThemeSnapshot` after settings load and before any `QWidget`. UI theme is not Matplotlib Figure style.
+- MATLAB and TeX are optional; failure must not block basic GUI work.
+  `mygui.database.matlab_adapter` is the MATLAB process boundary; Python
+  fallbacks in `matlab_fallbacks.py` must not start MATLAB or MCR. Replacing
+  user-expression evaluation is a dedicated high-risk task.
 
 ## Component, Inspector, and Selection Invariants
 
@@ -85,10 +85,9 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   `CanvasSnapshotApplier`, `CanvasPopoutWindow`, `ProjectNavigationToolbar`)
   run through that Canvas and must not cache `ComponentState`, selection IDs,
   or color-cycle state.
-- Inspector/container ownership, lifecycle, tree projection, data refresh, and
-  editor placement follow `.agents/architecture/inspector.md` and
-  `.agents/architecture/component-system.md`. Containers expose public APIs and
-  idempotent recursive `dispose()`; external code does not access private Qt
+- Inspector ownership, lifecycle, tree projection, data refresh, and editor
+  placement follow `.agents/architecture/inspector.md`. Containers expose
+  public APIs and idempotent recursive `dispose()`; do not access private Qt
   stack/toolbox fields.
 - UI synchronization blocks recursive signals, rolls back UI/Controller/Artist
   state atomically on failure, detaches all listeners during disposal, and
@@ -135,32 +134,30 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 
 ## Documentation and Completion
 
-- User-facing documentation is MkDocs content under `docs/`; every page appears
-  in `mkdocs.yml`. Feature/property changes update the relevant parameter page
-  and schema summary in the same change. Matplotlib links pin version 3.9.0.
-- Feature pages describe current behavior concisely and document parameters in
-  detail; limitations and plans stay out of `docs/`. Parameter tables keep one
-  row per Inspector field with control, meaning, values/default, and the
-  persisted/runtime property key. Uncommon Matplotlib value families carry a
-  pinned 3.9.0 inline link on every applicable row, and each page lists all
-  referenced URLs. Changes to nav/build/link policy also update
-  `docs/documentation-site.md`.
-- New feature state participates in project save/import workflows when
-  applicable; do not ship runtime state that silently disappears on reopen.
-- `.agents/` is operational Agent Engineering knowledge, not user docs.
+- User docs live under `docs/` and must appear in `mkdocs.yml`. Feature and
+  property changes update the relevant parameter page and schema summary
+  together. Matplotlib links pin 3.9.0. Nav/build/link policy changes also
+  update `docs/documentation-site.md`.
+- Feature pages describe current behavior and document each Inspector field
+  (control, meaning, values/default, persisted/runtime key). Uncommon
+  Matplotlib value families get a pinned 3.9.0 inline link on every applicable
+  row; each page lists every referenced URL. Keep limitations and plans out of
+  `docs/`.
+- New feature state participates in project save/import when applicable; do
+  not ship runtime state that silently disappears on reopen.
+- `.agents/` is Agent Engineering knowledge, not user docs.
   `codex_handoff/current-limitations.md` records current limitations only;
-  scanner output and task evidence are temporary artifacts under the ignored
-  `build/agent-results/` path.
-- Update this file in place when a global invariant, architecture owner,
-  schema version, or startup gate changes. Update the relevant Skill and
-  architecture page when a workflow changes. `AGENTS.md` is authoritative over
-  `.agents/`, which is authoritative over conflicting narrative under `docs/`.
+  scanner output and task evidence stay under ignored `build/agent-results/`.
+- Update this file when a global invariant, architecture owner, schema version,
+  or startup gate changes; update the Skill and architecture page when a
+  workflow changes. `AGENTS.md` outranks `.agents/`, which outranks conflicting
+  `docs/` narrative.
 - Use `ColorChoiceWidget` with the injected `ColorLibrary`; ordered chart colors
-  use `ColorCycleState.peek()` and call `commit()` only after the related
-  transaction succeeds.
-- Interactive desktop smoke checks remain required when a routed task declares
-  them; Qt offscreen tests do not cover multi-monitor scaling, native dialogs,
-  real TeX/MATLAB runtimes, or drag/drop.
+  use `ColorCycleState.peek()` and `commit()` only after the related transaction
+  succeeds.
+- Interactive desktop smoke remains required when a routed task declares it;
+  Qt offscreen tests do not cover multi-monitor scaling, native dialogs, real
+  TeX/MATLAB runtimes, or drag/drop.
 
 ## Task Router
 
@@ -171,6 +168,7 @@ the architecture pages named by `.agents/task-map.yaml`:
 | --- | --- |
 | New Figure/chart/element component | `.agents/skills/add-figure-component/SKILL.md` |
 | Add/change an Inspector property | `.agents/skills/modify-component-property/SKILL.md` |
+| Add/change an application setting | `.agents/skills/modify-application-setting/SKILL.md` |
 | Change persisted schema or fields | `.agents/skills/schema-migration/SKILL.md` |
 | Change save/open/restore publication | `.agents/skills/project-io-change/SKILL.md` |
 | Diagnose GUI state/lifecycle regression | `.agents/skills/debug-gui-regression/SKILL.md` |
@@ -183,15 +181,14 @@ checks. Ordinary local maintenance that matches none still obeys this file.
 
 ## Verification Protocol
 
-- Run routed checks from `.agents/checks/` with the project interpreter. The
-  canonical local full command is:
+- Run routed checks from `.agents/checks/` with the project interpreter. Local
+  full command:
   `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_full.py --profile local`.
-- The application baseline is compileall, Ruff, the complete unittest suite
-  with `QT_QPA_PLATFORM=offscreen`, branch coverage (global 74%, listed critical
+- Baseline: compileall, Ruff, the complete unittest suite with
+  `QT_QPA_PLATFORM=offscreen`, branch coverage (global 74%, listed critical
   files 80%), and applicable focused fault-injection/round-trip tests.
-- Documentation changes run `python -m mkdocs build --strict`; docs-only changes
-  do not require the Python application suite.
-- A routed required check that is failed, unknown, or not run prevents a
-  completed result. Report verification exactly; never equate “not run” with
-  pass. Use `.agents/architecture/testing-map.md` for focused suites and manual
-  smoke coverage.
+- Documentation changes run `python -m mkdocs build --strict`; docs-only
+  changes skip the Python application suite.
+- A required check that is failed, unknown, or not run blocks completion.
+  Report verification exactly; never equate “not run” with pass. Focused
+  suites and manual smoke: `.agents/architecture/testing-map.md`.

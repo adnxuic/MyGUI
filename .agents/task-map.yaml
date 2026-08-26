@@ -121,3 +121,37 @@ tasks:
     focused_tests: []
     documentation: []
     manual_smoke: false
+  modify_application_setting:
+    skill: .agents/skills/modify-application-setting/SKILL.md
+    architecture:
+      - .agents/architecture/application-settings.md
+      - .agents/architecture/application-theme.md
+    checks: [verify_fast, verify_application_settings, verify_architecture]
+    scanners: [mygui.architecture]
+    focused_tests:
+      - tests.test_application_settings_contracts
+      - tests.test_application_settings_storage
+      - tests.test_application_settings_service
+      - tests.test_application_settings_session
+      - tests.test_application_settings_new_figure
+      - tests.test_application_settings_pages
+      - tests.test_application_settings_center
+      - tests.test_application_settings_center_c
+      - tests.test_color_library
+      - tests.test_figure_export
+      - tests.test_gui_layout
+      - tests.test_application_theme
+      - tests.test_application_theme_transactions
+      - tests.test_application_theme_chrome
+      - tests.test_application_theme_qss
+    documentation:
+      - docs/settings.md
+      - docs/workbench.md
+      - docs/figure-export.md
+      - docs/color-picker.md
+      - docs/tex-integration.md
+      - docs/style-creation-defaults.md
+      - docs/documentation-site.md
+      - docs/keyboard-and-mouse-reference.md
+      - docs/smoke-test.md
+    manual_smoke: true

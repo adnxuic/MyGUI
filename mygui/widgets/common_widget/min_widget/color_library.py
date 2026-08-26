@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import json
+from dataclasses import dataclass
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, QSettings, Signal
+from PySide6.QtCore import QObject, Signal
+
+from mygui.application_settings.storage.types import (
+    DocumentHealth,
+)
 
 from mygui.figuremodify.style_base.color_models import (
     PaletteDefinition,
@@ -14,6 +18,20 @@ from mygui.figuremodify.style_base.color_models import (
     builtin_palettes,
     normalize_color,
 )
+
+
+class ColorLibraryStoreError(RuntimeError):
+    """Raised when a color-library mutation could not be made durable."""
+
+
+@dataclass(frozen=True, slots=True)
+class ColorLibraryCounts:
+    """Persisted color-library data counts. Built-in palettes are excluded."""
+
+    recent_colors: int = 0
+    favorite_colors: int = 0
+    favorite_palettes: int = 0
+    custom_palettes: int = 0
 
 
 class ColorLibrary(QObject):
@@ -25,14 +43,17 @@ class ColorLibrary(QObject):
     SETTINGS_VERSION = 1
     RECENT_LIMIT = 20
 
-    def __init__(self, settings: QSettings | None = None, parent: QObject | None = None):
+    def __init__(self, settings=None, parent: QObject | None = None, *, document=None):
         super().__init__(parent)
-        self.settings = settings
+        self._document = _resolve_color_document(settings, document)
         self.recent_colors: list[str] = []
         self.favorite_colors: list[str] = []
         self.favorite_palette_ids: list[str] = []
         self.custom_palettes: dict[str, PaletteDefinition] = {}
         self._load_warning = False
+        self._health = DocumentHealth.NORMAL
+        self._diagnostics: tuple[str, ...] = ()
+        self._payload_applied = False
         self._load()
 
     @staticmethod
@@ -50,37 +71,80 @@ class ColorLibrary(QObject):
         return result
 
     def _load(self) -> None:
-        if self.settings is None:
+        if self._document is None:
             return
-        self.settings.beginGroup(self.SETTINGS_GROUP)
         try:
+            loaded = self._document.load()
+        except Exception:
+            self._load_warning = True
+            return
+        payload = getattr(loaded, "payload", None)
+        health = getattr(loaded, "health", None)
+        diagnostics = tuple(getattr(loaded, "diagnostics", ()) or ())
+        self._diagnostics = diagnostics
+        if isinstance(health, DocumentHealth):
+            self._health = health
+        elif health is not None:
             try:
-                version = int(self.settings.value("version", 0))
-            except (TypeError, ValueError, OverflowError):
-                version = 0
-            raw_state = self.settings.value("state", "")
-        finally:
-            self.settings.endGroup()
-        if not raw_state:
-            return
-        if version != self.SETTINGS_VERSION:
+                self._health = DocumentHealth(str(getattr(health, "value", health)))
+            except ValueError:
+                self._health = DocumentHealth.NORMAL
+        notes = " ".join(str(item) for item in diagnostics).casefold()
+        if getattr(loaded, "error", None) or any(
+            token in notes
+            for token in ("invalid", "unknown version", "failed", "empty state", "corrupt")
+        ):
             self._load_warning = True
-            return
-        try:
-            state = json.loads(str(raw_state))
-            if not isinstance(state, dict):
-                raise ValueError("Color library state must be an object.")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            self._load_warning = True
-            return
+        if payload is None:
+            if self._health in {
+                DocumentHealth.RECOVERY_REQUIRED,
+                DocumentHealth.READ_ONLY_FUTURE,
+                DocumentHealth.WRITE_UNCERTAIN,
+            }:
+                self._load_warning = True
+                return
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        self._apply_payload(payload)
+        self._payload_applied = True
 
+    def document_health(self) -> DocumentHealth:
+        """Return the last dual-slot load health for this library."""
+
+        return self._health
+
+    def writable(self) -> bool:
+        """Return whether Clear/Reset may commit the color document."""
+
+        return self._health in {DocumentHealth.NORMAL, DocumentHealth.DEGRADED}
+
+    def diagnostics(self) -> tuple[str, ...]:
+        return self._diagnostics
+
+    def payload_applied(self) -> bool:
+        return self._payload_applied
+
+    def reload(self) -> None:
+        """Reload lists from the document without emitting ``changed``."""
+
+        self.recent_colors = []
+        self.favorite_colors = []
+        self.favorite_palette_ids = []
+        self.custom_palettes = {}
+        self._payload_applied = False
+        self._load()
+
+    def _apply_payload(self, payload: dict) -> None:
         self.recent_colors = self._deduplicate_colors(
-            state.get("recent_colors"), limit=self.RECENT_LIMIT
+            payload.get("recent_colors"), limit=self.RECENT_LIMIT
         )
-        self.favorite_colors = self._deduplicate_colors(state.get("favorite_colors"))
+        self.favorite_colors = self._deduplicate_colors(payload.get("favorite_colors"))
+        self.custom_palettes = {}
+        self.favorite_palette_ids = []
 
         custom_names: set[str] = set()
-        for raw_palette in state.get("custom_palettes", ()):
+        for raw_palette in payload.get("custom_palettes", ()) or ():
             try:
                 palette = PaletteDefinition.from_dict(
                     raw_palette,
@@ -98,33 +162,72 @@ class ColorLibrary(QObject):
             self.custom_palettes[palette.id] = palette
 
         available_ids = set(builtin_palette_map()) | set(self.custom_palettes)
-        for palette_id in state.get("favorite_palette_ids", ()):
+        for palette_id in payload.get("favorite_palette_ids", ()) or ():
             palette_id = str(palette_id)
             if palette_id in available_ids and palette_id not in self.favorite_palette_ids:
                 self.favorite_palette_ids.append(palette_id)
 
-    def _save(self) -> None:
-        if self.settings is None:
-            return
-        state = {
-            "recent_colors": list(self.recent_colors),
-            "favorite_colors": list(self.favorite_colors),
-            "favorite_palette_ids": list(self.favorite_palette_ids),
-            "custom_palettes": [
-                palette.to_dict() for palette in self.custom_palettes.values()
-            ],
+    def _payload(
+        self,
+        *,
+        recent_colors: list[str] | None = None,
+        favorite_colors: list[str] | None = None,
+        favorite_palette_ids: list[str] | None = None,
+        custom_palettes: dict[str, PaletteDefinition] | None = None,
+    ) -> dict:
+        palettes = self.custom_palettes if custom_palettes is None else custom_palettes
+        return {
+            "recent_colors": list(
+                self.recent_colors if recent_colors is None else recent_colors
+            ),
+            "favorite_colors": list(
+                self.favorite_colors if favorite_colors is None else favorite_colors
+            ),
+            "favorite_palette_ids": list(
+                self.favorite_palette_ids
+                if favorite_palette_ids is None
+                else favorite_palette_ids
+            ),
+            "custom_palettes": [palette.to_dict() for palette in palettes.values()],
         }
-        self.settings.beginGroup(self.SETTINGS_GROUP)
-        try:
-            self.settings.setValue("version", self.SETTINGS_VERSION)
-            self.settings.setValue("state", json.dumps(state, ensure_ascii=False))
-        finally:
-            self.settings.endGroup()
-        self.settings.sync()
 
-    def _commit_change(self) -> None:
-        self._save()
+    def _commit_payload(self, payload: dict) -> bool:
+        if self._document is None:
+            return True
+        try:
+            result = self._document.commit(payload)
+        except Exception:
+            return False
+        return _commit_succeeded(result)
+
+    def _publish(
+        self,
+        *,
+        recent_colors: list[str] | None = None,
+        favorite_colors: list[str] | None = None,
+        favorite_palette_ids: list[str] | None = None,
+        custom_palettes: dict[str, PaletteDefinition] | None = None,
+    ) -> bool:
+        if self._document is not None and not self.writable():
+            return False
+        payload = self._payload(
+            recent_colors=recent_colors,
+            favorite_colors=favorite_colors,
+            favorite_palette_ids=favorite_palette_ids,
+            custom_palettes=custom_palettes,
+        )
+        if not self._commit_payload(payload):
+            return False
+        if recent_colors is not None:
+            self.recent_colors = recent_colors
+        if favorite_colors is not None:
+            self.favorite_colors = favorite_colors
+        if favorite_palette_ids is not None:
+            self.favorite_palette_ids = favorite_palette_ids
+        if custom_palettes is not None:
+            self.custom_palettes = custom_palettes
         self.changed.emit()
+        return True
 
     def consume_load_warning(self) -> bool:
         """Return and clear load warning."""
@@ -166,8 +269,8 @@ class ColorLibrary(QObject):
         recent = list(self.recent_colors)
         for normalized in normalized_colors:
             recent = [normalized, *(value for value in recent if value != normalized)]
-        self.recent_colors = recent[: self.RECENT_LIMIT]
-        self._commit_change()
+        next_recent = recent[: self.RECENT_LIMIT]
+        self._publish(recent_colors=next_recent)
         return normalized_colors
 
     def is_favorite_color(self, color) -> bool:
@@ -179,14 +282,17 @@ class ColorLibrary(QObject):
         """Toggle favorite color."""
 
         normalized = normalize_color(color)
-        if normalized in self.favorite_colors:
-            self.favorite_colors.remove(normalized)
-            favorite = False
+        currently = normalized in self.favorite_colors
+        next_favorites = list(self.favorite_colors)
+        if currently:
+            next_favorites.remove(normalized)
+            desired = False
         else:
-            self.favorite_colors.append(normalized)
-            favorite = True
-        self._commit_change()
-        return favorite
+            next_favorites.append(normalized)
+            desired = True
+        if not self._publish(favorite_colors=next_favorites):
+            return currently
+        return desired
 
     def is_favorite_palette(self, palette_id: str) -> bool:
         """Return whether favorite palette."""
@@ -199,14 +305,17 @@ class ColorLibrary(QObject):
         palette_id = str(palette_id)
         if self.palette(palette_id) is None:
             raise ValueError(f"Unknown palette: {palette_id}")
-        if palette_id in self.favorite_palette_ids:
-            self.favorite_palette_ids.remove(palette_id)
-            favorite = False
+        currently = palette_id in self.favorite_palette_ids
+        next_ids = list(self.favorite_palette_ids)
+        if currently:
+            next_ids.remove(palette_id)
+            desired = False
         else:
-            self.favorite_palette_ids.append(palette_id)
-            favorite = True
-        self._commit_change()
-        return favorite
+            next_ids.append(palette_id)
+            desired = True
+        if not self._publish(favorite_palette_ids=next_ids):
+            return currently
+        return desired
 
     def _validate_custom_name(self, name: str, *, exclude_id: str | None = None) -> str:
         name = str(name).strip()
@@ -235,8 +344,10 @@ class ColorLibrary(QObject):
             source=PaletteSource.CUSTOM,
             colors=self._validate_custom_colors(colors),
         )
-        self.custom_palettes[palette.id] = palette
-        self._commit_change()
+        next_palettes = dict(self.custom_palettes)
+        next_palettes[palette.id] = palette
+        if not self._publish(custom_palettes=next_palettes):
+            raise ColorLibraryStoreError("Color library could not be saved.")
         return palette
 
     def update_custom_palette(self, palette_id: str, name: str, colors) -> PaletteDefinition:
@@ -252,19 +363,76 @@ class ColorLibrary(QObject):
             source=PaletteSource.CUSTOM,
             colors=self._validate_custom_colors(colors),
         )
-        self.custom_palettes[palette.id] = palette
-        self._commit_change()
+        next_palettes = dict(self.custom_palettes)
+        next_palettes[palette.id] = palette
+        if not self._publish(custom_palettes=next_palettes):
+            raise ColorLibraryStoreError("Color library could not be saved.")
         return palette
 
     def delete_custom_palette(self, palette_id: str) -> bool:
         """Delete custom palette."""
 
         palette_id = str(palette_id)
-        if self.custom_palettes.pop(palette_id, None) is None:
+        if palette_id not in self.custom_palettes:
             return False
-        try:
-            self.favorite_palette_ids.remove(palette_id)
-        except ValueError:
-            pass
-        self._commit_change()
+        next_palettes = dict(self.custom_palettes)
+        next_palettes.pop(palette_id)
+        next_ids = [item for item in self.favorite_palette_ids if item != palette_id]
+        if not self._publish(
+            favorite_palette_ids=next_ids,
+            custom_palettes=next_palettes,
+        ):
+            return False
         return True
+
+    def counts(self) -> ColorLibraryCounts:
+        """Return persisted data counts. Built-in palettes are not counted."""
+
+        return ColorLibraryCounts(
+            recent_colors=len(self.recent_colors),
+            favorite_colors=len(self.favorite_colors),
+            favorite_palettes=len(self.favorite_palette_ids),
+            custom_palettes=len(self.custom_palettes),
+        )
+
+    def clear_recent_colors(self) -> bool:
+        """Clear recent colors. Favorites and custom palettes are kept."""
+
+        if not self.recent_colors:
+            return True
+        return self._publish(recent_colors=[])
+
+    def reset_library(self) -> bool:
+        """Clear recents, favorites, and custom palettes. Built-ins remain."""
+
+        return self._publish(
+            recent_colors=[],
+            favorite_colors=[],
+            favorite_palette_ids=[],
+            custom_palettes={},
+        )
+
+
+def _commit_succeeded(result) -> bool:
+    if result is None:
+        return False
+    ok = getattr(result, "ok", None)
+    if ok is None:
+        ok = getattr(result, "success", False)
+    return bool(ok)
+
+
+def _resolve_color_document(settings, document):
+    if document is not None:
+        return document
+    if settings is None:
+        return None
+    if callable(getattr(settings, "load", None)) and callable(
+        getattr(settings, "commit", None)
+    ):
+        return settings
+    from mygui.application_settings.storage import create_settings_backend
+
+    # Tests may still pass a QSettings store. Production ColorLibrary receives
+    # backend.color_library_settings_port() and must not wrap a second backend.
+    return create_settings_backend(settings).color_library_settings_port()

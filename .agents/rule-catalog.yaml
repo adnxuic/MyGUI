@@ -13,11 +13,15 @@ rules:
   - {id: CORE-PROJECT-HISTORY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_figure_history]}
   - {id: CORE-PERSISTENCE-V15, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides]}
   - {id: CORE-COLORBAR-AUXILIARY-AXES, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_colorbar_component]}
+  - {id: CORE-APPLICATION-SETTINGS, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts]}
+  - {id: CORE-THEME-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme]}
   - {id: ARCH-PRIVATE-CONTAINER-ACCESS, source: .agents/architecture/inspector.md, enforcement: [mygui.architecture]}
   - {id: ARCH-UI-ARTIST-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}
   - {id: ARCH-UI-MPL-GLOBAL-STATE-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}
   - {id: ARCH-SECOND-COMPONENT-STATE, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
   - {id: ARCH-CONTROLLER-BYPASS, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
+  - {id: ARCH-QSETTINGS-BACKEND-BYPASS, source: .agents/architecture/application-settings.md, enforcement: [mygui.architecture]}
+  - {id: ARCH-UI-THEME-BYPASS, source: .agents/architecture/application-theme.md, enforcement: [mygui.architecture]}
   - {id: QT-TIMER-OWNERSHIP, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
   - {id: QT-THREAD-LIFECYCLE, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
   - {id: QT-SIGNAL-REBIND, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}

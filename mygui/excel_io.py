@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mygui.application_theme import bind_widget_qss, current_qss_tokens, watch_qss_tokens
 from mygui.database import ColumnRef, ColumnType, SheetDocument, TableChangeSet, TableMutationCommand
 from mygui.database.table_document import DEFAULT_ROWS, infer_column_type, new_id, validate_component_name
 from mygui.resource_limits import load_resource_limits
@@ -171,6 +172,18 @@ class ExcelSheetPreview(QWidget):
         layout.addWidget(self.columns)
         self.header.toggled.connect(self.rebuild)
         self.rebuild()
+        watch_qss_tokens(self, lambda _tokens: self._refresh_sample_chrome())
+
+    def _chrome_color(self, token: str) -> QColor:
+        return QColor(current_qss_tokens()[token])
+
+    def _refresh_sample_chrome(self) -> None:
+        for column in range(self.columns.columnCount()):
+            if column < len(self._column_include_boxes):
+                self._set_column_included(
+                    column,
+                    self.column_include_checkbox(column).isChecked(),
+                )
 
     def rebuild(self):
         """Rebuild the control from the latest available application state."""
@@ -254,7 +267,7 @@ class ExcelSheetPreview(QWidget):
                 else:
                     sample_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                 if value is None:
-                    sample_item.setBackground(QColor("#f3f4f6"))
+                    sample_item.setBackground(self._chrome_color("COLOR_SURFACE_ALT"))
                 self.columns.setItem(self.SAMPLE_START_ROW + sample_index, column, sample_item)
 
             self.columns.setColumnWidth(column, 190)
@@ -293,11 +306,11 @@ class ExcelSheetPreview(QWidget):
             if included:
                 item.setForeground(QBrush())
                 item.setBackground(
-                    QColor("#f3f4f6") if not item.text() else QBrush()
+                    self._chrome_color("COLOR_SURFACE_ALT") if not item.text() else QBrush()
                 )
             else:
-                item.setForeground(QColor("#9ca3af"))
-                item.setBackground(QColor("#e5e7eb"))
+                item.setForeground(self._chrome_color("COLOR_BORDER_STRONG"))
+                item.setBackground(self._chrome_color("COLOR_HOVER_LIGHT"))
 
     def spec(self) -> ExcelSheetSpec | None:
         """Return the current spec."""
@@ -330,6 +343,10 @@ class ExcelImportDialog(QDialog):
     def __init__(self, sheets: list[ExcelSheetData], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Import Excel")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         self.resize(960, 600)
         self.setMinimumSize(720, 480)
         self.tabs = QTabWidget(self)
@@ -516,10 +533,11 @@ def import_excel_into_workspace(file_name: str, table, figure_window=None, paren
         return None
     if create_canvas:
         try:
+            width, height, dpi = figure_window.creation_figure_size()
             figure_window.add_figure(
-                width=6.4,
-                height=4.8,
-                dpi=100,
+                width=width,
+                height=height,
+                dpi=dpi,
                 style="default",
                 canva_name=subtable.project.name,
                 create_table=False,

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 from mygui.figuremodify.components import FitCurveController, FitEngine
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
@@ -55,11 +55,10 @@ class FitDomainSection(QFrame):
         super().__init__(parent)
         del color_library
 
-        qss_file = load_qss_resource(
-            "mygui/widgets/fig_control_window/all_mod_widgets/"
-            "chart_mod_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/fig_control_window/all_mod_widgets/chart_mod_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.controller = controller
         self.context = context
@@ -255,6 +254,11 @@ class FitDomainSection(QFrame):
         )
 
         dialog = QDialog(self)
+        dialog.setObjectName("fit_dialog")
+        bind_widget_qss(
+            dialog,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
         dialog.setAttribute(Qt.WA_DeleteOnClose, True)
         dialog.setModal(False)
         dialog.setWindowTitle(f"{display_engine} Fit")
@@ -307,6 +311,7 @@ class FitDomainSection(QFrame):
         dialog_layout.addLayout(button_layout)
 
         self._fit_dialogs.append(dialog)
+        subscribe_theme_window(dialog)
         dialog.destroyed.connect(lambda *_args, target=dialog: self._forget_fit_dialog(target))
         dialog.show()
         return dialog

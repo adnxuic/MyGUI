@@ -1,10 +1,4 @@
-QDialog#chart_dialog,
-QDialog#fit_dialog,
-QDialog#interpolation_dialog,
-QDialog#style_dialog,
-QDialog#layout_dialog,
-QDialog#text_dialog,
-QDialog#figure_export_dialog
+QDialog
 {
     background-color: {{COLOR_SURFACE}};
     color: {{COLOR_TEXT_PRIMARY}};
@@ -35,6 +29,7 @@ QPushButton
     border: 1px solid {{COLOR_BORDER_STRONG}};
     border-radius: {{RADIUS_SM}}px;
     background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
     padding: 0px {{SPACE_MD}}px;
 }
 
@@ -61,12 +56,30 @@ QPushButton:disabled
     border-color: {{COLOR_BORDER}};
 }
 
-QLabel#export_error_label
+QLabel#export_error_label,
+QLabel#chrome_error_label,
+QLabel#layout_validation_message,
+QLabel#xrd_refinement_validation
 {
-    color: {{COLOR_ERROR}};
+    color: {{COLOR_TEXT_DANGER}};
 }
 
 QLabel#export_hint_label
 {
     color: {{COLOR_TEXT_MUTED}};
+}
+
+QLabel#import_summary_label[level="error"]
+{
+    color: {{COLOR_TEXT_DANGER}};
+}
+
+QLabel#import_summary_label[level="success"]
+{
+    color: {{COLOR_TEXT_SUCCESS}};
+}
+
+QLabel#import_summary_label[level="info"]
+{
+    color: {{COLOR_TEXT_INFO}};
 }

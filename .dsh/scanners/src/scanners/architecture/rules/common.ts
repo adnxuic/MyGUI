@@ -50,6 +50,16 @@ export function isDomainPath(relPath: string): boolean {
   return relPath.startsWith('mygui/figuremodify/');
 }
 
+/** Dual-slot QSettings adapter; the only production constructor/mutator of QSettings. */
+export function isSettingsStoragePath(relPath: string): boolean {
+  return relPath.replace(/\\/g, '/').startsWith('mygui/application_settings/storage/');
+}
+
+/** ThemeService / ThemeBindingPort package; the only application-chrome publisher. */
+export function isThemeOwnerPath(relPath: string): boolean {
+  return relPath.replace(/\\/g, '/').startsWith('mygui/application_theme/');
+}
+
 /** Non-index segment names of a chain, in order. */
 export function namedSegments(chain: AttrChain): string[] {
   return chain.segments.filter((segment) => !segment.isIndex).map((segment) => segment.name);

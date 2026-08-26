@@ -6,6 +6,7 @@ from PySide6.QtCore import QModelIndex, QPoint, Qt, Signal
 from PySide6.QtWidgets import QAbstractItemView, QTreeView
 
 from .nodes import COMPONENT_ID_ROLE, NODE_KEY_ROLE, TreeNodeKey
+from mygui.application_theme import current_density_metrics, subscribe_theme_window
 
 
 class ComponentTreeView(QTreeView):
@@ -25,6 +26,19 @@ class ComponentTreeView(QTreeView):
         self.setAnimated(False)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu_requested)
+        self._theme_row_height = current_density_metrics().tree
+        subscribe_theme_window(self)
+
+    def sizeHintForRow(self, row: int) -> int:
+        """Honor the density tree-row floor so large UI fonts are not clipped."""
+
+        return max(super().sizeHintForRow(row), int(self._theme_row_height))
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply Components-tree row height from the published density metrics."""
+
+        self._theme_row_height = metrics.tree
+        self.doItemsLayout()
 
     def selectionChanged(self, selected, deselected):
         super().selectionChanged(selected, deselected)

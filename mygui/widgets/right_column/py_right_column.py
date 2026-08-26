@@ -2,7 +2,14 @@
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
-from mygui.resources import icon_path, load_qss_resource
+from mygui.resources import icon_path
+from mygui.application_theme import (
+    bind_widget_qss,
+    current_density_metrics,
+    subscribe_theme_window,
+)
+from mygui.application_theme.icons import IconRole
+from mygui.application_theme.runtime import default_theme_runtime
 
 
 class PyRightColumn(QFrame):
@@ -14,8 +21,7 @@ class PyRightColumn(QFrame):
         self.fig_control_layout = fig_control_layout
 
         self.setObjectName("right_column")
-        qss_file = load_qss_resource("mygui/widgets/right_column/style.qss")
-        self.setStyleSheet(qss_file)
+        bind_widget_qss(self, "mygui/widgets/right_column/style.qss")
 
 
         self.layout = QVBoxLayout(self)
@@ -39,6 +45,36 @@ class PyRightColumn(QFrame):
         self.matlab_button.setChecked(False)
         self.matlab_button.toggled.connect(self.matlab_show)
         self.layout.addWidget(self.matlab_button)
+        subscribe_theme_window(self)
+        self.apply_theme_metrics(current_density_metrics())
+        snapshot = default_theme_runtime().snapshot
+        if snapshot is not None:
+            self.apply_theme_icons(snapshot, default_theme_runtime().icon_provider)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply activity-rail width from the published density metrics."""
+
+        self.setFixedWidth(metrics.rail)
+
+    def apply_theme_icons(self, snapshot, provider) -> None:
+        """TeX is chrome; MATLAB stays brand-colored."""
+
+        self.tex_button.setIcon(
+            provider.icon(
+                icon_path("tex.svg"),
+                snapshot=snapshot,
+                role=IconRole.CHROME,
+                widget=self,
+            )
+        )
+        self.matlab_button.setIcon(
+            provider.icon(
+                icon_path("matlab.svg"),
+                snapshot=snapshot,
+                role=IconRole.BRAND,
+                widget=self,
+            )
+        )
 
     def tex_show(self, checked):
         """Open the optional TeX integration settings."""

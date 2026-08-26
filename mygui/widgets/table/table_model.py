@@ -14,9 +14,11 @@ from PySide6.QtWidgets import (
     QDateTimeEdit,
     QLineEdit,
     QStyledItemDelegate,
+    QWidget,
 )
 
 from mygui import status_messages
+from mygui.application_theme import current_qss_tokens, watch_qss_tokens
 from mygui.database import (
     ColumnRef,
     ColumnType,
@@ -56,6 +58,8 @@ class TableModel(QAbstractTableModel):
         self.sheet_id = sheet_id
         self._error_cells: set[tuple[int, int]] = set()
         self.repository.transaction_committed.connect(self._repository_changed)
+        if isinstance(parent, QWidget):
+            watch_qss_tokens(parent, lambda _tokens: self._refresh_chrome())
 
     @property
     def sheet(self):
@@ -95,11 +99,23 @@ class TableModel(QAbstractTableModel):
         if role == Qt.ToolTipRole:
             return display_value(value, column.type) or "Missing value"
         if role == Qt.BackgroundRole:
+            tokens = current_qss_tokens()
             if (index.row(), index.column()) in self._error_cells:
-                return QBrush(QColor("#fecaca"))
+                return QBrush(QColor(tokens["COLOR_ERROR_SOFT"]))
             if is_missing(value):
-                return QBrush(QColor("#f3f4f6"))
+                return QBrush(QColor(tokens["COLOR_SURFACE_ALT"]))
         return None
+
+    def _refresh_chrome(self) -> None:
+        rows = self.rowCount()
+        columns = self.columnCount()
+        if rows <= 0 or columns <= 0:
+            return
+        self.dataChanged.emit(
+            self.index(0, 0),
+            self.index(rows - 1, columns - 1),
+            [Qt.BackgroundRole],
+        )
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         """Return display data for a Qt table header."""

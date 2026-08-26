@@ -3,7 +3,7 @@
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFrame, QScrollArea, QSizePolicy, QStackedLayout
 
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorHost,
 )
@@ -17,11 +17,7 @@ class PyFigControlWindow(QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("fig_control_window")
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/fig_control_window/style.qss"
-            )
-        )
+        bind_widget_qss(self, "mygui/widgets/fig_control_window/style.qss")
         self.setMouseTracking(True)
         self.setMinimumWidth(240)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

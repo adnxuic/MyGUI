@@ -26,12 +26,15 @@ The dark command row offers the File menu:
 - 导出当前图片... opens the shared Figure export window for PNG, JPEG, TIFF, WebP, PDF, or SVG. See [Figure Export](figure-export.md).
 - 导出数据... exports the current project's table data as a JSON snapshot.
 
+The Edit menu offers **Settings** (`Ctrl+,`), which opens the same Settings
+Center as the left activity-rail gear. See [Application Settings](settings.md).
+
 Save, open, restore, and export semantics are documented in [Project Files](project-files.md).
 
 ## Activity rails
 
-- The left activity rail toggles the Table and Components Explorer pages and opens the Settings dialog.
-- The right activity rail opens the TeX and MATLAB panels; the two panels share one page and opening one deselects the other. See [TeX Rendering Integration](tex-integration.md) and [Fitting](fitting.md).
+- The left activity rail toggles the Table and Components Explorer pages and opens the Settings Center (the same window as **Edit > Settings** and **Ctrl+,**). See [Application Settings](settings.md).
+- The right activity rail opens the TeX and MATLAB panels; the two panels share one page and opening one deselects the other. See [TeX Rendering Integration](tex-integration.md) and [Fitting](fitting.md). The Settings Integrations page can request those same existing panels; it does not remount them.
 
 ## Empty states and command galleries
 
@@ -44,19 +47,30 @@ Save, open, restore, and export semantics are documented in [Project Files](proj
 
 ## Persisted application settings
 
-Workbench preferences are stored in the versioned workspaceLayout QSettings group:
+Application preferences use injected dual-slot `QSettings` documents. They are
+not written to `.mygui.json` project files, and opening a project does not
+replace them. UI theme (Appearance: theme, UI font size, density) is not
+Matplotlib Figure style; Figure `style` is chosen at project creation. See
+[Application Settings](settings.md) and
+[Style Creation Defaults](style-creation-defaults.md).
 
-- version: layout settings version; currently 2.
-- outerSplitterSizes: left-workspace and figure-workspace sizes.
-- innerSplitterSizes: Explorer and Inspector sizes.
-- explorerMode: last visible page, table or components.
-- explorerVisible: whether the Explorer is expanded.
+The Settings Center Export page stores default format, output, encoding, and
+metadata, including the `Use project DPI` strategy and a separate custom DPI.
+A live export binds the current project's document DPI; the export window can
+override the defaults for that file. See [Figure Export](figure-export.md).
 
-Window geometry is not stored because every application launch starts maximized. Missing, malformed, obsolete, or unusable layout values fall back to the first-run sizes. The Settings dialog's reset action clears this group and reapplies the defaults. Version-1 tableVisible is migrated to the Table page and the equivalent Explorer visibility.
+Workspace remember/restore still covers the workbench splitters and Explorer
+page. Window geometry is not stored because every application launch starts
+maximized. Missing, malformed, or unusable layout values fall back to the
+first-run sizes. Resetting workspace layout is a confirmed immediate command,
+not an Apply draft.
 
-These settings are application preferences. They are not written to .mygui.json project files, and opening a project does not replace them.
+After the first successful dual-slot commit, leftover `workspaceLayout`,
+`figureExport`, and `colorLibrary` groups are inert data. Production writers
+for those legacy groups are removed.
 
-Successful Figure exports store the last directory, format, and export options in the separate versioned `figureExport` group. See [Figure Export](figure-export.md).
+The color library is a sibling dual-slot document. Reset-all application
+preferences does not delete it. See [Color Picker](color-picker.md).
 
 ## Project tabs, closing, and exit
 
@@ -86,3 +100,4 @@ main.APP_ICON_PATH resolves the icon asset through the package resource locator,
 - Message and State Bar semantics: [Bottom Bar](bottom-bar.md).
 - Project save/open format, export, and DPI: [Project Files](project-files.md).
 - Available styles and the project creation dialog: [Style Creation Defaults](style-creation-defaults.md).
+- Application Settings Center: [Application Settings](settings.md).

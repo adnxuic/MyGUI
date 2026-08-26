@@ -9,7 +9,7 @@ from mygui.figuremodify.components import (
     FunctionCurveController,
     InterpolationController,
 )
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 from .common import DebouncedTextBinding, RangeEditor
@@ -38,11 +38,10 @@ class FunctionCurveSection(QFrame, EditorSection):
         super().__init__(parent)
         del color_library
 
-        qss_file = load_qss_resource(
-            "mygui/widgets/fig_control_window/all_mod_widgets/"
-            "chart_mod_style.qss"
+        bind_widget_qss(
+            self,
+            "mygui/widgets/fig_control_window/all_mod_widgets/chart_mod_style.qss",
         )
-        self.setStyleSheet(qss_file)
 
         self.controller = controller
         self.context = context
@@ -181,6 +180,11 @@ class InterpolationSection(QFrame, EditorSection):
     ):
         super().__init__(parent)
         del color_library
+
+        bind_widget_qss(
+            self,
+            "mygui/widgets/fig_control_window/all_mod_widgets/chart_mod_style.qss",
+        )
 
         self.controller = controller
         self.context = context

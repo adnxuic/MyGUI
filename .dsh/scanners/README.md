@@ -127,7 +127,7 @@ once the registry service is available and automatically reloads/unloads it
 when the service changes — registration and unregistration always follow the
 plugin fiber.
 
-## 5. The Architecture Scanner (v0.3.0)
+## 5. The Architecture Scanner (v0.4.0)
 
 `mygui.architecture` — static, read-only checks derived from the rules in the
 repository's `AGENTS.md` (it never modifies the repo, never formats, never
@@ -140,6 +140,8 @@ auto-fixes, never launches the GUI):
 | `ARCH-UI-MPL-GLOBAL-STATE-MUTATION` | **independent** of the artist rule: UI code in `mygui/widgets/` directly mutating Matplotlib **process-global** mutable configuration — `rcParams[key] = ...` (mutation `assignment`), `rcParams.update({...})` (`update`), `matplotlib.rc(...)` / `mpl.rc(...)` / `rc(...)` (`rc-call`) — with import-alias resolution (`import matplotlib [as mpl]`, `from matplotlib import rcParams/rc`); reads are never reported; `*Controller` / `*Service` / `*Coordinator` / `*Canvas` classes and files outside `mygui/widgets/` (e.g. `mygui/tex_config.py`, the TeX configuration owner) are exempt |
 | `ARCH-SECOND-COMPONENT-STATE` | `ComponentState(...)` / `ComponentRegistry(...)` construction and `self.current_component_id = ...` writes in `mygui/widgets/` outside `PyFigureCanvas` |
 | `ARCH-CONTROLLER-BYPASS` | UI writes to controller state (`state.properties/data/selector` assignments, `.update()/.setdefault()/.pop()/.clear()` calls, whole-state replacement) instead of routing edits through Controllers/Services |
+| `ARCH-QSETTINGS-BACKEND-BYPASS` | `QSettings(...)` construction and QSettings store mutation (`beginGroup`/`endGroup`/`setValue` on a settings store) outside `mygui/application_settings/storage/` |
+| `ARCH-UI-THEME-BYPASS` | `QApplication`/`app` `setFont`/`setPalette`/`setStyleSheet` outside `mygui/application_theme/`; widget-local `setFont` is not reported. Bundled QSS hex completeness stays a Python contract test |
 
 Severity mapping for `ARCH-UI-MPL-GLOBAL-STATE-MUTATION` (the scanner ladder
 has no `warning`/`error`): user `warning` → `medium` (architecture smell,

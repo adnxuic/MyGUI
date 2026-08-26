@@ -1,6 +1,7 @@
 QFrame#right_column
 {
-    background-color: {{COLOR_COMMAND_BACKGROUND}};
+    background-color: {{COLOR_SURFACE_ALT}};
+    color: {{COLOR_TEXT_PRIMARY}};
     min-width: {{SIZE_ACTIVITY_RAIL}}px;
     max-width: {{SIZE_ACTIVITY_RAIL}}px;
     border: 0px;
@@ -25,7 +26,7 @@ QPushButton#matlab_button
 QPushButton#tex_button:hover,
 QPushButton#matlab_button:hover
 {
-    background-color: {{COLOR_COMMAND_HOVER}};
+    background-color: {{COLOR_HOVER_LIGHT}};
 }
 
 QPushButton#tex_button:focus,

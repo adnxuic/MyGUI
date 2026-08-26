@@ -71,24 +71,18 @@ def _icon_qss_tokens() -> dict[str, str]:
     }
 
 
-def load_qss_resource(
-    relative_path: str | Path,
-    *,
-    tokens: Mapping[str, object] | None = None,
-) -> str:
-    """Load bundled QSS and strictly expand shared theme tokens."""
+def expand_qss_tokens(source: str, tokens: Mapping[str, object]) -> str:
+    """Expand ``{{TOKEN}}`` placeholders using the given snapshot tokens.
 
-    from mygui.widgets.theme import QSS_TOKENS
+    Icon path tokens are merged after ``tokens`` so bundled QSS can reference
+    ``ICON_*`` without putting filesystem paths on ThemeSnapshot. The mapping
+    is copied in name-sorted order so one snapshot always yields one string.
+    """
 
-    source = load_text_resource(relative_path)
-    replacements = dict(QSS_TOKENS)
+    if not isinstance(tokens, Mapping):
+        raise TypeError("tokens must be a mapping")
+    replacements = {str(name): str(tokens[name]) for name in sorted(tokens, key=str)}
     replacements.update(_icon_qss_tokens())
-    if tokens is not None:
-        if not isinstance(tokens, Mapping):
-            raise TypeError("tokens must be a mapping")
-        replacements.update(
-            {str(name): str(value) for name, value in tokens.items()}
-        )
 
     token_names = set(_QSS_TOKEN_PATTERN.findall(source))
     unknown = sorted(token_names.difference(replacements))
@@ -103,3 +97,28 @@ def load_qss_resource(
     if "{{" in rendered or "}}" in rendered:
         raise ValueError("Malformed QSS theme token")
     return rendered
+
+
+def load_qss_resource(
+    relative_path: str | Path,
+    *,
+    tokens: Mapping[str, object] | None = None,
+) -> str:
+    """Load bundled QSS and expand the token mapping supplied by the caller.
+
+    Production widgets must pass ``ThemeSnapshot`` tokens through
+    ``ThemeBindingPort.bind_qss``. When ``tokens`` is omitted, Light snapshot
+    tokens are used so tests and resource-only callers still expand QSS.
+    After ThemeService publishes a snapshot, production chrome must not rely
+    on this Light fallback. This function never reads a mutable process-global
+    theme table.
+    """
+
+    source = load_text_resource(relative_path)
+    if tokens is None:
+        from mygui.application_theme.tokens import LIGHT_QSS_TOKENS
+
+        token_map: Mapping[str, object] = LIGHT_QSS_TOKENS
+    else:
+        token_map = tokens
+    return expand_qss_tokens(source, token_map)

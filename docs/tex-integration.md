@@ -19,6 +19,10 @@ preamble can use only packages installed in the local TeX distribution.
 At application startup, MyGUI always keeps TeX availability off until the
 runtime probe succeeds. A non-empty preamble supplied by `matplotlibrc` is
 retained as the editable initial value; otherwise the MyGUI default is used.
+The Settings Integrations page shows read-only availability, this-session
+state, and a short diagnostic, plus **Open TeX panel…**. It does not start
+TeX, does not remount the right-rail panel, and does not save enablement or
+preamble as application settings. See [Application Settings](settings.md).
 
 ## State flow
 

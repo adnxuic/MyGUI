@@ -19,6 +19,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from mygui import status_messages
+from mygui.application_settings import (
+    NewFigureDefaultsProvider,
+    resolve_new_figure_defaults,
+)
 from mygui.database import ColumnRef, TableRepository, validate_component_name
 from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
 from mygui.widgets.figure_canvas.project_metadata import ProjectMetadataService
@@ -28,7 +32,7 @@ from mygui.widgets.fig_control_window.figure_inspector import (
 )
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 
 
 class _ProjectHistoryShortcutFilter(QObject):
@@ -146,14 +150,13 @@ class PyFigureWindow(QFrame):
         repository: TableRepository | None = None,
         color_library: ColorLibrary | None = None,
         component_tree_host=None,
+        *,
+        new_figure_defaults: NewFigureDefaultsProvider | None = None,
     ):
         super().__init__()
 
         self.setObjectName('figure_window')
-        qss_file = load_qss_resource(
-            "mygui/widgets/figure_canvas/style.qss"
-        )
-        self.setStyleSheet(qss_file)
+        bind_widget_qss(self, "mygui/widgets/figure_canvas/style.qss")
 
         self.figure_inspector_host = figure_inspector_host
         self.component_tree_host = component_tree_host
@@ -163,6 +166,7 @@ class PyFigureWindow(QFrame):
         if color_library is None:
             raise ValueError("PyFigureWindow requires the shared ColorLibrary.")
         self.color_library = color_library
+        self._new_figure_defaults = new_figure_defaults
         self.current_canva: Optional[PyFigureCanvas] = None
         self.canvas = {}
         self._clean_fingerprints: dict[str, str] = {}
@@ -204,6 +208,30 @@ class PyFigureWindow(QFrame):
             self.content_stack.setCurrentWidget(self.empty_state)
         else:
             self.content_stack.setCurrentWidget(self.tabwindow)
+
+    def set_new_figure_defaults_provider(
+        self,
+        provider: NewFigureDefaultsProvider | None,
+    ) -> None:
+        """Inject the Style/import creation port. Do not pass the settings service."""
+
+        self._new_figure_defaults = provider
+
+    @property
+    def new_figure_defaults_provider(self) -> NewFigureDefaultsProvider | None:
+        """Return the injected New Figure defaults port, if any."""
+
+        return self._new_figure_defaults
+
+    def creation_figure_size(self) -> tuple[float, float, float]:
+        """Return width, height, and document DPI for a newly created Figure.
+
+        Reads the injected provider at call time. Project restore must not
+        use this method.
+        """
+
+        defaults = resolve_new_figure_defaults(self._new_figure_defaults)
+        return (defaults.width_in, defaults.height_in, defaults.document_dpi)
 
     def set_table(self, table):
         """Set table."""
@@ -661,6 +689,8 @@ class PyFigureWindow(QFrame):
             if component["id"] == root_id
         )
         properties = root["properties"]
+        # Schema v15 persisted values only. Do not read New Figure application
+        # defaults here; missing fields fall back to built-in constants.
         size_inches = properties.get("size_inches") or [6.4, 4.8]
         return self.add_figure(
             width=float(size_inches[0]),

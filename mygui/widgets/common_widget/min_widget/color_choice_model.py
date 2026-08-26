@@ -19,7 +19,7 @@ from mygui.figuremodify.style_base.color_models import (
     PaletteDefinition,
     normalize_color,
 )
-from mygui.widgets.theme import COLORS
+from mygui.application_theme import current_qss_tokens
 
 def color_to_qcolor(value) -> QColor:
     """Return the color to qcolor."""
@@ -54,9 +54,13 @@ def color_rgba_text(value) -> str:
     )
 
 
+def _chrome_qcolor(token: str) -> QColor:
+    return QColor(current_qss_tokens()[token])
+
+
 def _paint_checkerboard(painter: QPainter, rect: QRect, cell_size: int = 6) -> None:
-    light = QColor("#FFFFFF")
-    dark = QColor("#D1D5DB")
+    light = _chrome_qcolor("COLOR_SURFACE")
+    dark = _chrome_qcolor("COLOR_BORDER")
     for y in range(rect.top(), rect.bottom() + 1, cell_size):
         for x in range(rect.left(), rect.right() + 1, cell_size):
             color = light if ((x - rect.left()) // cell_size + (y - rect.top()) // cell_size) % 2 == 0 else dark
@@ -100,7 +104,11 @@ class ColorSwatch(QWidget):
         rect = self.rect().adjusted(1, 1, -1, -1)
         _paint_checkerboard(painter, rect)
         painter.fillRect(rect, color_to_qcolor(self._color))
-        border = QColor(COLORS["focus"] if self.hasFocus() else COLORS["text_primary"])
+        border = QColor(
+            current_qss_tokens()["COLOR_FOCUS"]
+            if self.hasFocus()
+            else current_qss_tokens()["COLOR_TEXT_PRIMARY"]
+        )
         painter.setPen(QPen(border, 2 if self.hasFocus() else 1))
         painter.drawRect(rect)
 
@@ -211,10 +219,10 @@ class ColorGridDelegate(QStyledItemDelegate):
         swatch = QRect(option.rect.left() + 6, option.rect.top() + 4, option.rect.width() - 12, 30)
         _paint_checkerboard(painter, swatch)
         painter.fillRect(swatch, color_to_qcolor(selection.color))
-        painter.setPen(QPen(QColor(COLORS["text_primary"]), 1))
+        painter.setPen(QPen(_chrome_qcolor("COLOR_TEXT_PRIMARY"), 1))
         painter.drawRect(swatch)
-        text_color = option.palette.highlightedText().color() if option.state & QStyle.State_Selected else QColor(
-            COLORS["text_primary"]
+        text_color = option.palette.highlightedText().color() if option.state & QStyle.State_Selected else _chrome_qcolor(
+            "COLOR_TEXT_PRIMARY"
         )
         painter.setPen(text_color)
         painter.drawText(
@@ -223,7 +231,7 @@ class ColorGridDelegate(QStyledItemDelegate):
             selection.color,
         )
         if option.state & QStyle.State_HasFocus:
-            painter.setPen(QPen(QColor(COLORS["focus"]), 2))
+            painter.setPen(QPen(_chrome_qcolor("COLOR_FOCUS"), 2))
             painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
         painter.restore()
 
@@ -246,8 +254,8 @@ class PaletteDelegate(QStyledItemDelegate):
         if option.state & QStyle.State_Selected:
             painter.fillRect(option.rect, option.palette.highlight())
         text_rect = option.rect.adjusted(8, 3, -8, -28)
-        text_color = option.palette.highlightedText().color() if option.state & QStyle.State_Selected else QColor(
-            COLORS["text_primary"]
+        text_color = option.palette.highlightedText().color() if option.state & QStyle.State_Selected else _chrome_qcolor(
+            "COLOR_TEXT_PRIMARY"
         )
         painter.setPen(text_color)
         painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, index.data(Qt.DisplayRole))
@@ -259,10 +267,10 @@ class PaletteDelegate(QStyledItemDelegate):
             segment = QRect(left, strip.top(), max(1, right - left), strip.height())
             _paint_checkerboard(painter, segment, 4)
             painter.fillRect(segment, color_to_qcolor(color))
-        painter.setPen(QPen(QColor(COLORS["text_primary"]), 1))
+        painter.setPen(QPen(_chrome_qcolor("COLOR_TEXT_PRIMARY"), 1))
         painter.drawRect(strip)
         if option.state & QStyle.State_HasFocus:
-            painter.setPen(QPen(QColor(COLORS["focus"]), 2))
+            painter.setPen(QPen(_chrome_qcolor("COLOR_FOCUS"), 2))
             painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
         painter.restore()
 

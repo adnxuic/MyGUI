@@ -10,6 +10,7 @@ MyGUI is a PySide6 + matplotlib desktop GUI for working with tabular data and cr
 - Atomic component creation and deletion backed by project transactions.
 - Strict schema v15 project files with validated v14 migration, chained v13/v12/v11/v10 migration, and save/open round trips.
 - Optional TeX rendering and MATLAB curve fitting that do not block the base GUI.
+- Application Settings Center for Appearance, Workspace, New Figure, Export defaults, Integrations status, and Maintenance. UI theme is not Matplotlib Figure style.
 
 ## Quick start
 
@@ -26,7 +27,7 @@ MyGUI targets [Matplotlib 3.9](https://matplotlib.org/3.9.0/); parameter pages l
 
 ## Documentation map
 
-- **Getting Started** — [GUI Workbench](workbench.md), [Project Undo and Redo](undo-redo.md), [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md), [Bottom Bar](bottom-bar.md).
+- **Getting Started** — [GUI Workbench](workbench.md), [Application Settings](settings.md), [Project Undo and Redo](undo-redo.md), [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md), [Bottom Bar](bottom-bar.md).
 - **Working with Data** — [Table Data](table-data.md), [Data Preprocessing](data-preprocessing.md), [Text Data Import](text-data-import.md), [Excel Import](excel-import.md).
 - **Creating Charts** — [Axes Layout Templates](axes-layouts.md), [Multi-Series Chart Creation](multi-series-charts.md), [Function Curve](function-curve.md), [Interpolation](interpolation.md), [Fitting](fitting.md), [In-Axes Elements](in-axes.md), [Text Element](text-element.md), [Reference Guides](reference-guides-component.md), [Reference Marks Component](reference-marks-component.md), [Colorbar Component](colorbar-component.md), [Color Picker](color-picker.md).
 - **Editing Components** — [Components Tree](components-tree.md), [Figure](editing-components/fixed-semantics/figure.md), [Axes](editing-components/fixed-semantics/axes.md), and [Plots](editing-components/charts/plot.md).

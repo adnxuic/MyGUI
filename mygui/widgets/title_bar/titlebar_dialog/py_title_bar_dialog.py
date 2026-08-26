@@ -14,7 +14,13 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
-from mygui.resources import icon_path, load_qss_resource
+from mygui.application_settings import (
+    NewFigureDefaultsProvider,
+    format_new_figure_field,
+    resolve_new_figure_defaults,
+)
+from mygui.application_theme import bind_widget_qss, subscribe_theme_window
+from mygui.resources import icon_path
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from mygui.widgets.theme import COLORS
 from mygui.widgets.title_bar.titlebar_dialog.axes_layout_input import (
@@ -31,23 +37,32 @@ from mygui.xrd_refinement import XrdRefinementImportService
 class PyStyleDialog(QDialog):
     """Collect the basic values used to create one Figure project."""
 
-    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+    def __init__(
+        self,
+        dialog_name=None,
+        figure_window=None,
+        parent=None,
+        *,
+        new_figure_defaults: NewFigureDefaultsProvider | None = None,
+    ):
         super().__init__(parent)
         self.style = dialog_name
         self.setObjectName("style_dialog")
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
-            )
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
         self.setWindowTitle(dialog_name)
         self.setWindowIcon(QIcon(icon_path("style.svg")))
+        self.setProperty("themeChromeWindowIcon", icon_path("style.svg"))
         self.figure_window = figure_window
+        self._new_figure_defaults = new_figure_defaults
 
         self.layout = QVBoxLayout()
-        self.width_line = QLineEdit("6.4")
-        self.height_line = QLineEdit("4.8")
-        self.dpi_line = QLineEdit("100")
+        self.width_line = QLineEdit()
+        self.height_line = QLineEdit()
+        self.dpi_line = QLineEdit()
+        self._apply_new_figure_defaults()
         self.canva_name_line = QLineEdit(str(dialog_name or "Figure"))
         for label, control in (
             ("Width", self.width_line),
@@ -68,6 +83,27 @@ class PyStyleDialog(QDialog):
         buttons.addWidget(self.cancel_button)
         self.layout.addLayout(buttons)
         self.setLayout(self.layout)
+        subscribe_theme_window(self)
+
+    def _new_figure_provider(self) -> NewFigureDefaultsProvider | None:
+        if self._new_figure_defaults is not None:
+            return self._new_figure_defaults
+        figure_window = self.figure_window
+        if figure_window is None:
+            return None
+        return getattr(figure_window, "new_figure_defaults_provider", None)
+
+    def _apply_new_figure_defaults(self) -> None:
+        defaults = resolve_new_figure_defaults(self._new_figure_provider())
+        self.width_line.setText(format_new_figure_field(defaults.width_in))
+        self.height_line.setText(format_new_figure_field(defaults.height_in))
+        self.dpi_line.setText(format_new_figure_field(defaults.document_dpi))
+
+    def showEvent(self, event):
+        """Refresh NEXT_USE defaults when a reused Style dialog is shown."""
+
+        self._apply_new_figure_defaults()
+        super().showEvent(event)
 
     def accept(self):
         """Validate the inputs and create the Figure."""
@@ -76,7 +112,7 @@ class PyStyleDialog(QDialog):
             self.figure_window.add_figure(
                 width=float(self.width_line.text()),
                 height=float(self.height_line.text()),
-                dpi=int(self.dpi_line.text()),
+                dpi=float(self.dpi_line.text()),
                 style=self.style,
                 canva_name=self.canva_name_line.text(),
             )
@@ -100,10 +136,9 @@ class PyLayoutDialog(QDialog):
     ):
         super().__init__(parent)
         self.setObjectName("layout_dialog")
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
-            )
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
         )
         self.figure_window: PyFigureWindow = figure_window
         self.layout_id = str(layout_id) if layout_id is not None else None
@@ -212,6 +247,7 @@ class PyLayoutDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
         self.setLayout(self.layout)
+        subscribe_theme_window(self)
         self.resize(720, 620)
         self._layout_validity_changed(*self.input.refresh_validation())
         if self.xrd_input is not None:

@@ -36,6 +36,7 @@ it is the rule-loss audit for the split.
 | Component Deletion | `deletion.md` |
 | New Figure Component Checklist | `component-system.md`; add-component Skill |
 | Verification Baseline | `testing-map.md`; shared checks; `fix-ci` Skill |
+| Application settings / theme | `application-settings.md`; `application-theme.md`; modify-application-setting Skill |
 
 Global constraints remain in `AGENTS.md`; the destination pages hold current
 implementation maps and task procedure without weakening those constraints.

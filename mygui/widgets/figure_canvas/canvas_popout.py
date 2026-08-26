@@ -38,6 +38,11 @@ class CanvasPopoutWindow(QDialog):
         self._close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
         self._close_shortcut.setContext(Qt.WindowShortcut)
         self._close_shortcut.activated.connect(self.close)
+        # Theme subscription only. This window must not cache ComponentState,
+        # selection IDs, or color-cycle cursors.
+        from mygui.application_theme import subscribe_theme_window
+
+        subscribe_theme_window(self)
 
     def attach_content(self, content: QWidget) -> None:
         """Attach the unique live Canvas content widget."""

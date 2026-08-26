@@ -1,7 +1,17 @@
 QFrame#figure_window
 {
     background-color: {{COLOR_CONTENT_BACKGROUND}};
+    color: {{COLOR_TEXT_PRIMARY}};
     border: 1px solid {{COLOR_BORDER}};
+}
+
+QScrollArea,
+QStackedWidget#figure_canvas_content_stack,
+QStackedWidget#figure_canvas_content_stack > QWidget
+{
+    background-color: {{COLOR_CONTENT_BACKGROUND}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    border: 0px;
 }
 
 QFrame#figure_empty_state
@@ -79,6 +89,7 @@ QTabBar::tab:selected
 QToolBar#figure_toolbar
 {
     background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
     border: 0px;
     border-bottom: 1px solid {{COLOR_BORDER}};
     spacing: {{SPACE_XS}}px;
@@ -88,6 +99,7 @@ QToolBar#figure_toolbar
 QToolBar#figure_toolbar QToolButton
 {
     background-color: transparent;
+    color: {{COLOR_TEXT_PRIMARY}};
     border: 2px solid transparent;
     border-radius: {{RADIUS_SM}}px;
     padding: 2px;

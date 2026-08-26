@@ -173,12 +173,13 @@ class FontDiagnosticBridgeTests(unittest.TestCase):
 
         application_index = startup.index("app = QApplication(sys.argv)")
         bridge_index = startup.index("install_font_diagnostic_bridge()")
-        font_index = startup.index("configure_application_font(app)")
+        theme_index = startup.index("compose_application_settings_and_theme(app)")
         window_index = startup.index("window = MainWindow")
 
         self.assertLess(application_index, bridge_index)
-        self.assertLess(bridge_index, font_index)
-        self.assertLess(font_index, window_index)
+        self.assertLess(bridge_index, theme_index)
+        self.assertLess(theme_index, window_index)
+        self.assertNotIn("configure_application_font", startup)
 
     def test_main_window_flushes_buffered_startup_font_warning(self):
         import main

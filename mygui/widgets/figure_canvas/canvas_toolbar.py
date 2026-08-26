@@ -91,6 +91,21 @@ class ProjectNavigationToolbar(NavigationToolbar):
         dialog.rejected.connect(self._project_history.cancel_interaction)
         return result
 
+    def apply_theme_icons(self, snapshot, provider) -> None:
+        """Rebuild Matplotlib tool icons from the current toolbar palette."""
+
+        del snapshot, provider
+        actions = getattr(self, "_actions", None)
+        if not actions:
+            return
+        for text, _tooltip, image_file, callback in self.toolitems:
+            if not text or not image_file:
+                continue
+            action = actions.get(callback)
+            if action is None:
+                continue
+            action.setIcon(self._icon(f"{image_file}.png"))
+
     def save_figure(self, *args):
         figure_canvas = self.parent()
         figure_canvas.exportRequested.emit(figure_canvas)

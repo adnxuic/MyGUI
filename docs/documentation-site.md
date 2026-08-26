@@ -7,7 +7,8 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 - `mkdocs.yml` at the repository root is the only site configuration. Its `docs_dir` is `docs/` and its `nav` groups the existing feature documents; document content stays in the Markdown files.
 - `docs/index.md` is the site landing page. Creating Charts includes the
   Reference Guides, Reference Marks, and Colorbar feature pages, Projects and
-  Appearance includes Figure Export, Developer Reference documents the
+  Appearance includes Figure Export, Getting Started includes Application
+  Settings, Developer Reference documents the
   Controller/Service/Canvas package layout plus the current schema-v15
   property contract and legacy v14, v13, v12, and v10 migration references,
   and Editing Components mirrors the full 27-profile runtime component
@@ -20,7 +21,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 - `theme`: Material with light/dark palettes and the features `search.suggest`, `search.highlight`, `content.code.copy`, `content.code.annotate`, `navigation.top`, and `navigation.indexes`.
 - `markdown_extensions`: admonition, tables, toc permalinks, pymdownx details/superfences (with a mermaid custom fence)/highlight, and `pymdownx.snippets` (configured with `base_path: [docs]` and `check_paths: true`).
 - `plugins`: `search` and `redirects` (configured via `mkdocs-redirects` with explicit redirect maps).
-- `nav`: explicit page list grouped into Getting Started, Working with Data, Creating Charts, Editing Components, Projects and Appearance, Integrations and Configuration, Developer Reference, and Maintenance & QA.
+- `nav`: explicit page list grouped into Getting Started (including Application Settings), Working with Data, Creating Charts, Editing Components, Projects and Appearance, Integrations and Configuration, Developer Reference, and Maintenance & QA. UI theme documented on the Settings page is not Matplotlib Figure style.
 - `repo_url` / `edit_uri`: link to the GitHub repository and let visitors edit pages on the `master` branch.
 
 ## Navigation hierarchy and component tree

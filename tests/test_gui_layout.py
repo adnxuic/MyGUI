@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests.axes_helpers import create_regular_axes
 
@@ -9,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QObject, QSettings, Qt
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from mygui.figuremodify.components import ComponentRole
 from mygui.widgets.fig_control_window.component_editors import (
@@ -25,6 +26,16 @@ from mygui.widgets.fig_control_window.figure_inspector import (
 from mygui.widgets.left_column import ExplorerMode
 from mygui.widgets.theme import CONTROL_SIZES
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
+from mygui.application_settings import (
+    ApplicationSettingsService,
+    MemorySettingsDocumentPort,
+    WORKSPACE_REMEMBER_LAYOUT,
+    commit_succeeded,
+)
+from mygui.application_settings.storage import (
+    LEGACY_WORKSPACE_GROUP,
+    create_settings_backend,
+)
 from main import MainWindow
 
 
@@ -494,6 +505,13 @@ class GuiLayoutSettingsTests(unittest.TestCase):
         window.deleteLater()
         self.app.processEvents()
 
+    def _workspace_snapshot(self, path: Path):
+        backend = create_settings_backend(file_path=path)
+        service = ApplicationSettingsService(
+            document=backend.application_settings_port()
+        )
+        return service.snapshot().workspace
+
     def test_splitters_and_explorer_mode_roundtrip_then_reset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir, "layout.ini")
@@ -510,7 +528,13 @@ class GuiLayoutSettingsTests(unittest.TestCase):
             self._close(first)
 
             settings = self._settings(path)
-            second = MainWindow(settings=settings)
+            settings.beginGroup(LEGACY_WORKSPACE_GROUP)
+            try:
+                self.assertIsNone(settings.value("version"))
+            finally:
+                settings.endGroup()
+
+            second = MainWindow(settings=self._settings(path))
             self._show(second)
             try:
                 self.assertFalse(second.left_column.table_button.isChecked())
@@ -528,16 +552,20 @@ class GuiLayoutSettingsTests(unittest.TestCase):
                     saved_inner,
                 )
 
-                second.reset_workspace_layout()
+                self.assertTrue(
+                    second.reset_workspace_layout(confirmed=True)
+                )
                 self.app.processEvents()
                 self.assertTrue(second.left_column.table_button.isChecked())
                 self.assertTrue(second.left_explorer.isVisible())
                 self.assertIs(second._explorer_mode, ExplorerMode.TABLE)
-                settings.beginGroup(second.WORKSPACE_SETTINGS_GROUP)
-                try:
-                    self.assertIsNone(settings.value("version"))
-                finally:
-                    settings.endGroup()
+                stored = second.settings_service.snapshot().workspace.layout
+                self.assertEqual(stored.explorer_mode.value, "table")
+                self.assertTrue(stored.explorer_visible)
+                self.assertNotEqual(
+                    tuple(stored.outer_splitter_sizes),
+                    tuple(saved_outer),
+                )
             finally:
                 self._close(second)
 
@@ -587,25 +615,16 @@ class GuiLayoutSettingsTests(unittest.TestCase):
             finally:
                 self._close(window)
 
-            migrated = self._settings(path)
-            migrated.beginGroup(MainWindow.WORKSPACE_SETTINGS_GROUP)
+            stored = self._workspace_snapshot(path).layout
+            self.assertEqual(stored.explorer_mode.value, "table")
+            self.assertFalse(stored.explorer_visible)
+
+            legacy = self._settings(path)
+            legacy.beginGroup(MainWindow.WORKSPACE_SETTINGS_GROUP)
             try:
-                self.assertEqual(
-                    int(migrated.value("version")),
-                    MainWindow.WORKSPACE_SETTINGS_VERSION,
-                )
-                self.assertEqual(
-                    migrated.value("explorerMode"),
-                    ExplorerMode.TABLE.value,
-                )
-                self.assertFalse(
-                    MainWindow._setting_bool(
-                        migrated.value("explorerVisible"),
-                        True,
-                    )
-                )
+                self.assertEqual(int(legacy.value("version")), 1)
             finally:
-                migrated.endGroup()
+                legacy.endGroup()
 
     def test_extreme_splitter_ratio_falls_back_to_defaults(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -625,6 +644,151 @@ class GuiLayoutSettingsTests(unittest.TestCase):
                 self.assertFalse(window._workspace_layout_restored)
                 self.assertTrue(window.left_column.table_button.isChecked())
                 self.assertGreaterEqual(window.figure_window.width(), 400)
+            finally:
+                self._close(window)
+
+    def test_remember_false_does_not_overwrite_stored_layout_on_close(self):
+        document = MemorySettingsDocumentPort()
+        first = MainWindow(settings_service=document)
+        self._show(first)
+        first.workspace_splitter.setSizes([640, 640])
+        first.explorer_control_splitter.setSizes([330, 260])
+        first.left_column.components_button.click()
+        first.left_column.components_button.click()
+        self.app.processEvents()
+        saved = first._current_workspace_layout()
+        self._close(first)
+        self.assertGreaterEqual(document.commit_calls, 1)
+        stored_before = dict(document.payload["workspace"]["layout"])
+
+        second = MainWindow(settings_service=document)
+        self._show(second)
+        try:
+            result = second.settings_service.commit_patch(
+                second.settings_service.begin_session(),
+                {WORKSPACE_REMEMBER_LAYOUT: False},
+            )
+            self.assertTrue(result.success)
+            second.workspace_splitter.setSizes([500, 780])
+            second.explorer_control_splitter.setSizes([200, 390])
+            self.app.processEvents()
+            commits_before_close = document.commit_calls
+            self._close(second)
+            self.assertEqual(document.commit_calls, commits_before_close)
+            stored_after = document.payload["workspace"]["layout"]
+            self.assertEqual(stored_after["outer_splitter_sizes"], stored_before["outer_splitter_sizes"])
+            self.assertEqual(stored_after["explorer_mode"], saved.explorer_mode.value)
+            self.assertFalse(document.payload["workspace"]["remember_layout"])
+        finally:
+            if second.isVisible():
+                self._close(second)
+
+    def test_reset_cancel_leaves_layout_unchanged(self):
+        document = MemorySettingsDocumentPort()
+        window = MainWindow(settings_service=document)
+        self._show(window)
+        try:
+            window.workspace_splitter.setSizes([640, 640])
+            self.app.processEvents()
+            before = window.workspace_splitter.sizes()
+            with patch.object(
+                QMessageBox, "question", return_value=QMessageBox.No
+            ):
+                self.assertFalse(window.reset_workspace_layout())
+            self.assertEqual(window.workspace_splitter.sizes(), before)
+            self.assertIs(window._explorer_mode, ExplorerMode.TABLE)
+        finally:
+            self._close(window)
+
+    def test_close_save_failure_does_not_block_exit(self):
+        document = MemorySettingsDocumentPort()
+        window = MainWindow(settings_service=document)
+        self._show(window)
+        window.workspace_splitter.setSizes([640, 640])
+        self.app.processEvents()
+        document.fail_commit = True
+        with self.assertLogs("main", level="WARNING") as captured:
+            closed = window.close()
+        self.assertTrue(closed)
+        window.deleteLater()
+        self.app.processEvents()
+        self.assertTrue(
+            any("Workspace layout was not saved" in line for line in captured.output)
+        )
+
+    def test_reset_persist_failure_emits_one_error(self):
+        document = MemorySettingsDocumentPort()
+        window = MainWindow(settings_service=document)
+        self._show(window)
+        try:
+            window.left_column.components_button.click()
+            window.left_column.components_button.click()
+            self.app.processEvents()
+            self.assertFalse(window.left_explorer.isVisible())
+            document.fail_commit = True
+            with patch("main.status_messages.show_error", return_value=True) as show_error:
+                self.assertFalse(window.reset_workspace_layout(confirmed=True))
+            show_error.assert_called_once()
+            self.assertIn(
+                "Could not save the default workspace layout",
+                show_error.call_args[0][0],
+            )
+            self.assertFalse(window.left_explorer.isVisible())
+        finally:
+            document.fail_commit = False
+            self._close(window)
+
+    def test_main_window_does_not_write_legacy_workspace_layout_group(self):
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('beginGroup("workspaceLayout")', source)
+        self.assertNotIn("beginGroup(self.WORKSPACE_SETTINGS_GROUP)", source)
+        self.assertNotIn("beginGroup(cls.WORKSPACE_SETTINGS_GROUP)", source)
+
+    def test_workspace_and_color_library_share_one_backend(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir, "shared.ini")
+            window = MainWindow(settings=self._settings(path))
+            try:
+                backend = window._settings_backend
+                self.assertIsNotNone(backend)
+                self.assertIsNotNone(window.settings_service)
+                self.assertIs(
+                    window.color_library._document,
+                    backend.color_library_settings_port(),
+                )
+                self.assertIsNotNone(
+                    window.figure_window.new_figure_defaults_provider
+                )
+                backend.mark_writes_forbidden()
+                window.color_library.record_recent("#FF0000")
+                self.assertEqual(window.color_library.recent_colors, [])
+                result = window._workspace_layout_port.save_layout(
+                    window._current_workspace_layout()
+                )
+                self.assertFalse(commit_succeeded(result))
+            finally:
+                self._close(window)
+
+    def test_composition_root_injected_backend_is_shared(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir, "injected.ini")
+            backend = create_settings_backend(file_path=path)
+            service = ApplicationSettingsService(
+                document=backend.application_settings_port()
+            )
+            window = MainWindow(
+                settings_backend=backend,
+                settings_service=service,
+            )
+            try:
+                self.assertIs(window._settings_backend, backend)
+                self.assertIs(window.settings_service, service)
+                self.assertIs(
+                    window.color_library._document,
+                    backend.color_library_settings_port(),
+                )
             finally:
                 self._close(window)
 

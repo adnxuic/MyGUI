@@ -21,6 +21,12 @@ class SafePanel(QFrame):
         self._text_binding.set_text("ok")
         self.label.setVisible(True)
 
+    def local_font_ok(self, title, font):
+        title.setFont(font)
+
+    def qsettings_annotation_ok(self, settings: QSettings | None = None):
+        return settings
+
     def axes_command(self, ax):
         ax.set_xlabel("x")
 

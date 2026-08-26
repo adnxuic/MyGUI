@@ -13,17 +13,26 @@ QFrame#matlab_window
 QScrollArea#inspector_scroll_area
 {
     background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
     border: 0px;
 }
 
+QScrollArea#inspector_scroll_area > QWidget,
 QScrollArea#inspector_scroll_area > QWidget > QWidget
 {
     background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel, QCheckBox, QRadioButton, QGroupBox
+{
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 
 QFrame#empty_state
 {
     background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
 }
 
 QLabel#empty_state_title

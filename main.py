@@ -1,6 +1,7 @@
 """Start MyGUI and compose its top-level Qt workspace."""
 
 import ctypes
+import logging
 import sys
 from pathlib import Path
 
@@ -9,7 +10,7 @@ import matplotlib
 matplotlib.use("QtAgg")
 
 from PySide6.QtCore import QCoreApplication, QSettings, QTimer, Qt
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -30,7 +31,7 @@ from mygui.font_diagnostics import (
 tex_config.initialize_tex_runtime()
 from mygui.database import TableRepository
 from mygui.excel_io import import_excel_into_workspace, is_supported_excel_workbook
-from mygui.resources import load_qss_resource, resource_path
+from mygui.resources import resource_path
 from mygui.text_io import import_text_into_workspace
 from mygui.widgets.bottom_bar.py_bottom_bar import PyBottomBar
 from mygui.widgets.component_tree import ComponentTreeHost
@@ -41,16 +42,36 @@ from mygui.widgets.left_column import (
     LeftExplorerHost,
     PyLeftColumn,
 )
-from mygui.widgets.mainwindow_init import mainwindow_qss
 from mygui.widgets.right_column.py_right_column import PyRightColumn
 from mygui.widgets.table.py_table import PyTable
-from mygui.widgets.theme import CONTROL_SIZES, FONT_FAMILIES, FONT_SIZE_PT
 from mygui.widgets.title_bar.py_title_bar import PyTitleBar
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.application_settings import (
+    ApplicationSettingsService,
+    WorkspaceExplorerMode,
+    WorkspaceLayoutPayload,
+    WorkspaceLayoutPort,
+    bind_workspace_layout_port,
+    commit_succeeded,
+)
+from mygui.application_settings.storage import SettingsBackend, create_settings_backend
+from mygui.application_theme import (
+    MAINWINDOW_QSS_RESOURCE,
+    ThemeService,
+    apply_committed_appearance,
+    bind_widget_qss,
+    compose_theme_runtime_applier,
+    compose_theme_service,
+    current_density_metrics,
+    default_theme_runtime,
+    subscribe_theme_window,
+)
+from mygui.widgets.settings_center import compose_settings_center
 
 
 APP_ICON_PATH = resource_path("pictures/icons/app_icon.ico")
 WINDOWS_APP_USER_MODEL_ID = "MyGUI.Desktop"
+LOGGER = logging.getLogger(__name__)
 
 
 def configure_windows_taskbar_identity() -> bool:
@@ -70,21 +91,81 @@ def configure_windows_taskbar_identity() -> bool:
 
 
 def configure_application_icon(application: QApplication) -> QIcon:
-    """Apply the shared application icon and return the loaded Qt icon."""
+    """Apply the shared brand icon and return the loaded Qt icon."""
 
     icon = QIcon(str(APP_ICON_PATH))
     application.setWindowIcon(icon)
     return icon
 
 
-def configure_application_font(application: QApplication) -> QFont:
-    """Apply the shared cross-platform font stack and return the Qt font."""
+def compose_application_settings_and_theme(
+    application: QApplication,
+) -> tuple[SettingsBackend, ApplicationSettingsService, ThemeService]:
+    """Create settings, then apply ThemeSnapshot before any QWidget.
 
-    font = QFont()
-    font.setFamilies(list(FONT_FAMILIES))
-    font.setPointSize(FONT_SIZE_PT)
-    application.setFont(font)
-    return font
+    Shares one ThemeService with ``compose_theme_runtime_applier`` and the
+    process ``default_theme_runtime()`` hub.
+    """
+
+    settings_backend = create_settings_backend(
+        organization=QCoreApplication.organizationName(),
+        application=QCoreApplication.applicationName(),
+    )
+    theme = compose_theme_service(application)
+    settings_service = ApplicationSettingsService(
+        document=settings_backend.application_settings_port(),
+        runtime_applier=compose_theme_runtime_applier(theme),
+    )
+    apply_committed_appearance(theme, settings_service.snapshot())
+    return settings_backend, settings_service, theme
+
+
+def _is_qsettings(value) -> bool:
+    return (
+        value is not None
+        and hasattr(value, "setValue")
+        and hasattr(value, "value")
+        and hasattr(value, "sync")
+        and hasattr(value, "beginGroup")
+    )
+
+
+def compose_window_settings(
+    *,
+    settings=None,
+    settings_service=None,
+    workspace_layout_port: WorkspaceLayoutPort | None = None,
+    settings_backend: SettingsBackend | None = None,
+) -> tuple[
+    SettingsBackend | None,
+    ApplicationSettingsService | None,
+    WorkspaceLayoutPort | None,
+]:
+    """Return one backend, one service, and the workspace port.
+
+    Production injects the backend and service created at the composition
+    root. A test-only ``settings=`` QSettings is wrapped once here so
+    ColorLibrary and export share ``WRITE_UNCERTAIN``.
+    """
+
+    backend = settings_backend
+    if (
+        backend is None
+        and settings_service is None
+        and workspace_layout_port is None
+        and _is_qsettings(settings)
+    ):
+        backend = create_settings_backend(settings=settings)
+    service_input = settings_service
+    if service_input is None and backend is not None:
+        service_input = ApplicationSettingsService(
+            document=backend.application_settings_port()
+        )
+    service, port = bind_workspace_layout_port(
+        settings_service=service_input,
+        workspace_layout_port=workspace_layout_port,
+    )
+    return backend, service, port
 
 
 class MainWindow(QMainWindow):
@@ -100,15 +181,44 @@ class MainWindow(QMainWindow):
     MAX_PERSISTED_SPLITTER_SIZE = 100_000
     MIN_PERSISTED_SPLITTER_SHARE = 0.01
 
-    def __init__(self, *, settings: QSettings | None = None):
+    def __init__(
+        self,
+        *,
+        settings: QSettings | None = None,
+        settings_service: ApplicationSettingsService | object | None = None,
+        workspace_layout_port: WorkspaceLayoutPort | None = None,
+        settings_backend: SettingsBackend | None = None,
+        theme_service: ThemeService | None = None,
+    ):
         super().__init__()
-        self.settings = settings
+        (
+            self._settings_backend,
+            self.settings_service,
+            self._workspace_layout_port,
+        ) = compose_window_settings(
+            settings=settings,
+            settings_service=settings_service,
+            workspace_layout_port=workspace_layout_port,
+            settings_backend=settings_backend,
+        )
+        self._theme_service = theme_service
+        self.settings_center = None
         self._workspace_layout_restored = False
         self._last_visible_explorer_sizes = list(
             self.DEFAULT_EXPLORER_SPLITTER_SIZES
         )
         self._explorer_mode = ExplorerMode.TABLE
         self._explorer_visible = True
+        self._deferred_workspace_timer = QTimer(self)
+        self._deferred_workspace_timer.setSingleShot(True)
+        self._deferred_workspace_timer.timeout.connect(
+            self._apply_default_workspace_sizes
+        )
+        self._explorer_sizes_timer = QTimer(self)
+        self._explorer_sizes_timer.setSingleShot(True)
+        self._explorer_sizes_timer.timeout.connect(
+            self._restore_explorer_splitter_sizes
+        )
         self.setWindowTitle("MyGUI")
         self.setWindowIcon(QIcon(str(APP_ICON_PATH)))
         self.setup_ui()
@@ -118,7 +228,7 @@ class MainWindow(QMainWindow):
         """Build the main window and connect its shared application services."""
 
         self.setObjectName("MainWindow")
-        self.setStyleSheet(mainwindow_qss)
+        bind_widget_qss(self, MAINWINDOW_QSS_RESOURCE)
 
         self.central_widget = QWidget()
         self.central_widget.setObjectName("central_widget")
@@ -127,7 +237,10 @@ class MainWindow(QMainWindow):
         self.central_widget_layout.setSpacing(0)
         self.central_widget_layout.setContentsMargins(0, 0, 0, 0)
         self.repository = TableRepository(self)
-        self.color_library = ColorLibrary(self.settings, self)
+        color_document = None
+        if self._settings_backend is not None:
+            color_document = self._settings_backend.color_library_settings_port()
+        self.color_library = ColorLibrary(document=color_document, parent=self)
         self.table = PyTable(self.repository)
         self.table.setMinimumWidth(220)
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -148,6 +261,11 @@ class MainWindow(QMainWindow):
         )
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        new_figure_defaults = None
+        if self.settings_service is not None:
+            new_figure_defaults = (
+                self.settings_service.new_figure_defaults_provider()
+            )
         self.figure_window = PyFigureWindow(
             figure_inspector_host=(
                 self.fig_control_window.figure_inspector_host
@@ -155,15 +273,20 @@ class MainWindow(QMainWindow):
             repository=self.repository,
             color_library=self.color_library,
             component_tree_host=self.component_tree_host,
+            new_figure_defaults=new_figure_defaults,
         )
         self.figure_window.setMinimumWidth(self.MIN_CANVAS_WIDTH)
         self.figure_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.figure_window.set_table(self.table)
 
+        export_preferences = None
+        if self.settings_service is not None:
+            export_preferences = self.settings_service.export_preferences_port()
         self.title_bar = PyTitleBar(
             self,
             figure_window=self.figure_window,
             table=self.table,
+            export_preferences=export_preferences,
         )
         self.figure_window.requestStyleSelector.connect(self.title_bar.show_style_selector)
         self.figure_window.projectCloseRequested.connect(
@@ -177,8 +300,9 @@ class MainWindow(QMainWindow):
         self.left_column = PyLeftColumn()
         self.left_column.set_reset_layout_callback(self.reset_workspace_layout)
         self.right_column = PyRightColumn(self.fig_control_window.layout)
-        self.left_column.setFixedWidth(CONTROL_SIZES["activity_rail"])
-        self.right_column.setFixedWidth(CONTROL_SIZES["activity_rail"])
+        metrics = current_density_metrics()
+        self.left_column.setFixedWidth(metrics.rail)
+        self.right_column.setFixedWidth(metrics.rail)
 
         self.explorer_control_splitter = QSplitter(Qt.Horizontal)
         self.explorer_control_splitter.setObjectName(
@@ -215,11 +339,12 @@ class MainWindow(QMainWindow):
         self.central_widget_layout.addWidget(self.workspace_splitter, stretch=1)
 
         self.bottom_bar = PyBottomBar()
-        self.bottom_bar.setFixedHeight(CONTROL_SIZES["bottom_bar"])
+        self.bottom_bar.setFixedHeight(metrics.bottom)
         status_messages.set_status_handler(self.bottom_bar.show_message)
         flush_font_diagnostics()
         self.central_widget_layout.addWidget(self.bottom_bar, stretch=0)
         self.setCentralWidget(self.central_widget)
+        subscribe_theme_window(self)
 
         self._restore_workspace_layout()
         self.workspace_splitter.splitterMoved.connect(self._workspace_splitter_moved)
@@ -229,6 +354,81 @@ class MainWindow(QMainWindow):
         self.left_column.explorerModeRequested.connect(
             self._explorer_mode_requested
         )
+        self._install_settings_center()
+
+    def _resolve_theme_service(self) -> ThemeService | None:
+        if self._theme_service is not None:
+            return self._theme_service
+        publisher = getattr(default_theme_runtime(), "_publisher", None)
+        if publisher is not None:
+            self._theme_service = publisher
+            return publisher
+        if self.settings_service is None:
+            return None
+        application = QApplication.instance()
+        if application is None:
+            return None
+        self._theme_service = compose_theme_service(application)
+        return self._theme_service
+
+    def _install_settings_center(self) -> None:
+        """Lazy Settings Center: gear, Edit > Settings, and Ctrl+, share one host."""
+
+        action = self.title_bar.menu_bar.settings_action
+        action.setShortcutContext(Qt.WindowShortcut)
+        self.settings_action = action
+        self.addAction(action)
+        action.triggered.connect(lambda _checked=False: self.open_settings_center())
+        if self.settings_service is None:
+            return
+        theme = self._resolve_theme_service()
+        if theme is None:
+            return
+        self.settings_center = compose_settings_center(
+            self,
+            settings_service=self.settings_service,
+            theme_service=theme,
+            color_library=self.color_library,
+            backend=self._settings_backend,
+            reset_layout_now=lambda: self.reset_workspace_layout(confirmed=True),
+            layout_port=self._workspace_layout_port,
+            on_message=status_messages.show_message,
+            on_open_tex_panel=self._open_tex_panel_from_settings,
+            on_open_matlab_panel=self._open_matlab_panel_from_settings,
+        )
+        self.left_column.set_open_settings(self.open_settings_center)
+
+    def open_settings_center(self, page_id: str | None = None) -> int:
+        """Open the cached Settings Center. Does not create a second instance."""
+
+        if self.settings_center is not None:
+            return int(self.settings_center.open(page_id))
+        self.left_column.show_setting_dialog()
+        return 0
+
+    def _open_tex_panel_from_settings(self) -> None:
+        """Show the existing right-rail TeX panel. Do not remount the widget."""
+
+        self._close_settings_center_for_panel()
+        if self.right_column.tex_button.isChecked():
+            self.right_column.tex_show(True)
+            return
+        self.right_column.tex_button.setChecked(True)
+
+    def _open_matlab_panel_from_settings(self) -> None:
+        """Show the existing right-rail MATLAB panel. Do not remount the widget."""
+
+        self._close_settings_center_for_panel()
+        if self.right_column.matlab_button.isChecked():
+            self.right_column.matlab_show(True)
+            return
+        self.right_column.matlab_button.setChecked(True)
+
+    def _close_settings_center_for_panel(self) -> None:
+        host = getattr(self, "settings_center", None)
+        window = getattr(host, "window", None) if host is not None else None
+        if window is not None and window.isVisible():
+            window.reject()
 
     @classmethod
     def _valid_splitter_sizes(cls, value):
@@ -267,57 +467,26 @@ class MainWindow(QMainWindow):
         explorer_sizes = list(self.DEFAULT_EXPLORER_SPLITTER_SIZES)
         explorer_mode = ExplorerMode.TABLE
         explorer_visible = True
+        restored = False
 
-        if self.settings is not None:
-            self.settings.beginGroup(self.WORKSPACE_SETTINGS_GROUP)
-            try:
+        port = self._workspace_layout_port
+        layout = port.layout_to_restore() if port is not None else None
+        if layout is not None:
+            saved_outer = self._valid_splitter_sizes(layout.outer_splitter_sizes)
+            saved_explorer = self._valid_splitter_sizes(
+                layout.inner_splitter_sizes
+            )
+            if saved_outer is not None and saved_explorer is not None:
+                outer_sizes = saved_outer
+                explorer_sizes = saved_explorer
                 try:
-                    version = int(self.settings.value("version", 0))
-                except (TypeError, ValueError, OverflowError):
-                    version = 0
-                if version in {1, self.WORKSPACE_SETTINGS_VERSION}:
-                    saved_outer = self._valid_splitter_sizes(
-                        self.settings.value("outerSplitterSizes")
-                    )
-                    saved_explorer = self._valid_splitter_sizes(
-                        self.settings.value("innerSplitterSizes")
-                    )
-                    if (
-                        saved_outer is not None
-                        and saved_explorer is not None
-                    ):
-                        outer_sizes = saved_outer
-                        explorer_sizes = saved_explorer
-                        if version == 1:
-                            explorer_mode = ExplorerMode.TABLE
-                            explorer_visible = self._setting_bool(
-                                self.settings.value(
-                                    "tableVisible",
-                                    True,
-                                ),
-                                True,
-                            )
-                        else:
-                            try:
-                                explorer_mode = ExplorerMode(
-                                    self.settings.value(
-                                        "explorerMode",
-                                        ExplorerMode.TABLE.value,
-                                    )
-                                )
-                            except (TypeError, ValueError):
-                                explorer_mode = ExplorerMode.TABLE
-                            explorer_visible = self._setting_bool(
-                                self.settings.value(
-                                    "explorerVisible",
-                                    True,
-                                ),
-                                True,
-                            )
-                        self._workspace_layout_restored = True
-            finally:
-                self.settings.endGroup()
+                    explorer_mode = ExplorerMode(str(layout.explorer_mode))
+                except (TypeError, ValueError):
+                    explorer_mode = ExplorerMode.TABLE
+                explorer_visible = bool(layout.explorer_visible)
+                restored = True
 
+        self._workspace_layout_restored = restored
         self._last_visible_explorer_sizes = list(explorer_sizes)
         self._explorer_mode = explorer_mode
         self._explorer_visible = explorer_visible
@@ -378,57 +547,68 @@ class MainWindow(QMainWindow):
             self._explorer_visible,
         )
         if self._explorer_visible and restore_sizes:
-            QTimer.singleShot(
-                0,
-                lambda: self.explorer_control_splitter.setSizes(
-                    self._last_visible_explorer_sizes
-                ),
-            )
+            self._explorer_sizes_timer.start(0)
 
-    def _save_workspace_layout(self):
-        if self.settings is None:
-            return
+    def _restore_explorer_splitter_sizes(self) -> None:
+        self.explorer_control_splitter.setSizes(
+            self._last_visible_explorer_sizes
+        )
+
+    def _current_workspace_layout(self) -> WorkspaceLayoutPayload:
         outer_sizes = self._valid_splitter_sizes(self.workspace_splitter.sizes())
         if outer_sizes is None:
             outer_sizes = list(self.DEFAULT_OUTER_SPLITTER_SIZES)
-
         self._remember_visible_explorer_sizes()
         explorer_sizes = self._valid_splitter_sizes(
             self._last_visible_explorer_sizes
         )
         if explorer_sizes is None:
             explorer_sizes = list(self.DEFAULT_EXPLORER_SPLITTER_SIZES)
-
-        self.settings.beginGroup(self.WORKSPACE_SETTINGS_GROUP)
         try:
-            self.settings.setValue("version", self.WORKSPACE_SETTINGS_VERSION)
-            self.settings.setValue("outerSplitterSizes", outer_sizes)
-            self.settings.setValue(
-                "innerSplitterSizes",
-                explorer_sizes,
-            )
-            self.settings.setValue(
-                "explorerMode",
-                self._explorer_mode.value,
-            )
-            self.settings.setValue(
-                "explorerVisible",
-                self._explorer_visible,
-            )
-        finally:
-            self.settings.endGroup()
-        self.settings.sync()
+            explorer_mode = WorkspaceExplorerMode(self._explorer_mode.value)
+        except (TypeError, ValueError):
+            explorer_mode = WorkspaceExplorerMode.TABLE
+        return WorkspaceLayoutPayload(
+            version=self.WORKSPACE_SETTINGS_VERSION,
+            outer_splitter_sizes=(outer_sizes[0], outer_sizes[1]),
+            inner_splitter_sizes=(explorer_sizes[0], explorer_sizes[1]),
+            explorer_mode=explorer_mode,
+            explorer_visible=bool(self._explorer_visible),
+        )
 
-    def reset_workspace_layout(self):
-        """Clear persisted workspace state and restore the versioned defaults."""
-        if self.settings is not None:
-            self.settings.beginGroup(self.WORKSPACE_SETTINGS_GROUP)
-            try:
-                self.settings.remove("")
-            finally:
-                self.settings.endGroup()
-            self.settings.sync()
+    def _save_workspace_layout(self):
+        port = self._workspace_layout_port
+        if port is None:
+            return
+        try:
+            if not port.remember_layout():
+                return
+            result = port.save_layout(self._current_workspace_layout())
+        except Exception:
+            LOGGER.exception(
+                "Workspace layout was not saved; keeping the previous settings slot"
+            )
+            return
+        if not commit_succeeded(result):
+            error = getattr(result, "error", None) or "storage commit failed"
+            LOGGER.warning(
+                "Workspace layout was not saved; keeping the previous settings "
+                "slot (%s)",
+                error,
+            )
 
+    def _confirm_reset_workspace_layout(self) -> bool:
+        answer = QMessageBox.question(
+            self,
+            "Reset workspace layout",
+            "Reset splitter sizes and Explorer visibility to the default "
+            "layout now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return answer == QMessageBox.Yes
+
+    def _apply_default_workspace_layout_ui(self) -> None:
         self._workspace_layout_restored = False
         self._last_visible_explorer_sizes = list(
             self.DEFAULT_EXPLORER_SPLITTER_SIZES
@@ -441,11 +621,80 @@ class MainWindow(QMainWindow):
         )
         self._apply_default_workspace_sizes()
 
+    def reset_workspace_layout(self, *, confirmed: bool | None = None) -> bool:
+        """Write the default workspace layout now. Not a Settings Apply draft."""
+
+        if confirmed is None:
+            confirmed = self._confirm_reset_workspace_layout()
+        if not confirmed:
+            return False
+        port = self._workspace_layout_port
+        service = getattr(self, "settings_service", None)
+        writable = getattr(service, "writable", None)
+        if port is not None and callable(writable) and not writable():
+            status_messages.show_error(
+                "Could not save the default workspace layout: storage is not writable"
+            )
+            return False
+        previous = self._current_workspace_layout()
+        previous_restored = self._workspace_layout_restored
+        self._apply_default_workspace_layout_ui()
+        if port is None:
+            status_messages.show_success("Workspace layout reset.")
+            return True
+        try:
+            result = port.save_layout(self._current_workspace_layout())
+        except Exception as exc:
+            self._apply_workspace_layout_payload(
+                previous,
+                restored=previous_restored,
+            )
+            status_messages.show_error(
+                f"Could not save the default workspace layout: {exc}"
+            )
+            return False
+        if not commit_succeeded(result):
+            self._apply_workspace_layout_payload(
+                previous,
+                restored=previous_restored,
+            )
+            error = getattr(result, "error", None) or "storage commit failed"
+            status_messages.show_error(
+                f"Could not save the default workspace layout: {error}"
+            )
+            return False
+        status_messages.show_success("Workspace layout reset.")
+        return True
+
+    def _apply_workspace_layout_payload(
+        self,
+        layout: WorkspaceLayoutPayload,
+        *,
+        restored: bool,
+    ) -> None:
+        outer_sizes = self._valid_splitter_sizes(layout.outer_splitter_sizes)
+        explorer_sizes = self._valid_splitter_sizes(layout.inner_splitter_sizes)
+        if outer_sizes is None:
+            outer_sizes = list(self.DEFAULT_OUTER_SPLITTER_SIZES)
+        if explorer_sizes is None:
+            explorer_sizes = list(self.DEFAULT_EXPLORER_SPLITTER_SIZES)
+        try:
+            explorer_mode = ExplorerMode(str(layout.explorer_mode))
+        except (TypeError, ValueError):
+            explorer_mode = ExplorerMode.TABLE
+        self._workspace_layout_restored = restored
+        self._last_visible_explorer_sizes = list(explorer_sizes)
+        self._explorer_mode = explorer_mode
+        self._explorer_visible = bool(layout.explorer_visible)
+        self.workspace_splitter.setSizes(outer_sizes)
+        self.explorer_control_splitter.setSizes(explorer_sizes)
+        self._apply_explorer_state(restore_sizes=False)
+
     def showEvent(self, event):
         """Restore persisted workspace geometry the first time the window opens."""
 
         super().showEvent(event)
-        QTimer.singleShot(0, self._apply_default_workspace_sizes)
+        self._deferred_workspace_timer.start(0)
 
     @staticmethod
     def _local_drop_paths(event) -> list[Path]:
@@ -603,6 +852,8 @@ class MainWindow(QMainWindow):
                     event.ignore()
                     return
         self._save_workspace_layout()
+        self._explorer_sizes_timer.stop()
+        self._deferred_workspace_timer.stop()
         if hasattr(self, "bottom_bar"):
             status_messages.clear_status_handler(self.bottom_bar.show_message)
             self.bottom_bar.cleanup()
@@ -617,13 +868,16 @@ if __name__ == "__main__":
     configure_windows_taskbar_identity()
     app = QApplication(sys.argv)
     font_diagnostic_bridge = install_font_diagnostic_bridge()
-    configure_application_icon(app)
-    configure_application_font(app)
-    app.setStyleSheet(
-        load_qss_resource("mygui/widgets/mainwindow_init/app_style.qss")
-    )
     QCoreApplication.setOrganizationName("MyGUI")
     QCoreApplication.setApplicationName("MyGUI")
-    window = MainWindow(settings=QSettings())
+    settings_backend, settings_service, theme = (
+        compose_application_settings_and_theme(app)
+    )
+    configure_application_icon(app)
+    window = MainWindow(
+        settings_backend=settings_backend,
+        settings_service=settings_service,
+        theme_service=theme,
+    )
     window.showMaximized()
     sys.exit(app.exec())

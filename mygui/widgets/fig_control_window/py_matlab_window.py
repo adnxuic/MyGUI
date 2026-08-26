@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import QFrame, QLabel, QMessageBox, QPushButton, QVBoxLayout
 
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 
 from mygui import status_messages
 from mygui.database import matlab_adapter
@@ -34,11 +34,7 @@ class PyMatlabWindow(QFrame):
         self.setMouseTracking(True)
         self.setObjectName("matlab_window")
 
-        self.setStyleSheet(
-            load_qss_resource(
-                "mygui/widgets/fig_control_window/style.qss"
-            )
-        )
+        bind_widget_qss(self, "mygui/widgets/fig_control_window/style.qss")
 
         self._connect_request_id = 0
 

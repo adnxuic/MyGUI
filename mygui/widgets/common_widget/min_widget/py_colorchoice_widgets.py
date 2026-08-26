@@ -47,6 +47,7 @@ class ColorChoiceWidget(QFrame):
         *,
         selection: ColorSelection | None = None,
         auto_record_recent: bool = True,
+        allow_favorite: bool = True,
     ):
         super().__init__(parent)
         self.setObjectName("color_choice_widget")
@@ -60,6 +61,7 @@ class ColorChoiceWidget(QFrame):
             selection = colorselector.peek()
         self._selection = selection or ColorSelection(color)
         self.auto_record_recent = bool(auto_record_recent)
+        self.allow_favorite = bool(allow_favorite)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -83,6 +85,9 @@ class ColorChoiceWidget(QFrame):
         self.favorite_button.setFixedWidth(34)
         self.favorite_button.clicked.connect(self._toggle_favorite)
         layout.addWidget(self.favorite_button)
+        if not self.allow_favorite:
+            self.favorite_button.hide()
+            self.favorite_button.setEnabled(False)
 
         if callable(connect_signal):
             self.colorChanged.connect(connect_signal)
@@ -104,6 +109,8 @@ class ColorChoiceWidget(QFrame):
         self.favorite_button.setAccessibleName(self.favorite_button.toolTip())
 
     def _toggle_favorite(self):
+        if not self.allow_favorite:
+            return
         self.color_library.toggle_favorite_color(self._selection.color)
 
     def showColorDialog(self):

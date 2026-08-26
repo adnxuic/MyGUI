@@ -45,6 +45,7 @@ from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
+from mygui.application_theme import bind_widget_qss
 
 from .common import (
     FocusAwareDoubleSpinBox,
@@ -55,6 +56,20 @@ from .common import (
     parse_number_sequence,
 )
 from .inline_spec_editors import LinePatternEditor, OptionalColorEditor
+
+_DIALOG_QSS = "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+
+
+def _bind_spec_dialog(dialog: QDialog) -> None:
+    bind_widget_qss(dialog, _DIALOG_QSS)
+
+
+def _chrome_error_label(parent) -> QLabel:
+    label = QLabel(parent)
+    label.setObjectName("chrome_error_label")
+    label.setWordWrap(True)
+    label.hide()
+    return label
 
 
 @dataclass(frozen=True)
@@ -467,6 +482,7 @@ class _TaggedSpecDialog(QDialog):
         flat: bool = False,
     ):
         super().__init__(parent)
+        _bind_spec_dialog(self)
         self.setWindowTitle(title)
         self.setModal(True)
         self.setMinimumWidth(430)
@@ -497,9 +513,7 @@ class _TaggedSpecDialog(QDialog):
         self.form_stack.setCurrentIndex(self.kind_input.currentIndex())
         layout.addWidget(self.form_stack)
 
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #B00020;")
+        self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
@@ -627,6 +641,7 @@ class AxisFormatterEditor(_StructuredValueEditor):
 class _FontSpecDialog(QDialog):
     def __init__(self, value: Any, color_library: ColorLibrary, parent=None):
         super().__init__(parent)
+        _bind_spec_dialog(self)
         self.setWindowTitle("Offset font")
         self.setModal(True)
         self.setMinimumWidth(430)
@@ -661,9 +676,7 @@ class _FontSpecDialog(QDialog):
         form.addRow("Color", self.color_input)
         layout.addLayout(form)
 
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #B00020;")
+        self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox(
@@ -837,6 +850,7 @@ _DEFAULT_TEXT_BOX = {
 class _TextBoxDialog(QDialog):
     def __init__(self, value: Any, color_library: ColorLibrary, parent=None):
         super().__init__(parent)
+        _bind_spec_dialog(self)
         self.setWindowTitle("Text box")
         self.setModal(True)
         self.setMinimumWidth(430)
@@ -901,9 +915,7 @@ class _TextBoxDialog(QDialog):
         form.addRow("Pad", self.pad_input)
         layout.addWidget(self.details)
 
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #B00020;")
+        self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox(
@@ -976,6 +988,7 @@ class TextBoxEditor(_StructuredValueEditor):
 class _ScatterColorMapDialog(QDialog):
     def __init__(self, value: Any, color_library: ColorLibrary, parent=None):
         super().__init__(parent)
+        _bind_spec_dialog(self)
         self.setWindowTitle("Color mapping")
         self.setModal(True)
         self.setMinimumWidth(430)
@@ -1017,9 +1030,7 @@ class _ScatterColorMapDialog(QDialog):
         form.addRow("Non-finite values", self.nonfinite_input)
         layout.addWidget(self.details)
 
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #B00020;")
+        self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox(
@@ -1086,6 +1097,7 @@ class ScatterColorMapEditor(_StructuredValueEditor):
 class _ScatterSizeMapDialog(QDialog):
     def __init__(self, value: Any, parent=None):
         super().__init__(parent)
+        _bind_spec_dialog(self)
         self.setWindowTitle("Size mapping")
         self.setModal(True)
         self.setMinimumWidth(430)
@@ -1123,9 +1135,7 @@ class _ScatterSizeMapDialog(QDialog):
         form.addRow("Clamp to range", self.clamp_input)
         layout.addWidget(self.details)
 
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #B00020;")
+        self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox(
@@ -1238,6 +1248,7 @@ class _ConnectorPage(QWidget):
 class _ZoomConnectorsDialog(QDialog):
     def __init__(self, value: Any, color_library: ColorLibrary, parent=None):
         super().__init__(parent)
+        _bind_spec_dialog(self)
         self.setWindowTitle("Zoom connectors")
         self.setModal(True)
         self.setMinimumWidth(430)
@@ -1253,9 +1264,7 @@ class _ZoomConnectorsDialog(QDialog):
             self.tabs.addTab(page, label)
         layout.addWidget(self.tabs)
 
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #B00020;")
+        self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
         buttons = QDialogButtonBox(

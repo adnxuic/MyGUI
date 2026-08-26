@@ -2,4 +2,10 @@ QFrame#axes_semantic_inspector_panel,
 QFrame#inspector_toolbox {
     border: 0px;
     background: transparent;
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel, QCheckBox, QRadioButton, QGroupBox
+{
+    color: {{COLOR_TEXT_PRIMARY}};
 }

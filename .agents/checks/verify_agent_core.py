@@ -16,11 +16,12 @@ from _runner import ROOT, finish, load_task_map, load_yaml, task_result
 REQUIRED_TASKS = {
     "add_figure_component", "modify_component_property", "schema_migration",
     "project_io_change", "debug_gui_regression", "architecture_audit",
-    "evolve_architecture_rule", "fix_ci",
+    "evolve_architecture_rule", "fix_ci", "modify_application_setting",
 }
 KNOWN_CHECKS = {
     "verify_agent_core", "verify_fast", "verify_component_contracts",
     "verify_architecture", "verify_project_io", "verify_full",
+    "verify_application_settings",
 }
 FORBIDDEN_IMPLEMENTATION_TOKENS = {
     "cordis_define", "cordis_run", "cordis_stop", "dynamicCordisRunner",

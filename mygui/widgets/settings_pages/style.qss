@@ -1,0 +1,67 @@
+QWidget#settings_page_appearance,
+QWidget#settings_page_workspace,
+QWidget#settings_page_new_figure
+{
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel#settings_page_intro,
+QLabel#settings_page_field_label
+{
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel#settings_page_hint
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QRadioButton,
+QCheckBox
+{
+    color: {{COLOR_TEXT_PRIMARY}};
+    spacing: {{SPACE_SM}}px;
+}
+
+QRadioButton:focus,
+QCheckBox:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QPushButton:focus
+{
+    outline: none;
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QSpinBox,
+QDoubleSpinBox
+{
+    min-height: 28px;
+    color: {{COLOR_TEXT_PRIMARY}};
+    background-color: {{COLOR_SURFACE}};
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_SM}}px;
+    padding: 0px {{SPACE_SM}}px;
+}
+
+QPushButton
+{
+    min-height: 30px;
+    color: {{COLOR_TEXT_PRIMARY}};
+    background-color: {{COLOR_SURFACE}};
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_SM}}px;
+    padding: 0px {{SPACE_MD}}px;
+}
+
+QPushButton:hover
+{
+    border-color: {{COLOR_ACCENT}};
+}
+
+QPushButton:pressed
+{
+    background-color: {{COLOR_ACCENT_SOFT}};
+    border-color: {{COLOR_ACCENT}};
+}

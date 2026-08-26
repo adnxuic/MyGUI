@@ -1,9 +1,10 @@
 """Compose the application's message and state bars."""
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout
-from mygui.resources import load_qss_resource
+from mygui.application_theme import bind_widget_qss
 from mygui.widgets.bottom_bar.py_message_bar import PyMessageBar
 from mygui.widgets.bottom_bar.py_state_bar import FeatureIndicator, PyStateBar
+from mygui.application_theme import current_density_metrics, subscribe_theme_window
 
 from mygui import tex_config
 from mygui.database import matlab_adapter
@@ -41,8 +42,7 @@ class PyBottomBar(QFrame):
         self._cleaned_up = False
 
         self.setObjectName("bottom_bar")
-        qss_file = load_qss_resource("mygui/widgets/bottom_bar/style.qss")
-        self.setStyleSheet(qss_file)
+        bind_widget_qss(self, "mygui/widgets/bottom_bar/style.qss")
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(10, 0, 10, 0)
@@ -55,6 +55,13 @@ class PyBottomBar(QFrame):
         self.layout.addWidget(self.state_bar, stretch=0)
 
         self.destroyed.connect(self.cleanup)
+        subscribe_theme_window(self)
+        self.apply_theme_metrics(current_density_metrics())
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply bottom-bar height from the published density metrics."""
+
+        self.setFixedHeight(metrics.bottom)
 
     def cleanup(self, *_args):
         """Detach process-wide feature listeners exactly once."""

@@ -1,0 +1,125 @@
+"""Stable dotted keys and page ids for persisted application settings."""
+
+from __future__ import annotations
+
+PAGE_APPEARANCE = "appearance"
+PAGE_WORKSPACE = "workspace"
+PAGE_NEW_FIGURE = "new_figure"
+PAGE_EXPORT = "export"
+PAGE_INTEGRATIONS = "integrations"
+PAGE_MAINTENANCE = "maintenance"
+
+APPEARANCE_THEME_MODE = "appearance.theme_mode"
+APPEARANCE_UI_FONT_POINT_SIZE = "appearance.ui_font_point_size"
+APPEARANCE_DENSITY = "appearance.density"
+
+WORKSPACE_REMEMBER_LAYOUT = "workspace.remember_layout"
+WORKSPACE_LAYOUT = "workspace.layout"
+
+NEW_FIGURE_WIDTH_IN = "new_figure.width_in"
+NEW_FIGURE_HEIGHT_IN = "new_figure.height_in"
+NEW_FIGURE_DOCUMENT_DPI = "new_figure.document_dpi"
+
+EXPORT_FORMAT = "export.format"
+EXPORT_LAST_DIRECTORY = "export.last_directory"
+EXPORT_USE_PROJECT_DPI = "export.use_project_dpi"
+EXPORT_CUSTOM_DPI = "export.custom_dpi"
+EXPORT_TRANSPARENT = "export.transparent"
+EXPORT_FACECOLOR = "export.facecolor"
+EXPORT_EDGECOLOR = "export.edgecolor"
+EXPORT_BBOX_INCHES = "export.bbox_inches"
+EXPORT_PAD_INCHES = "export.pad_inches"
+EXPORT_PNG_COMPRESS_LEVEL = "export.png_compress_level"
+EXPORT_PNG_OPTIMIZE = "export.png_optimize"
+EXPORT_JPEG_QUALITY = "export.jpeg_quality"
+EXPORT_JPEG_OPTIMIZE = "export.jpeg_optimize"
+EXPORT_JPEG_PROGRESSIVE = "export.jpeg_progressive"
+EXPORT_JPEG_SUBSAMPLING = "export.jpeg_subsampling"
+EXPORT_TIFF_COMPRESSION = "export.tiff_compression"
+EXPORT_WEBP_LOSSLESS = "export.webp_lossless"
+EXPORT_WEBP_QUALITY = "export.webp_quality"
+EXPORT_WEBP_ALPHA_QUALITY = "export.webp_alpha_quality"
+EXPORT_WEBP_METHOD = "export.webp_method"
+EXPORT_WEBP_EXACT = "export.webp_exact"
+EXPORT_METADATA = "export.metadata"
+
+PAGE_IDS = (
+    PAGE_APPEARANCE,
+    PAGE_WORKSPACE,
+    PAGE_NEW_FIGURE,
+    PAGE_EXPORT,
+)
+
+PERSISTENT_KEYS = (
+    APPEARANCE_THEME_MODE,
+    APPEARANCE_UI_FONT_POINT_SIZE,
+    APPEARANCE_DENSITY,
+    WORKSPACE_REMEMBER_LAYOUT,
+    WORKSPACE_LAYOUT,
+    NEW_FIGURE_WIDTH_IN,
+    NEW_FIGURE_HEIGHT_IN,
+    NEW_FIGURE_DOCUMENT_DPI,
+    EXPORT_FORMAT,
+    EXPORT_LAST_DIRECTORY,
+    EXPORT_USE_PROJECT_DPI,
+    EXPORT_CUSTOM_DPI,
+    EXPORT_TRANSPARENT,
+    EXPORT_FACECOLOR,
+    EXPORT_EDGECOLOR,
+    EXPORT_BBOX_INCHES,
+    EXPORT_PAD_INCHES,
+    EXPORT_PNG_COMPRESS_LEVEL,
+    EXPORT_PNG_OPTIMIZE,
+    EXPORT_JPEG_QUALITY,
+    EXPORT_JPEG_OPTIMIZE,
+    EXPORT_JPEG_PROGRESSIVE,
+    EXPORT_JPEG_SUBSAMPLING,
+    EXPORT_TIFF_COMPRESSION,
+    EXPORT_WEBP_LOSSLESS,
+    EXPORT_WEBP_QUALITY,
+    EXPORT_WEBP_ALPHA_QUALITY,
+    EXPORT_WEBP_METHOD,
+    EXPORT_WEBP_EXACT,
+    EXPORT_METADATA,
+)
+
+KEYS_BY_PAGE = {
+    PAGE_APPEARANCE: (
+        APPEARANCE_THEME_MODE,
+        APPEARANCE_UI_FONT_POINT_SIZE,
+        APPEARANCE_DENSITY,
+    ),
+    PAGE_WORKSPACE: (
+        WORKSPACE_REMEMBER_LAYOUT,
+        WORKSPACE_LAYOUT,
+    ),
+    PAGE_NEW_FIGURE: (
+        NEW_FIGURE_WIDTH_IN,
+        NEW_FIGURE_HEIGHT_IN,
+        NEW_FIGURE_DOCUMENT_DPI,
+    ),
+    PAGE_EXPORT: (
+        EXPORT_FORMAT,
+        EXPORT_LAST_DIRECTORY,
+        EXPORT_USE_PROJECT_DPI,
+        EXPORT_CUSTOM_DPI,
+        EXPORT_TRANSPARENT,
+        EXPORT_FACECOLOR,
+        EXPORT_EDGECOLOR,
+        EXPORT_BBOX_INCHES,
+        EXPORT_PAD_INCHES,
+        EXPORT_PNG_COMPRESS_LEVEL,
+        EXPORT_PNG_OPTIMIZE,
+        EXPORT_JPEG_QUALITY,
+        EXPORT_JPEG_OPTIMIZE,
+        EXPORT_JPEG_PROGRESSIVE,
+        EXPORT_JPEG_SUBSAMPLING,
+        EXPORT_TIFF_COMPRESSION,
+        EXPORT_WEBP_LOSSLESS,
+        EXPORT_WEBP_QUALITY,
+        EXPORT_WEBP_ALPHA_QUALITY,
+        EXPORT_WEBP_METHOD,
+        EXPORT_WEBP_EXACT,
+        EXPORT_METADATA,
+    ),
+}

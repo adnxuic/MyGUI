@@ -14,7 +14,7 @@ const FACTORIES: Record<string, () => ScannerDefinition> = {
 
 function usage(): void {
   process.stderr.write(
-    'usage: node dist/cli/scan.js <workspace> [--scanner <id>] [--json] [--json-out <path>] [--max <n>] [--include <glob>] [--exclude <glob>]\n',
+    'usage: node dist/cli/scan.js <workspace> [--scanner <id>] [--json] [--json-out <path>] [--max <n>] [--include <glob>] [--exclude <glob>] [--fail-on-gray]\n',
   );
 }
 
@@ -24,6 +24,7 @@ async function main(argv: string[]): Promise<number> {
   let json = false;
   let jsonOut: string | undefined;
   let maxFindings = 8;
+  let failOnGray = false;
   const include: string[] = [];
   const exclude: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
@@ -34,6 +35,7 @@ async function main(argv: string[]): Promise<number> {
     else if (arg === '--max') maxFindings = Number.parseInt(argv[++i] ?? '8', 10);
     else if (arg === '--include') include.push(argv[++i] ?? '');
     else if (arg === '--exclude') exclude.push(argv[++i] ?? '');
+    else if (arg === '--fail-on-gray') failOnGray = true;
     else if (arg === '--help' || arg === '-h') { usage(); return 0; }
     else positional.push(arg);
   }
@@ -63,7 +65,10 @@ async function main(argv: string[]): Promise<number> {
       process.stdout.write(`\n[${finding.severity}/${finding.confidence}] ${finding.ruleId} ${finding.file}:${finding.line ?? '-'}\n  ${finding.title}\n  ${finding.evidence}\n`);
     }
   }
-  return result.status === 'failed' ? 1 : 0;
+  if (result.status === 'failed' || result.status === 'partial') return 1;
+  if (result.verdict === 'violation' || result.verdict === 'unknown') return 1;
+  if (failOnGray && result.verdict === 'gray_boundary') return 1;
+  return 0;
 }
 
 main(process.argv.slice(2)).then(

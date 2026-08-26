@@ -13,6 +13,14 @@ Keyboard shortcuts and mouse interactions for MyGUI controls. Shortcuts apply to
 The Table and Figure toolbar actions use the same per-project timeline. See
 [Project Undo and Redo](undo-redo.md).
 
+## Application settings
+
+| Key | Action |
+| --- | --- |
+| Ctrl+, | Opens the Settings Center. The same window is available from **Edit > Settings** and the left activity-rail gear. |
+
+See [Application Settings](settings.md). UI theme is not Matplotlib Figure style.
+
 ## Table view
 
 | Key or mouse action | Action |

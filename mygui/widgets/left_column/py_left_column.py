@@ -3,9 +3,15 @@
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
-from mygui.resources import icon_path as resolve_icon_path, load_qss_resource
+from mygui.application_theme import (
+    bind_widget_qss,
+    current_density_metrics,
+    current_qss_tokens,
+    subscribe_theme_window,
+)
+from mygui.resources import icon_path as resolve_icon_path
 from mygui.widgets.left_column.py_setting_dialog import PySettingDialog
-from mygui.widgets.theme import COLORS
+from mygui.application_theme.runtime import default_theme_runtime
 
 
 def _tinted_icon(icon_path, color):
@@ -19,6 +25,23 @@ def _tinted_icon(icon_path, color):
     return QIcon(pixmap)
 
 
+def _chrome_icon(icon_path, *, variant="", fallback_color=None, widget=None):
+    runtime = default_theme_runtime()
+    snapshot = runtime.snapshot
+    if snapshot is None:
+        return _tinted_icon(
+            icon_path,
+            fallback_color
+            or current_qss_tokens().get("COLOR_TEXT_PRIMARY", "#1f2937"),
+        )
+    return runtime.icon_provider.icon(
+        icon_path,
+        snapshot=snapshot,
+        variant=variant,
+        widget=widget,
+    )
+
+
 class PyLeftColumn(QFrame):
     """Provide the left activity rail Qt widget."""
 
@@ -28,11 +51,10 @@ class PyLeftColumn(QFrame):
         super().__init__()
         self.setting_dialog = None
         self._reset_layout_callback = None
+        self._open_settings = None
 
         self.setObjectName("left_column")
-        self.setStyleSheet(
-            load_qss_resource("mygui/widgets/left_column/style.qss")
-        )
+        bind_widget_qss(self, "mygui/widgets/left_column/style.qss")
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -65,15 +87,18 @@ class PyLeftColumn(QFrame):
         self.setting_button.setToolTip("Open settings")
         self.setting_button.setAccessibleName("Open settings")
         self.setting_button.setIcon(
-            _tinted_icon(
+            _chrome_icon(
                 resolve_icon_path("setting.svg"),
-                COLORS["text_primary"],
+                fallback_color=current_qss_tokens().get("COLOR_TEXT_PRIMARY", "#1f2937"),
+                widget=self,
             )
         )
         self.setting_button.clicked.connect(self.show_setting_dialog)
         self.layout.addWidget(self.setting_button)
 
         self.set_explorer_state("table", True)
+        subscribe_theme_window(self)
+        self.apply_theme_metrics(current_density_metrics())
 
     def _explorer_button(
         self,
@@ -115,25 +140,55 @@ class PyLeftColumn(QFrame):
         ):
             button.setChecked(active[key])
             button.setIcon(
-                _tinted_icon(
+                _chrome_icon(
                     path,
-                    (
-                        COLORS["text_on_dark"]
+                    variant="on_accent" if active[key] else "",
+                    fallback_color=(
+                        current_qss_tokens().get("COLOR_TEXT_ON_DARK", "#f8fafc")
                         if active[key]
-                        else COLORS["text_primary"]
+                        else current_qss_tokens().get("COLOR_TEXT_PRIMARY", "#1f2937")
                     ),
+                    widget=self,
                 )
             )
 
-    def show_setting_dialog(self):
-        """Show setting dialog."""
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply activity-rail width from the published density metrics."""
 
+        self.setFixedWidth(metrics.rail)
+
+    def apply_theme_icons(self, snapshot, provider) -> None:
+        """Retint rail chrome icons for the published scheme."""
+
+        self.set_explorer_state(
+            "table" if self.table_button.isChecked() else "components",
+            self.table_button.isChecked() or self.components_button.isChecked(),
+        )
+        self.setting_button.setIcon(
+            provider.icon(
+                resolve_icon_path("setting.svg"),
+                snapshot=snapshot,
+                widget=self,
+            )
+        )
+
+    def show_setting_dialog(self):
+        """Open Settings. Production injects the Settings Center host."""
+
+        if self._open_settings is not None:
+            self._open_settings()
+            return
         if self.setting_dialog is None:
             self.setting_dialog = PySettingDialog(
                 parent=self.window(),
                 reset_layout_callback=self._reset_layout_callback,
             )
         self.setting_dialog.exec()
+
+    def set_open_settings(self, callback):
+        """Inject the shared Settings Center opener (gear, menu, shortcut)."""
+
+        self._open_settings = callback
 
     def set_reset_layout_callback(self, callback):
         """Set reset layout callback."""
