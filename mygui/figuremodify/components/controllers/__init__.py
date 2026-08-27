@@ -79,6 +79,16 @@ from .text import (
     AxisLabelController,
 )
 
+from .annotation import (
+    ANNOTATION_ARROW_STYLES,
+    ANNOTATION_CONNECTION_STYLES,
+    AnnotationController,
+    COORDINATE_SYSTEMS,
+    TARGET_COORDINATE_SYSTEMS,
+    TEXT_COORDINATE_SYSTEMS,
+    coordinate_system_name,
+)
+
 from .legend import (
     LegendController,
 )
@@ -193,6 +203,13 @@ __all__ = [
     "TextController",
     "TitleController",
     "AxisLabelController",
+    "ANNOTATION_ARROW_STYLES",
+    "ANNOTATION_CONNECTION_STYLES",
+    "AnnotationController",
+    "COORDINATE_SYSTEMS",
+    "TARGET_COORDINATE_SYSTEMS",
+    "TEXT_COORDINATE_SYSTEMS",
+    "coordinate_system_name",
     "LegendController",
     "_IN_AXES_COMMON_PROPERTIES",
     "InAxesController",

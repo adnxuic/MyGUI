@@ -1384,7 +1384,8 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             path = Path(directory) / "history-runtime-only.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             raw = load_project_file(path)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 16)
+            self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 17)
             self.assertEqual(
                 set(raw["figure"]),
                 {"root_component_id", "components"},

@@ -38,7 +38,7 @@ class TemplateApplyService:
         cancelled: Callable[[], bool] | None = None,
         progress: Callable[[int, int, str], None] | None = None,
     ) -> TemplateApplicationPlan:
-        """Build a strictly valid schema-v16 snapshot without publishing state."""
+        """Build a strictly valid schema-v17 snapshot without publishing state."""
 
         if self.repository is not None and self.repository.project_by_name(
             project_name, required=False

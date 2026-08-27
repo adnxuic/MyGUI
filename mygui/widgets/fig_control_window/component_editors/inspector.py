@@ -57,6 +57,7 @@ class TreePresentationSpec:
     group_order: int | None = None
     always_group: bool = False
     delete_label: str | None = None
+    duplicate_label: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.label, str) and not self.label.strip():
@@ -75,6 +76,8 @@ class TreePresentationSpec:
             raise ValueError("Always-group presentation requires a group title.")
         if self.delete_label is not None and not self.delete_label.strip():
             raise ValueError("Tree delete label must not be empty.")
+        if self.duplicate_label is not None and not self.duplicate_label.strip():
+            raise ValueError("Tree duplicate label must not be empty.")
 
 
 @dataclass(frozen=True, slots=True)

@@ -367,11 +367,24 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "fontfamily"):
                     validate_project_snapshot(candidate)
 
-    def test_only_exact_integer_v10_through_v16_are_accepted(self):
+    def test_only_exact_integer_v10_through_v17_are_accepted(self):
         current = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in (4, 9, 17, True, 14.0, 15.0, 16.0, "14", "15", "16"):
+            for version in (
+                4,
+                9,
+                18,
+                True,
+                14.0,
+                15.0,
+                16.0,
+                17.0,
+                "14",
+                "15",
+                "16",
+                "17",
+            ):
                 with self.subTest(version=version):
                     candidate = deepcopy(current)
                     candidate["schema_version"] = version
@@ -380,7 +393,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 16)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 17)
 
     def test_schema_v15_axes_reserve_and_v14_migration_defaults(self):
         current = self.snapshot()
@@ -409,7 +422,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "position_ref"):
             validate_project_snapshot(with_marks)
 
-    def test_schema_v15_migrates_to_v16_without_rewriting_records(self):
+    def test_schema_v15_migrates_to_v17_without_rewriting_records(self):
         current = self.snapshot()
         predecessor = as_schema_v15(current)
         self.assertEqual(predecessor["schema_version"], 15)
@@ -418,9 +431,9 @@ class ProjectSchemaV14Tests(unittest.TestCase):
             path = Path(directory) / "schema-v15.mygui.json"
             path.write_text(json.dumps(predecessor), encoding="utf-8")
             migrated = load_project_file(path)
-        self.assertEqual(migrated["schema_version"], 16)
+        self.assertEqual(migrated["schema_version"], 17)
         expected = deepcopy(predecessor)
-        expected["schema_version"] = 16
+        expected["schema_version"] = 17
         self.assertEqual(migrated, expected)
         self.assertEqual(migrated, current)
 

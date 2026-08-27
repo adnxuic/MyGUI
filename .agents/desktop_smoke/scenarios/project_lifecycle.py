@@ -96,6 +96,16 @@ def _scenario_save_and_reopen_v16(harness: SmokeHarness) -> None:
     cmap_spec = {**DEFAULT_COLOR_MAP, "cmap": "plasma"}
     canvas.add_contour(x_2d, y_2d, z_2d, {"colormap": cmap_spec})
     canvas.add_curve("sin(x)", 0, 5, "--", "#e377c2", "CurveSave")
+    canvas.add_annotation(
+        {
+            "text": "Saved Annotation",
+            "xy": [2.5, 0.5],
+            "xycoords": "data",
+            "xytext": [25.0, 25.0],
+            "textcoords": "offset_points",
+            "arrow_enabled": True,
+        }
+    )
     canvas.add_reference_line({"orientation": "vertical", "value": 2.0, "linestyle": ":"})
 
     harness.pump(80)
@@ -142,11 +152,14 @@ def _scenario_save_and_reopen_v16(harness: SmokeHarness) -> None:
         curves = restored_canvas.component_registry.query(
             kind=ComponentKind.LINE
         )
+        annotations = restored_canvas.component_registry.query(
+            kind=ComponentKind.ANNOTATION
+        )
         lines = restored_canvas.component_registry.query(
             kind=ComponentKind.REFERENCE_GUIDE, role=ComponentRole.REFERENCE_LINE
         )
 
-        if not contours or not curves or not lines:
+        if not contours or not curves or not annotations or not lines:
             raise SmokeError("Restored project missing expected components.")
 
         harness.grab_canvas("lifecycle-02-restored-canvas")

@@ -481,6 +481,7 @@ class EditorContext:
     field_2d: object | None = None
     reference_marks: object | None = None
     reference_guides: object | None = None
+    annotations: object | None = None
     axes_layout: object | None = None
     in_axes: object | None = None
     dependency_service: object | None = None

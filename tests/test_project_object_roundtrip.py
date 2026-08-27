@@ -204,6 +204,16 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             fit_result={"formula": "x**2", "coefficients": [], "goodness": {}},
         )
         canvas.add_text(0.25, 0.75, "axes text", "DejaVu Sans", 12)
+        canvas.add_annotation(
+            {
+                "text": "roundtrip annotation",
+                "xy": (1.0, 2.0),
+                "xytext": (18.0, 24.0),
+                "arrow_style": "filled_arrow",
+            },
+            object_id="roundtrip-annotation",
+            announce=False,
+        )
         canvas.add_global_text(0.5, 0.5, "figure text", "DejaVu Sans", 14)
         canvas.add_in_axes(
             ZoomInAxesCreateSpec(
@@ -366,11 +376,27 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 12,
                 usetex=True,
             )
+            annotation_artist = canvas.add_annotation(
+                {
+                    "text": r"$T_N$",
+                    "xy": (0.5, 0.5),
+                    "usetex": True,
+                },
+                object_id="tex-roundtrip-annotation",
+                announce=False,
+            )
         source = canvas.component_registry.query(role=ComponentRole.TEXT)[0]
+        source_annotation = canvas.component_registry.get(
+            annotation_artist.get_gid()
+        )
         self.assertTrue(source.read_state().properties["usetex"])
+        self.assertTrue(
+            source_annotation.read_state().properties["usetex"]
+        )
 
         tex_config.set_tex_enabled(False, notify=False)
         source.resolve_target().set_usetex(False)
+        source_annotation.resolve_target().set_usetex(False)
         save_project_snapshot(self.path, self.window.figure_window)
 
         loaded = MainWindow()
@@ -383,6 +409,11 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             )[0]
             self.assertTrue(controller.read_state().properties["usetex"])
             self.assertFalse(controller.resolve_target().get_usetex())
+            annotation = restored.component_registry.get(
+                "tex-roundtrip-annotation"
+            )
+            self.assertTrue(annotation.read_state().properties["usetex"])
+            self.assertFalse(annotation.resolve_target().get_usetex())
 
             save_project_snapshot(second_path, loaded.figure_window)
             self.assertIn('"usetex": true', second_path.read_text(encoding="utf-8"))

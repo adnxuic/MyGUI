@@ -91,7 +91,7 @@ does not update the plotted curve or result table.
 
 ## Project Files
 
-Fitting curves are saved in schema v16 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
+Fitting curves are saved in schema v17 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
 Saved records include a stable `object_id`, X/Y `ColumnRef` objects, fitting engine, fit type,
 advanced options when used, fit result, drawing expression, X range, style,
 color, and legend label.

@@ -29,6 +29,7 @@ from mygui.figuremodify.style_base.creation_defaults import (
 from mygui.figuremodify.style_base.creation_preferences import resolve_text_appearance
 from mygui import status_messages
 from mygui.widgets.fig_control_window.component_editors import (
+    AnnotationInput,
     ColorbarInput,
     InAxesInput,
     ReferenceBandInput,
@@ -196,6 +197,61 @@ class PyTextDialog(QDialog):
         """Reject the dialog without applying its pending inputs."""
 
         super().reject()
+
+
+class PyAnnotationDialog(QDialog):
+    """Collect Controller-free values for one new Annotation."""
+
+    ICON_PATH = icon_path("element_images/annotation.svg")
+
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("annotation_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
+        self.setWindowTitle(dialog_name or "Annotation")
+        self.setWindowIcon(QIcon(self.ICON_PATH))
+        self.figure_window: PyFigureWindow = figure_window
+        canvas = getattr(figure_window, "current_canva", None)
+
+        default_xy = None
+        if canvas is not None and canvas.current_axes is not None:
+            try:
+                default_xy = canvas.annotation_service.center_data_coordinates(
+                    canvas.current_axes
+                )
+            except ValueError:
+                default_xy = None
+
+        layout = QVBoxLayout(self)
+        self.input = AnnotationInput(default_xy=default_xy, parent=self)
+        layout.addWidget(self.input)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self):
+        """Create the Annotation without closing when validation fails."""
+
+        canvas = getattr(self.figure_window, "current_canva", None)
+        if canvas is None or not canvas.has_current_axes:
+            status_messages.show_warning(
+                "Select an Axes before creating an Annotation."
+            )
+            return
+        try:
+            canvas.add_annotation_from_input(self.input.properties())
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return
+        super().accept()
 
 
 class PyInAxesDialog(QDialog):
@@ -468,6 +524,10 @@ element_action_specs = {
     "Text": ElementActionSpec(
         PyTextDialog,
         icon_path("element_images/Text.svg"),
+    ),
+    "Annotation": ElementActionSpec(
+        PyAnnotationDialog,
+        PyAnnotationDialog.ICON_PATH,
     ),
     "in_axes": ElementActionSpec(
         PyInAxesDialog,

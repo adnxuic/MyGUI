@@ -26,6 +26,7 @@ class ComponentKind(str, Enum):
     TICK_LABEL_GROUP = "tick_label_group"
     GRID = "grid"
     TEXT = "text"
+    ANNOTATION = "annotation"
     LEGEND = "legend"
     LINE = "line"
     SCATTER = "scatter"
@@ -53,6 +54,7 @@ class ComponentRole(str, Enum):
     X_LABEL = "x_label"
     Y_LABEL = "y_label"
     TEXT = "text"
+    ANNOTATION = "annotation"
     LEGEND = "legend"
     LINE = "line"
     FUNCTION_CURVE = "function_curve"
@@ -76,6 +78,32 @@ class FitEngine(StrEnum):
 
     PYTHON = "Python"
     MATLAB = "Matlab"
+
+
+class CoordinateSystem(StrEnum):
+    """Enumerate coordinate systems supported by component geometries."""
+
+    DATA = "data"
+    AXES_FRACTION = "axes_fraction"
+    FIGURE_FRACTION = "figure_fraction"
+    OFFSET_POINTS = "offset_points"
+
+
+class AnnotationArrowStyle(StrEnum):
+    """Enumerate stable wire values for Annotation arrow styles."""
+
+    LINE = "line"
+    ARROW = "arrow"
+    FILLED_ARROW = "filled_arrow"
+    DOUBLE_ARROW = "double_arrow"
+
+
+class AnnotationConnectionStyle(StrEnum):
+    """Enumerate stable wire values for Annotation connection styles."""
+
+    STRAIGHT = "straight"
+    ANGLE = "angle"
+    ARC = "arc"
 
 
 class EditorKind(StrEnum):
@@ -116,6 +144,7 @@ class EditorKind(StrEnum):
     OPTIONAL_COLOR = "optional_color"
     NAMED_NUMBER = "named_number"
     TEXT_BOX = "text_box"
+    ANNOTATION_BOX = "annotation_box"
     LEGEND_ANCHOR = "legend_anchor"
     LAYOUT_SPEC = "layout_spec"
     AXES_ANCHOR = "axes_anchor"
@@ -176,6 +205,7 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
         }
     ),
     ComponentKind.LEGEND: frozenset({ComponentRole.LEGEND}),
+    ComponentKind.ANNOTATION: frozenset({ComponentRole.ANNOTATION}),
     ComponentKind.LINE: frozenset(
         {
             ComponentRole.LINE,

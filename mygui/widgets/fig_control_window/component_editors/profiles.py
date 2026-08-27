@@ -23,6 +23,11 @@ from .inspector import (
     TreePresentationSpec,
 )
 from .sections import (
+    AnnotationArrowSection,
+    AnnotationContentSection,
+    AnnotationPlacementSection,
+    AnnotationPropertySection,
+    AnnotationTypographySection,
     AxesLayoutSection,
     AxesLimitsSection,
     ColorbarSourceSection,
@@ -1424,6 +1429,212 @@ TEXT_PROFILE = EditorProfile(
 )
 
 
+_ANNOTATION_HISTORY_LABELS = {
+    "text": "Content",
+    "label": "Name",
+    "xy": "Target Position",
+    "xycoords": "Target Coordinates",
+    "xytext": "Text Position",
+    "textcoords": "Text Coordinates",
+    "fontsize": "Font Size",
+    "color": "Color",
+    "bbox": "Box",
+}
+
+
+def _annotation_history_label(property_key: str) -> str:
+    return _ANNOTATION_HISTORY_LABELS.get(
+        property_key,
+        property_key.replace("_", " ").title(),
+    )
+
+
+def _annotation_apply(controller, context):
+    def apply(properties):
+        patch = dict(properties)
+        if len(patch) == 1:
+            property_key = next(iter(patch))
+            text = (
+                f"Change Annotation {_annotation_history_label(property_key)}"
+            )
+            merge_key = (
+                "property",
+                controller.component_id,
+                property_key,
+            )
+        else:
+            text = "Change Annotation Properties"
+            merge_key = None
+        return perform_editor_action(
+            context,
+            text,
+            lambda: context.annotations.apply_properties(controller, patch),
+            merge_key=merge_key,
+        )
+
+    return apply
+
+
+def _annotation_content(controller, context, parent):
+    return AnnotationContentSection(
+        controller,
+        context=context,
+        apply_properties=_annotation_apply(controller, context),
+        parent=parent,
+    )
+
+
+def _annotation_target(controller, context, parent):
+    return AnnotationPropertySection(
+        controller,
+        context=context,
+        property_keys=("xy", "xycoords"),
+        apply_properties=_annotation_apply(controller, context),
+        parent=parent,
+    )
+
+
+def _annotation_text_position(controller, context, parent):
+    return AnnotationPlacementSection(
+        controller,
+        context=context,
+        apply_properties=_annotation_apply(controller, context),
+        parent=parent,
+    )
+
+
+def _annotation_arrow(controller, context, parent):
+    return AnnotationArrowSection(
+        controller,
+        context=context,
+        apply_properties=_annotation_apply(controller, context),
+        parent=parent,
+    )
+
+
+def _annotation_text_style(controller, context, parent):
+    return AnnotationTypographySection(
+        controller,
+        context=context,
+        property_keys=(
+            "fontfamily",
+            "fontsize",
+            "fontweight",
+            "fontstyle",
+            "color",
+        ),
+        apply_properties=_annotation_apply(controller, context),
+        parent=parent,
+    )
+
+
+def _annotation_transform(controller, context, parent):
+    return AnnotationPropertySection(
+        controller,
+        context=context,
+        property_keys=(
+            "rotation",
+            "horizontalalignment",
+            "verticalalignment",
+        ),
+        apply_properties=_annotation_apply(controller, context),
+        parent=parent,
+    )
+
+
+def _annotation_preview(state):
+    label = str(state.properties.get("label", "")).strip()
+    if label:
+        preview = label
+    else:
+        preview = " ".join(
+            str(state.properties.get("text", "")).split()
+        )
+    if len(preview) > 32:
+        return preview[:31].rstrip() + "…"
+    return preview
+
+
+ANNOTATION_PROFILE = EditorProfile(
+    "annotation",
+    "Annotation",
+    (
+        SectionSpec(
+            "content",
+            "Content",
+            _annotation_content,
+            property_keys=("text", "visible", "label"),
+        ),
+        SectionSpec(
+            "target",
+            "Target",
+            _annotation_target,
+            property_keys=("xy", "xycoords"),
+        ),
+        SectionSpec(
+            "text_position",
+            "Text Position",
+            _annotation_text_position,
+            property_keys=("xytext", "textcoords"),
+        ),
+        SectionSpec(
+            "arrow",
+            "Arrow",
+            _annotation_arrow,
+            property_keys=AnnotationArrowSection.KEYS,
+        ),
+        SectionSpec(
+            "text_style",
+            "Text Style",
+            _annotation_text_style,
+            property_keys=(
+                "fontfamily",
+                "fontsize",
+                "fontweight",
+                "fontstyle",
+                "color",
+            ),
+        ),
+        SectionSpec(
+            "transform",
+            "Rotation and alignment",
+            _annotation_transform,
+            property_keys=(
+                "rotation",
+                "horizontalalignment",
+                "verticalalignment",
+            ),
+        ),
+        SectionSpec(
+            "box",
+            "Box",
+            _properties("bbox"),
+            property_keys=("bbox",),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _properties("usetex", "alpha", "zorder", "clip_on"),
+            collapsed=True,
+            property_keys=("usetex", "alpha", "zorder", "clip_on"),
+        ),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        "Annotation",
+        "Annotations",
+        "annotation",
+        _annotation_preview,
+        46,
+        group_key="annotations",
+        group_order=46,
+        always_group=True,
+        delete_label="Annotation",
+        duplicate_label="Duplicate Annotation",
+    ),
+)
+
+
 IN_AXES_ZOOM_PROFILE = EditorProfile(
     "in_axes_zoom",
     "Zoom inset",
@@ -1864,6 +2075,11 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.TEXT,
         TEXT_PROFILE,
         role=ComponentRole.TEXT,
+    )
+    editor_registry.register_profile(
+        ComponentKind.ANNOTATION,
+        ANNOTATION_PROFILE,
+        role=ComponentRole.ANNOTATION,
     )
     editor_registry.register_profile(
         ComponentKind.TEXT,

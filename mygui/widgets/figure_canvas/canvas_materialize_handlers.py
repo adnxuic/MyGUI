@@ -75,6 +75,9 @@ class CanvasMaterializeHost(Protocol):
     def add_global_text(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
+    def add_annotation(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
     def _materialize_zoom_in_axes(self, state: Any, _transaction: Any) -> None:
         ...
 
@@ -115,6 +118,9 @@ class CanvasMaterializeHost(Protocol):
         ...
 
     def _materialize_text(self, state: Any, _transaction: Any) -> None:
+        ...
+
+    def _materialize_annotation(self, state: Any, _transaction: Any) -> None:
         ...
 
 
@@ -452,6 +458,21 @@ def materialize_text(host: CanvasMaterializeHost, state, _transaction) -> None:
         host.add_text(**kwargs)
 
 
+def materialize_annotation(host: CanvasMaterializeHost, state, _transaction) -> None:
+    if (
+        state.kind is not ComponentKind.ANNOTATION
+        or state.role is not ComponentRole.ANNOTATION
+    ):
+        raise ValueError("Annotation materializer requires an Annotation state.")
+    host.add_annotation(
+        state.properties,
+        axes_id=state.parent_id,
+        object_id=state.id,
+        component_order=state.order,
+        announce=False,
+    )
+
+
 def register_canvas_materializers(host: CanvasMaterializeHost, expected_phases) -> None:
     """Register Canvas-bound handlers on the generic materializer registry."""
 
@@ -581,6 +602,13 @@ def register_canvas_materializers(host: CanvasMaterializeHost, expected_phases) 
             (ComponentKind.TEXT, ComponentRole.TEXT),
             host._materialize_text,
             expected_phases[(ComponentKind.TEXT, ComponentRole.TEXT)],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.ANNOTATION, ComponentRole.ANNOTATION),
+            host._materialize_annotation,
+            expected_phases[
+                (ComponentKind.ANNOTATION, ComponentRole.ANNOTATION)
+            ],
         ),
     )
     for declaration in declarations:

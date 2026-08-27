@@ -47,6 +47,7 @@ from mygui.figuremodify.components.property_values import (
     normalize_scatter_color_map,
     normalize_scatter_size_map,
     normalize_text_box,
+    normalize_annotation_box,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
@@ -990,6 +991,122 @@ class TextBoxEditor(_StructuredValueEditor):
         if not value["enabled"]:
             return "No box"
         return f"{str(value['boxstyle']).title()} \u00b7 {value['facecolor']}"
+
+
+class AnnotationBoxEditor(_StructuredValueEditor):
+    """Edit the closed box composite behind one Annotation."""
+
+    def __init__(self, value: Any, *, color_library: ColorLibrary, parent=None):
+        if color_library is None:
+            raise ValueError("AnnotationBoxEditor requires the application ColorLibrary.")
+        self.color_library = color_library
+        super().__init__(
+            value,
+            title="annotation box",
+            normalizer=normalize_annotation_box,
+            parent=parent,
+        )
+
+    def _dialog(self) -> _AnnotationBoxDialog:
+        return _AnnotationBoxDialog(self.value(), self.color_library, self)
+
+    def _summary_text(self, value: Any) -> str:
+        if not value["enabled"]:
+            return "No box"
+        return f"{str(value['style']).title()} · {value['facecolor']}"
+
+
+class _AnnotationBoxDialog(QDialog):
+    def __init__(self, value: Any, color_library: ColorLibrary, parent=None):
+        super().__init__(parent)
+        _bind_spec_dialog(self)
+        self.setWindowTitle("Annotation box")
+        self.setModal(True)
+        self.setMinimumWidth(430)
+        self._value: dict[str, Any] | None = None
+        spec = normalize_annotation_box(value)
+
+        layout = QVBoxLayout(self)
+        self.enabled_input = QCheckBox("Draw a box behind this annotation", self)
+        self.enabled_input.setChecked(bool(spec["enabled"]))
+        layout.addWidget(self.enabled_input)
+
+        self.details = QWidget(self)
+        form = QFormLayout(self.details)
+        form.setContentsMargins(0, 6, 0, 0)
+        self.style_input = QComboBox(self.details)
+        self.style_input.addItem("Square", "square")
+        self.style_input.addItem("Rounded", "rounded")
+        self.style_input.setCurrentIndex(
+            max(0, self.style_input.findData(str(spec["style"])))
+        )
+        self.facecolor_input = ColorChoiceWidget(
+            spec["facecolor"], color_library=color_library, parent=self.details
+        )
+        self.edgecolor_input = ColorChoiceWidget(
+            spec["edgecolor"], color_library=color_library, parent=self.details
+        )
+        self.linewidth_input = FocusAwareDoubleSpinBox(self.details)
+        self.linewidth_input.setRange(0.0, 1e6)
+        self.linewidth_input.setDecimals(3)
+        self.linewidth_input.setValue(float(spec["linewidth"]))
+        self.alpha_input = NullableDoubleEditor(
+            spec["alpha"],
+            fallback=1.0,
+            bounds=(0.0, 1.0),
+            decimals=3,
+            step=0.05,
+            parent=self.details,
+        )
+        self.padding_input = FocusAwareDoubleSpinBox(self.details)
+        self.padding_input.setRange(0.0, 1e6)
+        self.padding_input.setDecimals(3)
+        self.padding_input.setValue(float(spec["padding"]))
+        form.addRow("Box style", self.style_input)
+        form.addRow("Background", self.facecolor_input)
+        form.addRow("Border", self.edgecolor_input)
+        form.addRow("Border width", self.linewidth_input)
+        form.addRow("Opacity", self.alpha_input)
+        form.addRow("Padding", self.padding_input)
+        layout.addWidget(self.details)
+
+        self.error_label = _chrome_error_label(self)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self._validate_and_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.enabled_input.toggled.connect(self.details.setEnabled)
+        self.details.setEnabled(self.enabled_input.isChecked())
+
+    def _validate_and_accept(self) -> None:
+        try:
+            self._value = normalize_annotation_box(
+                {
+                    "enabled": self.enabled_input.isChecked(),
+                    "style": self.style_input.currentData(),
+                    "facecolor": self.facecolor_input.color(),
+                    "edgecolor": self.edgecolor_input.color(),
+                    "linewidth": self.linewidth_input.value(),
+                    "alpha": self.alpha_input.value(),
+                    "padding": self.padding_input.value(),
+                }
+            )
+        except Exception as exc:
+            self.error_label.setText(str(exc))
+            self.error_label.show()
+            return
+        self.accept()
+
+    def value(self) -> dict[str, Any]:
+        if self._value is None:
+            raise RuntimeError("The annotation box editor has not been accepted.")
+        return deepcopy(self._value)
 
 
 class _ScatterColorMapDialog(QDialog):

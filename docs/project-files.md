@@ -1,22 +1,22 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 16. One file contains one
+MyGUI project files use strict JSON schema version 17. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v16, strictly validated integer v15 for direct
-in-memory migration, integer v14 through v15, integer v13 through v14/v15, integer v12 through v13–v15, integer v11 through v12–v15, and
-integer v10 through every intervening version. Schema v4-v9, non-integer values, and unknown versions are rejected before
-application state is published.
+The loader accepts exact integer v17. Strict v16 input migrates directly to
+v17, while v10–v15 migrate through every intervening version. Schema v4–v9,
+non-integer values, and unknown versions are rejected before application state
+is published.
 
 Reusable chart templates are deliberately separate from project files. They
 use strict `mygui-template` schema version 1, do not contain a Table document,
-and never change project schema version 16. See [Chart Templates](chart-templates.md).
+and never change project schema version 17. See [Chart Templates](chart-templates.md).
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 16,
+  "schema_version": 17,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -27,7 +27,7 @@ and never change project schema version 16. See [Chart Templates](chart-template
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `16`.
+- Newly saved `schema_version` is always the integer `17`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -87,6 +87,7 @@ The controlled kind/role combinations are:
 | `tick_label_group` | `major_tick_label`, `minor_tick_label` |
 | `grid` | `grid` |
 | `text` | `title`, `x_label`, `y_label`, `text` |
+| `annotation` | `annotation` |
 | `legend` | `legend` |
 | `line` | `line`, `function_curve`, `data_plot`, `fit_curve`, `interpolation` |
 | `scatter` | `scatter` |
@@ -139,7 +140,7 @@ component wire shape.
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v16)](component-properties-v16.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v17)](component-properties-v17.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -155,6 +156,7 @@ Role-specific `data` fields are:
 | `reflection_positions` | ordered finite manual `positions`, nullable Number-column `position_ref`, and tagged `placement`; empty cells are skipped, duplicates remain valid |
 | `reference_line` | exactly `{}`; constant geometry is owned by `properties` |
 | `reference_band` | exactly `{}`; constant geometry is owned by `properties` |
+| `annotation` | exactly `{}`; target, text placement, arrow, typography, and box state are owned by `properties` |
 | `colorbar` | `source_component_id` |
 | `interpolation` | `x_ref`, `y_ref`, `preprocess`, `method`, `k`, `samples`, `lam`, `lam_auto` |
 | `fit_curve` | `x_ref`, `y_ref`, `preprocess`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
@@ -162,6 +164,14 @@ Role-specific `data` fields are:
 | `in_axes_image` | `filename`, detected `mime_type`, original `payload_base64` bytes |
 
 Free Text, Title, and Axis Label records share the safe Text typography, alignment, bbox, math/TeX, z-order, and export contract. Only Free Text persists a selectable data/axes/figure coordinate system.
+
+An `annotation/annotation` record is a removable child of an ordinary Axes.
+Its selector is exactly `{"object_id": component_id}` and its `data` object is
+exactly empty. `xy` plus `xycoords` own the pointed target; `xytext` plus
+`textcoords` own the text anchor. Arrow, typography, alignment, simple box,
+TeX request, overall alpha, z-order, and clipping are concrete properties.
+Only `data` and `axes_fraction` are valid target systems; text placement also
+accepts `offset_points`. See [Annotation Component](editing-components/elements/annotation.md).
 
 Legend properties use tagged location and anchor records, complete entry/title fonts, columns/layout, points/scaling, spacing/padding, frame appearance, dragging, z-order/export fields, and `entry_scope` (`axes` or `twin_pair`).
 
@@ -229,32 +239,31 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v16.
+snapshot only and does not change schema v17.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v16 save/open round trip. Strict v15 input is
-validated completely and migrated in memory to v16 by advancing the version
-only. Strict v14 input is validated completely and migrated in memory through
-v15 to v16. Strict v13 input is
-validated completely, deep-copied, and advanced through v14 and v15 to v16. Tick Label
+unchanged across every schema-v17 save/open round trip. Strict v16 input is
+validated completely, deep-copied, and migrated in memory to v17 by advancing
+the version only. Strict v15 input migrates through v16 to v17; older accepted
+inputs migrate through every intervening version. Tick Label
 `fontfamily` string values remain unchanged; non-empty string lists become only
-their first string. No other component or Table field is rewritten. Strict v12
-input migrates through v13–v15 to v16, strict v11 through v12–v15, and
-strict v10 through every intervening version. v10 cannot
+their first string during the v13→v14 step. No other component or Table field
+is rewritten. v10 cannot
 contain Colorbar; v10/v11 cannot contain Reference Marks; v10-v12 cannot
-contain Reference Guides; and v10–v15 cannot contain FIELD_2D. Malformed predecessors and versions v4 through v9
+contain Reference Guides; v10–v15 cannot contain FIELD_2D; and every
+predecessor v10–v16 rejects Annotation. Malformed predecessors and versions v4 through v9
 are rejected before Table or Figure state is published.
 
 After validation, restore enters `PyFigureCanvas.restore_component_tree` on
 the target Canvas. Handlers live in `canvas_materialize_handlers.py`; after
 Matplotlib targets exist, `CanvasSnapshotApplier` applies the saved property
 tree. Restore materializes Figure, Axes/layout groups, fixed semantic
-children and source chart/Text artists first, then `in_axes` Elements and
+children and source chart/Text artists first, then dynamic Annotation,
+Reference Marks, Reference Guides, `in_axes` Elements, and
 Colorbar after its source, with Legend restored from the component tree.
-Reference Marks and Reference Guides are materialized as collections in the
-dynamic component phase. After those Matplotlib targets exist, the Canvas
+After those Matplotlib targets exist, the Canvas
 applies the saved property tree and publishes one final selection. Zoom
 mirrors receive one final batch refresh after their sources exist. Restore
 does not create legacy chart arrays or Modifier records as an intermediate
@@ -280,6 +289,9 @@ Before Table or Figure application state changes, the loader validates:
   keys, finite ordered positions, and normalized baseline/height geometry;
 - Reference Guide ownership by an ordinary Axes, exact selector/property keys,
   empty data, finite values/bounds, orientation, and normalized spans;
+- Annotation ownership by an ordinary Axes, exact object selector and empty
+  data, complete property keys, finite coordinate pairs, closed coordinate,
+  arrow, connection, color, and box values;
 - property/data JSON types, finite numbers, normalized colors, unique chart order values, and one non-empty string `fontfamily` for every Tick Label Group;
 - data references, compatible column types, preprocessing expressions,
   interpolation methods, and fitting engines.
@@ -297,15 +309,15 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v16.
+are not added to schema v17.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v16 project stays clean through those UI-only interactions, and a
+schema-v17 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export
 
-- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v16.
+- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v17.
 - 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
 - PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

@@ -45,7 +45,7 @@ from mygui.widgets.settings_pages.page import (
 
 COMPONENTS_INTRO = (
     "These defaults apply to components created after Apply. They do not "
-    "change existing Artists, the current project, Undo/Redo, or schema v15 "
+    "change existing Artists, the current project, Undo/Redo, or schema v17 "
     "files."
 )
 COMPONENTS_PRECEDENCE = (

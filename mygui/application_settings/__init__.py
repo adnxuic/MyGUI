@@ -1,4 +1,4 @@
-"""Application-level preferences. Not ComponentState and not schema v15.
+"""Application-level preferences. Not ComponentState and not schema v17.
 
 Public business API lives here. Dual-slot storage types
 (``DocumentLoadResult``, ``StorageCommitResult``, ``DocumentHealth``) stay in

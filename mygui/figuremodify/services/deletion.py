@@ -321,6 +321,11 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
         DeletionHandler(),
     )
     handlers.register(
+        ComponentKind.ANNOTATION,
+        ComponentRole.ANNOTATION,
+        DeletionHandler(),
+    )
+    handlers.register(
         ComponentKind.IN_AXES,
         ComponentRole.IN_AXES_ZOOM,
         DeletionHandler(),

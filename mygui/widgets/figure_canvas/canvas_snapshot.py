@@ -213,7 +213,8 @@ class CanvasSnapshotApplier:
                 ):
                     controller = host.component_registry.get(source_state.id)
                     use_effective_fallback = (
-                        source_state.kind is ComponentKind.TEXT
+                        source_state.kind
+                        in {ComponentKind.TEXT, ComponentKind.ANNOTATION}
                         and source_state.properties.get("usetex")
                         and not tex_config.is_tex_enabled()
                     )

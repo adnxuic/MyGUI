@@ -221,3 +221,40 @@ def _scenario_undo_redo(harness: SmokeHarness) -> None:
     if not curves_redo:
         raise SmokeError("Curve missing after redo.")
     harness.grab_canvas("history-03-after-redo")
+
+    # Add Annotation and test Undo/Redo
+    canvas.add_annotation(
+        {
+            "text": "Undo/Redo Annotation",
+            "xy": [2.0, 0.0],
+            "xycoords": "data",
+            "xytext": [20.0, 20.0],
+            "textcoords": "offset_points",
+            "arrow_enabled": True,
+        }
+    )
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    annos = canvas.component_registry.query(kind=ComponentKind.ANNOTATION)
+    if not annos:
+        raise SmokeError("Annotation was not created in undo/redo scenario.")
+    harness.grab_canvas("history-04-annotation-added")
+
+    stack.undo()
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    annos_undo = canvas.component_registry.query(kind=ComponentKind.ANNOTATION)
+    if annos_undo:
+        raise SmokeError("Annotation still exists after undo.")
+    harness.grab_canvas("history-05-annotation-undo")
+
+    stack.redo()
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    annos_redo = canvas.component_registry.query(kind=ComponentKind.ANNOTATION)
+    if not annos_redo:
+        raise SmokeError("Annotation missing after redo.")
+    harness.grab_canvas("history-06-annotation-redo")

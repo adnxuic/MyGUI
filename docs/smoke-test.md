@@ -7,7 +7,7 @@ Run these checks from the repository root after GUI-facing changes.
 A code-driven Windows walk opens the real MainWindow, clicks controls, and
 writes PNG evidence plus `summary.json`. Groups are selected with `--only`.
 The walk covers Settings Center (including Templates), NEXT_USE creation
-defaults, Chart Templates extract/apply, 1D charts, Field 2D, Elements, all 30
+defaults, Chart Templates extract/apply, 1D charts, Field 2D, Elements, all 31
 Inspector profiles, layout templates, XRD import, deletion/history, and
 project save/restore, export, and Canvas popout. Native file dialogs, drag and
 drop, multi-monitor DPI, and live TeX/MATLAB remain on the interactive checks
@@ -312,6 +312,44 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    Inspector, collection, selection, and stable state disappear and return
    atomically with one result per action.
 
+## Annotation
+
+1. With no selected ordinary Axes, choose Elements > **Annotation**. Confirm
+   one warning appears and no Artist, Component, Inspector, selection, or
+   history command is created.
+2. Select an ordinary Axes and create an Annotation from Elements. Edit its
+   text, Data target, Offset-points text position, and arrow checkbox. Confirm
+   it appears under the Axes' **Annotations** group and the exact eight-section
+   Inspector opens.
+3. Right-click a finite data position and choose **Add Annotation Here**.
+   Confirm `New Annotation`, Data target, `(+20, +20)` point offset, and an
+   arrow are created; the new component is selected and Content has focus.
+4. Activate Pan, then Zoom, and right-click inside the Axes. Repeat over a
+   Colorbar, In-Axes element, and outside all Axes. Confirm the Annotation menu
+   is suppressed in every case.
+5. On linear, logarithmic, and reversed axes, switch target between Data and
+   Axes fraction and text position among Data, Axes fraction, and Offset
+   points. Confirm the screen positions do not jump and Inspector/Artist values
+   remain identical. Apply all eight placement presets, especially Lower Right
+   `(20, -20)`.
+6. Edit arrow style/color/width/connection, typography, rotation/alignment,
+   overall Alpha/Clip, and each Box field. Hide and re-show the arrow and
+   confirm its prior style is preserved; confirm Box transparency remains
+   independent of overall Alpha.
+7. Rename the Annotation, then clear Name and use multiline text. Confirm the
+   tree preview prefers Name, otherwise collapses whitespace, and never exceeds
+   32 characters including the ellipsis.
+8. Duplicate, delete, Undo, and Redo. Confirm each user action adds exactly one
+   command and restores stable IDs, next sibling order, Artist, Locator,
+   Inspector, tree projection, and selection atomically.
+9. Save, close, and reopen the schema-v17 project. Confirm all text, coordinate,
+   arrow, typography, box, TeX request, order, and stable-ID state returns.
+   Extract and apply a template with dynamic Annotation text and verify the
+   remapped Annotation appears in the new project.
+10. Enter non-finite coordinates, request TeX while unavailable, and exercise a
+    font missing a required glyph. Confirm state and controls roll back with one
+    red result and no history entry or leaked Artist/Inspector remains.
+
 ## Reference Guides
 
 1. With no selected ordinary Axes, choose Elements > `Add Reference Line` and
@@ -336,7 +374,7 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    guide belongs to the selected Axes and uses that Axes' blended transform.
    Delete multiple Reference Lines together, then Undo/Redo; repeat by deleting
    their owning Axes and confirm the full subtree restores with stable IDs.
-7. Save, close, and reopen the schema-v15 project. Confirm orientation,
+7. Save, close, and reopen the schema-v17 project. Confirm orientation,
    position/bounds, spans, appearance, stable IDs, order, empty `data`, one
    runtime collection per guide, selection/Inspector behavior, and clean/dirty
    fingerprints survive the round trip. Close the project and confirm no

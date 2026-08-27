@@ -38,6 +38,15 @@ from .text import (
     TextRenderSection,
 )
 
+from .annotation import (
+    ANNOTATION_PLACEMENT_PRESETS,
+    AnnotationArrowSection,
+    AnnotationContentSection,
+    AnnotationPlacementSection,
+    AnnotationPropertySection,
+    AnnotationTypographySection,
+)
+
 from .legend import (
     LegendLocationSection,
 )
@@ -49,6 +58,12 @@ from .palette import (
 
 
 __all__ = [
+    "ANNOTATION_PLACEMENT_PRESETS",
+    "AnnotationArrowSection",
+    "AnnotationContentSection",
+    "AnnotationPlacementSection",
+    "AnnotationPropertySection",
+    "AnnotationTypographySection",
     "ApplyProperties",
     "ApplyReferences",
     "PropertySection",

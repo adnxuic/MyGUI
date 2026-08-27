@@ -10,6 +10,7 @@ the stable import facade.
 
 from __future__ import annotations
 
+from .services.annotation import AnnotationService
 from .services.axes_command import AxesCommandService, AxesPaletteStatus
 from .services.chart_data import (
     ChartDataService,
@@ -48,6 +49,7 @@ from .services.reference_marks import ReferenceGuideService, ReferenceMarksServi
 from .services.text_render import TextRenderService
 
 __all__ = [
+    "AnnotationService",
     "AxesCommandService",
     "AxesPaletteStatus",
     "ChartDataService",

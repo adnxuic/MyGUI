@@ -46,6 +46,7 @@ from .lines import (
     LineController,
 )
 from .text import AxisLabelController, TextController, TitleController
+from .annotation import AnnotationController
 
 CONTROLLER_TYPES: dict[
     tuple[ComponentKind, ComponentRole],
@@ -71,6 +72,7 @@ CONTROLLER_TYPES: dict[
     (ComponentKind.TEXT, ComponentRole.X_LABEL): AxisLabelController,
     (ComponentKind.TEXT, ComponentRole.Y_LABEL): AxisLabelController,
     (ComponentKind.TEXT, ComponentRole.TEXT): TextController,
+    (ComponentKind.ANNOTATION, ComponentRole.ANNOTATION): AnnotationController,
     (ComponentKind.LEGEND, ComponentRole.LEGEND): LegendController,
     (ComponentKind.LINE, ComponentRole.LINE): LineController,
     (

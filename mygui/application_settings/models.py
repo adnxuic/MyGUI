@@ -1,7 +1,7 @@
 """Immutable application-settings snapshots and commit results.
 
 These types are application preferences, not ``ComponentState``. They must not
-enter schema v15 project files.
+enter schema v17 project files.
 """
 
 from __future__ import annotations

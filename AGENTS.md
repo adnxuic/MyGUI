@@ -42,7 +42,7 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 - **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot
   QSettings is the sole preference store. Sessions keep a dirty patch plus base
   revision; commit is atomic. Narrow ports only to Controllers, Services,
-  `ChartCreationStager`, and `EditorContext`. Settings never enter schema v16,
+  `ChartCreationStager`, and `EditorContext`. Settings never enter schema v17,
   Undo/Redo, dirty fingerprints, `ComponentState`, or Canvas materialization.
   Line/Scatter/free-Text use explicit input > Components `NEXT_USE` > Axes
   palette/Figure style > Matplotlib 3.9 fallback. Ordinary Axes use explicit
@@ -54,7 +54,7 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   chart-template schema, storage, extraction, matching, ID remapping, dynamic
   text, fitting, and application planning. Templates live under root `template/`
   independently of CWD, use strict `mygui-template` schema v1, contain no Table
-  cell document, and never alter schema v16. Application builds a validated
+  cell document, and never alter schema v17. Application builds a validated
   in-memory project snapshot and publishes via staged restore.
 - **CORE-THEME-OWNER:** `ThemeService` is the sole publisher of application font,
   palette, bundled QSS, and density. Apply `ThemeSnapshot` after settings load
@@ -121,11 +121,11 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   Artists, Controllers, QWidgets, or whole Figures; replay enters through
   Controllers, Services, materializers, and `DeletionCoordinator`. Restore,
   refresh, and replay are recording-suspended. History is runtime-only, absent
-  from schema v16, and invalidated if failed replay cannot prove a safe cursor.
-- **CORE-PERSISTENCE-V16:** Persist component state only through the exact
-  integer schema-v16 component tree. UI profiles, widgets, callbacks, tree
-  keys, and expansion/selection state never enter project files. Strict v15
-  migrates directly to v16; v14–v10 migrate stepwise; v4–v9 stay retired.
+  from schema v17, and invalidated if failed replay cannot prove a safe cursor.
+- **CORE-PERSISTENCE-V17:** Persist component state only through the exact
+  integer schema-v17 component tree. UI profiles, widgets, callbacks, tree
+  keys, and expansion/selection state never enter project files. Strict v16
+  migrates directly to v17; v15–v10 migrate stepwise; v4–v9 stay retired.
 - Runtime-created persisted components declare `RESTORE_PHASE` and exactly one
   `ComponentMaterializer`; fixed semantic components use `None`. Preserve
   stable IDs and empty valid data-backed components.

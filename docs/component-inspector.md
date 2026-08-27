@@ -99,6 +99,14 @@ replacing the Inspector. See [Colorbar Component](colorbar-component.md).
 
 Title, X Label, Y Label, and free Text share the ordered Content, Typography, Rotation and alignment, Position and visibility, and Rendering sections documented in [Text Element](text-element.md). All render-sensitive Text properties use `TextRenderService`. `apply_many()` accepts multiple `(controller, property_patch)` pairs, applies them in one Registry transaction, performs one render verification per Figure, and rolls back every target if validation or rendering fails. Free Text may be deleted; semantic Title and Axis Label Controllers are hidden with `visible` and are not removed.
 
+Annotation has its own exact profile with Content, Target, Text Position,
+Arrow, Text Style, Rotation and alignment, Box, and Advanced sections.
+`AnnotationService` is injected as `EditorContext.annotations`; every
+Annotation edit, including full-state history replay, reaches the Controller
+through that service and `TextRenderService`. Coordinate-system changes carry
+their converted coordinate value in the same Registry transaction. Placement
+presets are UI-only shortcuts, not persisted state.
+
 Legend remains a `LegendController`. It reuses the content editor for `title` and the typography editor for `fontsize`, then adds `location`, `ncols`, `visible`, `frameon`, `facecolor`, `edgecolor`, `framealpha`, and twin `entry_scope`. Preset and two-coordinate custom locations are supported. Editing an absent Legend first asks `AxesCommandService` to create its runtime artist.
 
 ## Axes layout
@@ -134,7 +142,7 @@ readable value such as `Linear`, `Automatic`, `Scalar`, `sans-serif · 10 pt`,
 locator/formatter, scale, font, text box, marked points, Scatter color/size
 mapping, and Zoom connectors.
 
-Both control families validate through the same closed schema-v15 value
+Both control families validate through the same closed schema-v17 value
 normalizer and submit one complete value to one Controller/Service
 transaction. A cancelled dialog changes nothing, and a rejected change
 restores the prior summary, control state, and Controller value together with
@@ -156,7 +164,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v15.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v17.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -166,7 +174,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v15
+state, artists, Locator bindings, a complete tree projection, and schema-v17
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -216,4 +224,4 @@ methods:
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v15. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, Reference Marks `positions` plus nullable `position_ref` and tagged `placement`, Axes `y_lower_reserve`, and Reference Guide geometry are business state; profile and widget state remain UI-only.
+The project format uses schema v17. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, Reference Marks `positions` plus nullable `position_ref` and tagged `placement`, Axes `y_lower_reserve`, Reference Guide geometry, and Annotation target/text/arrow state are business state; profile and widget state remain UI-only.

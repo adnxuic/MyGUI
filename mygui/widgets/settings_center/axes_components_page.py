@@ -39,7 +39,7 @@ from mygui.widgets.settings_pages.page import (
 AXES_COMPONENTS_INTRO = (
     "These defaults apply to ordinary Axes created after Apply. They do not "
     "change existing Artists, Colorbar auxiliary Axes, In-Axes, project "
-    "restore, Undo/Redo, or schema v15 files."
+    "restore, Undo/Redo, or schema v17 files."
 )
 AXES_COMPONENTS_PRECEDENCE = (
     "Precedence: this layout dialog's explicit values > Axes Components "

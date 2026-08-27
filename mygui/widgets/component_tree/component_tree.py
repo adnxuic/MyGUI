@@ -294,15 +294,32 @@ class ComponentTreeHost(QFrame):
         menu = QMenu(self)
         delete_action = None
         batch_action = None
+        duplicate_action = None
         delete_label = self.model.presentation.delete_label(state)
         if controller.DELETION_POLICY is DeletionPolicy.REMOVE:
             delete_action = menu.addAction(f"Delete {delete_label}")
             if len(self._batch_candidates(state)) > 1:
                 batch_action = menu.addAction("Batch Delete Same Type...")
+        duplicate_label = self.model.presentation.duplicate_label(state)
+        if duplicate_label:
+            duplicate_action = menu.addAction(duplicate_label)
         if menu.isEmpty():
             return
         action = menu.exec(global_position)
         if action is None:
+            return
+        if action is duplicate_action:
+            try:
+                new_id = canvas.duplicate_component(component_id)
+            except Exception as exc:
+                QMessageBox.warning(
+                    self,
+                    duplicate_label or "Duplicate Component",
+                    f"Could not duplicate component: {exc}",
+                )
+                return
+            if new_id is not None:
+                self._select_and_show(new_id)
             return
         if action is delete_action:
             if not self._confirm_single_delete(component_id):

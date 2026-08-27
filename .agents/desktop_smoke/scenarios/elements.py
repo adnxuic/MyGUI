@@ -8,6 +8,7 @@ from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.components import ComponentKind, ComponentRole
 from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     PyInAxesDialog,
+    PyAnnotationDialog,
     PyReferenceBandDialog,
     PyReferenceLineDialog,
     PyReferenceMarksDialog,
@@ -18,11 +19,18 @@ from desktop_smoke.harness import SmokeError, SmokeHarness
 
 
 def run_elements_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
-    """Walk through Figure elements: Text, Reflection Marks, Reference Line/Band, In-Axes."""
+    """Walk through Figure elements: Text, Reflection Marks, Reference Line/Band, In-Axes, Annotation."""
     results: list[dict[str, Any]] = []
 
     results.append(
         _run_case(harness, "elements.text", lambda: _scenario_text(harness))
+    )
+    results.append(
+        _run_case(
+            harness,
+            "elements.annotation",
+            lambda: _scenario_annotation(harness),
+        )
     )
     results.append(
         _run_case(
@@ -218,3 +226,48 @@ def _scenario_in_axes(harness: SmokeHarness) -> None:
     harness.select_component(insets[0].component_id)
     harness.grab_canvas("elements-13-inaxes-canvas")
     harness.grab_inspector("elements-14-inaxes-inspector")
+
+
+def _scenario_annotation(harness: SmokeHarness) -> None:
+    canvas = harness.create_project("Smoke_Elem_Annotation")
+    canvas.create_axes_layout(AxesLayoutSpec.grid(1, 1))
+    harness.pump(50)
+    canvas.add_curve("sin(x)", 0, 6.28, "-", "#1f77b4", "Sine")
+    harness.pump(50)
+
+    figure_window = harness.window.figure_window
+    dialog = PyAnnotationDialog(
+        dialog_name="Annotation",
+        figure_window=figure_window,
+        parent=harness.window,
+    )
+    dialog.setModal(False)
+    dialog.show()
+    harness.pump(60)
+
+    if hasattr(dialog, "input"):
+        dialog.input.text_input.setText("Peak Point (π/2, 1)")
+        dialog.input.x_input.setValue(1.57)
+        dialog.input.y_input.setValue(1.0)
+        dialog.input.xytext_x_input.setValue(35.0)
+        dialog.input.xytext_y_input.setValue(30.0)
+    harness.grab(dialog, "elements-15-annotation-dialog")
+
+    dialog.accept()
+    harness.pump(80)
+
+    annotations = canvas.component_registry.query(kind=ComponentKind.ANNOTATION)
+    if not annotations:
+        raise SmokeError("Annotation component was not created.")
+
+    annotation_id = annotations[0].component_id
+    harness.select_component(annotation_id)
+    harness.grab_canvas("elements-16-annotation-canvas")
+    harness.grab_inspector("elements-17-annotation-inspector")
+
+    # Duplicate Annotation to test duplicate action
+    canvas.duplicate_annotation(annotation_id)
+    harness.pump(80)
+    canvas.redraw()
+    harness.pump(50)
+    harness.grab_canvas("elements-18-annotation-duplicated-canvas")

@@ -56,6 +56,7 @@ from .inspector import (
     SectionSpec,
     TreePresentationSpec,
 )
+from .annotation_inputs import AnnotationInput
 from .inputs import (
     ColorbarInput,
     DataReferenceInput,
@@ -131,6 +132,7 @@ __all__ = [
     "TreePresentationSpec",
     "DataReferenceInput",
     "Field2DDataReferenceInput",
+    "AnnotationInput",
     "ColorbarInput",
     "InAxesInput",
     "InterpolationOptionsInput",

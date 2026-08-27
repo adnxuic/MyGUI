@@ -14,6 +14,7 @@ from mygui.font_diagnostics import (
     normalize_font_diagnostic,
 )
 from mygui.figuremodify.components import (
+    AnnotationController,
     ComponentBatchChange,
     ComponentChange,
     ComponentMutation,
@@ -25,6 +26,9 @@ from ._helpers import (
     _notices,
     _rejected,
 )
+
+_TEXT_LIKE_CONTROLLERS = (TextController, AnnotationController)
+
 
 class TextRenderService:
     """Verify render-sensitive Text changes before publishing them."""
@@ -46,7 +50,7 @@ class TextRenderService:
         controller = _controller(
             self.registry,
             component_id,
-            TextController,
+            _TEXT_LIKE_CONTROLLERS,
         )
         requested = bool(controller.state.properties.get("usetex"))
         return requested and component_id not in self._tex_effective_overrides
@@ -66,7 +70,7 @@ class TextRenderService:
         requested = [
             controller
             for controller in self.registry.query()
-            if isinstance(controller, TextController)
+            if isinstance(controller, _TEXT_LIKE_CONTROLLERS)
             and bool(controller.state.properties.get("usetex"))
         ]
         if not requested:
@@ -138,7 +142,7 @@ class TextRenderService:
         controller = _controller(
             self.registry,
             component,
-            TextController,
+            _TEXT_LIKE_CONTROLLERS,
         )
         result = self.apply_many(((controller, properties),))
         if not result.changes:
@@ -163,12 +167,12 @@ class TextRenderService:
     ) -> ComponentBatchChange:
         """Apply multiple Text patches in one transaction and render probe."""
 
-        resolved: list[tuple[TextController, dict[str, Any]]] = []
+        resolved: list[tuple[AnnotationController | TextController, dict[str, Any]]] = []
         for component, properties in patches:
             controller = _controller(
                 self.registry,
                 component,
-                TextController,
+                _TEXT_LIKE_CONTROLLERS,
             )
             patch = dict(properties)
             if patch.get("usetex") and not self.tex_enabled():

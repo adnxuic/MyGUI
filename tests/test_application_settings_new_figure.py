@@ -342,7 +342,7 @@ class NewFigureCreationPathTests(unittest.TestCase):
         self.assertEqual(canvas.current_component_id, selected)
         self.assertEqual(stack.index(), undo_index)
         self.assertEqual(stack.count(), undo_count)
-        self.assertEqual(after_snapshot["schema_version"], 16)
+        self.assertEqual(after_snapshot["schema_version"], 17)
         self.assertNotIn("ui_font_point_size", after_json)
         self.assertNotIn("applicationSettings", after_json)
         self.assertNotIn("remember_layout", after_json)

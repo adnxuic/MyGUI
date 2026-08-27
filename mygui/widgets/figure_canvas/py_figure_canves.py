@@ -1,13 +1,16 @@
 """Host Matplotlib figures and register their editable components."""
 
 from contextlib import contextmanager
+import math
 from copy import deepcopy
 from functools import partial
 from typing import Any, Optional
 from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
+    QMenu,
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
@@ -27,6 +30,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     register_production_profiles,
 )
 from mygui.figuremodify.component_services import (
+    AnnotationService,
     AxesCommandService,
     ChartDataService,
     ColorbarService,
@@ -76,6 +80,7 @@ from mygui.widgets.figure_canvas.canvas_materialize_handlers import (
     materialize_reference_line,
     materialize_reference_marks,
     materialize_scatter,
+    materialize_annotation,
     materialize_text,
     materialize_zoom_in_axes,
     materializer_pair,
@@ -87,6 +92,7 @@ from mygui.widgets.figure_canvas.canvas_snapshot import (
     json_component_value,
 )
 from mygui.figuremodify.components import (
+    AnnotationController,
     AxesController,
     ComponentEvent,
     ComponentEventKind,
@@ -116,10 +122,11 @@ from mygui.figuremodify.components import (
     decode_in_axes_image,
     validate_controller_contracts,
 )
+from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v16_figure,
-    validate_v16_figure,
+    normalize_v17_figure,
+    validate_v17_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
@@ -286,6 +293,10 @@ class PyFigureCanvas(QWidget):
         self.text_render_service = TextRenderService(
             self.component_registry
         )
+        self.annotation_service = AnnotationService(
+            self.component_registry,
+            text_render_service=self.text_render_service,
+        )
         self.in_axes_service = InAxesService(
             self.component_registry,
             warning_callback=status_messages.show_warning,
@@ -334,6 +345,7 @@ class PyFigureCanvas(QWidget):
             field_2d=self.field_2d_service,
             reference_marks=self.reference_marks_service,
             reference_guides=self.reference_guide_service,
+            annotations=self.annotation_service,
             in_axes=self.in_axes_service,
             dependency_service=self.dependency_service,
             delete_command=self.delete_components,
@@ -390,6 +402,10 @@ class PyFigureCanvas(QWidget):
             root_controller.set_property_callback(
                 self._sync_figure_property
             )
+        self._button_press_cid = self.canva.mpl_connect(
+            "button_press_event",
+            self._on_mpl_button_press,
+        )
 
         # Add scroll area
         self.scroArea = QScrollArea()
@@ -1233,6 +1249,12 @@ class PyFigureCanvas(QWidget):
         if self._selection_unsubscribe is not None:
             self._selection_unsubscribe()
             self._selection_unsubscribe = None
+        if self._button_press_cid is not None:
+            try:
+                self.canva.mpl_disconnect(self._button_press_cid)
+            except Exception:
+                pass
+            self._button_press_cid = None
         self.figure_history.dispose()
         self.message_presenter.close()
         self.component_registry.set_observer_failure_handler(None)
@@ -2679,6 +2701,139 @@ class PyFigureCanvas(QWidget):
         self._finish_created_component(controller)
         return text_artist
 
+    @_history_command("Create Annotation")
+    def add_annotation(
+        self,
+        properties: dict[str, Any] | None = None,
+        *,
+        axes_id: str | None = None,
+        object_id: str | None = None,
+        component_order: int | None = None,
+        announce: bool = True,
+    ):
+        """Create and publish one Annotation atomically on a normal Axes."""
+
+        owner_axes_id = (
+            axes_id if axes_id is not None else self.current_axes_component_id
+        )
+        if owner_axes_id is None:
+            raise ValueError("Select an Axes before creating an Annotation.")
+        parent = self.component_registry.get(owner_axes_id)
+        if parent.state.kind is not ComponentKind.AXES:
+            raise ValueError("Annotations must be owned by a normal Axes.")
+        axes = parent.resolve_target()
+
+        merged = AnnotationController.default_properties()
+        merged.update(properties or {})
+        component_id = object_id or new_id()
+        artist_kwargs = annotation_artist_kwargs(merged)
+
+        with self.component_registry.registration_transaction() as transaction:
+            with matplotlib_style_context(self.component_style):
+                annotation = axes.annotate(merged["text"], **artist_kwargs)
+            transaction.on_rollback(
+                lambda: self._remove_created_artist(annotation)
+            )
+            state = ComponentState(
+                id=component_id,
+                kind=ComponentKind.ANNOTATION,
+                role=ComponentRole.ANNOTATION,
+                parent_id=owner_axes_id,
+                order=(
+                    self._next_child_order(
+                        owner_axes_id,
+                        kind=ComponentKind.ANNOTATION,
+                    )
+                    if component_order is None
+                    else int(component_order)
+                ),
+                selector={"object_id": component_id},
+                properties=merged,
+                data={},
+            )
+            controller = AnnotationController(state, target=annotation)
+            initialized = controller.apply_state(controller.state)
+            if not initialized.ok:
+                raise ValueError(
+                    initialized.message or "Could not initialize the Annotation."
+                )
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=annotation)
+            annotation.set_gid(component_id)
+            if not self._restoring_component_tree_now:
+                result = self.text_render_service.apply(
+                    controller,
+                    {"usetex": bool(merged.get("usetex", False))},
+                )
+                if not result.ok:
+                    raise ValueError(
+                        result.message or "Annotation render validation failed."
+                    )
+            self._prepare_created_component(controller, transaction)
+            self.component_registry.request_update(
+                axes,
+                UpdateImpact.REDRAW,
+            )
+
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
+            status_messages.show_success("Annotation created.")
+        return annotation
+
+    def add_annotation_from_input(
+        self,
+        properties: dict[str, Any] | None = None,
+        *,
+        axes_id: str | None = None,
+    ):
+        """Create one Annotation from UI input with a frozen style snapshot.
+
+        Only interactive creation reads the active Figure style here; restore,
+        history replay, and template application go through ``add_annotation``
+        with their persisted state only.
+        """
+
+        defaults = self.component_creation_defaults()
+        text_style = defaults.text
+        line_style = defaults.line
+        style = {
+            "fontfamily": text_style.fontfamily,
+            "fontsize": text_style.fontsize,
+            "fontweight": text_style.fontweight,
+            "fontstyle": text_style.fontstyle,
+            "color": text_style.color,
+            "arrow_color": text_style.color,
+            "arrow_linewidth": line_style.linewidth,
+        }
+        merged = dict(style)
+        merged.update(properties or {})
+        return self.add_annotation(merged, axes_id=axes_id)
+
+    @_history_command("Duplicate Annotation")
+    def duplicate_annotation(self, component_id: str):
+        """Duplicate one Annotation with a new stable id and full state."""
+
+        controller = self.annotation_service.annotation_controller(component_id)
+        state = controller.read_state(strict=True)
+        new_id_value = new_id()
+        self.add_annotation(
+            state.properties,
+            axes_id=state.parent_id,
+            object_id=new_id_value,
+            announce=False,
+        )
+        if not self._restoring_component_tree_now:
+            status_messages.show_success("Annotation duplicated.")
+        return new_id_value
+
+    def duplicate_component(self, component_id: str):
+        """Duplicate one duplicable component by id."""
+
+        controller = self.component_registry.get(component_id)
+        if controller.state.kind is ComponentKind.ANNOTATION:
+            return self.duplicate_annotation(component_id)
+        raise ValueError(f"Component {component_id} cannot be duplicated.")
+
     @_history_command("Create In-Axes Element")
     def add_in_axes(
         self,
@@ -3234,6 +3389,81 @@ class PyFigureCanvas(QWidget):
             status_messages.show_success(f"{label} created.")
         return runtime
 
+    def _on_mpl_button_press(self, event) -> None:
+        """Handle Matplotlib button_press_event for right-click Annotation creation."""
+
+        if self._disposed or self._restoring_component_tree_now:
+            return
+        if getattr(event, "button", None) != 3:
+            return
+        toolbar_mode = str(getattr(self.navigation_toolbar, "mode", "")).strip()
+        if toolbar_mode != "":
+            return
+        target_axes = getattr(event, "inaxes", None)
+        if target_axes is None:
+            return
+        axes_id = None
+        for controller in self.component_registry.query(kind=ComponentKind.AXES):
+            if controller.resolve_target() is target_axes:
+                if controller.state.role is ComponentRole.AXES:
+                    axes_id = controller.component_id
+                break
+        if axes_id is None:
+            return
+        x_data = getattr(event, "xdata", None)
+        y_data = getattr(event, "ydata", None)
+        if (
+            x_data is None
+            or y_data is None
+            or not (math.isfinite(x_data) and math.isfinite(y_data))
+        ):
+            return
+
+        menu = QMenu(self)
+        action = menu.addAction("Add Annotation Here")
+        gui_event = getattr(event, "guiEvent", None)
+        global_position = None
+        if gui_event is not None:
+            getter = getattr(gui_event, "globalPosition", None)
+            if callable(getter):
+                global_position = getter().toPoint()
+        if menu.exec(global_position or QCursor.pos()) is not action:
+            return
+        properties = {
+            "text": "New Annotation",
+            "xy": [float(x_data), float(y_data)],
+            "xycoords": "data",
+            "xytext": [20.0, 20.0],
+            "textcoords": "offset_points",
+            "arrow_enabled": True,
+        }
+        try:
+            annotation_artist = self.add_annotation_from_input(
+                properties,
+                axes_id=axes_id,
+            )
+            new_id = getattr(annotation_artist, "get_gid", lambda: None)()
+            if new_id:
+                self.select_component(new_id)
+                self._focus_annotation_editor(new_id)
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+
+    def _focus_annotation_editor(self, component_id: str) -> None:
+        """Focus the text content input of a newly created Annotation."""
+
+        if self.figure_inspector is None:
+            return
+        inspector = self.component_editor_manager.editor(component_id)
+        if inspector is None:
+            return
+        try:
+            content_section = inspector.section("content")
+            if hasattr(content_section, "text_content"):
+                content_section.text_content.setFocus()
+        except Exception:
+            pass
+
     def export_context(self) -> FigureExportContext:
         """Return the export summary. Callers must not read canvas.fig."""
 
@@ -3326,6 +3556,9 @@ class PyFigureCanvas(QWidget):
 
     def _materialize_text(self, state, _transaction) -> None:
         materialize_text(self, state, _transaction)
+
+    def _materialize_annotation(self, state, _transaction) -> None:
+        materialize_annotation(self, state, _transaction)
 
     @contextmanager
     def _history_component_id_overrides(
@@ -3522,7 +3755,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v16 component tree."""
+        """Materialize and apply a validated schema-v17 component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -3555,7 +3788,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v16_figure(source)
+        source = normalize_v17_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3596,7 +3829,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v16 component tree used by persistence."""
+        """Return the canonical schema-v17 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3616,10 +3849,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v16_figure(snapshot)
+        return normalize_v17_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v16 Figure tree."""
+        """Validate and return the current complete schema-v17 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3628,7 +3861,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v16_figure(
+        validate_v17_figure(
             snapshot,
             available_refs,
             self.project_id,

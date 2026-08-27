@@ -45,7 +45,7 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [30, 7, 8, 6])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [30, 7, 8, 7])
             self.assertEqual(
                 next(iter(bars[0].action_dict)),
                 "Apply Template",

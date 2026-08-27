@@ -32,7 +32,7 @@ NEW_FIGURE_PRECEDENCE = (
     "built-in defaults (6.4 in × 4.8 in, 100 DPI)."
 )
 NEW_FIGURE_PROJECT = (
-    "Opening a project uses the persisted schema v15 Figure size and document "
+    "Opening a project uses the persisted schema v17 Figure size and document "
     "DPI. These application defaults do not overwrite an opened Figure."
 )
 

@@ -6,6 +6,11 @@ Band** while the intended Axes is selected. The creation dialog collects only
 the initial values; the resulting component is owned by the Component Registry
 and edited through the shared Component Inspector.
 
+Reference Guides own constant line/band geometry such as a transition line or
+phase interval. [Annotation](editing-components/elements/annotation.md) owns a
+semantic label pointing to a target. Combine separate components when a guide
+also needs a label; Annotation does not absorb Reference Guide geometry.
+
 Both guide types use a blended coordinate system. For a vertical guide, the X
 value or bounds use data coordinates while the start and end of the orthogonal
 span use Axes fractions. A horizontal guide uses data coordinates on Y and Axes

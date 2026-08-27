@@ -20,6 +20,7 @@ store Table cell values. It does retain intentionally embedded component data:
 - manual Line X/Y values;
 - Function Curve expressions and ranges;
 - manual Reference Marks positions and Reference Guides;
+- Annotation text, target/text positions, arrow, typography, and box state;
 - embedded In-Axes image bytes.
 
 The warning matters because those values or images may contain source data.
@@ -33,7 +34,7 @@ again whenever the template is applied.
 ## Dynamic text
 
 The Figure project name becomes `{{project_name}}` automatically. Title, Axis
-Label, chart label, and free-Text values remain static unless you insert one of
+Label, chart label, free-Text, and Annotation text/name values remain static unless you insert one of
 the variables offered by the extraction dialog:
 
 | Variable | Result during application |
@@ -91,12 +92,12 @@ to SciPy. Any failed Fit aborts the entire application.
 Axes dimensions saved with autoscale enabled recompute their limits from the
 newly materialized data before the tab is published. Dimensions with autoscale
 disabled keep the fixed template limits. Interpolation, FIELD_2D, Colorbar,
-Reference Marks, and other derived components continue through their normal
+Reference Marks, Annotation, and other derived components continue through their normal
 materializers and services.
 
 All component, layout, shared-axis, Colorbar-source, Sheet, column, project,
 and data-reference IDs are regenerated. Dynamic text and Fit results are
-inserted into a complete schema-v16 project snapshot, which is strictly
+inserted into a complete schema-v17 project snapshot, which is strictly
 validated before it reaches the shared Repository/Canvas restore transaction.
 On success the new project is selected, has no file path, has an empty Undo
 stack, and is dirty. On failure no project, tab, Inspector, tree entry, Fit

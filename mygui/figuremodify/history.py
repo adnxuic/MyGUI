@@ -20,6 +20,7 @@ from PySide6.QtGui import QUndoCommand
 
 from mygui import status_messages
 from mygui.figuremodify.components import (
+    AnnotationController,
     ChangeStatus,
     ColorbarController,
     ComponentBatchChange,
@@ -567,7 +568,13 @@ class FigureHistoryService:
         if current == state:
             return
 
-        if isinstance(controller, TextController):
+        if isinstance(controller, AnnotationController):
+            result = self.canvas.annotation_service.apply_state(
+                controller,
+                state,
+            )
+            self._require_result(result, "Could not restore Annotation state.")
+        elif isinstance(controller, TextController):
             result = self.canvas.text_render_service.apply(
                 controller,
                 state.properties,

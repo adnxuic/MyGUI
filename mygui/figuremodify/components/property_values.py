@@ -747,6 +747,70 @@ def text_box_kwargs(value: Any) -> dict[str, Any] | None:
     }
 
 
+_ANNOTATION_BOX_STYLES = frozenset({"square", "rounded"})
+
+
+def normalize_annotation_box(value: Any) -> dict[str, Any]:
+    """Normalize the closed schema-v17 Annotation box composite value."""
+
+    spec = _mapping(value, "Annotation box")
+    expected = {
+        "enabled",
+        "style",
+        "facecolor",
+        "edgecolor",
+        "linewidth",
+        "alpha",
+        "padding",
+    }
+    _exact(spec, expected, "Annotation box")
+    if spec["enabled"] is not True and spec["enabled"] is not False:
+        raise ComponentValidationError("Annotation box enabled must be boolean.")
+    if spec["style"] not in _ANNOTATION_BOX_STYLES:
+        raise ComponentValidationError(
+            "Annotation box style must be 'square' or 'rounded'."
+        )
+    alpha = spec["alpha"]
+    if alpha is not None:
+        alpha = min(
+            1.0,
+            max(0.0, _finite(alpha, "Annotation box alpha")),
+        )
+    return {
+        "enabled": bool(spec["enabled"]),
+        "style": str(spec["style"]),
+        "facecolor": _color(spec["facecolor"], "Annotation box face color"),
+        "edgecolor": _color(spec["edgecolor"], "Annotation box edge color"),
+        "linewidth": _positive(
+            spec["linewidth"],
+            "Annotation box linewidth",
+            allow_zero=True,
+        ),
+        "alpha": alpha,
+        "padding": _positive(
+            spec["padding"],
+            "Annotation box padding",
+            allow_zero=True,
+        ),
+    }
+
+
+def annotation_box_kwargs(value: Any) -> dict[str, Any] | None:
+    """Return Matplotlib bbox kwargs for one normalized Annotation box."""
+
+    spec = normalize_annotation_box(value)
+    if not spec["enabled"]:
+        return None
+    boxstyle = "square" if spec["style"] == "square" else "round"
+    return {
+        "boxstyle": f"{boxstyle},pad={spec['padding']}",
+        "facecolor": spec["facecolor"],
+        "edgecolor": spec["edgecolor"],
+        "linewidth": spec["linewidth"],
+        "alpha": spec["alpha"],
+    }
+
+
 _LEGEND_LOCATIONS = frozenset(
     {
         "best",

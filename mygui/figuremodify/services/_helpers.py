@@ -24,8 +24,12 @@ def _controller(
 ):
     result = registry.get(value) if isinstance(value, str) else value
     if expected_type is not None and not isinstance(result, expected_type):
+        if isinstance(expected_type, tuple):
+            names = ", ".join(item.__name__ for item in expected_type)
+        else:
+            names = expected_type.__name__
         raise TypeError(
-            f"Expected {expected_type.__name__}, got {type(result).__name__}."
+            f"Expected {names}, got {type(result).__name__}."
         )
     return result
 

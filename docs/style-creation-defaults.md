@@ -1,6 +1,6 @@
 # Style Creation Defaults
 
-New chart, free-Text, and ordinary Axes components resolve their initial
+New chart, free-Text, Annotation, and ordinary Axes components resolve their initial
 appearance when the creation dialog opens. Changing Figure style, Settings →
 Components, or Settings → Axes Components after that open does not rewrite
 the open dialog or existing artists.
@@ -15,7 +15,7 @@ Precedence is:
 
 Inherit Line/Scatter color still uses the Axes palette cursor, not the first
 color from a style probe. Restore, Undo/Redo, and project open use persisted
-schema-v15 properties and do not read Components or Axes Components settings.
+schema-v17 properties and do not read Components or Axes Components settings.
 
 ## Resolved parameters
 
@@ -27,13 +27,14 @@ schema-v15 properties and do not read Components or Axes Components settings.
 | Fit | line style, line width, marker, marker size, marker edge width, chart color |
 | Interpolation | line style, line width, marker, marker size, marker edge width, chart color |
 | Text | font family, font size, color, weight, and style (free Text only) |
+| Annotation | Text font family, size, color, weight, and style; arrow color follows text color and arrow width follows Line width; does not consume the chart color sequence |
 | Ordinary Axes | facecolor, frameon, axisbelow, four spines, X/Y major/minor ticks, tick labels, and grid |
 | In-Axes | child-Axes background/border, indicator line, image interpolation |
 | Reference Marks | X major-tick color and tick-line width; does not consume the chart color sequence |
 | Reference Line | Reference Marks color and tick-line width; does not consume the chart color sequence |
 | Reference Band | Reference Marks color for its face and edge plus tick-line width; does not consume the chart color sequence |
 
-Settings → Components does not cover In-Axes, Reference Marks/Line/Band,
+Settings → Components does not cover Annotation, In-Axes, Reference Marks/Line/Band,
 Colorbar, Title, or axis labels. Settings → Axes Components covers later
 ordinary Axes (main, shared, right Y, and XRD layout Axes) only. It does not
 cover Colorbar auxiliary Axes, In-Axes, restore, or history replay. Title,
@@ -72,8 +73,8 @@ Selecting a style in the gallery opens the Style dialog, which creates a new pro
 
 | Parameter | Meaning | Default |
 | --- | --- | --- |
-| Width / Height | The Figure size in inches. | Application New Figure defaults (fresh install: 6.4 by 4.8). An explicit value in this dialog wins. Opening a project keeps the schema v15 size. |
-| DPI | The document resolution used for exports. | Application New Figure defaults (fresh install: 100). An explicit value in this dialog wins. Opening a project keeps the schema v15 DPI. |
+| Width / Height | The Figure size in inches. | Application New Figure defaults (fresh install: 6.4 by 4.8). An explicit value in this dialog wins. Opening a project keeps the schema v17 size. |
+| DPI | The document resolution used for exports. | Application New Figure defaults (fresh install: 100). An explicit value in this dialog wins. Opening a project keeps the schema v17 DPI. |
 | Figure name | The project name; non-empty and unique among open projects. | The style name |
 
 UI theme is not Matplotlib Figure style. Settings Appearance (theme, UI font
@@ -104,6 +105,8 @@ palette. A Figure style change alone does not recolor existing components.
   `next_index` after the first successful palette-backed creation.
 - Line, Scatter, and Text components store their resolved concrete visual
   properties.
+- Annotation stores its resolved Text/Line-derived appearance without reading
+  Components Settings and without changing the Axes chart-color cursor.
 - In-Axes Components store their resolved background, frame, indicator, and
   display properties without consuming the Axes chart-color cursor.
 - Reference Marks stores its resolved tick-derived color and line width and
@@ -111,7 +114,7 @@ palette. A Figure style change alone does not recolor existing components.
 - Reference Lines and Reference Bands reuse those resolved Reference Marks
   defaults and do not consume the Axes chart-color cursor.
 
-These values use the existing schema-v15 component tree. Opening a project
+These values use the existing schema-v17 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
 

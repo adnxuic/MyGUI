@@ -1,4 +1,4 @@
-"""All 30 Component Inspector Profiles desktop smoke. Group id: inspectors."""
+"""All 31 Component Inspector Profiles desktop smoke. Group id: inspectors."""
 
 from __future__ import annotations
 
@@ -165,6 +165,16 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
         raise SmokeError("Pseudocolor was not created for the Inspector walk.")
     canvas.add_colorbar(pcolors[0].component_id, {})
     canvas.add_text(0.5, 0.5, "Inspector Walk Text", "sans-serif", 11.0)
+    canvas.add_annotation(
+        {
+            "text": "Inspector Walk Annotation",
+            "xy": [2.5, 2.5],
+            "xycoords": "data",
+            "xytext": [30.0, 30.0],
+            "textcoords": "offset_points",
+            "arrow_enabled": True,
+        }
+    )
     canvas.add_reference_marks([15.2, 22.9, 31.5])
     canvas.add_reference_line(
         {"orientation": "vertical", "value": 2.5, "linestyle": "--"}

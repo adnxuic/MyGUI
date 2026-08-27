@@ -64,6 +64,7 @@ from .spec_editors import (
     ScatterColorMapEditor,
     ScatterSizeMapEditor,
     StructuredValueEditor,
+    AnnotationBoxEditor,
     TextBoxEditor,
     ZoomConnectorsEditor,
 )
@@ -474,6 +475,7 @@ class ComponentEditorBase(QWidget):
         color_editor_types = {
             EditorKind.FONT_SPEC: FontSpecEditor,
             EditorKind.TEXT_BOX: TextBoxEditor,
+            EditorKind.ANNOTATION_BOX: AnnotationBoxEditor,
             EditorKind.SCATTER_COLOR_MAP: ScatterColorMapEditor,
             EditorKind.COLOR_MAP_SPEC: ColorMapSpecEditor,
             EditorKind.GRID_EDGE_SPEC: GridEdgeSpecEditor,

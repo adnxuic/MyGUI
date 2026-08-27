@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from mygui.database import ColumnRef, ColumnType, validate_component_name
-from mygui.figuremodify.components.serialization import validate_v16_figure
+from mygui.figuremodify.components.serialization import validate_v17_figure
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 from .models import (
@@ -259,7 +259,7 @@ def parse_template(value: Any) -> ChartTemplate:
         for column in sheet.columns
     }
     figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
-    validate_v16_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    validate_v17_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
     _validate_tokens(figure, allowed_tokens(contract), "figure")
     return ChartTemplate(metadata, contract, figure)
 

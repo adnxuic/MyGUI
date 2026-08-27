@@ -88,3 +88,9 @@ class TreePresentationResolver:
             return spec.delete_label
         label = spec.label(state) if callable(spec.label) else spec.label
         return str(label)
+
+    def duplicate_label(self, state: ComponentState) -> str | None:
+        """Return the declared user-facing duplicate action label if duplicable."""
+
+        spec = self.spec(state)
+        return spec.duplicate_label

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
+  <g fill="none" stroke="#000" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Axes -->
+    <path d="M194 1000 L194 195"/>
+    <path d="M194 1000 L1086 1000"/>
+    <path d="M143 236 L194 184 L246 236"/>
+    <path d="M1039 951 L1090 1001 L1039 1052"/>
+
+    <!-- Plot line, split at markers so marker interiors remain transparent -->
+    <path d="M326 831 L464 647"/>
+    <path d="M510 643 L685 804"/>
+    <path d="M735 804 L896 652"/>
+
+    <!-- Data point markers -->
+    <circle cx="305" cy="858" r="34"/>
+    <circle cx="485" cy="620" r="34"/>
+    <circle cx="710" cy="827" r="34"/>
+    <circle cx="921" cy="629" r="34"/>
+
+    <!-- Annotation box -->
+    <rect x="764" y="177" width="347" height="222" rx="30" ry="30"/>
+    <path d="M835 255 L1042 255"/>
+    <path d="M835 324 L968 324"/>
+
+    <!-- Annotation leader / arrow -->
+    <path d="M758 332 L706 332 L535 546"/>
+    <path d="M535 492 L535 548 L591 538"/>
+  </g>
+</svg>

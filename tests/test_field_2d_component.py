@@ -414,7 +414,7 @@ class Field2DComponentTests(unittest.TestCase):
         self.assertNotIn("contour-cbar", self.canvas.component_registry)
         self.assertNotIn("cbar-contour-cbar", self.canvas.component_registry)
 
-    def test_schema_v16_round_trip_and_v15_rejection(self):
+    def test_schema_v17_round_trip_and_v15_rejection(self):
         self.add_chart("add_pseudocolor", "pseudo-save")
         self.add_chart("add_heatmap", "heat-save")
         self.add_chart("add_contour", "contour-save")
@@ -447,7 +447,7 @@ class Field2DComponentTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 16)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 17)
             roles = {
                 component["role"]
                 for component in raw["figure"]["components"]
@@ -465,7 +465,7 @@ class Field2DComponentTests(unittest.TestCase):
             v15_path = Path(directory) / "field-2d-v15.mygui.json"
             v15_path.write_text(json.dumps(predecessor), encoding="utf-8")
             migrated = load_project_file(v15_path)
-            self.assertEqual(migrated["schema_version"], 16)
+            self.assertEqual(migrated["schema_version"], 17)
             self.assertFalse(
                 any(
                     component["kind"] == "field_2d"

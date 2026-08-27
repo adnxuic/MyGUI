@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v16 Figure trees."""
+"""Normalize and validate strict schema-v10 through v17 Figure trees."""
 
 from __future__ import annotations
 
@@ -152,7 +152,13 @@ def normalize_v15_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v16_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v16 Figure component tree."""
+    """Normalize a predecessor schema-v16 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v17_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v17 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -349,6 +355,7 @@ def _validate_parent(
         ComponentKind.AXIS,
         ComponentKind.SPINE,
         ComponentKind.LEGEND,
+        ComponentKind.ANNOTATION,
         ComponentKind.COLORBAR,
         ComponentKind.REFERENCE_MARKS,
         ComponentKind.REFERENCE_GUIDE,
@@ -420,6 +427,11 @@ def _validate_parent(
     if state.kind is ComponentKind.SPINE:
         if selector.get("name") not in _SPINE_NAMES:
             raise ValueError(f"Invalid Spine selector at {path}.selector.")
+    if state.kind is ComponentKind.ANNOTATION and set(selector) != {"object_id"}:
+        raise ValueError(
+            f"Invalid Annotation selector at {path}.selector: expected only "
+            "object_id."
+        )
     if (
         state.kind
         in _CHART_KINDS
@@ -428,6 +440,7 @@ def _validate_parent(
             ComponentKind.COLORBAR,
             ComponentKind.REFERENCE_MARKS,
             ComponentKind.REFERENCE_GUIDE,
+            ComponentKind.ANNOTATION,
         }
         or state.role is ComponentRole.TEXT
     ) and selector.get("object_id") != state.id:
@@ -769,6 +782,14 @@ def _validate_figure(
                 f"Invalid project field {path}: FIELD_2D is not part "
                 f"of schema v{schema_version}."
             )
+        if (
+            schema_version < 17
+            and state.kind is ComponentKind.ANNOTATION
+        ):
+            raise ValueError(
+                f"Invalid project field {path}: Annotation is not part "
+                f"of schema v{schema_version}."
+            )
         if state.id in by_id:
             raise ValueError(f"Duplicate component id at {path}: {state.id}")
         by_id[state.id] = state
@@ -1025,7 +1046,7 @@ def validate_v16_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v16 Figure component tree."""
+    """Validate a predecessor schema-v16 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -1033,4 +1054,21 @@ def validate_v16_figure(
         project_id,
         project_name,
         schema_version=16,
+    )
+
+
+def validate_v17_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v17 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=17,
     )

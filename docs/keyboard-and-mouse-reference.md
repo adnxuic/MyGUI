@@ -95,11 +95,17 @@ Matplotlib's default key bindings are active while the canvas has focus:
 
 The default Matplotlib bindings f and Ctrl+F (fullscreen) and Ctrl+W and q (close figure) are accepted by the default handler but have no effect on MyGUI's embedded project canvas.
 
+Right-click a finite data position inside a registered ordinary Axes and choose
+**Add Annotation Here** to create `New Annotation` at that target with a
+`(+20, +20)` point text offset and arrow. The new component is selected and
+its Content editor receives focus. The menu is suppressed outside an Axes, on
+Colorbar or In-Axes auxiliary Axes, and while Pan or Zoom mode is active.
+
 ## Components tree
 
 - Typing in the search box filters the tree by component name; the clear button restores the full tree.
 - Clicking a component selects it and opens its Inspector.
-- Right-clicking a removable component offers Delete and Batch Delete Same Type. See [Components Tree](components-tree.md).
+- Right-clicking a removable component offers Delete and Batch Delete Same Type. Annotation also offers Duplicate Annotation. See [Components Tree](components-tree.md).
 
 ## Color and palette pickers
 

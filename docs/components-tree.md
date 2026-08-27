@@ -9,7 +9,7 @@ or click the active page button again to collapse the Explorer.
 
 - Click a Component node to select it and open its exact Inspector; the active Axes follows the Registry ancestry of the selection.
 - Type in the search box to filter by label, kind, or role. Clearing the search restores the previous expansion state. A search that hides the selected Component keeps the Canvas and Inspector selection and clears only the tree highlight.
-- Right-click a removable Component to Delete it or choose Batch Delete Same Type...; Figure and fixed semantic Components have no delete action.
+- Right-click a removable Component to Delete it or choose Batch Delete Same Type.... Annotation additionally offers **Duplicate Annotation**; Figure and fixed semantic Components have no delete action.
 - After deletion, selection falls back to the next surviving same-cohort Component, the previous survivor, the parent, the nearest surviving ancestor, or the Figure root.
 
 ## Tree projection
@@ -29,6 +29,8 @@ The presentation adds non-selectable, UI-only group nodes:
   under a plural role group such as `Function Curves`, `Plots`, `Scatters`,
   `Pseudocolor`, `Heatmaps`, `Contours`,
   or `Texts`;
+- every Axes has an always-present `Annotations` group for its persistent
+  Annotation children, even when it contains only one Annotation;
 - a repeated-role group disappears again when fewer than two matching
   siblings remain.
 
@@ -46,7 +48,7 @@ remain the only selection, refresh, Inspector lookup, and deletion targets.
 
 Labels are presentation-only and update from Registry events. Examples
 include `Figure — Project`, `Axes 1`, `Left Spine`, `Plot — Raw Data`, and
-`Text — note preview`, `Reflection Positions — YBCO`, and the shared
+`Text — note preview`, an Annotation name/text preview, `Reflection Positions — YBCO`, and the shared
 `Reference Guides` group containing formula or label previews. A Component
 Tooltip lists:
 
@@ -80,11 +82,11 @@ group under their owner Axes. The group is not a Component and is never saved.
 
 Closing a project releases its Registry and Canvas callbacks and discards its
 tree session. Selection, expansion, search text, and Explorer page state are
-not part of schema v15.
+not part of schema v17.
 
 When a project is first bound, the tree selects the current Axes when one
 exists, otherwise the Figure root. Creating an Axes, Chart, free Text,
-Reference Marks, or Reference Guide component
+Reference Marks, Reference Guide, or Annotation component
 selects the new Component and opens its exact Inspector, but does not force
 the Explorer to change page or become visible.
 
@@ -109,6 +111,9 @@ Right-click actions are determined by the Controller deletion policy:
 - Figure and fixed semantic Components have no physical delete action.
 - Axes and removable Line, Scatter, FIELD_2D, and free Text Components use the same
   Canvas `DeletionCoordinator` entry.
+- Annotation uses that same deletion path. Its profile-declared duplicate
+  action calls the Canvas generic duplicate command; the tree does not inspect
+  Annotation kind or role.
 - `Batch Delete Same Type...` includes only removable siblings with the same
   `parent_id`, kind, role, and `REMOVE` policy. Search changes only what is
   visible; it never narrows this business cohort.

@@ -2,6 +2,11 @@
 
 The Text action on the Element command bar adds a free Text component. A Text can be local (inside the currently selected Axes, the default) or global (attached to the whole Figure). Free Text components are removable and are edited through the Components tree and the Inspector. Property keys are given in parentheses.
 
+Use Text for unanchored labels such as `(a)`, a sample name, or a panel note.
+Use [Annotation](editing-components/elements/annotation.md) when the text points
+to a target position and may need an arrow. Text has one position; Annotation
+has independent target and text positions.
+
 ## Creation parameters
 
 | Parameter | Control | Meaning | Default |

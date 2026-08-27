@@ -6,13 +6,13 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 - `mkdocs.yml` at the repository root is the only site configuration. Its `docs_dir` is `docs/` and its `nav` groups the existing feature documents; document content stays in the Markdown files.
 - `docs/index.md` is the site landing page. Creating Charts includes the
-  Reference Guides, Reference Marks, Colorbar, Pseudocolor, Heatmap, and
+  Annotation, Reference Guides, Reference Marks, Colorbar, Pseudocolor, Heatmap, and
   Contour feature pages, Projects and
   Appearance includes Figure Export, Getting Started includes Application
   Settings, Developer Reference documents the
-  Controller/Service/Canvas package layout plus the current schema-v16
+  Controller/Service/Canvas package layout plus the current schema-v17
   property contract and legacy v15, v14, v13, v12, and v10 migration references,
-  and Editing Components mirrors the full 30-profile runtime component
+  and Editing Components mirrors the full 31-profile runtime component
   hierarchy.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.
 
@@ -27,7 +27,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 ## Navigation hierarchy and component tree
 
-The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 30 production Inspector profiles:
+The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 31 production Inspector profiles:
 
 1. **Fixed Semantics (14 profiles)**:
    - `Figure` (`editing-components/fixed-semantics/figure.md`)
@@ -54,8 +54,9 @@ The navigation structure under **Editing Components** strictly mirrors the runti
    - `Pseudocolor` (`editing-components/charts/pseudocolor.md`)
    - `Heatmaps` (`editing-components/charts/heatmap.md`)
    - `Contours` (`editing-components/charts/contour.md`)
-3. **Texts (1 profile)**:
+3. **Texts & Annotations (2 profiles)**:
    - `Texts` (`editing-components/elements/text.md`)
+   - `Annotations` (`editing-components/elements/annotation.md`)
 4. **Insets (2 profiles)**:
    - `Zoom Insets` (`editing-components/elements/in-axes-zoom.md`)
    - `Image Insets` (`editing-components/elements/in-axes-image.md`)
@@ -80,7 +81,7 @@ Component documentation uses `pymdownx.snippets` to maintain single-source-of-tr
 
 ## Redirect policy
 
-Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 30-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
+Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 31-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
 
 - `chart-component-parameters.md` -> `editing-components/charts/line.md`
 - `axes-component-parameters.md` -> `editing-components/fixed-semantics/axes.md`

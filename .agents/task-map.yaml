@@ -15,11 +15,12 @@ tasks:
       - tests.test_component_inspector
       - tests.test_component_runtime_integration
       - tests.test_reference_guides
+      - tests.test_annotation_component
       - tests.test_component_deletion_and_project_close
       - tests.test_project_object_roundtrip
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
-    documentation: [docs/component-extension-template.md, docs/component-properties-v16.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
+    documentation: [docs/component-extension-template.md, docs/component-properties-v17.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
     manual_smoke: true
   modify_component_property:
     skill: .agents/skills/modify-component-property/SKILL.md
@@ -52,12 +53,13 @@ tasks:
       - tests.test_project_object_roundtrip
       - tests.test_component_materializers
       - tests.test_reference_guides
+      - tests.test_annotation_component
       - tests.test_y_axis_reserve
       - tests.test_reference_marks_table
       - tests.test_xrd_refinement
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
-    documentation: [docs/project-files.md, docs/component-properties-v16.md]
+    documentation: [docs/project-files.md, docs/component-properties-v17.md]
     manual_smoke: true
   project_io_change:
     skill: .agents/skills/project-io-change/SKILL.md

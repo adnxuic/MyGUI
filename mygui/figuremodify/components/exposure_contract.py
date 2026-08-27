@@ -164,6 +164,22 @@ MATPLOTLIB_39_EXPOSURE: dict[str, ArtistExposureContract] = {
         unsupported={"agg_filter", "animated", "antialiased", "arrowstyle", "capstyle", "clip_box", "clip_on", "clip_path", "connectionstyle", "facecolor", "figure", "fill", "gid", "hatch", "in_layout", "joinstyle", "label", "mouseover", "mutation_aspect", "mutation_scale", "path_effects", "picker", "rasterized", "sketch_params", "snap", "transform", "url"},
         unsupported_reason="excluded from the safe four-connector state contract",
     ),
+    "Annotation": _contract(
+        core={"alpha", "bbox", "color", "fontfamily", "fontsize", "fontstretch", "fontstyle", "fontvariant", "fontweight", "horizontalalignment", "label", "linespacing", "math_fontfamily", "multialignment", "parse_math", "position", "rotation", "rotation_mode", "text", "usetex", "verticalalignment", "visible", "wrap", "zorder"},
+        advanced={"clip_on", "gid", "in_layout", "rasterized", "sketch_params", "snap", "url"},
+        aliases={"anncoords", "backgroundcolor", "fontproperties", "x", "y"},
+        derived={"annotation_clip", "transform_rotates_text"},
+        unsupported={"agg_filter", "animated", "antialiased", "clip_box", "clip_path", "figure", "mouseover", "path_effects", "picker", "transform"},
+        unsupported_reason="excluded from the safe Annotation text state contract",
+    ),
+    "FancyArrowPatch": _contract(
+        core={"arrowstyle", "color", "connectionstyle", "linestyle", "linewidth", "visible", "zorder"},
+        advanced={"clip_on", "gid", "in_layout", "label", "rasterized", "sketch_params", "snap", "url"},
+        aliases={"edgecolor"},
+        derived={"alpha", "mutation_aspect", "mutation_scale", "patchA", "patchB", "positions"},
+        unsupported={"agg_filter", "animated", "antialiased", "capstyle", "clip_box", "clip_path", "facecolor", "figure", "fill", "hatch", "joinstyle", "mouseover", "path_effects", "picker", "transform"},
+        unsupported_reason="excluded from the safe Annotation arrow state contract",
+    ),
 }
 
 
@@ -186,6 +202,20 @@ def _representative_artists() -> dict[str, object]:
         "QuadContourSet": axes.contour([[0.0, 1.0], [1.0, 0.0]]),
         "Rectangle": axes.indicate_inset_zoom(figure.add_axes([0.1, 0.1, 0.2, 0.2]))[0],
         "ConnectionPatch": axes.indicate_inset_zoom(figure.axes[-1])[1][0],
+        "Annotation": axes.annotate(
+            "contract",
+            (0.4, 0.4),
+            xytext=(0.6, 0.6),
+            textcoords="axes fraction",
+            arrowprops={"arrowstyle": "->"},
+        ),
+        "FancyArrowPatch": axes.annotate(
+            "arrow",
+            (0.1, 0.1),
+            xytext=(0.2, 0.2),
+            textcoords="axes fraction",
+            arrowprops={"arrowstyle": "->"},
+        ).arrow_patch,
     }
 
 

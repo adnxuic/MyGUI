@@ -329,6 +329,56 @@ class ComponentTreeTests(unittest.TestCase):
         )
         self.assertIn("curve-a", model.visual_children_ids(axes_id))
 
+    def test_annotation_group_and_profile_driven_duplicate_action(self):
+        component_id = "tree-annotation"
+        self.canvas.add_annotation(
+            {
+                "text": "  T_N   = 14.2 K  ",
+                "xy": (14.2, 0.0035),
+                "xytext": (20.0, 20.0),
+            },
+            object_id=component_id,
+            announce=False,
+        )
+        self.app.processEvents()
+
+        host = self.window.component_tree_host
+        axes_id = self.canvas.current_axes_component_id
+        group = self._group_index(host.model, axes_id, "Annotations")
+        self.assertTrue(group.isValid())
+        self.assertEqual(host.model.rowCount(group), 1)
+        index = host.model.index_for_component(component_id)
+        self.assertEqual(
+            index.data(Qt.DisplayRole),
+            "annotation1 — T_N = 14.2 K",
+        )
+        self.assertEqual(host.model.parent(index), group)
+
+        with mock.patch(
+            "mygui.widgets.component_tree.component_tree.QMenu",
+            self._menu_type("Duplicate Annotation"),
+        ), mock.patch.object(
+            QMessageBox,
+            "warning",
+            side_effect=AssertionError("duplicate must not open a warning"),
+        ):
+            host._show_context_menu(
+                index.data(NODE_KEY_ROLE),
+                host.tree.mapToGlobal(host.tree.rect().center()),
+            )
+        self.app.processEvents()
+
+        group = self._group_index(host.model, axes_id, "Annotations")
+        children = host.model.visual_children_ids(group.data(NODE_KEY_ROLE))
+        self.assertEqual(len(children), 2)
+        self.assertIn(component_id, children)
+        duplicate_id = next(item for item in children if item != component_id)
+        self.assertEqual(self.canvas.current_component_id, duplicate_id)
+        self.assertEqual(
+            self.canvas.component_registry.get(duplicate_id).state.properties,
+            self.canvas.component_registry.get(component_id).state.properties,
+        )
+
     def test_labels_tooltips_semantic_sort_and_registry_changes_are_live(self):
         axes_id = self.canvas.current_axes_component_id
         self.canvas.add_global_text(

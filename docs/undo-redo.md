@@ -33,13 +33,13 @@ purposes even though a navigation action is itself undoable.
 
 A single user action creates one command for:
 
-- Figure, Axes, Axis, Spine, Tick, Tick Label, Grid, Text, Legend, Line,
+- Figure, Axes, Axis, Spine, Tick, Tick Label, Grid, Text, Annotation, Legend, Line,
   Scatter, Colorbar, and in-Axes property changes;
 - Function expression/range, raw X/Y data, data references and preprocessing,
   Scatter mapping, interpolation settings, Fit results/ranges, TeX rendering,
   inset-image replacement, palettes, and project rename;
 - Axes layouts and creation of Function Curve, Plot, Scatter, Fit,
-  Interpolation, Text, Zoom/Image in-Axes elements, and Colorbar components;
+  Interpolation, Text, Annotation, Zoom/Image in-Axes elements, and Colorbar components;
 - individual, batch, and Axes-subtree deletion.
 - completed Matplotlib Home, Back, Forward, pan, zoom, and Figure-options
   changes that alter persisted component state.
@@ -58,7 +58,12 @@ its dependent charts still occupies one chronological slot.
 
 ## Save, dirty state, and project lifetime
 
-History is runtime-only and is never written to schema-v15 project JSON. Saving
+Annotation creation, duplication, deletion, text/position/style edits,
+coordinate-system conversions, placement presets, and box edits each form one
+command. A render, TeX, or missing-glyph rejection restores both Controller
+state and Artist without adding history.
+
+History is runtime-only and is never written to schema-v17 project JSON. Saving
 does not clear the current session's timeline. Opening or restoring a project
 starts with empty Undo/Redo actions.
 

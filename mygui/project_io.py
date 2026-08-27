@@ -1,4 +1,4 @@
-"""Validate, migrate, save, and load strict schema-v16 project snapshots."""
+"""Validate, migrate, save, and load strict schema-v17 project snapshots."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any
 
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.components.serialization import (
-    normalize_v16_figure,
+    normalize_v17_figure,
     validate_v10_figure,
     validate_v11_figure,
     validate_v12_figure,
@@ -21,12 +21,14 @@ from mygui.figuremodify.components.serialization import (
     validate_v14_figure,
     validate_v15_figure,
     validate_v16_figure,
+    validate_v17_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 16
+PROJECT_SCHEMA_VERSION = 17
+SCHEMA_V16_VERSION = 16
 SCHEMA_V15_VERSION = 15
 SCHEMA_V14_VERSION = 14
 SCHEMA_V13_VERSION = 13
@@ -186,11 +188,21 @@ def _validate_project_snapshot_version(
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
-    """Validate one exact current schema-v16 project snapshot."""
+    """Validate one exact current schema-v17 project snapshot."""
 
     _validate_project_snapshot_version(
         snapshot,
         version=PROJECT_SCHEMA_VERSION,
+        figure_validator=validate_v17_figure,
+    )
+
+
+def validate_v16_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate one exact predecessor schema-v16 project snapshot."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=SCHEMA_V16_VERSION,
         figure_validator=validate_v16_figure,
     )
 
@@ -327,6 +339,16 @@ def migrate_v15_to_v16(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     validate_v15_project_snapshot(snapshot)
     migrated = deepcopy(snapshot)
+    migrated["schema_version"] = SCHEMA_V16_VERSION
+    validate_v16_project_snapshot(migrated)
+    return migrated
+
+
+def migrate_v16_to_v17(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Promote a strictly valid schema-v16 tree to schema v17 without rewrite."""
+
+    validate_v16_project_snapshot(snapshot)
+    migrated = deepcopy(snapshot)
     migrated["schema_version"] = PROJECT_SCHEMA_VERSION
     validate_project_snapshot(migrated)
     return migrated
@@ -342,7 +364,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v16_figure(canvas.component_snapshot())
+    figure = normalize_v17_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -407,41 +429,51 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
             "must use exact integers."
         )
     if version == SCHEMA_V10_VERSION:
-        return migrate_v15_to_v16(
-            migrate_v14_to_v15(
-                migrate_v13_to_v14(
-                    migrate_v12_to_v13(
-                        migrate_v11_to_v12(migrate_v10_to_v11(snapshot))
+        return migrate_v16_to_v17(
+            migrate_v15_to_v16(
+                migrate_v14_to_v15(
+                    migrate_v13_to_v14(
+                        migrate_v12_to_v13(
+                            migrate_v11_to_v12(migrate_v10_to_v11(snapshot))
+                        )
                     )
                 )
             )
         )
     if version == SCHEMA_V11_VERSION:
-        return migrate_v15_to_v16(
-            migrate_v14_to_v15(
-                migrate_v13_to_v14(
-                    migrate_v12_to_v13(migrate_v11_to_v12(snapshot))
+        return migrate_v16_to_v17(
+            migrate_v15_to_v16(
+                migrate_v14_to_v15(
+                    migrate_v13_to_v14(
+                        migrate_v12_to_v13(migrate_v11_to_v12(snapshot))
+                    )
                 )
             )
         )
     if version == SCHEMA_V12_VERSION:
-        return migrate_v15_to_v16(
-            migrate_v14_to_v15(
-                migrate_v13_to_v14(migrate_v12_to_v13(snapshot))
+        return migrate_v16_to_v17(
+            migrate_v15_to_v16(
+                migrate_v14_to_v15(
+                    migrate_v13_to_v14(migrate_v12_to_v13(snapshot))
+                )
             )
         )
     if version == SCHEMA_V13_VERSION:
-        return migrate_v15_to_v16(migrate_v14_to_v15(migrate_v13_to_v14(snapshot)))
+        return migrate_v16_to_v17(
+            migrate_v15_to_v16(migrate_v14_to_v15(migrate_v13_to_v14(snapshot)))
+        )
     if version == SCHEMA_V14_VERSION:
-        return migrate_v15_to_v16(migrate_v14_to_v15(snapshot))
+        return migrate_v16_to_v17(migrate_v15_to_v16(migrate_v14_to_v15(snapshot)))
     if version == SCHEMA_V15_VERSION:
-        return migrate_v15_to_v16(snapshot)
+        return migrate_v16_to_v17(migrate_v15_to_v16(snapshot))
+    if version == SCHEMA_V16_VERSION:
+        return migrate_v16_to_v17(snapshot)
     if version != PROJECT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported project schema version {version!r}; only schema "
-            f"v{PROJECT_SCHEMA_VERSION}, strict v15 migration, strict v14 "
-            "migration, strict v13 migration, and chained strict v10-v12 "
-            "migration are supported."
+            f"v{PROJECT_SCHEMA_VERSION}, strict v16 migration, strict v15 "
+            "migration, strict v14 migration, strict v13 migration, and "
+            "chained strict v10-v12 migration are supported."
         )
     validate_project_snapshot(snapshot)
     return snapshot
