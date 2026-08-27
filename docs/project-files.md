@@ -7,6 +7,10 @@ in-memory migration, integer v14 through v15, integer v13 through v14/v15, integ
 integer v10 through every intervening version. Schema v4-v9, non-integer values, and unknown versions are rejected before
 application state is published.
 
+Reusable chart templates are deliberately separate from project files. They
+use strict `mygui-template` schema version 1, do not contain a Table document,
+and never change project schema version 16. See [Chart Templates](chart-templates.md).
+
 ## Root structure
 
 ```json

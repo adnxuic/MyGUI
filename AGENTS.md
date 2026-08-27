@@ -10,61 +10,59 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 - From the repo root, run `python main.py`. Local verification uses exactly
   `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe`; CI may use its
   workflow-installed Python 3.12.
-- Read the nearest implementation, tests, and routed Agent material first.
-  Prefer small local changes; do not mix hygiene or broad architecture into
-  an unrelated fix. Keep GUI behavior, resource names, QSS/JSON locations,
-  historical Canvas names, and tracked IDE/sync artifacts unless the task
-  targets them. `mygui/widgets/`, `mygui/figuremodify/`, and `mygui/database/`
-  keep UI, figure-domain, and data roles; new files follow the nearest module.
-  Adapter harness policy lives in that adapter dir. Codex follows
-  `.codex/README.md`; DSH stays under `.dsh/`.
+- Read nearest implementation, tests, and routed Agent material first.
+  Prefer small local changes; do not mix hygiene or broad architecture into an
+  unrelated fix. Keep GUI behavior, resource names, QSS/JSON paths, historical
+  Canvas names, and tracked artifacts unless targeted. `mygui/widgets/`,
+  `mygui/figuremodify/`, `mygui/database/` keep UI, domain, data roles; new
+  files follow nearest module. Adapter policy lives in that adapter dir. Codex
+  follows `.codex/README.md`; DSH stays under `.dsh/`.
 
 ## Authoritative Runtime Boundaries
 
 - **CORE-RESOURCE-BOUNDARY:** Resolve bundled icons, QSS, and JSON only through
-  `mygui.resources`; production behavior must not depend on the process CWD.
-- **CORE-TABLE-REPOSITORY:** The `TableRepository` created by `MainWindow` is
-  the shared runtime data authority. Do not add another global table store;
-  refresh dependent artifacts when authoritative data changes.
-- **CORE-MATPLOTLIB-BOUNDARY:**
-  `mygui.figuremodify.matplotlib_adapter` is the sole production boundary for
-  process-global style contexts and style/colormap/marker/font catalogs.
-  Presentation modules must not import Matplotlib, read `canvas.fig`, resolve
-  live targets, or mutate Artists directly. `main.py` has the startup-only
-  backend-selection exception.
-- **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` is owned by its Colorbar
+  `mygui.resources`; production behavior must not depend on CWD.
+- **CORE-TABLE-REPOSITORY:** `TableRepository` created by `MainWindow` is the
+  shared runtime data authority. Do not add global table stores; refresh
+  dependent artifacts when authoritative data changes.
+- **CORE-MATPLOTLIB-BOUNDARY:** `mygui.figuremodify.matplotlib_adapter` is the
+  sole boundary for global style contexts and catalogs. Presentation modules
+  must not import Matplotlib, read `canvas.fig`, resolve live targets, or mutate
+  Artists directly (`main.py` startup backend-selection exception).
+- **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` is owned by Colorbar
   Component. It is never an ordinary `ComponentKind.AXES` and never receives
-  the fixed Axes semantic subtree; lifecycle enters through `ColorbarService`
-  and the reversible Colorbar removal contract.
-- **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of Matplotlib TeX
-  rcParams. TeX starts disabled, preserves a non-empty external preamble (or
-  installs the MyGUI default), and is enabled only after validation;
-  render-sensitive changes go through `TextRenderService`.
-- **CORE-FONT-DIAGNOSTICS:** `mygui.font_diagnostics` is the sole application
-  bridge for Matplotlib missing-glyph and Qt DirectWrite diagnostics. Install
-  it after `QApplication` and before fonts/widgets. A missing glyph rejects the
-  edit, atomically restores UI/Controller/Artist state, and emits one red
-  result.
+  fixed Axes subtree; lifecycle enters via `ColorbarService`.
+- **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of TeX rcParams. TeX
+  starts disabled and is enabled only after validation; render-sensitive changes
+  go through `TextRenderService`.
+- **CORE-FONT-DIAGNOSTICS:** `mygui.font_diagnostics` is the sole bridge for
+  Matplotlib missing-glyph and DirectWrite diagnostics. Install after
+  `QApplication` and before fonts/widgets. Missing glyph rejects edit, restores
+  state atomically, and emits one red result.
 - **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot
-  QSettings is the only persistent preference store. Sessions keep a dirty
-  patch plus base revision; commit is atomic. Controllers, Services,
-  `ChartCreationStager`, and `EditorContext` receive only narrow ports.
-  Settings never enter schema v16, Undo/Redo, dirty fingerprints,
-  `ComponentState`, or Canvas materialization. Line/Scatter/free-Text use
-  explicit input > Components `NEXT_USE` > Axes palette or Figure style >
-  Matplotlib 3.9 fallback. Ordinary Axes use explicit layout/XRD >
-  Axes Components `NEXT_USE` > Figure style > Matplotlib 3.9 fallback.
-  Restore, materializers, history replay, layout updates, Colorbar
-  auxiliary Axes, In-Axes, `add_component_line`, and Reference Guide must
-  not read `ComponentDefaultsProvider`; Apply must not mutate existing
-  Artists.
+  QSettings is the sole preference store. Sessions keep a dirty patch plus base
+  revision; commit is atomic. Narrow ports only to Controllers, Services,
+  `ChartCreationStager`, and `EditorContext`. Settings never enter schema v16,
+  Undo/Redo, dirty fingerprints, `ComponentState`, or Canvas materialization.
+  Line/Scatter/free-Text use explicit input > Components `NEXT_USE` > Axes
+  palette/Figure style > Matplotlib 3.9 fallback. Ordinary Axes use explicit
+  layout/XRD > Axes Components `NEXT_USE` > Figure style > Matplotlib 3.9
+  fallback. Restore, materializers, history replay, layout updates, Colorbar
+  auxiliary Axes, In-Axes, `add_component_line`, and Reference Guide must not
+  read `ComponentDefaultsProvider`; Apply must not mutate existing Artists.
+- **CORE-TEMPLATE-LIBRARY:** `mygui.template_library` is the sole owner of
+  chart-template schema, storage, extraction, matching, ID remapping, dynamic
+  text, fitting, and application planning. Templates live under root `template/`
+  independently of CWD, use strict `mygui-template` schema v1, contain no Table
+  cell document, and never alter schema v16. Application builds a validated
+  in-memory project snapshot and publishes via staged restore.
 - **CORE-THEME-OWNER:** `ThemeService` is the sole publisher of application font,
   palette, bundled QSS, and density. Apply `ThemeSnapshot` after settings load
   and before any `QWidget`. UI theme is not Matplotlib Figure style.
 - MATLAB and TeX are optional; failure must not block basic GUI work.
-  `mygui.database.matlab_adapter` is the MATLAB process boundary; Python
-  fallbacks in `matlab_fallbacks.py` must not start MATLAB or MCR. Replacing
-  user-expression evaluation is a dedicated high-risk task.
+  `mygui.database.matlab_adapter` is the MATLAB boundary; Python fallbacks in
+  `matlab_fallbacks.py` must not start MATLAB or MCR. Replacing user-expression
+  evaluation is a dedicated high-risk task.
 
 ## Component, Inspector, and Selection Invariants
 
@@ -109,30 +107,25 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   `ComponentRegistry.registration_transaction()`. Artists, Controllers,
   Registry/Locator bindings, Inspectors, listeners, IDs, pending state,
   selection, redraw/events, and color-cycle commits form one logical operation.
-  Publish user-visible effects only after commit and restore exact pre-call
-  identity on failure.
+  Publish visible effects only after commit; restore pre-call identity on failure.
 - Axes creation/deletion includes its fixed semantic subtree in one compound
   transaction. Project creation/restore is staged before tab publication and
   cleaned up by stable project/object ID on either side of publication.
 - **CORE-DELETION-COORDINATOR:** Every production deletion enters through
   `DeletionCoordinator` with `DeletionRequest`. Fixed semantics hide; genuinely
-  removable components declare `REMOVE` and exactly one handler. Deletion is a
-  prepared all-or-nothing transaction; post-delete selection comes from the
-  confirmed deletion set.
-- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by
-  its `TableRepository` entry for one chronological Table/Figure history.
-  Figure commands retain immutable `ComponentState` deltas plus explicit
-  runtime mementos, never Artists, Controllers, QWidgets, or whole Figures;
-  replay enters through Controllers, domain Services, materializers, and
-  `DeletionCoordinator`. Restore, table-driven refresh, and replay are
-  recording-suspended. History is runtime-only, is absent from schema v16,
-  and is invalidated if a failed replay cannot prove a safe cursor.
+  removable components declare `REMOVE` and exactly one handler. Deletion is an
+  all-or-nothing transaction; post-delete selection comes from confirmed set.
+- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by its
+  `TableRepository` entry for chronological Table/Figure history. Figure commands
+  retain immutable `ComponentState` deltas plus explicit runtime mementos, never
+  Artists, Controllers, QWidgets, or whole Figures; replay enters through
+  Controllers, Services, materializers, and `DeletionCoordinator`. Restore,
+  refresh, and replay are recording-suspended. History is runtime-only, absent
+  from schema v16, and invalidated if failed replay cannot prove a safe cursor.
 - **CORE-PERSISTENCE-V16:** Persist component state only through the exact
   integer schema-v16 component tree. UI profiles, widgets, callbacks, tree
   keys, and expansion/selection state never enter project files. Strict v15
-  migrates directly to v16; v14–v10 migrate stepwise; v4–v9 stay retired. A
-  later persisted format change needs a dedicated migration task with
-  validation, rollback, and round-trip coverage.
+  migrates directly to v16; v14–v10 migrate stepwise; v4–v9 stay retired.
 - Runtime-created persisted components declare `RESTORE_PHASE` and exactly one
   `ComponentMaterializer`; fixed semantic components use `None`. Preserve
   stable IDs and empty valid data-backed components.
@@ -148,21 +141,19 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   update `docs/documentation-site.md`.
 - Feature pages describe current behavior and document each Inspector field
   (control, meaning, values/default, persisted/runtime key). Uncommon
-  Matplotlib value families get a pinned 3.9.0 inline link on every applicable
-  row; each page lists every referenced URL. Keep limitations and plans out of
-  `docs/`.
-- New feature state participates in project save/import when applicable; do
-  not ship runtime state that silently disappears on reopen.
+  Matplotlib families get pinned 3.9.0 links; each page lists referenced URLs.
+  Keep limitations and plans out of `docs/`.
+- New feature state participates in save/import; do not ship runtime state that
+  silently disappears on reopen.
 - `.agents/` is Agent Engineering knowledge, not user docs.
-  `codex_handoff/current-limitations.md` records current limitations only;
-  scanner output and task evidence stay under ignored `build/agent-results/`.
+  `codex_handoff/current-limitations.md` records limitations only; scanner output
+  and task evidence stay under ignored `build/agent-results/`.
 - Update this file when a global invariant, architecture owner, schema version,
   or startup gate changes; update the Skill and architecture page when a
   workflow changes. `AGENTS.md` outranks `.agents/`, which outranks conflicting
   `docs/` narrative.
-- Use `ColorChoiceWidget` with the injected `ColorLibrary`; ordered chart colors
-  use `ColorCycleState.peek()` and `commit()` only after the related transaction
-  succeeds.
+- Use `ColorChoiceWidget` with injected `ColorLibrary`; ordered chart colors
+  use `ColorCycleState.peek()` and `commit()` only after transaction succeeds.
 - Interactive desktop smoke remains required when a routed task declares it;
   Qt offscreen tests do not cover multi-monitor scaling, native dialogs, real
   TeX/MATLAB runtimes, or drag/drop.

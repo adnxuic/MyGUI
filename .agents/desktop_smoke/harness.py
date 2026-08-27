@@ -11,6 +11,7 @@ from PySide6.QtCore import QCoreApplication, QEventLoop, Qt, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QInputDialog,
     QMessageBox,
     QPushButton,
     QWidget,
@@ -101,10 +102,21 @@ class SmokeHarness:
             theme_service=self._theme,
         )
         self.window._skip_close_confirmation = True
+        self._isolate_template_library()
         self.window.showMaximized()
         self.pump(200)
         if not self.window.isVisible():
             raise SmokeError("MainWindow did not become visible.")
+
+    def _isolate_template_library(self) -> None:
+        """Redirect the shared TemplateLibrary away from the repository template/."""
+
+        if self.window is None or self._tempdir is None:
+            raise SmokeError("Cannot isolate the template library before start.")
+        root = Path(self._tempdir.name) / "templates"
+        root.mkdir(parents=True, exist_ok=True)
+        library = self.window.template_workflow.library
+        library.root = root
 
     def shutdown(self) -> None:
         """Close windows and drop the temporary settings file."""
@@ -288,6 +300,52 @@ class SmokeHarness:
         button.click()
         self.pump(80)
         self.dismiss_confirmation()
+
+    def click_and_accept_confirm(self, button: QPushButton) -> None:
+        """Click a command that opens a Yes/No box and accept with Yes."""
+
+        QTimer.singleShot(0, self.accept_confirmation)
+        button.click()
+        self.pump(80)
+        self.accept_confirmation()
+
+    def accept_confirmation(self) -> None:
+        app = self.app or QApplication.instance()
+        if app is None:
+            return
+        for widget in list(app.topLevelWidgets()):
+            if not isinstance(widget, QMessageBox):
+                continue
+            try:
+                visible = widget.isVisible()
+            except RuntimeError:
+                continue
+            if not visible:
+                continue
+            yes_button = widget.button(QMessageBox.StandardButton.Yes)
+            if yes_button is not None:
+                yes_button.click()
+            else:
+                widget.accept()
+        self.pump(20)
+
+    def accept_input_dialog(self) -> None:
+        """Accept a visible QInputDialog without waiting for keyboard focus."""
+
+        app = self.app or QApplication.instance()
+        if app is None:
+            return
+        for widget in list(app.topLevelWidgets()):
+            if not isinstance(widget, QInputDialog):
+                continue
+            try:
+                visible = widget.isVisible()
+            except RuntimeError:
+                continue
+            if visible:
+                widget.accept()
+                break
+        self.pump(20)
 
     def dismiss_confirmation(self) -> None:
         app = self.app or QApplication.instance()
@@ -478,6 +536,48 @@ class SmokeHarness:
         """Capture screenshot of the active Figure canvas."""
         canvas = self.window.figure_window.current_canva
         return self.grab(canvas, name)
+
+    def zoom_in_axes_spec(self, canvas: Any, bounds=(0.6, 0.55, 0.35, 0.35)):
+        """Build a Zoom inset spec from the current Figure creation defaults."""
+
+        from mygui.figuremodify.in_axes import ZoomInAxesCreateSpec
+
+        defaults = canvas.component_creation_defaults().in_axes
+        return ZoomInAxesCreateSpec(
+            bounds=bounds,
+            xlim=(0.0, 5.0),
+            ylim=(0.0, 25.0),
+            facecolor=defaults.facecolor,
+            edgecolor=defaults.edgecolor,
+            linewidth=defaults.linewidth,
+            indicator_color=defaults.indicator_color,
+            indicator_linestyle=defaults.indicator_linestyle,
+            indicator_linewidth=defaults.indicator_linewidth,
+        )
+
+    def image_in_axes_spec(self, canvas: Any, bounds=(0.05, 0.55, 0.3, 0.3)):
+        """Build an Image inset spec with an in-memory PNG payload."""
+
+        import base64
+        from io import BytesIO
+
+        from PIL import Image
+
+        from mygui.figuremodify.in_axes import ImageInAxesCreateSpec
+
+        defaults = canvas.component_creation_defaults().in_axes
+        buffer = BytesIO()
+        Image.new("RGBA", (4, 3), (20, 40, 80, 255)).save(buffer, format="PNG")
+        return ImageInAxesCreateSpec(
+            bounds=bounds,
+            filename="smoke.png",
+            mime_type="image/png",
+            payload_base64=base64.b64encode(buffer.getvalue()).decode("ascii"),
+            facecolor=defaults.facecolor,
+            edgecolor=defaults.edgecolor,
+            linewidth=defaults.linewidth,
+            interpolation=defaults.image_interpolation,
+        )
 
     def dismiss_all_dialogs(self) -> None:
         """Close any remaining open modal or modeless dialogs."""

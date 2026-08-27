@@ -29,6 +29,7 @@ from mygui.application_settings.keys import (
     PAGE_INTEGRATIONS,
     PAGE_MAINTENANCE,
     PAGE_NEW_FIGURE,
+    PAGE_TEMPLATES,
     PAGE_WORKSPACE,
 )
 from mygui.application_settings.models import DefaultValueMode
@@ -39,6 +40,10 @@ from mygui.widgets.settings_center.geometry import NAV_PANE_WIDTH
 from mygui.widgets.settings_center.inheritable_editors import InheritableSettingRow
 from mygui.widgets.settings_center.maintenance_page import MaintenanceSettingsPage
 from mygui.widgets.settings_center.pages import SHELL_PAGE_METADATA, SHELL_PAGE_ORDER
+from mygui.widgets.settings_center.templates_page import (
+    TEMPLATES_EMPTY_DESCRIPTION,
+    TemplatesSettingsPage,
+)
 from mygui.widgets.settings_center.window import SettingsCenterWindow
 from mygui.widgets.settings_pages.workspace import WorkspaceSettingsPage
 from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
@@ -60,6 +65,7 @@ PAGE_SHOT_NAMES = {
     PAGE_APPEARANCE: "02-page-appearance",
     PAGE_WORKSPACE: "03-page-workspace",
     PAGE_NEW_FIGURE: "04-page-new-figure",
+    PAGE_TEMPLATES: "04a-page-templates",
     PAGE_COMPONENTS: "05-page-components",
     PAGE_AXES_COMPONENTS: "06-page-axes-components",
     PAGE_EXPORT: "07-page-export",
@@ -209,6 +215,8 @@ def _scenario_pages(harness: SmokeHarness) -> None:
         inner = _page_inner(dialog, page_id)
         if inner is not None:
             harness.grab(inner, f"{PAGE_SHOT_NAMES[page_id]}-inner")
+        if page_id == PAGE_TEMPLATES:
+            _assert_templates_empty_page(harness, dialog)
         if page_id == PAGE_COMPONENTS:
             _assert_hosted_intro_once(
                 dialog,
@@ -308,6 +316,13 @@ def _scenario_search(harness: SmokeHarness) -> None:
             f"Search 'spine' opened {harness.page_title()!r}, not Axes Components."
         )
     harness.grab(dialog, "12-search-spine")
+    dialog.search_edit.setText("headers")
+    harness.pump(80)
+    if harness.page_title() != "Templates":
+        raise SmokeError(
+            f"Search 'headers' opened {harness.page_title()!r}, not Templates."
+        )
+    harness.grab(dialog, "12a-search-headers")
     dialog.search_edit.clear()
     harness.pump(40)
     harness.close_settings(cancel=True)
@@ -620,6 +635,25 @@ def _assert_row_count(box: QGroupBox | None, expected: int, title: str) -> None:
         raise SmokeError(
             f"Components {title} has {len(rows)} inheritable rows, expected {expected}."
         )
+
+
+def _assert_templates_empty_page(
+    harness: SmokeHarness,
+    dialog: SettingsCenterWindow,
+) -> None:
+    if dialog.restore_defaults_button.isEnabled():
+        raise SmokeError("Templates Restore page defaults must stay disabled.")
+    page = _page_inner(dialog, PAGE_TEMPLATES)
+    if not isinstance(page, TemplatesSettingsPage):
+        raise SmokeError("Templates page widget is missing.")
+    if page.empty_frame.isHidden():
+        raise SmokeError("Isolated empty template library did not show the placeholder.")
+    if page.empty_description.text() != TEMPLATES_EMPTY_DESCRIPTION:
+        raise SmokeError(
+            "Templates empty copy is "
+            f"{page.empty_description.text()!r}, expected {TEMPLATES_EMPTY_DESCRIPTION!r}."
+        )
+    harness.grab(page.empty_frame, "04a-page-templates-empty")
 
 
 def _page_inner(dialog: SettingsCenterWindow, page_id: str) -> QWidget | None:

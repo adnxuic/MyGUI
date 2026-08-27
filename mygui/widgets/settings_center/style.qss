@@ -133,3 +133,218 @@ QPushButton#settings_ok:disabled
     background-color: {{COLOR_SURFACE_ALT}};
     border-color: {{COLOR_BORDER}};
 }
+
+QListWidget#settings_template_list
+{
+    background-color: {{COLOR_SURFACE}};
+    border: 1px solid {{COLOR_BORDER}};
+    border-radius: {{RADIUS_SM}}px;
+    color: {{COLOR_TEXT_PRIMARY}};
+    outline: none;
+}
+
+QListWidget#settings_template_list::item
+{
+    min-height: 28px;
+    padding: {{SPACE_SM}}px {{SPACE_MD}}px;
+}
+
+QListWidget#settings_template_list::item:selected
+{
+    background-color: {{COLOR_ACCENT}};
+    color: {{COLOR_TEXT_ON_DARK}};
+}
+
+QListWidget#settings_template_list::item:selected:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QListWidget#settings_template_list::item:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QFrame#template_header_card
+{
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#template_detail_title
+{
+    font-size: 16px;
+    font-weight: 600;
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel#template_detail_timestamps
+{
+    color: {{COLOR_TEXT_MUTED}};
+    font-size: 11px;
+}
+
+QLabel#template_section_header
+{
+    font-weight: 600;
+    color: {{COLOR_TEXT_PRIMARY}};
+    font-size: 12px;
+}
+
+QLabel#template_spec_subtitle
+{
+    font-weight: 600;
+    color: {{COLOR_TEXT_MUTED}};
+    font-size: 11px;
+}
+
+QLabel#template_empty_title,
+QLabel#template_miss_title
+{
+    font-weight: 600;
+    font-size: 14px;
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QLabel#template_empty_description,
+QLabel#template_miss_description,
+QLabel#template_error_detail
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QLabel#template_error_title
+{
+    font-weight: 600;
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QFrame#template_spec_card
+{
+    background-color: {{COLOR_SURFACE_ALT}};
+    border: 1px solid {{COLOR_BORDER}};
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QPlainTextEdit#template_contract_label
+{
+    border: 1px solid {{COLOR_BORDER}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    padding: {{SPACE_XS}}px {{SPACE_SM}}px;
+}
+
+QPlainTextEdit#template_notes_edit
+{
+    border: 1px solid {{COLOR_BORDER}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+    padding: {{SPACE_XS}}px {{SPACE_SM}}px;
+}
+
+QPlainTextEdit#template_notes_edit:focus
+{
+    border: 1px solid {{COLOR_FOCUS}};
+}
+
+QPushButton#template_apply_button
+{
+    background-color: {{COLOR_ACCENT}};
+    color: {{COLOR_TEXT_ON_DARK}};
+    border: 1px solid {{COLOR_ACCENT}};
+    border-radius: {{RADIUS_SM}}px;
+    padding: 4px {{SPACE_MD}}px;
+    font-weight: 600;
+    font-size: 12px;
+    min-height: 28px;
+}
+
+QPushButton#template_apply_button:hover
+{
+    background-color: {{COLOR_ACCENT_HOVER}};
+    border-color: {{COLOR_ACCENT_HOVER}};
+}
+
+QPushButton#template_apply_button:focus
+{
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QPushButton#template_apply_button:disabled
+{
+    color: {{COLOR_BORDER_STRONG}};
+    background-color: {{COLOR_SURFACE_ALT}};
+    border-color: {{COLOR_BORDER}};
+}
+
+QPushButton#template_update_button,
+QPushButton#template_rename_button,
+QPushButton#template_duplicate_button,
+QPushButton#template_export_button,
+QPushButton#template_notes_save_button,
+QPushButton#template_import_button,
+QPushButton#template_empty_import_button,
+QPushButton#template_folder_button,
+QPushButton#template_refresh_button,
+QPushButton#template_delete_button
+{
+    min-height: 26px;
+    padding: 2px {{SPACE_SM}}px;
+    border: 1px solid {{COLOR_BORDER_STRONG}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{COLOR_SURFACE}};
+    color: {{COLOR_TEXT_PRIMARY}};
+}
+
+QPushButton#template_update_button:hover,
+QPushButton#template_rename_button:hover,
+QPushButton#template_duplicate_button:hover,
+QPushButton#template_export_button:hover,
+QPushButton#template_notes_save_button:hover:!disabled,
+QPushButton#template_import_button:hover,
+QPushButton#template_empty_import_button:hover,
+QPushButton#template_folder_button:hover,
+QPushButton#template_refresh_button:hover
+{
+    border-color: {{COLOR_ACCENT}};
+    background-color: {{COLOR_SURFACE_ALT}};
+}
+
+
+QPushButton#template_delete_button:hover:!disabled
+{
+    border-color: {{COLOR_ERROR}};
+    color: {{COLOR_TEXT_DANGER}};
+    background-color: {{COLOR_ERROR_SOFT}};
+}
+
+QPushButton#template_update_button:disabled,
+QPushButton#template_rename_button:disabled,
+QPushButton#template_duplicate_button:disabled,
+QPushButton#template_export_button:disabled,
+QPushButton#template_notes_save_button:disabled,
+QPushButton#template_delete_button:disabled
+{
+    color: {{COLOR_BORDER_STRONG}};
+    background-color: {{COLOR_SURFACE_ALT}};
+    border-color: {{COLOR_BORDER}};
+}
+
+QFrame#template_error_box
+{
+    background-color: {{COLOR_ERROR_SOFT}};
+    border: 1px solid {{COLOR_ERROR}};
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QFrame#template_empty_box,
+QFrame#template_miss_box
+{
+    background-color: {{COLOR_SURFACE_ALT}};
+    border: 1px dashed {{COLOR_BORDER}};
+    border-radius: {{RADIUS_MD}}px;
+}
+
+

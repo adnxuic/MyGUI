@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from mygui.database import ColumnRef, scipy_fit_adapter
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
-from mygui.figuremodify.components import ComponentKind, ComponentRole
+from mygui.figuremodify.components import ComponentKind, ComponentRole, ROLES_BY_KIND
 from mygui.figuremodify.components.property_values import DEFAULT_COLOR_MAP
-from mygui.figuremodify.in_axes import ZoomInAxesCreateSpec
+from mygui.figuremodify.style_base.color_models import ColorSelection
 
 from desktop_smoke.harness import SmokeError, SmokeHarness
+
+EXPECTED_PROFILES = frozenset(
+    (kind, role) for kind, roles in ROLES_BY_KIND.items() for role in roles
+)
 
 
 def run_inspectors_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
@@ -58,12 +63,9 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
     axes_ids = canvas.create_axes_layout(AxesLayoutSpec.grid(1, 1))
     if not axes_ids:
         raise SmokeError("Axes creation failed.")
+    axes_id = str(axes_ids[0])
     harness.pump(50)
 
-    from mygui.database import ColumnRef
-    from mygui.figuremodify.style_base.color_models import ColorSelection
-
-    # Add 1D & 2D components, elements, etc.
     subtable = harness.window.table.current_subtable()
     sheet = subtable.get_table(0).table_model.sheet
     rows_1d = [
@@ -91,9 +93,8 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
     z_2d = ColumnRef(canvas.project_id, sheet.id, sheet.columns[6].id)
     harness.pump(40)
 
-    # Function curve
+    canvas.add_component_line([0.0, 1.0, 2.0], [0.0, 1.0, 4.0], "-", "#111111", "line")
     canvas.add_curve("sin(x)", 0, 5, "-", "#1f77b4", "Curve")
-    # Data plot
     canvas.add_plots(
         x_ref,
         (y_refs[0],),
@@ -103,7 +104,6 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
         preprocess=None,
         color_selection=ColorSelection(color="#ff7f0e"),
     )
-    # Scatter
     canvas.add_scatters(
         x_ref,
         (y_refs[1],),
@@ -112,7 +112,6 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
         preprocess=None,
         color_selection=ColorSelection(color="#2ca02c"),
     )
-    # Interpolation
     canvas.add_interpolate_curves(
         x_ref,
         (y_refs[0],),
@@ -124,71 +123,89 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
         markersize=6.0,
         markeredgewidth=1.0,
     )
-    # Contour
+    pair = harness.window.repository.line_pair(x_ref, y_refs[0])
+    options = scipy_fit_adapter.default_fit_options("poly1")
+    fit_result = scipy_fit_adapter.fit_curve(
+        pair.x[pair.valid_mask],
+        pair.y[pair.valid_mask],
+        "poly1",
+        options,
+    )
+    canvas.add_fit_curve(
+        pair.x[pair.valid_mask],
+        pair.y[pair.valid_mask],
+        "#9467bd",
+        "Fit",
+        x_ref,
+        y_refs[0],
+        engine="Python",
+        fit_type="poly1",
+        fit_options=options,
+        fit_result=fit_result,
+        expression=fit_result["value_expression"],
+        x_start=1.0,
+        x_stop=5.0,
+    )
     canvas.add_contour(
         x_2d, y_2d, z_2d, {"colormap": {**DEFAULT_COLOR_MAP, "cmap": "viridis"}}
     )
-    # Heatmap
     canvas.add_heatmap(
         x_2d,
         y_2d,
         z_2d,
         {"colormap": {**DEFAULT_COLOR_MAP, "cmap": "coolwarm"}},
     )
-    # Pseudocolor
     canvas.add_pseudocolor(
         x_2d, y_2d, z_2d, {"colormap": {**DEFAULT_COLOR_MAP, "cmap": "magma"}}
     )
-    # Colorbar
     pcolors = canvas.component_registry.query(
         kind=ComponentKind.FIELD_2D, role=ComponentRole.PSEUDOCOLOR
     )
-    if pcolors:
-        try:
-            canvas.add_colorbar(pcolors[0].component_id, {})
-        except Exception:
-            pass
-    # Text
+    if not pcolors:
+        raise SmokeError("Pseudocolor was not created for the Inspector walk.")
+    canvas.add_colorbar(pcolors[0].component_id, {})
     canvas.add_text(0.5, 0.5, "Inspector Walk Text", "sans-serif", 11.0)
-    # Reference marks
     canvas.add_reference_marks([15.2, 22.9, 31.5])
-    # Reference Line & Band
     canvas.add_reference_line(
         {"orientation": "vertical", "value": 2.5, "linestyle": "--"}
     )
     canvas.add_reference_band(
         {"orientation": "horizontal", "lower": -0.5, "upper": 0.5}
     )
-    # In-Axes
-    try:
-        canvas.add_in_axes(ZoomInAxesCreateSpec(bounds=(0.6, 0.6, 0.35, 0.35)))
-    except Exception:
-        pass
+    canvas.add_in_axes(harness.zoom_in_axes_spec(canvas))
+    canvas.add_in_axes(harness.image_in_axes_spec(canvas))
+    canvas.axes_commands.ensure_legend(axes_id)
 
     harness.pump(80)
     canvas.redraw()
     harness.pump(50)
+    harness.grab_canvas("inspector-all-components-canvas")
 
-    # Walk all unique (kind, role) components in registry
     visited_profiles: set[tuple[ComponentKind, ComponentRole]] = set()
-    controllers = canvas.component_registry.query()
-
-    for ctrl in controllers:
+    for ctrl in canvas.component_registry.query():
         profile_key = (ctrl.state.kind, ctrl.state.role)
         if profile_key in visited_profiles:
             continue
         visited_profiles.add(profile_key)
-
         harness.select_component(ctrl.component_id)
         harness.pump(60)
-
         kind_name = ctrl.state.kind.value.lower()
         role_name = ctrl.state.role.value.lower()
-        shot_name = f"inspector-{kind_name}-{role_name}"
+        harness.grab_inspector(f"inspector-{kind_name}-{role_name}")
 
-        harness.grab_inspector(shot_name)
-
-    if len(visited_profiles) < 15:
-        raise SmokeError(
-            f"Expected at least 15 distinct inspector profiles, visited {len(visited_profiles)}."
+    missing = EXPECTED_PROFILES - visited_profiles
+    if missing:
+        labels = ", ".join(
+            f"{kind.value}:{role.value}"
+            for kind, role in sorted(missing, key=lambda item: (item[0].value, item[1].value))
         )
+        raise SmokeError(
+            f"Inspector walk missed {len(missing)} profile(s): {labels}."
+        )
+    extra = visited_profiles - EXPECTED_PROFILES
+    if extra:
+        labels = ", ".join(
+            f"{kind.value}:{role.value}"
+            for kind, role in sorted(extra, key=lambda item: (item[0].value, item[1].value))
+        )
+        raise SmokeError(f"Inspector walk saw unexpected profile(s): {labels}.")

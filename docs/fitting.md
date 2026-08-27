@@ -47,6 +47,12 @@ Changing a source or preprocessing expression invalidates any running request
 and preserves the previous curve/result until the user explicitly fits again.
 The fit dialog range uses the minimum and maximum preprocessed X values.
 
+Applying a [Chart Template](chart-templates.md) is the deliberate exception to
+manual recomputation: every configured Fit Curve is rerun sequentially against
+the newly imported and preprocessed data before the new project is published.
+Any failure aborts the whole template application. A MATLAB template requires
+MATLAB availability and never falls back to SciPy.
+
 ## Fit Types
 
 The backend-independent `mygui.database.fit_catalog` is the authoritative
@@ -85,7 +91,7 @@ does not update the plotted curve or result table.
 
 ## Project Files
 
-Fitting curves are saved in schema v15 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
+Fitting curves are saved in schema v16 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
 Saved records include a stable `object_id`, X/Y `ColumnRef` objects, fitting engine, fit type,
 advanced options when used, fit result, drawing expression, X range, style,
 color, and legend label.

@@ -5,6 +5,7 @@ from __future__ import annotations
 PAGE_APPEARANCE = "appearance"
 PAGE_WORKSPACE = "workspace"
 PAGE_NEW_FIGURE = "new_figure"
+PAGE_TEMPLATES = "templates"
 PAGE_COMPONENTS = "components"
 PAGE_AXES_COMPONENTS = "axes_components"
 PAGE_EXPORT = "export"

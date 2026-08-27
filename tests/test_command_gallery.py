@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QRegion
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow
 
@@ -44,7 +45,11 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [29, 7, 8, 6])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [30, 7, 8, 6])
+            self.assertEqual(
+                next(iter(bars[0].action_dict)),
+                "Apply Template",
+            )
             layout_bar = bars[1]
             presets = axes_layout_presets()
             self.assertEqual(
@@ -320,6 +325,65 @@ class CommandGalleryTests(unittest.TestCase):
         finally:
             window.close()
             self.app.processEvents()
+
+    def test_apply_template_action_icon_matches_theme_contrast(self):
+        from mygui.application_theme import (
+            AppearancePreferences,
+            Density,
+            FakeStyleHints,
+            ThemeMode,
+            ThemeService,
+        )
+        from mygui.application_theme.runtime import (
+            reset_theme_runtime_for_tests,
+        )
+        from mygui.widgets.title_bar.py_title_menu import SelectorStyleMenuBar
+
+        reset_theme_runtime_for_tests()
+        hints = FakeStyleHints(Qt.ColorScheme.Light)
+        theme = ThemeService(self.app, style_hints=hints)
+        try:
+            theme.apply_committed(
+                AppearancePreferences(
+                    mode=ThemeMode.LIGHT,
+                    font_pt=9,
+                    density=Density.STANDARD,
+                )
+            )
+            bar = SelectorStyleMenuBar()
+            apply_action = bar.action_dict["Apply Template"]
+            image_light = apply_action.icon().pixmap(24, 24).toImage()
+            lightness_values_light = [
+                image_light.pixelColor(x, y).lightness()
+                for y in range(image_light.height())
+                for x in range(image_light.width())
+                if image_light.pixelColor(x, y).alpha() > 0
+            ]
+            self.assertTrue(lightness_values_light)
+            avg_lightness_light = sum(lightness_values_light) / len(lightness_values_light)
+            self.assertLess(avg_lightness_light, 100)
+
+            theme.apply_committed(
+                AppearancePreferences(
+                    mode=ThemeMode.DARK,
+                    font_pt=9,
+                    density=Density.STANDARD,
+                )
+            )
+            self.app.processEvents()
+            image_dark = apply_action.icon().pixmap(24, 24).toImage()
+            lightness_values_dark = [
+                image_dark.pixelColor(x, y).lightness()
+                for y in range(image_dark.height())
+                for x in range(image_dark.width())
+                if image_dark.pixelColor(x, y).alpha() > 0
+            ]
+            self.assertTrue(lightness_values_dark)
+            avg_lightness_dark = sum(lightness_values_dark) / len(lightness_values_dark)
+            self.assertGreater(avg_lightness_dark, 200)
+        finally:
+            theme.shutdown()
+            reset_theme_runtime_for_tests()
 
 
 class LazySettingsDialogTests(unittest.TestCase):

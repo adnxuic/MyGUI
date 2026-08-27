@@ -652,6 +652,25 @@ class SettingsCenterProductionPagesTests(unittest.TestCase):
             self.assertEqual(flat.call_count, 1)
             reload.assert_not_called()
 
+    def test_navigating_pages_with_comboboxes_emits_no_set_tab_order_warnings(self) -> None:
+        from PySide6.QtCore import qInstallMessageHandler
+        captured_warnings: list[str] = []
+
+        def handler(mode, context, message):
+            if "setTabOrder" in message:
+                captured_warnings.append(message)
+
+        prev_handler = qInstallMessageHandler(handler)
+        try:
+            window = self.host.present("export")
+            self.app.processEvents()
+            for page_id in self.host.pages.page_ids():
+                window._select_page(page_id)
+                self.app.processEvents()
+            self.assertEqual(captured_warnings, [])
+        finally:
+            qInstallMessageHandler(prev_handler)
+
 
 class SettingsCenterFutureSchemaTests(unittest.TestCase):
     @classmethod

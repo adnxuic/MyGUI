@@ -289,7 +289,8 @@ class PyFigureWindow(QFrame):
         )
 
     def add_figure(self, width=None, height=None, dpi=None, style=None, canva_name=None,
-                   create_table=True, project_path=None, component_tree=None):
+                   create_table=True, project_path=None, component_tree=None,
+                   before_publish=None):
         """Add figure."""
 
         project_name = validate_component_name(canva_name or self._default_project_name(), "Project name")
@@ -328,6 +329,8 @@ class PyFigureWindow(QFrame):
             canva.set_figure_inspector(figure_inspector)
             if component_tree is not None:
                 canva.restore_component_tree(component_tree)
+            if callable(before_publish):
+                before_publish(canva)
             self.figure_inspector_host.publish_figure_inspector(
                 figure_inspector
             )
@@ -710,6 +713,7 @@ class PyFigureWindow(QFrame):
         figure: dict[str, Any],
         project_name: str,
         project_path: str | None = None,
+        before_publish=None,
     ):
         """Load project figure snapshot."""
 
@@ -732,4 +736,5 @@ class PyFigureWindow(QFrame):
             create_table=False,
             project_path=project_path,
             component_tree=figure,
+            before_publish=before_publish,
         )

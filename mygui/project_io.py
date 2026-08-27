@@ -447,10 +447,24 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
     return snapshot
 
 
-def restore_project_snapshot(filename: str | Path, table=None, figure_window=None) -> dict[str, Any]:
-    """Restore project snapshot."""
+def restore_project_payload(
+    snapshot: dict[str, Any],
+    *,
+    table=None,
+    figure_window=None,
+    project_path: str | Path | None = None,
+    mark_clean: bool = False,
+    before_figure_publish=None,
+) -> dict[str, Any]:
+    """Stage and publish one already decoded, strictly validated snapshot.
 
-    snapshot = load_project_file(filename)
+    File opening and template application share this transaction boundary so
+    neither path can leave a Table, Canvas, Inspector, tree, or tab half
+    published after a failure.
+    """
+
+    snapshot = deepcopy(snapshot)
+    validate_project_snapshot(snapshot)
     project_meta = snapshot["project"]
     project_id = project_meta["id"]
     project_name = project_meta["name"]
@@ -486,14 +500,21 @@ def restore_project_snapshot(filename: str | Path, table=None, figure_window=Non
             raise ValueError("Project restore requires the Table widget.")
         table.load_project_table_snapshot(snapshot["table"], publish=False)
         if figure_window is not None:
+            figure_kwargs = {
+                "project_path": (
+                    str(Path(project_path)) if project_path is not None else None
+                )
+            }
+            if before_figure_publish is not None:
+                figure_kwargs["before_publish"] = before_figure_publish
             canvas = figure_window.load_project_figure_snapshot(
                 snapshot["figure"],
                 project_name,
-                project_path=str(Path(filename)),
+                **figure_kwargs,
             )
-            mark_clean = getattr(figure_window, "mark_canvas_clean", None)
-            if callable(mark_clean) and canvas is not None:
-                mark_clean(canvas)
+            mark_clean_canvas = getattr(figure_window, "mark_canvas_clean", None)
+            if mark_clean and callable(mark_clean_canvas) and canvas is not None:
+                mark_clean_canvas(canvas)
         repository.publish_project_added(project_id)
         discard_restore_messages()
         return snapshot
@@ -534,3 +555,17 @@ def restore_project_snapshot(filename: str | Path, table=None, figure_window=Non
                 "; ".join(cleanup_errors),
             )
         raise
+
+
+def restore_project_snapshot(filename: str | Path, table=None, figure_window=None) -> dict[str, Any]:
+    """Load and restore one project file through the shared publish boundary."""
+
+    path = Path(filename)
+    snapshot = load_project_file(path)
+    return restore_project_payload(
+        snapshot,
+        table=table,
+        figure_window=figure_window,
+        project_path=path,
+        mark_clean=True,
+    )

@@ -82,15 +82,16 @@ not claimed by offscreen automation.
 
 ## Desktop smoke walk
 
-`.agents/checks/verify_desktop_smoke.py` is a local Windows check. The
-implemented walk is **Settings Center + NEXT_USE only** (Components / Axes
-Components pages, Cancel/Apply restore, a minimum new Curve / Scatter / Text
-creation, and a new Figure for Axes). It is not a full-application walk:
-galleries, 27
-Inspectors, XRD, table, Canvas popout, TeX/MATLAB Connect, and export encoding
-remain on the manual smoke page. Evidence is PNG screenshots plus
-`summary.json` under `build/agent-results/desktop-smoke/`. It is **not** part of
+`.agents/checks/verify_desktop_smoke.py` is a local Windows check. It opens
+the real MainWindow, clicks controls, and writes PNG plus `summary.json` under
+`build/agent-results/desktop-smoke/`. Groups (`--only`) are `settings`,
+`templates`, `field_2d`, `charts_1d`, `elements`, `inspectors`,
+`layouts_xrd`, `deletion_history`, and `project_lifecycle`. Settings includes
+the Templates page (Restore disabled, isolated empty library). The templates
+group extracts, duplicates, and applies a chart template without native file
+dialogs. Inspectors walk all 30 production `(ComponentKind, ComponentRole)`
+profiles. Native file dialogs, drag/drop, multi-monitor DPI, and live
+TeX/MATLAB remain on the manual smoke page. It is **not** part of
 `APPLICATION_TEST_MODULES` or `verify_full`. Do not set
 `QT_QPA_PLATFORM=offscreen`. Pixel-golden comparison is not used; assertions
-are structural. Native file dialogs, drag/drop, and multi-monitor DPI remain
-manual.
+are structural.

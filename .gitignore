@@ -57,3 +57,8 @@ pictures/icons/app_icon_mark.png
 pictures/icons/app_icon_mark.ico
 temp.md
 test_XRD.mygui.json
+
+# Repository-local chart templates may contain embedded source data
+/template/
+
+tests/test_datas/*

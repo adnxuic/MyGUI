@@ -12,6 +12,7 @@ from .table_repository import AlignedPair, TableChangeSet, TableMutationCommand,
 from .data_preprocessing import (
     DataPreprocessSpec,
     PreprocessedPair,
+    preprocess_aligned_pair,
     resolve_preprocessed_pair,
 )
 
@@ -23,6 +24,7 @@ __all__ = [
     "DataPreprocessSpec",
     "PreprocessedPair",
     "ProjectTableDocument",
+    "preprocess_aligned_pair",
     "SheetDocument",
     "TableChangeSet",
     "TableMutationCommand",

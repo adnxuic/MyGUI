@@ -38,6 +38,7 @@ def run_smoke(
         run_project_lifecycle_scenarios,
     )
     from desktop_smoke.scenarios.settings import run_settings_scenarios
+    from desktop_smoke.scenarios.templates import run_templates_scenarios
 
     selected = list(GROUPS) if not groups else list(groups)
     unknown = [name for name in selected if name not in GROUPS]
@@ -58,6 +59,8 @@ def run_smoke(
         harness.start()
         if "settings" in selected:
             scenario_results.extend(run_settings_scenarios(harness))
+        if "templates" in selected:
+            scenario_results.extend(run_templates_scenarios(harness))
         if "field_2d" in selected:
             scenario_results.extend(run_field_2d_scenarios(harness))
         if "charts_1d" in selected:

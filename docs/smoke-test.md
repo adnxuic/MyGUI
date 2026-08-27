@@ -4,18 +4,23 @@ Run these checks from the repository root after GUI-facing changes.
 
 ## Automated desktop walk
 
-A code-driven Windows walk opens the real MainWindow and exercises **Settings
-Center plus NEXT_USE creation defaults only** (Components and Axes
-Components). It writes PNG evidence plus `summary.json`. It does **not**
-replace the interactive checks below, and it does not walk galleries, the 30
-Inspectors, XRD, the table, Canvas popout, TeX/MATLAB Connect, or export
-encoding. Offscreen Qt tests still do not cover DPI, native file dialogs, drag
-and drop, or live TeX/MATLAB.
+A code-driven Windows walk opens the real MainWindow, clicks controls, and
+writes PNG evidence plus `summary.json`. Groups are selected with `--only`.
+The walk covers Settings Center (including Templates), NEXT_USE creation
+defaults, Chart Templates extract/apply, 1D charts, Field 2D, Elements, all 30
+Inspector profiles, layout templates, XRD import, deletion/history, and
+project save/restore, export, and Canvas popout. Native file dialogs, drag and
+drop, multi-monitor DPI, and live TeX/MATLAB remain on the interactive checks
+below. Offscreen Qt tests still do not cover those.
 
 ```powershell
 E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only settings
+E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only templates
+E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only field_2d,charts_1d,elements,inspectors,layouts_xrd,deletion_history,project_lifecycle
 ```
 
+Available groups: `settings`, `templates`, `field_2d`, `charts_1d`, `elements`,
+`inspectors`, `layouts_xrd`, `deletion_history`, `project_lifecycle`.
 `--all-styles` is ignored. Evidence lands under
 `build/agent-results/desktop-smoke/`. Do not set `QT_QPA_PLATFORM=offscreen`.
 This check is local-only and is not part of `verify_full`. Remaining Start,
@@ -42,9 +47,12 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
    click the active page again to hide the Explorer, restart, and confirm the
    splitter, page, and visibility preferences restore.
 5. Open Settings (gear, **Edit > Settings**, or Ctrl+,). Confirm the page
-   order is Appearance, Workspace, New Figure, Components, Axes Components, Export,
+   order is Appearance, Workspace, New Figure, Templates, Components, Axes Components, Export,
    Integrations, Maintenance. Search `Line width` and confirm Components is
    the visible page. Search `spine` and confirm Axes Components is visible.
+   Search `headers` and confirm Templates is visible. Templates Restore page
+   defaults stays disabled; extract/duplicate writes files immediately and
+   Cancel does not revert them.
    On Workspace, use `Reset workspace layout now…`, confirm,
    and confirm the default proportions return and the Message Bar reports
    success in green. Cancel/Esc must restore an uncommitted Appearance

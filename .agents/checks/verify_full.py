@@ -135,6 +135,7 @@ APPLICATION_TEST_MODULES = {
     "test_e2e_acceptance": (ISOLATION_GUI_MODULE, 24.0),
     "test_py_figure_canvas": (ISOLATION_GUI_MODULE, 5.5),
     "test_project_metadata": (ISOLATION_GUI_MODULE, 0.5),
+    "test_template_library": (ISOLATION_GUI_MODULE, 15.0),
 }
 
 GUI_SENSITIVE_TEST_MODULES = frozenset(

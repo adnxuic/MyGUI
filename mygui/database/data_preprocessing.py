@@ -176,8 +176,27 @@ def resolve_preprocessed_pair(
 ) -> PreprocessedPair:
     """Resolve aligned table values and apply both expressions atomically."""
 
-    spec = DataPreprocessSpec.from_dict(preprocess)
     raw = repository.line_pair(x_ref, y_ref)
+    return preprocess_aligned_pair(
+        raw,
+        preprocess,
+        preserve_gaps=preserve_gaps,
+    )
+
+
+def preprocess_aligned_pair(
+    raw,
+    preprocess: DataPreprocessSpec | Mapping[str, Any] | None = None,
+    *,
+    preserve_gaps: bool,
+) -> PreprocessedPair:
+    """Apply persisted preprocessing to one immutable aligned-pair value.
+
+    This state-free entry point is shared by the live Repository adapter and
+    pre-publication template fitting.
+    """
+
+    spec = DataPreprocessSpec.from_dict(preprocess)
     raw_x = np.asarray(raw.x).copy()
     raw_y = np.asarray(raw.y).copy()
     length = len(raw_x)

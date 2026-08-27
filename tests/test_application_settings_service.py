@@ -381,6 +381,49 @@ class WorkspaceLayoutPortTests(unittest.TestCase):
         self.assertEqual(service.snapshot().revision, revision)
         self.assertEqual(service.snapshot().workspace.layout, layout)
 
+    def test_normal_dual_slot_diagnostics_do_not_produce_load_warning(self):
+        class _HealthyDualSlotDocument:
+            def load(self):
+                from mygui.application_settings.storage.types import DocumentHealth, DocumentLoadResult
+                return DocumentLoadResult(
+                    health=DocumentHealth.NORMAL,
+                    revision=9,
+                    payload={},
+                    source_slot="slotA",
+                    diagnostics=(
+                        "slotA: valid_current revision=9 schema_version=1",
+                        "slotB: valid_current revision=8 schema_version=1",
+                    ),
+                )
+
+        service = ApplicationSettingsService(document=_HealthyDualSlotDocument())
+        self.assertEqual(service.health(), SettingsHealth.OK)
+        self.assertIsNone(service._load_warning)
+        result = service.commit_patch(service.begin_session())
+        self.assertTrue(result.success)
+        self.assertIsNone(result.warning)
+
+    def test_degraded_dual_slot_diagnostics_produce_load_warning(self):
+        class _DegradedDualSlotDocument:
+            def load(self):
+                from mygui.application_settings.storage.types import DocumentHealth, DocumentLoadResult
+                return DocumentLoadResult(
+                    health=DocumentHealth.DEGRADED,
+                    revision=9,
+                    payload={},
+                    source_slot="slotA",
+                    diagnostics=(
+                        "slotA: valid_current revision=9 schema_version=1",
+                        "slotB: corrupt (sha256 mismatch)",
+                        "using slotA; the next successful commit will repair the corrupt companion slot",
+                    ),
+                )
+
+        service = ApplicationSettingsService(document=_DegradedDualSlotDocument())
+        self.assertEqual(service.health(), SettingsHealth.DEGRADED)
+        self.assertIsNotNone(service._load_warning)
+        self.assertIn("corrupt", service._load_warning)
+
 
 if __name__ == "__main__":
     unittest.main()

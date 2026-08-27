@@ -67,6 +67,7 @@ from mygui.application_theme import (
     subscribe_theme_window,
 )
 from mygui.widgets.settings_center import compose_settings_center
+from mygui.widgets.template_workflow import TemplateWorkflow
 
 
 APP_ICON_PATH = resource_path("pictures/icons/app_icon.ico")
@@ -287,11 +288,16 @@ class MainWindow(QMainWindow):
         export_preferences = None
         if self.settings_service is not None:
             export_preferences = self.settings_service.export_preferences_port()
+        self.template_workflow = TemplateWorkflow(
+            table=self.table,
+            figure_window=self.figure_window,
+        )
         self.title_bar = PyTitleBar(
             self,
             figure_window=self.figure_window,
             table=self.table,
             export_preferences=export_preferences,
+            template_workflow=self.template_workflow,
         )
         self.figure_window.requestStyleSelector.connect(self.title_bar.show_style_selector)
         self.figure_window.projectCloseRequested.connect(
@@ -400,6 +406,8 @@ class MainWindow(QMainWindow):
             on_message=status_messages.show_message,
             on_open_tex_panel=self._open_tex_panel_from_settings,
             on_open_matlab_panel=self._open_matlab_panel_from_settings,
+            template_library=self.template_workflow.library,
+            template_workflow=self.template_workflow,
         )
         self.left_column.set_open_settings(self.open_settings_center)
 

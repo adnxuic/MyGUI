@@ -1,1 +1,1 @@
-"""Local Windows desktop smoke: Settings Center and NEXT_USE only."""
+"""Local Windows desktop smoke: open MainWindow, click, and capture screenshots."""

@@ -104,8 +104,6 @@ class ApplicationSettingsService:
         self._health = _health_from_document(loaded)
         warning = getattr(loaded, "warning", None)
         diagnostics = getattr(loaded, "diagnostics", ())
-        if warning is None and diagnostics:
-            warning = "; ".join(str(item) for item in diagnostics if item)
         error = getattr(loaded, "error", None)
         if error and not missing:
             warning = str(error)
@@ -116,6 +114,8 @@ class ApplicationSettingsService:
         ):
             if self._health is SettingsHealth.OK:
                 self._health = SettingsHealth.DEGRADED
+        if warning is None and self._health is not SettingsHealth.OK and diagnostics:
+            warning = "; ".join(str(item) for item in diagnostics if item)
         if payload_has_unknown_current_fields(
             payload if isinstance(payload, Mapping) else None
         ):

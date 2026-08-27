@@ -1,1 +1,1 @@
-"""Desktop smoke scenario modules. Only the settings group is implemented."""
+"""Desktop smoke scenario modules registered in catalog.GROUPS."""

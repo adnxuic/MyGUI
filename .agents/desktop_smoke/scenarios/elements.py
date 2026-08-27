@@ -209,6 +209,10 @@ def _scenario_in_axes(harness: SmokeHarness) -> None:
 
     insets = canvas.component_registry.query(kind=ComponentKind.IN_AXES)
     if not insets:
+        canvas.add_in_axes(harness.zoom_in_axes_spec(canvas))
+        harness.pump(60)
+        insets = canvas.component_registry.query(kind=ComponentKind.IN_AXES)
+    if not insets:
         raise SmokeError("In-Axes component was not created.")
 
     harness.select_component(insets[0].component_id)

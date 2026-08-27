@@ -29,6 +29,7 @@ class PyTitleBar(QFrame):
         figure_window=None,
         table: PyTable | None = None,
         export_preferences=None,
+        template_workflow=None,
     ):
         super().__init__(parent)
         self.parent = parent
@@ -51,6 +52,7 @@ class PyTitleBar(QFrame):
 
         self.selector_style_bar = SelectorStyleMenuBar(
             figure_window=figure_window,
+            template_workflow=template_workflow,
         )
         self.selector_layout_bar = SelectorLayoutMenuBar(
             figure_window=figure_window,
@@ -74,6 +76,7 @@ class PyTitleBar(QFrame):
             table,
             figure_window,
             export_preferences=export_preferences,
+            template_workflow=template_workflow,
         )
         self.stacklayout_top.addWidget(self.selector_menu_bar)
         self.stacklayout_top.addWidget(self.menu_bar)

@@ -27,6 +27,7 @@ resource loading.
 | Environment variable | Default | Hard cap | Applies to |
 | --- | ---: | ---: | --- |
 | `MYGUI_MAX_PROJECT_BYTES` | 64 MiB | 256 MiB | Project JSON bytes |
+| `MYGUI_MAX_TEMPLATE_BYTES` | 32 MiB | 128 MiB | Chart-template JSON bytes |
 | `MYGUI_MAX_JSON_DEPTH` | 64 | 128 | Decoded project nesting |
 | `MYGUI_MAX_JSON_VALUES` | 1,000,000 | 5,000,000 | Decoded JSON values |
 | `MYGUI_MAX_PROJECT_COMPONENTS` | 20,000 | 100,000 | Figure components |

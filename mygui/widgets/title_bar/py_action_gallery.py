@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QSize, QTimer, Qt
 from PySide6.QtGui import QAction, QIcon
@@ -18,10 +20,16 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.application_theme import current_density_metrics, subscribe_theme_window
+from mygui.application_theme.icons import IconRole, classify_icon_source
+from mygui.application_theme.runtime import default_theme_runtime
+
+if TYPE_CHECKING:
+    from mygui.application_theme.icons import CachingThemeIconProvider
+    from mygui.application_theme.models import ThemeSnapshot
 
 
 DialogFactory = Callable[[QWidget | None], QDialog]
-IconSource = str | QIcon
+IconSource = str | QIcon | Path
 
 
 class LazyDialogAction(QAction):
@@ -36,13 +44,32 @@ class LazyDialogAction(QAction):
         *,
         reuse_dialog: bool = True,
     ):
-        super().__init__(QIcon(icon), text, parent)
+        self._icon_source = icon
+        resolved_icon = self._resolve_icon(icon, parent)
+        super().__init__(resolved_icon, text, parent)
         self.setToolTip(text)
         self.setStatusTip(text)
         self._dialog_factory = dialog_factory
         self._reuse_dialog = reuse_dialog
         self._dialog: QDialog | None = None
         self.triggered.connect(self.show_dialog)
+
+    @staticmethod
+    def _resolve_icon(icon: IconSource, parent: QObject | None = None) -> QIcon:
+        if isinstance(icon, QIcon):
+            return icon
+        source = str(icon)
+        runtime = default_theme_runtime()
+        snapshot = runtime.snapshot
+        if snapshot is not None and runtime.icon_provider is not None:
+            if classify_icon_source(source) is IconRole.CHROME:
+                widget = parent if isinstance(parent, QWidget) else None
+                return runtime.icon_provider.icon(
+                    source,
+                    snapshot=snapshot,
+                    widget=widget,
+                )
+        return QIcon(source)
 
     @property
     def dialog(self) -> QDialog | None:
@@ -108,6 +135,25 @@ class ResponsiveActionGallery(QFrame):
         self.setMinimumHeight(metrics.gallery)
         self.setMaximumHeight(metrics.gallery)
         self.toolbar.setIconSize(QSize(metrics.button, metrics.button))
+
+    def apply_theme_icons(
+        self,
+        snapshot: ThemeSnapshot,
+        provider: CachingThemeIconProvider,
+    ) -> None:
+        """Retint chrome action icons for the published scheme."""
+
+        for action in self.action_dict.values():
+            source = getattr(action, "_icon_source", None)
+            if isinstance(source, (str, Path)):
+                if classify_icon_source(str(source)) is IconRole.CHROME:
+                    action.setIcon(
+                        provider.icon(
+                            str(source),
+                            snapshot=snapshot,
+                            widget=self,
+                        )
+                    )
 
     def showEvent(self, event):
         """Refresh the widget when Qt makes it visible."""

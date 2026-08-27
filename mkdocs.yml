@@ -73,6 +73,7 @@ nav:
       - Text Data Import: text-data-import.md
       - Excel Import: excel-import.md
   - Creating Charts:
+      - Chart Templates: chart-templates.md
       - Axes Layout Templates: axes-layouts.md
       - Multi-Series Chart Creation: multi-series-charts.md
       - Function Curve: function-curve.md

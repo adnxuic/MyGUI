@@ -17,6 +17,7 @@ from mygui.application_settings.keys import (
     PAGE_INTEGRATIONS,
     PAGE_MAINTENANCE,
     PAGE_NEW_FIGURE,
+    PAGE_TEMPLATES,
     PAGE_WORKSPACE,
 )
 from mygui.application_settings.registry import SettingsRegistry, production_settings_registry
@@ -94,6 +95,7 @@ SHELL_PAGE_ORDER = (
     PAGE_APPEARANCE,
     PAGE_WORKSPACE,
     PAGE_NEW_FIGURE,
+    PAGE_TEMPLATES,
     PAGE_COMPONENTS,
     PAGE_AXES_COMPONENTS,
     PAGE_EXPORT,
@@ -116,6 +118,16 @@ SHELL_PAGE_METADATA: Mapping[str, SettingsCenterPageSpec] = {
         page_id=PAGE_NEW_FIGURE,
         title="New Figure",
         description="Default Figure size and document DPI.",
+    ),
+    PAGE_TEMPLATES: SettingsCenterPageSpec(
+        page_id=PAGE_TEMPLATES,
+        title="Templates",
+        description=(
+            "Template files are written immediately under the repository-root "
+            "template directory. They are not Settings preferences, and Cancel "
+            "does not revert them."
+        ),
+        keywords=("chart", "headers", "fit", "apply", "extract"),
     ),
     PAGE_COMPONENTS: SettingsCenterPageSpec(
         page_id=PAGE_COMPONENTS,

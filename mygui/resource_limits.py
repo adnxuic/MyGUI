@@ -15,6 +15,7 @@ class ResourceLimits:
     """Application resource budgets, configurable through ``MYGUI_*`` env vars."""
 
     max_project_bytes: int = 64 * _MIB
+    max_template_bytes: int = 32 * _MIB
     max_json_depth: int = 64
     max_json_values: int = 1_000_000
     max_project_components: int = 20_000
@@ -43,6 +44,7 @@ DEFAULT_RESOURCE_LIMITS = ResourceLimits()
 
 _HARD_CAPS = ResourceLimits(
     max_project_bytes=256 * _MIB,
+    max_template_bytes=128 * _MIB,
     max_json_depth=128,
     max_json_values=5_000_000,
     max_project_components=100_000,

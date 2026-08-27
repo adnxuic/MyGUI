@@ -139,12 +139,14 @@ class MenuBar(QFrame):
         table: PyTable,
         figure_window=None,
         export_preferences=None,
+        template_workflow=None,
     ):
         super().__init__()
 
         self.table = table
         self.figure_window = figure_window
         self._export_preferences = export_preferences
+        self.template_workflow = template_workflow
 
         self.setObjectName("menu_bar")
         self.layout = QHBoxLayout(self)
@@ -180,9 +182,17 @@ class MenuBar(QFrame):
 
         # 设置编辑菜单
         self.edit_menu = QMenu(self)
-        self.edit_menu.addAction("copy")
-        self.edit_menu.addAction("paste")
-        self.edit_menu.addAction("cut")
+        self.change_to_template_action = QAction(
+            QIcon(icon_path("template_extract.svg")),
+            "Change to Template…",
+            self,
+        )
+        self.change_to_template_action.setObjectName("change_to_template_action")
+        self.change_to_template_action.setData("template_extract.svg")
+        self.change_to_template_action.triggered.connect(
+            lambda _checked=False: self._change_to_template()
+        )
+        self.edit_menu.addAction(self.change_to_template_action)
         self.edit_menu.addSeparator()
         self.settings_action = QAction("Settings", self)
         self.settings_action.setObjectName("settings_action")
@@ -192,6 +202,17 @@ class MenuBar(QFrame):
         self.settings_action.setMenuRole(QAction.MenuRole.NoRole)
         self.settings_action.setToolTip("Open Settings")
         self.edit_menu.addAction(self.settings_action)
+        self.edit_menu.aboutToShow.connect(self._sync_edit_actions)
+
+    def _sync_edit_actions(self) -> None:
+        self.change_to_template_action.setEnabled(
+            self.template_workflow is not None
+            and getattr(self.figure_window, "current_canva", None) is not None
+        )
+
+    def _change_to_template(self) -> None:
+        if self.template_workflow is not None:
+            self.template_workflow.open_extract(self.window())
 
     def apply_theme_metrics(self, metrics) -> None:
         """Apply command-row height and separator size from density metrics."""
@@ -492,11 +513,20 @@ class ControlBar(QFrame):
 class SelectorStyleMenuBar(ResponsiveActionGallery):
     """Provide the selector style title-bar menu."""
 
-    def __init__(self, figure_window=None):
+    def __init__(self, figure_window=None, template_workflow=None):
         super().__init__()
         self.available_styles_dict = load_json_resource(
             "mygui/widgets/title_bar/available_styles.json"
         )
+
+        apply_action = self.add_dialog_action(
+            "Apply Template",
+            icon_path("template_apply.svg"),
+            lambda parent: template_workflow.create_apply_dialog(parent),
+            reuse_dialog=False,
+        )
+        apply_action.setObjectName("apply_template_action")
+        apply_action.setEnabled(template_workflow is not None)
 
         for style in self.available_styles_dict:
             self.add_dialog_action(

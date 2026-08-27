@@ -325,7 +325,6 @@ class FitDomainSection(QFrame):
     def _start_fit_from_dialog(self, dialog, engine: FitEngine):
         if self._disposed:
             return
-        from mygui.database import scipy_fit_adapter
         from mygui.widgets.fig_control_window.background_task import start_background_task
 
         display_engine = self._engine_display_name(engine)
@@ -374,11 +373,9 @@ class FitDomainSection(QFrame):
             len(x_values),
             len(y_values),
         )
-        fit_func = (
-            matlab_adapter.fit_curve_isolated
-            if engine is FitEngine.MATLAB
-            else scipy_fit_adapter.fit_curve
-        )
+        from mygui.template_library.fit_execution import FitExecutionService
+
+        fit_func = FitExecutionService().execute_arrays
         dialog_ref = weakref.ref(dialog)
         fit_options_record = deepcopy(fit_options)
         start_background_task(
@@ -401,6 +398,7 @@ class FitDomainSection(QFrame):
             fit_options,
             logger=matlab_adapter.matlab_logger(),
             task_log_prefix=f"{display_engine} fit task",
+            engine=engine,
         )
 
     def _dialog_for_request(self, dialog_ref, request_id):

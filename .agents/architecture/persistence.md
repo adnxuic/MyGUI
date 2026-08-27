@@ -48,6 +48,33 @@ publication. Failure on either side of insertion cleans by stable object or
 project ID, never display names or tab scans. Compound restore uses Registry
 batch events so the tree rebuilds and redraws once.
 
+File opening and chart-template application enter the same
+`restore_project_payload()` publication boundary. The template path first
+builds a new `ProjectTableDocument`, remaps every template-local component,
+layout, sharing, source, Sheet, and column identity, resolves the closed text
+variables, executes all configured Fit tasks, and strictly validates a full
+schema-v16 snapshot. None of that state is registered or shown before the
+plan succeeds. Automatic Axes limits are recomputed through
+`TemplateAxesAutoscaleService` after materialization and before Inspector/tab
+publication; dimensions with autoscale disabled retain the blueprint range.
+
+## Chart-template persistence
+
+`mygui.template_library` owns independent strict `mygui-template` schema v1.
+Its files are UUID-named records below the repository-root `template/`
+directory, resolved independently of the process CWD, and are not project
+files or QSettings. The library is absent until an explicit save, import, or
+Open Folder action. Writes use a sibling temporary file plus atomic
+replacement; corrupt records remain visible to management UI but are excluded
+from application choices.
+
+The template Figure is a schema-v16 component-tree blueprint with template-
+local identities and logical ColumnRefs. It stores component configuration,
+manual element values, and embedded images, but no `ProjectTableDocument`,
+source project/Sheet/column/component identities, or previous Fit result and
+expression. Changing template fields never enters project Undo/Redo or dirty
+fingerprints.
+
 ## Project history
 
 `TableRepository.undo_stack(project_id)` is the only command timeline for a

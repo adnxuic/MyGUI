@@ -12,7 +12,7 @@ project is created. See [Style Creation Defaults](style-creation-defaults.md).
 
 Settings values never enter `.mygui.json`, Undo/Redo, project dirty
 fingerprints, Component state, or Canvas restore. Opening a project always
-uses the persisted schema-v15 tree.
+uses the persisted schema-v16 tree.
 
 Apply saves the current draft and keeps Settings open. OK saves and closes.
 Cancel, Esc, and the window close button discard an uncommitted draft,
@@ -59,7 +59,7 @@ not stored. Restore page defaults does not stage the hidden layout.
 These defaults apply to the Style creation window and to Figures created by
 a first-time text or Excel import. Precedence is this session's explicit
 input > application defaults > built-in defaults (`6.4` in × `4.8` in,
-`100` DPI). Opening a project uses the persisted schema-v15 Figure size and
+`100` DPI). Opening a project uses the persisted schema-v16 Figure size and
 document DPI and does not overwrite them.
 
 | Parameter | Control | Meaning | Values / default | Key |
@@ -68,10 +68,32 @@ document DPI and does not overwrite them.
 | Default Figure height | Number | Height in inches for new Figures. | `0.1`–`100`; default `4.8` in | `new_figure.height_in` |
 | Default document DPI | Number | Document DPI for new Figures. See [`Figure.dpi`](https://matplotlib.org/3.9.0/api/figure_api.html#matplotlib.figure.Figure.dpi). | `1`–`2400`; default `100` | `new_figure.document_dpi` |
 
+## Templates
+
+Templates are external files, not application-preference keys. This page is
+therefore not part of `PAGE_IDS`; **Restore page defaults** is disabled.
+Template operations take effect immediately even if Settings is later closed
+with Cancel. See [Chart Templates](chart-templates.md) for extraction,
+matching, privacy, and application behavior.
+
+| Operation | Control | Meaning | Persistence |
+| --- | --- | --- | --- |
+| Search | Text | Filter by name, notes, and required headers; corrupt records remain identifiable by filename. | None |
+| Required Data | Read-only text | Sheet and column contract for the selected template. Extra lines scroll; stretching the window does not spread or clip the lines. | None |
+| Apply Template… | Button | Close Settings and open the shared four-step Apply Template workflow. | Creates a new dirty project only after success |
+| Rename… | Button | Change the unique display name without changing the template UUID filename. | Immediate atomic file replacement |
+| Save Notes | Button | Save up to 2,000 characters. | Immediate atomic file replacement |
+| Duplicate | Button | Create a new template ID and unique name. | Immediate new file |
+| Update from Figure… | Button | Preserve ID, name, notes, and creation time while replacing the contract and Figure blueprint after confirmation. | Immediate atomic file replacement |
+| Import… / Export… | Buttons | Transfer one strict `.mygui-template.json` file. Same-ID imports require replacement confirmation. Empty library also offers Import… in the placeholder. | Immediate file operation |
+| Refresh | Button | Reload valid and corrupt files from the template directory. | None |
+| Delete… | Button | Delete the selected template after confirmation. | Immediate, not Undoable |
+| Open Template Folder | Button | Create the repository-root `template/` directory if needed and open it. | Directory creation only |
+
 ## Components
 
 These defaults apply only to components created after Apply. They do not
-change existing Artists, the open project, Undo/Redo, or schema-v15 files.
+change existing Artists, the open project, Undo/Redo, or schema-v16 files.
 Opening a project restores persisted component properties and does not apply
 this page. Restore page defaults and Reset all restore every field to
 **inherit** (the last custom value is kept but unused until you uncheck
@@ -112,7 +134,7 @@ page.
 
 These defaults apply only to ordinary Axes created after Apply. They do not
 change existing Artists, Colorbar auxiliary Axes, In-Axes, project restore,
-Undo/Redo, or schema-v15 files. Opening a project restores persisted Axes
+Undo/Redo, or schema-v16 files. Opening a project restores persisted Axes
 properties and does not apply this page. Restore page defaults and Reset all
 restore every field to **inherit** (the last custom value is kept but unused
 until you uncheck inherit). Color editors on this page do not write the color

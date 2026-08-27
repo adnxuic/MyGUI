@@ -617,7 +617,7 @@ class SettingsPageRegistrationTests(unittest.TestCase):
             tex_status=UNAVAILABLE,
             matlab_status=UNAVAILABLE,
         )
-        self.assertEqual(len(returned), 8)
+        self.assertEqual(len(returned), 9)
         self.assertEqual(list(host_pages.page_ids()), list(SHELL_PAGE_ORDER))
 
     def test_c_page_controls_are_keyboard_reachable(self):

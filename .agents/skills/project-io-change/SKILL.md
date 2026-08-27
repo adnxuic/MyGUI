@@ -17,6 +17,12 @@ handlers live in `canvas_materialize_handlers.py`, and snapshot apply is
 failures by stable project/object ID. Do not infer success from a tab name,
 QUndoStack index, or partially written file.
 
+Decoded in-memory sources such as chart-template application must enter
+`restore_project_payload()` after strict schema-v16 validation. They must not
+reimplement Repository/Canvas publication. Pass any post-materialization,
+pre-publication domain work through its explicit callback, and preserve the
+same rollback and selection-identity proof as file restore.
+
 Add tests on both sides of tab publication, file replace/cleanup failure,
 repository mismatch, materializer failure, one final message/refresh, exact
 identity rollback, and open-save-open round trips. Update current project-file

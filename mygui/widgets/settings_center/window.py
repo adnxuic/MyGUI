@@ -698,6 +698,8 @@ class SettingsCenterWindow(QDialog):
                     continue
                 if not child.isEnabled():
                     continue
+                if child.window() != self.window():
+                    continue
                 QWidget.setTabOrder(previous, child)
                 previous = child
         QWidget.setTabOrder(previous, self._restore_button)

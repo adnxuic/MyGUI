@@ -1,4 +1,4 @@
-"""Compose the production Settings Center host and register all eight pages."""
+"""Compose the production Settings Center host and register all nine pages."""
 
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ from mygui.widgets.settings_center.host import SettingsCenterHost
 from mygui.widgets.settings_center.register import register_c_pages
 from mygui.widgets.settings_center.session_glue import MessageCallback
 from mygui.widgets.settings_pages import register_b_pages
+from mygui.widgets.settings_center.templates_page import templates_page_spec
+from mygui.application_settings.keys import PAGE_TEMPLATES
+from mygui.widgets.settings_center.pages import standard_page_spec
 
 
 def register_all_pages(
@@ -37,6 +40,8 @@ def register_all_pages(
     on_open_tex_panel: Callable[[], None] | None = None,
     on_open_matlab_panel: Callable[[], None] | None = None,
     confirm: Callable[[str, str], bool] | None = None,
+    template_library: Any | None = None,
+    template_workflow: Any | None = None,
 ) -> list[Any]:
     """Register Appearance through Maintenance in navigation order."""
 
@@ -50,6 +55,12 @@ def register_all_pages(
     )
     register = getattr(center, "register_page", None)
     if callable(register):
+        if template_library is not None and template_workflow is not None:
+            templates = templates_page_spec(template_library, template_workflow)
+        else:
+            templates = standard_page_spec(PAGE_TEMPLATES)
+        register(templates)
+        specs.append(templates)
         components = components_page_spec(
             make_components_factory(color_library)
         )
@@ -88,8 +99,10 @@ def compose_settings_center(
     on_message: MessageCallback | None = None,
     on_open_tex_panel: Callable[[], None] | None = None,
     on_open_matlab_panel: Callable[[], None] | None = None,
+    template_library: Any | None = None,
+    template_workflow: Any | None = None,
 ) -> SettingsCenterHost:
-    """Build the lazy Settings Center host with all eight production pages."""
+    """Build the lazy Settings Center host with all nine production pages."""
 
     host = SettingsCenterHost(
         parent,
@@ -106,5 +119,7 @@ def compose_settings_center(
         layout_port=layout_port,
         on_open_tex_panel=on_open_tex_panel,
         on_open_matlab_panel=on_open_matlab_panel,
+        template_library=template_library,
+        template_workflow=template_workflow,
     )
     return host
