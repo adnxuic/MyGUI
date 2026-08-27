@@ -27,8 +27,10 @@ from mygui.application_settings import (
 )
 from mygui.application_theme import (
     AppearancePreferences,
+    EffectiveScheme,
     FakeStyleHints,
     ThemeService,
+    ThemeSnapshot,
     reset_qss_bindings_for_tests,
     subscribe_theme_window,
 )
@@ -271,6 +273,66 @@ class SettingsCenterShellTests(unittest.TestCase):
         self.assertFalse(window.isVisible())
         self.assertEqual(self.service.snapshot().appearance.ui_font_point_size, 11)
         self.assertEqual(self.theme.snapshot().preferences.font_pt, 11)
+
+    def test_dark_preview_reselect_light_restores_window_icons(self) -> None:
+        class _SubscribedProbe(QWidget):
+            def __init__(self) -> None:
+                super().__init__()
+                self.snapshots: list[ThemeSnapshot] = []
+
+            def apply_theme_icons(self, snapshot: ThemeSnapshot, _provider) -> None:
+                self.snapshots.append(snapshot)
+
+        probe = _SubscribedProbe()
+        subscribe_theme_window(probe)
+
+        window = self._present()
+        window.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+        self.app.processEvents()
+        self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.DARK)
+        self.assertTrue(window.glue.is_dirty())
+        self.assertEqual(probe.snapshots[-1].scheme, EffectiveScheme.DARK)
+
+        window.stage_value(APPEARANCE_THEME_MODE, ThemeMode.SYSTEM)
+        self.app.processEvents()
+        self.assertFalse(window.glue.is_dirty())
+        self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.LIGHT)
+        self.assertEqual(probe.snapshots[-1].scheme, EffectiveScheme.LIGHT)
+
+        probe.deleteLater()
+        window.reject()
+
+    def test_dark_preview_cancel_esc_close_restore_window_icons(self) -> None:
+        class _SubscribedProbe(QWidget):
+            def __init__(self) -> None:
+                super().__init__()
+                self.snapshots: list[ThemeSnapshot] = []
+
+            def apply_theme_icons(self, snapshot: ThemeSnapshot, _provider) -> None:
+                self.snapshots.append(snapshot)
+
+        for path in ("cancel", "escape", "close"):
+            with self.subTest(path=path):
+                probe = _SubscribedProbe()
+                subscribe_theme_window(probe)
+
+                window = self._present()
+                window.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+                self.app.processEvents()
+                self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.DARK)
+                self.assertEqual(probe.snapshots[-1].scheme, EffectiveScheme.DARK)
+
+                if path == "cancel":
+                    window.cancel_button.click()
+                elif path == "escape":
+                    QTest.keyClick(window, Qt.Key_Escape)
+                elif path == "close":
+                    window.close()
+                self.app.processEvents()
+
+                self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.LIGHT)
+                self.assertEqual(probe.snapshots[-1].scheme, EffectiveScheme.LIGHT)
+                probe.deleteLater()
 
     def test_restore_page_defaults_only_changes_draft(self) -> None:
         committed = self.service.commit_patch(

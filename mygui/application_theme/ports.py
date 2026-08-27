@@ -44,7 +44,7 @@ class ThemeIconProvider(Protocol):
         """Return a memento of the currently applied icons."""
 
     def restore(self, memento: object) -> None:
-        """Restore icons from ``capture``."""
+        """Restore icons from ``capture`` and replay them to live theme windows."""
 
 
 @runtime_checkable

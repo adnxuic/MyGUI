@@ -279,7 +279,7 @@ class CachingThemeIconProvider:
         }
 
     def restore(self, memento: object) -> None:
-        """Restore icons from ``capture`` without emitting a new theme event."""
+        """Restore icons from ``capture`` and replay them to live theme windows."""
 
         payload = dict(memento) if isinstance(memento, dict) else {}
         self._cache = dict(payload.get("cache") or {})
@@ -288,6 +288,20 @@ class CachingThemeIconProvider:
         self.recolor_calls = int(payload.get("recolor_calls") or 0)
         self.hits = int(payload.get("hits") or 0)
         self.misses = int(payload.get("misses") or 0)
+        snapshot = (
+            self._applied.get("snapshot")
+            if isinstance(self._applied, dict)
+            else None
+        ) or payload.get("snapshot")
+        if snapshot is None:
+            return
+        from .runtime import default_theme_runtime
+        from .windows import default_window_registry
+
+        runtime = default_theme_runtime()
+        runtime.snapshot = snapshot
+        registry = default_window_registry()
+        registry.apply_icons(snapshot, self)
 
     def invalidate(self) -> None:
         """Drop every cached pixmap. Scheme changes call this via ``apply``."""

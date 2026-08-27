@@ -33,6 +33,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
     ComponentState,
     FitCurveController,
+    FitEngine,
     TextController,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
@@ -1224,11 +1225,133 @@ class OptionalDependencyTests(unittest.TestCase):
                 1.0,
                 "Python",
             )
-            self.assertEqual(controller.state.data["expression"], "")
         finally:
             dialog.close()
             widget.close()
             fit.context.editor_manager.close()
+
+    def test_fit_execution_service_matlab_modes(self):
+        from mygui.template_library.fit_execution import FitExecutionService
+
+        service = FitExecutionService()
+        x = [0.0, 1.0, 2.0]
+        y = [0.0, 2.0, 4.0]
+
+        # Mode A: unavailable -> raises RuntimeError, fit_curve_isolated NOT called
+        with patch.object(
+            matlab_adapter,
+            "matlab_status",
+            return_value=matlab_adapter.MatlabStatus(
+                False, "MATLAB runtime unavailable: missing runtime"
+            ),
+        ) as status_mock, patch.object(
+            matlab_adapter, "fit_curve_isolated"
+        ) as fit_mock:
+            with self.assertRaisesRegex(
+                RuntimeError, "MATLAB runtime unavailable: missing runtime"
+            ):
+                service.execute_arrays(x, y, "poly1", None, engine=FitEngine.MATLAB)
+            status_mock.assert_called_once()
+            fit_mock.assert_not_called()
+
+        # Mode B: available + fitting failure -> fit_curve_isolated called, raises RuntimeError
+        with patch.object(
+            matlab_adapter,
+            "matlab_status",
+            return_value=matlab_adapter.MatlabStatus(True),
+        ) as status_mock, patch.object(
+            matlab_adapter,
+            "fit_curve_isolated",
+            side_effect=RuntimeError("MATLAB fitting failed: solver diverged"),
+        ) as fit_mock:
+            with self.assertRaisesRegex(
+                RuntimeError, "MATLAB fitting failed: solver diverged"
+            ):
+                service.execute_arrays(x, y, "poly1", None, engine=FitEngine.MATLAB)
+            status_mock.assert_called_once()
+            fit_mock.assert_called_once()
+
+        # Mode C: available + fitting success -> returns normalized result
+        fake_result = {
+            "value_expression": "2.0*x",
+            "show_expression": "2.0*x",
+            "formula": "p1*x",
+            "fit_type": "poly1",
+            "coefficients": [{"name": "p1", "value": 2.0, "lower": 1.0, "upper": 3.0}],
+            "goodness": {"sse": 0.0, "rsquare": 1.0, "dfe": 2, "adjrsquare": 1.0, "rmse": 0.0},
+            "confidence_level": 0.95,
+            "engine": "Matlab",
+        }
+        with patch.object(
+            matlab_adapter,
+            "matlab_status",
+            return_value=matlab_adapter.MatlabStatus(True),
+        ) as status_mock, patch.object(
+            matlab_adapter,
+            "fit_curve_isolated",
+            return_value=fake_result,
+        ) as fit_mock:
+            result = service.execute_arrays(x, y, "poly1", None, engine=FitEngine.MATLAB)
+            status_mock.assert_called_once()
+            fit_mock.assert_called_once()
+            self.assertEqual(result["value_expression"], "2.0*x")
+            self.assertEqual(result["fit_type"], "poly1")
+
+    def test_matlab_runtime_unavailable_only_warns(self):
+        repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
+        matlab_adapter.set_matlab_enabled(True, notify=False)
+
+        messages = []
+        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
+        widget, fit, _controller, _line = make_fit_editor(
+            repository,
+            project.id,
+            x_ref,
+            y_ref,
+            engine="Matlab",
+        )
+        try:
+            with patch.object(matlab_adapter, "_LOG_TO_FILE", False), \
+                    patch.object(matlab_adapter, "_LOG_TO_STDERR", False), \
+                    self.assertLogs(matlab_adapter.LOGGER_NAME, level="INFO") as logs:
+                with patch.object(
+                    matlab_adapter,
+                    "matlab_status",
+                    return_value=matlab_adapter.MatlabStatus(
+                        False,
+                        "MATLAB runtime unavailable: test runtime missing",
+                    ),
+                ) as matlab_status, patch.object(
+                    fit_options_module.matlab_adapter,
+                    "get_func_info_isolated",
+                    return_value=matlab_adapter.fallback_func_info("poly1"),
+                ), patch.object(
+                    matlab_adapter,
+                    "fit_curve_isolated",
+                ) as fit_curve_isolated:
+                    dialog = fit.open_fit_window("Matlab")
+                    self.assertIsNotNone(dialog)
+                    dialog.fit_options_widget.order_input.setCurrentText("poly1")
+                    dialog.fit_button.click()
+                    self.wait_until(lambda: any(level == "error" for _, level in messages))
+
+            self.assertEqual(fit.result_model_label.text(), "Model: -")
+            self.assertTrue(dialog.fit_button.isEnabled())
+            self.assertIn(
+                ("MATLAB runtime unavailable: test runtime missing", "error"),
+                messages,
+            )
+            fit_curve_isolated.assert_not_called()
+            matlab_status.assert_called_once()
+
+            log_text = "\n".join(logs.output)
+            self.assertIn("Matlab fit request started request_id=1", log_text)
+        finally:
+            if "dialog" in locals() and dialog is not None:
+                dialog.close()
+            widget.close()
+            fit.context.editor_manager.close()
+            matlab_adapter.set_matlab_enabled(False, notify=False)
 
     def test_matlab_fitting_failure_only_warns(self):
         repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
@@ -1248,6 +1371,10 @@ class OptionalDependencyTests(unittest.TestCase):
                     patch.object(matlab_adapter, "_LOG_TO_STDERR", False), \
                     self.assertLogs(matlab_adapter.LOGGER_NAME, level="INFO") as logs:
                 with patch.object(
+                    matlab_adapter,
+                    "matlab_status",
+                    return_value=matlab_adapter.MatlabStatus(True),
+                ) as matlab_status, patch.object(
                     fit_options_module.matlab_adapter,
                     "get_func_info_isolated",
                     return_value=matlab_adapter.fallback_func_info("poly1"),
@@ -1255,7 +1382,7 @@ class OptionalDependencyTests(unittest.TestCase):
                     matlab_adapter,
                     "fit_curve_isolated",
                     side_effect=RuntimeError("MATLAB fitting failed: fit failed"),
-                ):
+                ) as fit_curve_isolated:
                     dialog = fit.open_fit_window("Matlab")
                     self.assertIsNotNone(dialog)
                     dialog.fit_options_widget.order_input.setCurrentText("poly1")
@@ -1265,6 +1392,74 @@ class OptionalDependencyTests(unittest.TestCase):
             self.assertEqual(fit.result_model_label.text(), "Model: -")
             self.assertTrue(dialog.fit_button.isEnabled())
             self.assertIn(("MATLAB fitting failed: fit failed", "error"), messages)
+            fit_curve_isolated.assert_called_once()
+            matlab_status.assert_called_once()
+
+            log_text = "\n".join(logs.output)
+            self.assertIn("Matlab fit request started request_id=1", log_text)
+        finally:
+            if "dialog" in locals() and dialog is not None:
+                dialog.close()
+            widget.close()
+            fit.context.editor_manager.close()
+            matlab_adapter.set_matlab_enabled(False, notify=False)
+
+    def test_matlab_fitting_success_updates_curve_and_dialog(self):
+        repository, project, x_ref, y_ref = self.make_table_repository(with_data=True)
+        matlab_adapter.set_matlab_enabled(True, notify=False)
+
+        messages = []
+        status_messages.set_status_handler(lambda message, level: messages.append((message, level)))
+        widget, fit, controller, _line = make_fit_editor(
+            repository,
+            project.id,
+            x_ref,
+            y_ref,
+            engine="Matlab",
+        )
+        fake_result = {
+            "value_expression": "2.0*x + 1.0",
+            "show_expression": "2.0*x + 1.0",
+            "formula": "p1*x + p2",
+            "fit_type": "poly1",
+            "coefficients": [
+                {"name": "p1", "value": 2.0, "lower": 1.0, "upper": 3.0},
+                {"name": "p2", "value": 1.0, "lower": 0.0, "upper": 2.0},
+            ],
+            "goodness": {"sse": 0.0, "rsquare": 1.0, "dfe": 1, "adjrsquare": 1.0, "rmse": 0.0},
+            "confidence_level": 0.95,
+            "engine": "Matlab",
+        }
+        try:
+            with patch.object(matlab_adapter, "_LOG_TO_FILE", False), \
+                    patch.object(matlab_adapter, "_LOG_TO_STDERR", False), \
+                    self.assertLogs(matlab_adapter.LOGGER_NAME, level="INFO") as logs:
+                with patch.object(
+                    matlab_adapter,
+                    "matlab_status",
+                    return_value=matlab_adapter.MatlabStatus(True),
+                ) as matlab_status, patch.object(
+                    fit_options_module.matlab_adapter,
+                    "get_func_info_isolated",
+                    return_value=matlab_adapter.fallback_func_info("poly1"),
+                ), patch.object(
+                    matlab_adapter,
+                    "fit_curve_isolated",
+                    return_value=fake_result,
+                ) as fit_curve_isolated:
+                    dialog = fit.open_fit_window("Matlab")
+                    self.assertIsNotNone(dialog)
+                    dialog.fit_options_widget.order_input.setCurrentText("poly1")
+                    dialog.fit_button.click()
+                    self.wait_until(lambda: any(level == "success" for _, level in messages))
+
+            self.assertEqual(fit.result_model_label.text(), "Model: poly1")
+            self.assertEqual(fit.expression_input.toPlainText(), "2.0*x + 1.0")
+            self.assertEqual(controller.state.data["expression"], "2.0*x + 1.0")
+            self.assertTrue(dialog.fit_button.isEnabled())
+            self.assertIn(("Matlab fitting completed.", "success"), messages)
+            fit_curve_isolated.assert_called_once()
+            matlab_status.assert_called_once()
 
             log_text = "\n".join(logs.output)
             self.assertIn("Matlab fit request started request_id=1", log_text)

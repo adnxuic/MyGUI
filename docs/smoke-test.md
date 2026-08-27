@@ -53,6 +53,10 @@ Expected result: the main PySide6 window opens without requiring MATLAB or LaTeX
    Search `headers` and confirm Templates is visible. Templates Restore page
    defaults stays disabled; extract/duplicate writes files immediately and
    Cancel does not revert them.
+   On Appearance, with Light saved, preview Dark and then reselect Light,
+   Cancel, or Esc; confirm that the top command bar and bottom status bar stay
+   dark, unselected icons on light surfaces restore to dark, selected items
+   keep high contrast, and no white Dark-preview icons remain.
    On Workspace, use `Reset workspace layout now…`, confirm,
    and confirm the default proportions return and the Message Bar reports
    success in green. Cancel/Esc must restore an uncommitted Appearance

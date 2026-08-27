@@ -11,10 +11,13 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtGui import QFontMetrics, QPalette
+from PySide6.QtGui import QColor, QFontMetrics, QPalette
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
+from mygui.application_settings import APPEARANCE_THEME_MODE, ApplicationSettingsService
 from mygui.application_settings.models import Density, ThemeMode
+from mygui.application_settings.storage import create_settings_backend
 from mygui.application_theme import (
     AppearancePreferences,
     CachingThemeIconProvider,
@@ -27,6 +30,7 @@ from mygui.application_theme import (
     LIGHT_QSS_TOKENS,
     SIZE_PARTICIPANTS,
     ThemeService,
+    ThemeSnapshot,
     compose_theme_snapshot,
     contrast_ratio,
     current_qss_tokens,
@@ -220,6 +224,53 @@ class ThemeIconCacheTests(unittest.TestCase):
         self.assertEqual(self.provider.recolor_calls, before)
         self.assertFalse(brand.isNull())
         self.assertFalse(preview.isNull())
+
+    def test_restore_replays_icons_to_live_subscribed_windows(self) -> None:
+        class _TestIconSubscriber(QWidget):
+            def __init__(self) -> None:
+                super().__init__()
+                self.applied_snapshots: list[ThemeSnapshot] = []
+
+            def apply_theme_icons(self, snapshot: ThemeSnapshot, _provider) -> None:
+                self.applied_snapshots.append(snapshot)
+
+        subscriber = _TestIconSubscriber()
+        subscribe_theme_window(subscriber)
+        rendered_light = self.provider.prerender(self.light)
+        self.provider.apply(rendered_light)
+        memento = self.provider.capture()
+
+        rendered_dark = self.provider.prerender(self.dark)
+        self.provider.apply(rendered_dark)
+        self.assertEqual(subscriber.applied_snapshots[-1].scheme, EffectiveScheme.DARK)
+
+        self.provider.restore(memento)
+        self.assertEqual(subscriber.applied_snapshots[-1].scheme, EffectiveScheme.LIGHT)
+        subscriber.deleteLater()
+
+    def test_restore_without_snapshot_degrades_safely(self) -> None:
+        self.provider.restore({"cache": {}})
+        self.assertEqual(self.provider._cache, {})
+
+    def test_restore_propagates_exception_when_widget_fails(self) -> None:
+        class _FaultySubscriber(QWidget):
+            def __init__(self) -> None:
+                super().__init__()
+                self.fail_now = False
+
+            def apply_theme_icons(self, _snapshot, _provider) -> None:
+                if self.fail_now:
+                    raise RuntimeError("custom icon fail")
+
+        faulty = _FaultySubscriber()
+        subscribe_theme_window(faulty)
+        rendered = self.provider.prerender(self.light)
+        self.provider.apply(rendered)
+        memento = self.provider.capture()
+        faulty.fail_now = True
+        with self.assertRaises(RuntimeError):
+            self.provider.restore(memento)
+        faulty.deleteLater()
 
 
 class ThemeWindowSubscriptionTests(unittest.TestCase):
@@ -507,6 +558,189 @@ class ThemeDarkToLightChromeTests(unittest.TestCase):
         self.assertLess(light_home, 160)
         if dark_toolbar_value < 128:
             self.assertLess(light_home, dark_home)
+
+
+class ThemeDarkPreviewRevertTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = _qapp()
+        cls._origin_font = cls.app.font()
+        cls._origin_palette = QPalette(cls.app.palette())
+        cls._origin_stylesheet = cls.app.styleSheet()
+
+    def setUp(self) -> None:
+        reset_theme_runtime_for_tests()
+        reset_qss_bindings_for_tests()
+        self.hints = FakeStyleHints(Qt.ColorScheme.Light)
+        self.theme = ThemeService(self.app, style_hints=self.hints)
+        self.theme.apply_committed(
+            AppearancePreferences(mode=ThemeMode.LIGHT, font_pt=9, density=Density.STANDARD)
+        )
+        self.backend = create_settings_backend(
+            organization="MyGUI",
+            application="MyGUITest",
+        )
+        self.service = ApplicationSettingsService(
+            document=self.backend.application_settings_port(),
+        )
+        self.service.commit_patch(
+            self.service.begin_session(),
+            {APPEARANCE_THEME_MODE: ThemeMode.LIGHT},
+        )
+        from main import MainWindow
+
+        self.window = MainWindow(
+            settings_backend=self.backend,
+            settings_service=self.service,
+            theme_service=self.theme,
+        )
+        self.window.resize(1280, 720)
+        self.canvas = self.window.figure_window.add_figure(
+            width=4, height=3, dpi=100, style="default", canva_name="PreviewRevert"
+        )
+        create_regular_axes(self.canvas)
+        self.assertTrue(self.canvas.select_component(self.canvas.current_axes_component_id))
+        self.app.processEvents()
+
+    def tearDown(self) -> None:
+        if hasattr(self, "theme"):
+            self.theme.shutdown()
+        if hasattr(self, "window") and self.window is not None:
+            self.window.close_without_prompt()
+            self.window.deleteLater()
+        self.app.processEvents()
+        self.app.setFont(self._origin_font)
+        self.app.setPalette(self._origin_palette)
+        self.app.setStyleSheet(self._origin_stylesheet)
+        reset_qss_bindings_for_tests()
+        reset_theme_runtime_for_tests()
+
+    def _assert_light_icons(self) -> None:
+        self.assertLess(
+            _opaque_icon_value(self.window.left_column.setting_button.icon()),
+            120,
+            "setting_button should be dark",
+        )
+        self.assertLess(
+            _opaque_icon_value(self.window.left_column.components_button.icon()),
+            120,
+            "components_button should be dark",
+        )
+        self.assertGreater(
+            _opaque_icon_value(self.window.left_column.table_button.icon()),
+            200,
+            "checked table_button on blue accent should be bright",
+        )
+        self.assertLess(
+            _opaque_icon_value(self.window.title_bar.selector_menu_bar.style_button.icon()),
+            120,
+            "checked style_button on light surface should be dark",
+        )
+        self.assertGreater(
+            _opaque_icon_value(self.window.title_bar.selector_menu_bar.layout_button.icon()),
+            200,
+            "unchecked layout_button on dark command bar should be bright",
+        )
+        self.assertLess(
+            _opaque_icon_value(self.window.right_column.tex_button.icon()),
+            120,
+            "tex_button should be dark",
+        )
+        self.assertLess(
+            QColor(str(self.theme.snapshot().tokens["COLOR_STATUS_BACKGROUND"])).value(),
+            128,
+            "bottom_bar background should remain dark",
+        )
+
+    def _assert_dark_preview_icons(self) -> None:
+        self.assertGreater(
+            _opaque_icon_value(self.window.left_column.setting_button.icon()),
+            200,
+            "setting_button should be bright in Dark preview",
+        )
+        self.assertGreater(
+            _opaque_icon_value(self.window.left_column.components_button.icon()),
+            200,
+            "components_button should be bright in Dark preview",
+        )
+        self.assertGreater(
+            _opaque_icon_value(self.window.right_column.tex_button.icon()),
+            200,
+            "tex_button should be bright in Dark preview",
+        )
+
+    def test_dark_preview_reselect_light_restores_all_window_icons(self) -> None:
+        self._assert_light_icons()
+        dialog = self.window.settings_center.present()
+        self.app.processEvents()
+        self.assertIsNotNone(dialog)
+
+        dialog.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+        self.app.processEvents()
+        self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.DARK)
+        self.assertTrue(dialog.glue.is_dirty())
+        self._assert_dark_preview_icons()
+
+        dialog.stage_value(APPEARANCE_THEME_MODE, ThemeMode.LIGHT)
+        self.app.processEvents()
+        self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.LIGHT)
+        self.assertFalse(dialog.glue.is_dirty())
+        self._assert_light_icons()
+
+        dialog.reject()
+        self.app.processEvents()
+        self._assert_light_icons()
+
+    def test_dark_preview_cancel_esc_and_close_restore_all_window_icons(self) -> None:
+        paths = ("cancel", "escape", "close")
+        for path in paths:
+            with self.subTest(path=path):
+                self._assert_light_icons()
+                dialog = self.window.settings_center.present()
+                self.app.processEvents()
+                self.assertIsNotNone(dialog)
+
+                dialog.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+                self.app.processEvents()
+                self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.DARK)
+                self._assert_dark_preview_icons()
+
+                if path == "cancel":
+                    dialog.cancel_button.click()
+                elif path == "escape":
+                    QTest.keyClick(dialog, Qt.Key_Escape)
+                elif path == "close":
+                    dialog.close()
+                self.app.processEvents()
+
+                self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.LIGHT)
+                self.assertEqual(self.theme.snapshot().preferences.mode, ThemeMode.LIGHT)
+                self._assert_light_icons()
+
+    def test_cached_hidden_window_and_dialog_created_during_preview(self) -> None:
+        cached_dialog = PySettingDialog()
+        cached_dialog.hide()
+        self.assertTrue(default_window_registry().contains(cached_dialog))
+
+        settings_win = self.window.settings_center.present()
+        self.app.processEvents()
+        settings_win.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+        self.app.processEvents()
+
+        late_widget = QWidget()
+        late_widget.setProperty("themeChromeWindowIcon", icon_path("setting.svg"))
+        subscribe_theme_window(late_widget)
+        self.assertTrue(default_window_registry().contains(late_widget))
+
+        settings_win.cancel_button.click()
+        self.app.processEvents()
+
+        self._assert_light_icons()
+        self.assertEqual(self.theme.snapshot().scheme, EffectiveScheme.LIGHT)
+
+        cached_dialog.deleteLater()
+        late_widget.deleteLater()
+        self.app.processEvents()
 
 
 if __name__ == "__main__":
