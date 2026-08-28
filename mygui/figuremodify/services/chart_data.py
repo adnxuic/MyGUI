@@ -11,6 +11,7 @@ import numpy as np
 from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
+    FitInputRangeSpec,
     PreprocessedPair,
     resolve_preprocessed_pair,
 )
@@ -716,6 +717,7 @@ class FitService:
         expression: str,
         x_start: float,
         x_stop: float,
+        fit_input_range: FitInputRangeSpec | dict[str, Any] | None = None,
         clear_pending: bool = True,
     ) -> ComponentChange:
         """Apply a completed result only if it belongs to the current request."""
@@ -729,6 +731,7 @@ class FitService:
             engine = FitEngine(engine)
             start = float(x_start)
             stop = float(x_stop)
+            input_range = FitInputRangeSpec.from_dict(fit_input_range)
             persisted_options = normalize_fit_options_for_storage(fit_options)
             persisted_result = normalize_fit_result_for_storage(fit_result)
             x_values = np.linspace(start, stop, 1000)
@@ -748,6 +751,7 @@ class FitService:
             expression=str(expression),
             x_start=start,
             x_stop=stop,
+            fit_input_range=input_range.to_dict(),
         )
         change = controller.apply_role_data(
             data,
@@ -780,5 +784,6 @@ class FitService:
             expression=data["expression"],
             x_start=x_start,
             x_stop=x_stop,
+            fit_input_range=data.get("fit_input_range"),
             clear_pending=False,
         )

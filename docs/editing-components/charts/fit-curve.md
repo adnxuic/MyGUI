@@ -12,9 +12,10 @@ For details on fitting algorithms, initial parameters, and fit evaluation, see [
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
-| Engine | Dropdown | Fitting calculation backend: `scipy` or `astropy`. | `scipy` or `astropy`; default `scipy` | `data.engine` |
-| Fit Type | Dropdown | Parametric curve model name (e.g. `linear`, `poly2`, `gaussian`, `lorentzian`). | Model name; default `linear` | `data.fit_type` |
+| Engine | Dropdown | Fitting calculation backend: `scipy` or `matlab`. | `scipy` or `matlab`; default `scipy` | `data.engine` |
+| Fit Type | Dropdown | Parametric curve model name (e.g. `poly1`, `exp1`, `gauss2`). | Model name; default `poly1` | `data.fit_type` |
 | Fit Options | Fit options dialog | Configuration dictionary including parameter bounds, tolerances, and initial guesses. | Dict of fit options | `data.fit_options` |
+| Fit Data Range | Fit options dialog | Input range filter specification: all preprocessed data or bounded range with inclusive endpoints. | Range specification | `data.fit_input_range` |
 
 ## Fit result
 
@@ -27,8 +28,8 @@ For details on fitting algorithms, initial parameters, and fit evaluation, see [
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
-| X Start | Number | Lower boundary of the X evaluation interval for curve rendering. | Finite number or auto; default auto | `data.x_start` |
-| X Stop | Number | Upper boundary of the X evaluation interval for curve rendering. | Finite number or auto; default auto | `data.x_stop` |
+| X Start | Number | Lower boundary of the X evaluation interval for curve rendering. Defaults to the fit range start on fit completion, but can be edited independently for extrapolation. | Finite number | `data.x_start` |
+| X Stop | Number | Upper boundary of the X evaluation interval for curve rendering. Defaults to the fit range stop on fit completion, but can be edited independently for extrapolation. | Finite number | `data.x_stop` |
 
 ## Appearance
 
@@ -36,7 +37,7 @@ For details on fitting algorithms, initial parameters, and fit evaluation, see [
 
 ## Project record
 
-Schema v15 persists Fit Curve as `kind: "line"`, `role: "fit_curve"`, with `selector: {"object_id": component_id}` under its parent Axes.
+Schema v18 persists Fit Curve as `kind: "line"`, `role: "fit_curve"`, with `selector: {"object_id": component_id}` under its parent Axes. Required data keys include `x_ref`, `y_ref`, `preprocess`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop`, and `fit_input_range` (`{"kind": "all"}` or `{"kind": "bounded", "minimum": float, "maximum": float}`).
 
 ## Referenced Matplotlib 3.9.0 URLs
 

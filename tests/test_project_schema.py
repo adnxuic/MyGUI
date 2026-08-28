@@ -20,9 +20,10 @@ from mygui.project_io import (
     validate_project_snapshot,
     validate_v14_project_snapshot,
     validate_v15_project_snapshot,
+    validate_v17_project_snapshot,
 )
 from main import MainWindow
-from tests.schema_helpers import as_schema_v14, as_schema_v15
+from tests.schema_helpers import as_schema_v14, as_schema_v15, as_schema_v17
 
 
 class ProjectSchemaV14Tests(unittest.TestCase):
@@ -367,23 +368,25 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "fontfamily"):
                     validate_project_snapshot(candidate)
 
-    def test_only_exact_integer_v10_through_v17_are_accepted(self):
+    def test_only_exact_integer_v10_through_v18_are_accepted(self):
         current = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for version in (
                 4,
                 9,
-                18,
+                19,
                 True,
                 14.0,
                 15.0,
                 16.0,
                 17.0,
+                18.0,
                 "14",
                 "15",
                 "16",
                 "17",
+                "18",
             ):
                 with self.subTest(version=version):
                     candidate = deepcopy(current)
@@ -393,7 +396,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 17)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 18)
 
     def test_schema_v15_axes_reserve_and_v14_migration_defaults(self):
         current = self.snapshot()
@@ -422,7 +425,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "position_ref"):
             validate_project_snapshot(with_marks)
 
-    def test_schema_v15_migrates_to_v17_without_rewriting_records(self):
+    def test_schema_v15_migrates_to_v18_without_rewriting_records(self):
         current = self.snapshot()
         predecessor = as_schema_v15(current)
         self.assertEqual(predecessor["schema_version"], 15)
@@ -431,10 +434,33 @@ class ProjectSchemaV14Tests(unittest.TestCase):
             path = Path(directory) / "schema-v15.mygui.json"
             path.write_text(json.dumps(predecessor), encoding="utf-8")
             migrated = load_project_file(path)
-        self.assertEqual(migrated["schema_version"], 17)
-        expected = deepcopy(predecessor)
-        expected["schema_version"] = 17
-        self.assertEqual(migrated, expected)
+        self.assertEqual(migrated["schema_version"], 18)
+        self.assertEqual(migrated, current)
+
+    def test_schema_v17_migrates_to_v18_with_fit_curve_default_range(self):
+        pair = self.window.repository.line_pair(self.x_ref, self.y_ref)
+        self.canvas.add_fit_curve(
+            pair.x,
+            pair.y,
+            "tab:green",
+            "my_fit",
+            self.x_ref,
+            self.y_ref,
+        )
+        current = self.snapshot()
+        fit_comp = self.component(current, "fit_curve")
+        self.assertEqual(fit_comp["data"]["fit_input_range"], {"kind": "all"})
+
+        predecessor = as_schema_v17(current)
+        self.assertEqual(predecessor["schema_version"], 17)
+        self.assertNotIn("fit_input_range", self.component(predecessor, "fit_curve")["data"])
+        validate_v17_project_snapshot(predecessor)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "schema-v17.mygui.json"
+            path.write_text(json.dumps(predecessor), encoding="utf-8")
+            migrated = load_project_file(path)
+        self.assertEqual(migrated["schema_version"], 18)
         self.assertEqual(migrated, current)
 
     def test_validation_rejects_invalid_graph_and_component_state(self):

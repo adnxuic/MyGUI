@@ -434,6 +434,7 @@ def materialize_fit(host: CanvasMaterializeHost, state, _transaction) -> None:
         object_id=state.id,
         color_order=state.order,
         preprocess=preprocess,
+        fit_input_range=state.data.get("fit_input_range"),
     )
 
 

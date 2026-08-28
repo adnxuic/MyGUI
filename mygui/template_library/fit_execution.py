@@ -9,7 +9,13 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from mygui.database import ColumnRef, DataPreprocessSpec, preprocess_aligned_pair
+from mygui.database import (
+    ColumnRef,
+    DataPreprocessSpec,
+    FitInputRangeSpec,
+    preprocess_aligned_pair,
+    select_fit_input_pair,
+)
 from mygui.database.fit_result import (
     normalize_fit_options_for_storage,
     normalize_fit_result_for_storage,
@@ -116,16 +122,16 @@ class FitExecutionService:
         options = data.get("fit_options")
         x_ref = ColumnRef.from_dict(data["x_ref"])
         y_ref = ColumnRef.from_dict(data["y_ref"])
+        input_range = FitInputRangeSpec.from_dict(data.get("fit_input_range"))
         pair = preprocess_aligned_pair(
             _document_pair(project, x_ref, y_ref),
             DataPreprocessSpec.from_dict(data["preprocess"]),
             preserve_gaps=False,
         )
-        if pair.x.size == 0:
-            raise ValueError("Fit Curve has no valid data after preprocessing.")
+        selected = select_fit_input_pair(pair, input_range)
         result = self.execute_arrays(
-            pair.x,
-            pair.y,
+            selected.x,
+            selected.y,
             fit_type,
             options,
             engine=data["engine"],
@@ -133,12 +139,11 @@ class FitExecutionService:
         expression = result.get("value_expression")
         if not isinstance(expression, str) or not expression.strip():
             raise RuntimeError("Fitting returned no drawable expression.")
-        numeric_x = np.asarray(pair.x, dtype=float)
         return FitExecutionResult(
             result,
             expression,
-            float(np.min(numeric_x)),
-            float(np.max(numeric_x)),
+            selected.x_start,
+            selected.x_stop,
         )
 
     def execute_all(

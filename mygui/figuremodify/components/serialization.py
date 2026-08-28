@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v17 Figure trees."""
+"""Normalize and validate strict schema-v10 through v18 Figure trees."""
 
 from __future__ import annotations
 
@@ -158,7 +158,13 @@ def normalize_v16_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v17_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v17 Figure component tree."""
+    """Normalize the predecessor schema-v17 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v18_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v18 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -228,6 +234,17 @@ def _validate_controller_contract(
                     f"Invalid project field {path}.data.y[{index}]: "
                     "expected number."
                 )
+    if state.kind is ComponentKind.LINE and state.role is ComponentRole.FIT_CURVE:
+        has_input_range = "fit_input_range" in state.data
+        if schema_version >= 18 and not has_input_range:
+            raise ComponentValidationError(
+                "Schema v18 Fit Curve data requires fit_input_range."
+            )
+        if schema_version < 18 and has_input_range:
+            raise ComponentValidationError(
+                f"Fit Curve data must not contain fit_input_range before "
+                f"schema v18; schema v{schema_version} rejected it."
+            )
     if state.kind is ComponentKind.TICK_LABEL_GROUP:
         font_path = f"{path}.properties.fontfamily"
         fontfamily = state.properties.get("fontfamily")
@@ -1063,7 +1080,7 @@ def validate_v17_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v17 Figure component tree."""
+    """Validate a predecessor schema-v17 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -1071,4 +1088,21 @@ def validate_v17_figure(
         project_id,
         project_name,
         schema_version=17,
+    )
+
+
+def validate_v18_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v18 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=18,
     )

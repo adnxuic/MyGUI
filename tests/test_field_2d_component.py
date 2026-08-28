@@ -447,7 +447,7 @@ class Field2DComponentTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 17)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 18)
             roles = {
                 component["role"]
                 for component in raw["figure"]["components"]
@@ -465,7 +465,7 @@ class Field2DComponentTests(unittest.TestCase):
             v15_path = Path(directory) / "field-2d-v15.mygui.json"
             v15_path.write_text(json.dumps(predecessor), encoding="utf-8")
             migrated = load_project_file(v15_path)
-            self.assertEqual(migrated["schema_version"], 17)
+            self.assertEqual(migrated["schema_version"], PROJECT_SCHEMA_VERSION)
             self.assertFalse(
                 any(
                     component["kind"] == "field_2d"

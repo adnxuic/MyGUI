@@ -28,6 +28,6 @@ Provider. Do not encode application defaults in `PropertySpec.default`.
 Verify creation, empty valid data, style/palette/Components precedence, data
 refresh,
 lazy Inspector reuse, deletion cohorts, failure rollback at every publication
-stage, and stable schema-v17 save/open. Update the routed parameter and feature
+stage, and stable schema-v18 save/open. Update the routed parameter and feature
 documentation. Do not finish while a required check or manual smoke item is not
 run.

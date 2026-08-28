@@ -1,4 +1,4 @@
-"""Strict schema-v1 parsing and validation for MyGUI chart templates."""
+"""Strict schema-v2 parsing, v1 migration, and validation for chart templates."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ from typing import Any
 from uuid import UUID
 
 from mygui.database import ColumnRef, ColumnType, validate_component_name
-from mygui.figuremodify.components.serialization import validate_v17_figure
+from mygui.figuremodify.components.serialization import (
+    validate_v17_figure,
+    validate_v18_figure,
+)
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 from .models import (
@@ -22,7 +25,8 @@ from .models import (
 
 
 TEMPLATE_SCHEMA_NAME = "mygui-template"
-TEMPLATE_SCHEMA_VERSION = 1
+TEMPLATE_SCHEMA_VERSION = 2
+TEMPLATE_SCHEMA_V1_VERSION = 1
 TEMPLATE_MATCH_ALGORITHM_VERSION = 1
 TEMPLATE_PROJECT_ID = "template-project"
 TEMPLATE_FILE_SUFFIX = ".mygui-template.json"
@@ -224,7 +228,7 @@ def template_to_dict(template: ChartTemplate) -> dict[str, Any]:
 
 
 def parse_template(value: Any) -> ChartTemplate:
-    """Parse and strictly validate a schema-v1 template object."""
+    """Parse and strictly validate a schema-v2 template object."""
 
     validate_json_budget(value, limits=load_resource_limits())
     root = _expect_dict(value, "template")
@@ -234,7 +238,8 @@ def parse_template(value: Any) -> ChartTemplate:
     version = root.get("schema_version")
     if type(version) is not int or version != TEMPLATE_SCHEMA_VERSION:
         raise ValueError(
-            f"Unsupported template schema version {version!r}; expected exact integer 1."
+            f"Unsupported template schema version {version!r}; expected exact "
+            f"integer {TEMPLATE_SCHEMA_VERSION}."
         )
     metadata_value = _expect_dict(root.get("metadata"), "metadata")
     _exact(metadata_value, {"id", "name", "notes", "created_at", "updated_at"}, "metadata")
@@ -259,9 +264,61 @@ def parse_template(value: Any) -> ChartTemplate:
         for column in sheet.columns
     }
     figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
-    validate_v17_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    validate_v18_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
     _validate_tokens(figure, allowed_tokens(contract), "figure")
     return ChartTemplate(metadata, contract, figure)
+
+
+def migrate_v1_template_to_v2(value: Any) -> ChartTemplate:
+    """Strictly read a schema-v1 template and upgrade it to schema v2.
+
+    Every Fit Curve receives the persisted all-data input range before the
+    migrated record is re-validated as schema v2; nothing else is rewritten.
+    """
+
+    validate_json_budget(value, limits=load_resource_limits())
+    root = _expect_dict(value, "template")
+    _exact(root, {"schema", "schema_version", "metadata", "data_contract", "figure"}, "template")
+    if _expect_string(root.get("schema"), "schema") != TEMPLATE_SCHEMA_NAME:
+        raise ValueError("Unsupported template file.")
+    version = root.get("schema_version")
+    if type(version) is not int or version != TEMPLATE_SCHEMA_V1_VERSION:
+        raise ValueError(
+            f"Unsupported template schema version {version!r}; expected exact "
+            f"integer {TEMPLATE_SCHEMA_V1_VERSION}."
+        )
+    contract = _parse_contract(root.get("data_contract"))
+    refs = {
+        ColumnRef(TEMPLATE_PROJECT_ID, sheet.id, column.id): column.type
+        for sheet in contract.sheets
+        for column in sheet.columns
+    }
+    figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
+    validate_v17_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    migrated = deepcopy(value)
+    for component in migrated["figure"]["components"]:
+        if (
+            component.get("kind") == "line"
+            and component.get("role") == "fit_curve"
+        ):
+            component.setdefault("data", {}).setdefault(
+                "fit_input_range", {"kind": "all"}
+            )
+    migrated["schema_version"] = TEMPLATE_SCHEMA_VERSION
+    return parse_template(migrated)
+
+
+def parse_template_record(value: Any) -> ChartTemplate:
+    """Parse one stored record, migrating strict schema-v1 templates to v2."""
+
+    if (
+        isinstance(value, dict)
+        and value.get("schema") == TEMPLATE_SCHEMA_NAME
+        and type(value.get("schema_version")) is int
+        and value["schema_version"] == TEMPLATE_SCHEMA_V1_VERSION
+    ):
+        return migrate_v1_template_to_v2(value)
+    return parse_template(value)
 
 
 def validate_template(template: ChartTemplate) -> None:

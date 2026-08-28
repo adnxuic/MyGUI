@@ -6,7 +6,7 @@ description: Change MyGUI save, open, restore, dirty-state, or project publicati
 # Project IO Change
 
 Read the routed persistence, component, and testing pages. Preserve
-`CORE-PERSISTENCE-V17`, `CORE-REGISTRATION-ATOMICITY`, and
+`CORE-PERSISTENCE-V18`, `CORE-REGISTRATION-ATOMICITY`, and
 `CORE-TABLE-REPOSITORY`.
 
 Trace the operation from file validation through repository/Canvas preparation,
@@ -18,7 +18,7 @@ failures by stable project/object ID. Do not infer success from a tab name,
 QUndoStack index, or partially written file.
 
 Decoded in-memory sources such as chart-template application must enter
-`restore_project_payload()` after strict schema-v17 validation. They must not
+`restore_project_payload()` after strict schema-v18 validation. They must not
 reimplement Repository/Canvas publication. Pass any post-materialization,
 pre-publication domain work through its explicit callback, and preserve the
 same rollback and selection-identity proof as file restore.

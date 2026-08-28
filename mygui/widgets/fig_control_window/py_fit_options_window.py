@@ -3,6 +3,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QFrame,
@@ -16,8 +17,9 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
 )
+from typing import Any
 
-from mygui.database import matlab_adapter, scipy_fit_adapter
+from mygui.database import FitInputRangeSpec, matlab_adapter, scipy_fit_adapter
 from mygui.widgets.fig_control_window.background_task import start_background_task
 
 import numpy as np
@@ -37,6 +39,88 @@ def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
         task_log_prefix="MATLAB background task",
         **kwargs,
     )
+
+
+class FitDataRangeWidget(QGroupBox):
+    """Provide the 'Fit Data Range' selection controls for fit dialogs."""
+
+    def __init__(self, parent=None):
+        super().__init__("Fit Data Range", parent)
+        self._available_min: float | None = None
+        self._available_max: float | None = None
+
+        layout = QVBoxLayout(self)
+        self.use_all_checkbox = QCheckBox("Use all preprocessed data", self)
+        self.use_all_checkbox.setChecked(True)
+        layout.addWidget(self.use_all_checkbox)
+
+        self.available_label = QLabel("Available X: -", self)
+        layout.addWidget(self.available_label)
+
+        bounds_layout = QHBoxLayout()
+        bounds_layout.addWidget(QLabel("Minimum X:", self))
+        self.minimum_input = QLineEdit(self)
+        bounds_layout.addWidget(self.minimum_input)
+        bounds_layout.addWidget(QLabel("Maximum X:", self))
+        self.maximum_input = QLineEdit(self)
+        bounds_layout.addWidget(self.maximum_input)
+        layout.addLayout(bounds_layout)
+
+        self.use_all_checkbox.toggled.connect(self._on_use_all_toggled)
+        self._update_inputs_enabled()
+
+    def _on_use_all_toggled(self, checked: bool) -> None:
+        self._update_inputs_enabled()
+        if not checked:
+            if not self.minimum_input.text().strip() and self._available_min is not None:
+                self.minimum_input.setText(f"{self._available_min:g}")
+            if not self.maximum_input.text().strip() and self._available_max is not None:
+                self.maximum_input.setText(f"{self._available_max:g}")
+
+    def _update_inputs_enabled(self) -> None:
+        enabled = not self.use_all_checkbox.isChecked()
+        self.minimum_input.setEnabled(enabled)
+        self.maximum_input.setEnabled(enabled)
+
+    def set_available_range(self, x_min: float, x_max: float) -> None:
+        self._available_min = float(x_min)
+        self._available_max = float(x_max)
+        self.available_label.setText(f"Available X: {self._available_min:g} to {self._available_max:g}")
+
+    def set_range_spec(self, spec: Any) -> None:
+        spec_obj = FitInputRangeSpec.from_dict(spec)
+        if spec_obj.is_bounded:
+            self.use_all_checkbox.setChecked(False)
+            self.minimum_input.setText(f"{spec_obj.minimum:g}")
+            self.maximum_input.setText(f"{spec_obj.maximum:g}")
+        else:
+            self.use_all_checkbox.setChecked(True)
+            self.minimum_input.clear()
+            self.maximum_input.clear()
+        self._update_inputs_enabled()
+
+    def range_spec(self) -> FitInputRangeSpec:
+        if self.use_all_checkbox.isChecked():
+            return FitInputRangeSpec(kind="all")
+        min_text = self.minimum_input.text().strip()
+        max_text = self.maximum_input.text().strip()
+        if not min_text:
+            raise ValueError("Fit input range minimum must not be empty.")
+        if not max_text:
+            raise ValueError("Fit input range maximum must not be empty.")
+        try:
+            min_val = float(min_text)
+        except ValueError as exc:
+            raise ValueError("Fit input range minimum must be a finite number.") from exc
+        try:
+            max_val = float(max_text)
+        except ValueError as exc:
+            raise ValueError("Fit input range maximum must be a finite number.") from exc
+        if not np.isfinite(min_val):
+            raise ValueError("Fit input range minimum must be a finite number.")
+        if not np.isfinite(max_val):
+            raise ValueError("Fit input range maximum must be a finite number.")
+        return FitInputRangeSpec(kind="bounded", minimum=min_val, maximum=max_val)
 
 
 class _FitOptionsWidgetBase(QFrame):

@@ -632,11 +632,11 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
         component_id = artist.get_gid()
 
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "test_annotation_v17.mygui.json"
+            path = Path(directory) / "test_annotation_v18.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
 
             raw = load_project_file(path)
-            self.assertEqual(raw["schema_version"], 17)
+            self.assertEqual(raw["schema_version"], 18)
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
 
             # Reopen in new MainWindow
@@ -778,7 +778,7 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
             mock_add.assert_not_called()
         foreign_axes.remove()
 
-    def test_schema_v16_to_v17_migration(self):
+    def test_schema_v16_to_v18_migration(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "test_v16.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
@@ -786,7 +786,7 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
             raw["schema_version"] = 16
             path.write_text(json.dumps(raw), encoding="utf-8")
             migrated = load_project_file(path)
-            self.assertEqual(migrated["schema_version"], 17)
+            self.assertEqual(migrated["schema_version"], 18)
 
     def test_schema_v17_annotation_contract_and_predecessor_rejection(self):
         self.canvas.add_annotation(

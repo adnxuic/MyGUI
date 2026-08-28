@@ -14,7 +14,7 @@ from mygui.database.interpolate_func import (
     SMOOTHING_SPLINE_METHOD,
     interpolate_dict,
 )
-from mygui.database import DataPreprocessSpec
+from mygui.database import DataPreprocessSpec, FitInputRangeSpec
 from mygui.database.fit_result import (
     normalize_fit_options_for_storage,
     normalize_fit_result_for_storage,
@@ -203,6 +203,13 @@ class LineController(ComponentController[Line2D]):
             data = deepcopy(state.data)
             data["preprocess"] = DataPreprocessSpec().to_dict()
             state = state.clone(data=data)
+        if (
+            state.role is ComponentRole.FIT_CURVE
+            and "fit_input_range" not in state.data
+        ):
+            data = deepcopy(state.data)
+            data["fit_input_range"] = FitInputRangeSpec().to_dict()
+            state = state.clone(data=data)
         self._line_pattern_value = _line_pattern(
             state.properties.get("linestyle", {"kind": "preset", "value": "-"})
         )
@@ -337,11 +344,16 @@ class LineController(ComponentController[Line2D]):
                 "x_start",
                 "x_stop",
                 "preprocess",
+                "fit_input_range",
             }
             _exact_data_fields(state, expected)
             _column_reference(state.data["x_ref"], "x_ref")
             _column_reference(state.data["y_ref"], "y_ref")
             DataPreprocessSpec.from_dict(state.data["preprocess"])
+            try:
+                FitInputRangeSpec.from_dict(state.data["fit_input_range"])
+            except ValueError as exc:
+                raise ComponentValidationError(str(exc)) from exc
             try:
                 FitEngine(state.data["engine"])
             except ValueError as exc:

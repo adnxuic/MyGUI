@@ -125,8 +125,8 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v17_figure,
-    validate_v17_figure,
+    normalize_v18_figure,
+    validate_v18_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
@@ -148,9 +148,11 @@ from mygui.figure_export import (
 from mygui.database import (
     ColumnRef,
     DataPreprocessSpec,
+    FitInputRangeSpec,
     TableChangeSet,
     TableRepository,
     resolve_preprocessed_pair,
+    select_fit_input_pair,
     validate_component_name,
 )
 from mygui.database.table_document import new_id
@@ -2192,6 +2194,7 @@ class PyFigureCanvas(QWidget):
         object_id: str | None = None,
         color_order: int | None = None,
         preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        fit_input_range: FitInputRangeSpec | dict[str, Any] | None = None,
         *,
         color_selection: ColorSelection | None = None,
         preview_cycle: ColorCycleState | None = None,
@@ -2203,6 +2206,7 @@ class PyFigureCanvas(QWidget):
         """Add fit curve."""
 
         preprocess = DataPreprocessSpec.from_dict(preprocess)
+        input_range = FitInputRangeSpec.from_dict(fit_input_range)
         pair = resolve_preprocessed_pair(
             self.repository,
             x_ref,
@@ -2210,7 +2214,8 @@ class PyFigureCanvas(QWidget):
             preprocess,
             preserve_gaps=False,
         )
-        x, y = pair.x, pair.y
+        selected = select_fit_input_pair(pair, input_range, require_data=False)
+        x, y = selected.x, selected.y
         try:
             engine = FitEngine(engine)
         except ValueError as exc:
@@ -2221,14 +2226,8 @@ class PyFigureCanvas(QWidget):
         object_id = object_id or new_id()
         x_array = np.asarray(x, dtype=float)
         y_array = np.asarray(y, dtype=float)
-        if x_array.size:
-            default_x_start = float(np.min(x_array))
-            default_x_stop = float(np.max(x_array))
-        else:
-            default_x_start = 0.0
-            default_x_stop = 1.0
-        x_start = default_x_start if x_start is None else float(x_start)
-        x_stop = default_x_stop if x_stop is None else float(x_stop)
+        x_start = selected.x_start if x_start is None else float(x_start)
+        x_stop = selected.x_stop if x_stop is None else float(x_stop)
 
         line_x = x_array
         line_y = y_array
@@ -2288,6 +2287,7 @@ class PyFigureCanvas(QWidget):
                     "expression": expression or "",
                     "x_start": float(x_start),
                     "x_stop": float(x_stop),
+                    "fit_input_range": input_range.to_dict(),
                 },
             )
             self._prepare_created_component(controller, transaction)
@@ -3788,7 +3788,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v17_figure(source)
+        source = normalize_v18_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3829,7 +3829,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v17 component tree used by persistence."""
+        """Return the canonical schema-v18 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3849,10 +3849,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v17_figure(snapshot)
+        return normalize_v18_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v17 Figure tree."""
+        """Validate and return the current complete schema-v18 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3861,7 +3861,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v17_figure(
+        validate_v18_figure(
             snapshot,
             available_refs,
             self.project_id,

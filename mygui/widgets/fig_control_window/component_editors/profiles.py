@@ -850,7 +850,7 @@ LINE_PROFILES = {
                 "actions",
                 "Fit operations",
                 _fit_actions,
-                data_keys=("engine", "fit_type", "fit_options"),
+                data_keys=("engine", "fit_type", "fit_options", "fit_input_range"),
             ),
             SectionSpec(
                 "result",

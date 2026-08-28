@@ -6,10 +6,35 @@ from copy import deepcopy
 from typing import Any
 
 
+def as_schema_v17(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Strip v18-only fit_input_range from Fit Curves so a current snapshot validates as v17."""
+
+    payload = deepcopy(snapshot)
+    payload["schema_version"] = 17
+    figure = payload.get("figure") or {}
+    for component in figure.get("components") or []:
+        if (
+            component.get("kind") == "line"
+            and component.get("role") == "fit_curve"
+        ):
+            data = component.get("data")
+            if isinstance(data, dict):
+                data.pop("fit_input_range", None)
+    return payload
+
+
+def as_schema_v16(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Convert snapshot to strict schema v16."""
+
+    payload = as_schema_v17(snapshot)
+    payload["schema_version"] = 16
+    return payload
+
+
 def as_schema_v15(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Drop v16-only FIELD_2D records so a current snapshot can validate as v15."""
 
-    payload = deepcopy(snapshot)
+    payload = as_schema_v17(snapshot)
     payload["schema_version"] = 15
     figure = payload.get("figure") or {}
     components = []

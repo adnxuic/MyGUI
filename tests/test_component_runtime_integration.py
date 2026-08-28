@@ -25,7 +25,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
 )
 from mygui.figuremodify.components.serialization import (
-    validate_v15_figure,
+    validate_v18_figure,
 )
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
 from mygui.project_io import restore_project_snapshot, save_project_snapshot
@@ -216,7 +216,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(registry.resolve_target(component_id))
 
         snapshot = self.canvas.component_snapshot()
-        validate_v15_figure(
+        validate_v18_figure(
             snapshot,
             self._available_refs(),
             self.canvas.project_id,
@@ -409,7 +409,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             original_cycle,
         )
 
-        validate_v15_figure(
+        validate_v18_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,
@@ -1139,7 +1139,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                         ),
                         1,
                     )
-                validate_v15_figure(
+                validate_v18_figure(
                     restored.component_snapshot(),
                     self._available_refs(restored),
                     restored.project_id,
@@ -1268,7 +1268,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
                 title="Native legend",
             )
             component("legend")["properties"]["label_font"]["size"] = 11.0
-            validate_v15_figure(
+            validate_v18_figure(
                 figure,
                 self._available_refs(),
                 self.canvas.project_id,
@@ -1641,7 +1641,7 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             {item["id"] for item in figure.state.data["layouts"]},
             {first_layout_id, second_layout_id},
         )
-        validate_v15_figure(
+        validate_v18_figure(
             self.canvas.component_snapshot(),
             self._available_refs(),
             self.canvas.project_id,

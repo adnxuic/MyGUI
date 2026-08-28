@@ -26,6 +26,7 @@ from mygui.template_library import (
     TemplateMatcher,
     normalize_header,
     parse_template,
+    parse_template_record,
     template_to_dict,
     validate_template,
 )
@@ -174,7 +175,7 @@ class TemplateFeatureTests(unittest.TestCase):
 
     def test_schema_is_closed_exact_and_rejects_nonfinite_and_unknown_tokens(self):
         raw = template_to_dict(self.template())
-        for version in (True, 2, 1.0):
+        for version in (True, 1, 3, 2.0, 0, -1):
             with self.subTest(version=version):
                 candidate = deepcopy(raw)
                 candidate["schema_version"] = version
@@ -335,6 +336,57 @@ class TemplateFeatureTests(unittest.TestCase):
                 cancelled=lambda: True,
             )
         self.assertEqual(set(self.window.repository.projects), before)
+
+    def test_template_v1_migration_and_custom_fit_range(self):
+        template = self.template(fit=True)
+        raw_v2 = template_to_dict(template)
+        # Create strict v1 template payload
+        raw_v1 = deepcopy(raw_v2)
+        raw_v1["schema_version"] = 1
+        for comp in raw_v1["figure"]["components"]:
+            if comp.get("kind") == "line" and comp.get("role") == "fit_curve":
+                comp["data"].pop("fit_input_range", None)
+
+        migrated = parse_template_record(raw_v1)
+        self.assertEqual(template_to_dict(migrated)["schema_version"], 2)
+        fit_v1 = next(
+            c for c in migrated.figure["components"]
+            if c.get("role") == "fit_curve"
+        )
+        self.assertEqual(fit_v1["data"]["fit_input_range"], {"kind": "all"})
+
+        # Bounded fit input range in template
+        fit_v2 = next(
+            c for c in template.figure["components"]
+            if c.get("role") == "fit_curve"
+        )
+        fit_v2["data"]["fit_input_range"] = {
+            "kind": "bounded",
+            "minimum": 1.0,
+            "maximum": 3.0,
+        }
+        validate_template(template)
+
+        service = TemplateApplyService(self.window.repository)
+        plan = service.prepare(
+            template,
+            imported_specs(
+                x_values=[0.0, 1.0, 2.0, 3.0, 4.0],
+                y_values=[10, 20, 30, 40, 50],
+            ),
+            source_file="sample-bounded.csv",
+            project_name="Bounded Applied",
+        )
+        applied_fit = next(
+            item for item in plan.project_snapshot["figure"]["components"]
+            if item["role"] == "fit_curve"
+        )
+        self.assertEqual(
+            applied_fit["data"]["fit_input_range"],
+            {"kind": "bounded", "minimum": 1.0, "maximum": 3.0},
+        )
+        self.assertEqual(applied_fit["data"]["x_start"], 1.0)
+        self.assertEqual(applied_fit["data"]["x_stop"], 3.0)
 
     def test_publish_is_dirty_empty_history_and_rolls_back_materialization_failure(self):
         template = self.template()

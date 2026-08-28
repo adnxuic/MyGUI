@@ -15,6 +15,11 @@ from .data_preprocessing import (
     preprocess_aligned_pair,
     resolve_preprocessed_pair,
 )
+from .fit_input_range import (
+    FitInputRangeSpec,
+    SelectedFitInput,
+    select_fit_input_pair,
+)
 
 __all__ = [
     "AlignedPair",
@@ -22,13 +27,16 @@ __all__ = [
     "ColumnSchema",
     "ColumnType",
     "DataPreprocessSpec",
+    "FitInputRangeSpec",
     "PreprocessedPair",
     "ProjectTableDocument",
+    "SelectedFitInput",
     "preprocess_aligned_pair",
     "SheetDocument",
     "TableChangeSet",
     "TableMutationCommand",
     "TableRepository",
     "resolve_preprocessed_pair",
+    "select_fit_input_pair",
     "validate_component_name",
 ]

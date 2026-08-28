@@ -1,22 +1,22 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 17. One file contains one
+MyGUI project files use strict JSON schema version 18. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v17. Strict v16 input migrates directly to
-v17, while v10–v15 migrate through every intervening version. Schema v4–v9,
+The loader accepts exact integer v18. Strict v17 input migrates directly to
+v18 (injecting default `fit_input_range: {"kind": "all"}` for Fit Curves), while v10–v16 migrate through every intervening version. Schema v4–v9,
 non-integer values, and unknown versions are rejected before application state
 is published.
 
 Reusable chart templates are deliberately separate from project files. They
-use strict `mygui-template` schema version 1, do not contain a Table document,
-and never change project schema version 17. See [Chart Templates](chart-templates.md).
+use strict `mygui-template` schema version 2, do not contain a Table document,
+and never change project schema version 18. See [Chart Templates](chart-templates.md).
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 17,
+  "schema_version": 18,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -27,7 +27,7 @@ and never change project schema version 17. See [Chart Templates](chart-template
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `17`.
+- Newly saved `schema_version` is always the integer `18`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.

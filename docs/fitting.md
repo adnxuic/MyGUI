@@ -17,9 +17,10 @@ This document describes the fitting feature and its user-facing parameters.
 1. Create or select a fitting curve.
 2. Select X data and Y data.
 3. Click `SciPy` or `Matlab`.
-4. Choose fit type and order.
-5. Enable advanced options if needed.
-6. Click `Fit`.
+4. Configure the **Fit Data Range** (by default "Use all preprocessed data" is checked; uncheck to specify custom minimum and maximum X bounds within the available data range).
+5. Choose fit type and order.
+6. Enable advanced options if needed.
+7. Click `Fit`.
 
 The fit options dialog is non-modal. If the dialog is closed before a background fit returns, the result is ignored.
 
@@ -33,6 +34,7 @@ The Fit creation dialog collects X Data, Y Data, the X/Y preprocessing expressio
 | X expression | Yes | Element-wise preprocessing formula. Default `x`. |
 | Y Data | Yes | Source column for Y values. |
 | Y expression | Yes | Element-wise preprocessing formula. Default `y`. |
+| Fit Data Range | Yes | Range specification (`all` preprocessed data, or `bounded` with inclusive endpoints). |
 
 Rules:
 
@@ -40,16 +42,18 @@ Rules:
 - X and Y must have the same length.
 - X and Y preprocessing is evaluated from the original row-aligned values.
 - Rows with missing or non-finite transformed values are removed as pairs.
-- At least one finite transformed pair must remain.
+- Range filtering is applied after X/Y preprocessing and invalid-row exclusion, with inclusive endpoints (`min <= x <= max`) independently of data sorting.
+- At least one finite transformed pair must remain within the specified range.
+- When custom range is used and fitting succeeds, the curve's display interval (`x_start` and `x_stop`) defaults to that range; the Inspector's Display range can be adjusted later for extrapolation.
 - Some models require stricter domains, such as positive or non-negative X values.
 
 Changing a source or preprocessing expression invalidates any running request
-and preserves the previous curve/result until the user explicitly fits again.
-The fit dialog range uses the minimum and maximum preprocessed X values.
+and preserves the previous curve/result while retaining the absolute fit range until the user explicitly fits again.
+The fit dialog range displays the minimum and maximum preprocessed X values.
 
 Applying a [Chart Template](chart-templates.md) is the deliberate exception to
 manual recomputation: every configured Fit Curve is rerun sequentially against
-the newly imported and preprocessed data before the new project is published.
+the newly imported and preprocessed data using its saved range specification (adapting "all" to the new dataset bounds, or retaining bounded numeric limits) before the new project is published.
 Any failure aborts the whole template application. A MATLAB template requires
 MATLAB availability and never falls back to SciPy.
 
@@ -91,9 +95,9 @@ does not update the plotted curve or result table.
 
 ## Project Files
 
-Fitting curves are saved in schema v17 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, fitting options, result data, expression, and evaluation range are stored in `data`.
+Fitting curves are saved in schema v18 as `line/fit_curve` components. Their visual state is stored in `properties`, while references, preprocessing expressions, `fit_input_range`, fitting options, result data, expression, and evaluation range are stored in `data`.
 Saved records include a stable `object_id`, X/Y `ColumnRef` objects, fitting engine, fit type,
-advanced options when used, fit result, drawing expression, X range, style,
+advanced options when used, fit result, drawing expression, X range, `fit_input_range`, style,
 color, and legend label.
 
 Opening a project restores fitting curves from the saved drawing expression and

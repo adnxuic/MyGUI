@@ -19,7 +19,7 @@ from mygui.resources import REPOSITORY_ROOT
 from .models import ChartTemplate, TemplateLibraryEntry
 from .schema import (
     TEMPLATE_FILE_SUFFIX,
-    parse_template,
+    parse_template_record,
     template_to_dict,
     validate_template,
     validate_template_name,
@@ -63,7 +63,7 @@ class TemplateLibrary:
             raise ValueError("Template file exceeds the configured file-size budget.")
         with path.open("r", encoding="utf-8-sig") as handle:
             value = json.load(handle, parse_constant=_reject_json_constant)
-        return parse_template(value)
+        return parse_template_record(value)
 
     def entries(self) -> tuple[TemplateLibraryEntry, ...]:
         """List valid and corrupt records without letting one file break startup."""

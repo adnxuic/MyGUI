@@ -35,6 +35,7 @@ EDITABLE_DATA_KEYS: dict[EditorKey, frozenset[str]] = {
         {
             "x_ref", "y_ref", "preprocess", "engine", "fit_type",
             "fit_options", "fit_result", "expression", "x_start", "x_stop",
+            "fit_input_range",
         }
     ),
     (ComponentKind.LINE, ComponentRole.INTERPOLATION): frozenset(

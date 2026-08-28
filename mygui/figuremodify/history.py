@@ -19,6 +19,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QUndoCommand
 
 from mygui import status_messages
+from mygui.database import select_fit_input_pair
 from mygui.figuremodify.components import (
     AnnotationController,
     ChangeStatus,
@@ -625,6 +626,11 @@ class FigureHistoryService:
             )
             self._require_result(result, "Could not restore Fit sources.")
             pair = self.canvas.fit_service.resolve_sources(controller)
+            selected = select_fit_input_pair(
+                pair,
+                data.get("fit_input_range"),
+                require_data=False,
+            )
             if data.get("expression"):
                 result = self.canvas.fit_service.apply_result(
                     controller,
@@ -635,11 +641,12 @@ class FigureHistoryService:
                     expression=data["expression"],
                     x_start=data["x_start"],
                     x_stop=data["x_stop"],
+                    fit_input_range=data.get("fit_input_range"),
                 )
             else:
                 result = controller.apply_role_data(
                     data,
-                    drawable=XYData(pair.x, pair.y),
+                    drawable=XYData(selected.x, selected.y),
                 )
             self._require_result(result, "Could not restore Fit data.")
         elif isinstance(controller, ScatterController) and "x_ref" in state.data:

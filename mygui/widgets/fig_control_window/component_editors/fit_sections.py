@@ -28,7 +28,12 @@ from .inspector import EditorSection
 from .lifecycle import CallbackLifecycle
 
 from mygui import status_messages
-from mygui.database import ColumnRef, matlab_adapter
+from mygui.database import ColumnRef, matlab_adapter, select_fit_input_pair
+from mygui.widgets.fig_control_window.py_fit_options_window import (
+    FitDataRangeWidget,
+    PyMatlabFitOptionsWidget,
+    PyScipyFitOptionsWidget,
+)
 import math
 import weakref
 from copy import deepcopy
@@ -243,15 +248,18 @@ class FitDomainSection(QFrame):
             status_messages.show_error("Connect MATLAB before using Matlab fitting.")
             return None
         try:
-            self._current_fit_data()
+            (
+                x_name,
+                y_name,
+                x_values,
+                y_values,
+                x_min,
+                x_max,
+                excluded_count,
+            ) = self._current_fit_data()
         except ValueError as exc:
             status_messages.show_error(str(exc))
             return None
-
-        from mygui.widgets.fig_control_window.py_fit_options_window import (
-            PyMatlabFitOptionsWidget,
-            PyScipyFitOptionsWidget,
-        )
 
         dialog = QDialog(self)
         dialog.setObjectName("fit_dialog")
@@ -277,6 +285,13 @@ class FitDomainSection(QFrame):
         fit_type_layout.addWidget(dialog.fit_type_input)
         fit_type_box.setLayout(fit_type_layout)
         dialog_layout.addWidget(fit_type_box)
+
+        dialog.fit_range_widget = FitDataRangeWidget(dialog)
+        dialog.fit_range_widget.set_available_range(x_min, x_max)
+        dialog.fit_range_widget.set_range_spec(
+            _controller_data(self.controller, "fit_input_range")
+        )
+        dialog_layout.addWidget(dialog.fit_range_widget)
 
         dialog.fit_options_layout = QVBoxLayout()
         dialog.fit_options_widget = options_widget_class(
@@ -329,15 +344,9 @@ class FitDomainSection(QFrame):
 
         display_engine = self._engine_display_name(engine)
         try:
-            (
-                x_name,
-                y_name,
-                x_values,
-                y_values,
-                x_min,
-                x_max,
-                excluded_count,
-            ) = self._current_fit_data()
+            pair = self.context.fitting.resolve_sources(self.controller)
+            range_spec = dialog.fit_range_widget.range_spec()
+            selected = select_fit_input_pair(pair, range_spec, require_data=True)
             fit_type_order, fit_options = dialog.fit_options_widget.fit_parameters()
         except ValueError as exc:
             status_messages.show_error(str(exc))
@@ -352,10 +361,20 @@ class FitDomainSection(QFrame):
             pass
         dialog.fit_button.setEnabled(False)
         dialog.fit_button.setText("Fitting...")
-        if excluded_count:
+        if selected.excluded_count and pair.excluded_count:
             status_messages.show_warning(
                 f"{display_engine} fitting started; preprocessing excluded "
-                f"{excluded_count} rows."
+                f"{pair.excluded_count} rows, range excluded {selected.excluded_count} rows."
+            )
+        elif selected.excluded_count:
+            status_messages.show_warning(
+                f"{display_engine} fitting started; range excluded "
+                f"{selected.excluded_count} rows."
+            )
+        elif pair.excluded_count:
+            status_messages.show_warning(
+                f"{display_engine} fitting started; preprocessing excluded "
+                f"{pair.excluded_count} rows."
             )
         else:
             status_messages.show_message(
@@ -363,25 +382,28 @@ class FitDomainSection(QFrame):
                 "info",
             )
 
+        x_ref = ColumnRef.from_dict(self.controller.state.data["x_ref"])
+        y_ref = ColumnRef.from_dict(self.controller.state.data["y_ref"])
         matlab_adapter.matlab_logger().info(
             "%s fit request started request_id=%s fit_type=%s x_data=%s y_data=%s x_len=%s y_len=%s",
             display_engine,
             request_id,
             fit_type_order,
-            x_name,
-            y_name,
-            len(x_values),
-            len(y_values),
+            self.repository.ref_label(x_ref),
+            self.repository.ref_label(y_ref),
+            len(selected.x),
+            len(selected.y),
         )
         from mygui.template_library.fit_execution import FitExecutionService
 
         fit_func = FitExecutionService().execute_arrays
         dialog_ref = weakref.ref(dialog)
         fit_options_record = deepcopy(fit_options)
+        range_spec_record = range_spec.to_dict()
         start_background_task(
             self,
             fit_func,
-            lambda result, rid=request_id, dref=dialog_ref, xmin=x_min, xmax=x_max: self._fit_dialog_succeeded(
+            lambda result, rid=request_id, dref=dialog_ref, xmin=selected.x_start, xmax=selected.x_stop, rspec=range_spec_record: self._fit_dialog_succeeded(
                 dref,
                 rid,
                 result,
@@ -390,10 +412,11 @@ class FitDomainSection(QFrame):
                 engine,
                 fit_type_order,
                 fit_options_record,
+                fit_input_range=rspec,
             ),
             lambda message, rid=request_id, dref=dialog_ref: self._fit_dialog_failed(dref, rid, message, engine),
-            x_values,
-            y_values,
+            selected.x,
+            selected.y,
             fit_type_order,
             fit_options,
             logger=matlab_adapter.matlab_logger(),
@@ -424,8 +447,18 @@ class FitDomainSection(QFrame):
             return False
         return True
 
-    def _fit_dialog_succeeded(self, dialog_ref, request_id, result, x_min, x_max, engine: FitEngine,
-                              fit_type=None, fit_options=None):
+    def _fit_dialog_succeeded(
+        self,
+        dialog_ref,
+        request_id,
+        result,
+        x_min,
+        x_max,
+        engine: FitEngine,
+        fit_type=None,
+        fit_options=None,
+        fit_input_range=None,
+    ):
         if self._disposed:
             return
         if not self._restore_dialog_fit_button(dialog_ref, request_id):
@@ -442,6 +475,7 @@ class FitDomainSection(QFrame):
             engine=engine,
             fit_type=fit_type,
             fit_options=fit_options,
+            fit_input_range=fit_input_range,
         ):
             status_messages.show_success(
                 f"{self._engine_display_name(engine)} fitting completed."
@@ -528,6 +562,7 @@ class FitDomainSection(QFrame):
         engine=None,
         fit_type=None,
         fit_options=None,
+        fit_input_range=None,
     ):
         """Update curve."""
 
@@ -542,6 +577,11 @@ class FitDomainSection(QFrame):
             state_data["fit_options"]
             if fit_options is None
             else fit_options
+        )
+        fit_input_range = (
+            state_data.get("fit_input_range")
+            if fit_input_range is None
+            else fit_input_range
         )
         if isinstance(fit_result, dict):
             if len(args) < 2:
@@ -584,6 +624,7 @@ class FitDomainSection(QFrame):
                 expression=value_expression,
                 x_start=x_start,
                 x_stop=x_stop,
+                fit_input_range=fit_input_range,
             ),
         )
         if not self.context.messages.present(result):
