@@ -10,7 +10,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
-from mygui import tex_config
+from mygui import status_messages, tex_config
 from mygui.database import matlab_adapter
 from mygui.database import (
     ColumnRef,
@@ -128,6 +128,14 @@ class ComponentInspectorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        status_messages.clear_status_handler()
+        QApplication.processEvents()
+
+    def tearDown(self):
+        status_messages.clear_status_handler()
+        QApplication.processEvents()
 
     def test_text_content_commit_preserves_cursor_at_end(self):
         controller, context, inspector = _managed_text_inspector("abc")

@@ -158,6 +158,25 @@ corresponding scanner rule is `ARCH-FIGURE-LAYOUT-ENGINE-BYPASS`.
   remains editable and persistable, and a read-only note informs the user that
   rendered margins and spacing may be adjusted by the Figure engine.
 
+## Individual Axes geometry ownership
+
+Individual Axes geometry projection mode (`grid` vs `manual`) and manual allocation
+rectangle (`bounds` as `[left, bottom, width, height]`) are owned exclusively by
+`AxesGeometryService`.
+
+The corresponding invariant is `CORE-AXES-GEOMETRY-OWNER` and the corresponding
+scanner rule is `ARCH-AXES-GEOMETRY-BYPASS`.
+
+- `AxesGeometryService` manages individual Axes grid/manual modes, manual bounds,
+  Colorbar follower tracking, and position resets.
+- In `grid` mode, the Axes follows its Figure layout GridSpec cell and Figure layout
+  engine; in `manual` mode, the Axes is detached (`in_layout=False`, `subplotspec=None`)
+  and pinned to Figure-normalized bounds.
+- UI, Inspector, Axes Layout, and Canvas helper code must not call `set_position()`,
+  `set_subplotspec()`, `set_in_layout()`, or access `_subplotspec` directly.
+- Colorbars on manual Axes move and scale with the source Axes via affine transformation
+  without shrinking the source Axes.
+
 ## Required declarations
 
 Every supported `(ComponentKind, ComponentRole)` has exactly one Controller
@@ -166,6 +185,6 @@ components additionally have a non-`None` `RESTORE_PHASE` and one exact
 `ComponentMaterializer`; fixed semantic components use `RESTORE_PHASE = None`.
 Removable components additionally have one deletion handler.
 
-Complete additions with schema-v18 round trips, empty-data coverage, data
+Complete additions with schema-v19 round trips, empty-data coverage, data
 refresh tests, lazy Inspector identity, failure rollback tests, component
 parameter documentation, and any applicable manual GUI smoke checks.

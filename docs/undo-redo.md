@@ -35,6 +35,7 @@ A single user action creates one command for:
 
 - Figure, Axes, Axis, Spine, Tick, Tick Label, Grid, Text, Annotation, Legend, Line,
   Scatter, Colorbar, and in-Axes property changes;
+- Axes projection mode (Grid vs Manual) and manual bounds changes;
 - Function expression/range, raw X/Y data, data references and preprocessing,
   Scatter mapping, interpolation settings, Fit results/ranges, TeX rendering,
   inset-image replacement, palettes, and project rename;
@@ -63,7 +64,7 @@ coordinate-system conversions, placement presets, and box edits each form one
 command. A render, TeX, or missing-glyph rejection restores both Controller
 state and Artist without adding history.
 
-History is runtime-only and is never written to schema-v17 project JSON. Saving
+History is runtime-only and is never written to schema-v19 project JSON. Saving
 does not clear the current session's timeline. Opening or restoring a project
 starts with empty Undo/Redo actions.
 

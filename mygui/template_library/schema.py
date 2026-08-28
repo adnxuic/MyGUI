@@ -9,9 +9,11 @@ from typing import Any
 from uuid import UUID
 
 from mygui.database import ColumnRef, ColumnType, validate_component_name
+from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.components.serialization import (
     validate_v17_figure,
     validate_v18_figure,
+    validate_v19_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
@@ -25,7 +27,8 @@ from .models import (
 
 
 TEMPLATE_SCHEMA_NAME = "mygui-template"
-TEMPLATE_SCHEMA_VERSION = 2
+TEMPLATE_SCHEMA_VERSION = 3
+TEMPLATE_SCHEMA_V2_VERSION = 2
 TEMPLATE_SCHEMA_V1_VERSION = 1
 TEMPLATE_MATCH_ALGORITHM_VERSION = 1
 TEMPLATE_PROJECT_ID = "template-project"
@@ -228,7 +231,7 @@ def template_to_dict(template: ChartTemplate) -> dict[str, Any]:
 
 
 def parse_template(value: Any) -> ChartTemplate:
-    """Parse and strictly validate a schema-v2 template object."""
+    """Parse and strictly validate a schema-v3 template object."""
 
     validate_json_budget(value, limits=load_resource_limits())
     root = _expect_dict(value, "template")
@@ -264,17 +267,13 @@ def parse_template(value: Any) -> ChartTemplate:
         for column in sheet.columns
     }
     figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
-    validate_v18_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    validate_v19_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
     _validate_tokens(figure, allowed_tokens(contract), "figure")
     return ChartTemplate(metadata, contract, figure)
 
 
-def migrate_v1_template_to_v2(value: Any) -> ChartTemplate:
-    """Strictly read a schema-v1 template and upgrade it to schema v2.
-
-    Every Fit Curve receives the persisted all-data input range before the
-    migrated record is re-validated as schema v2; nothing else is rewritten.
-    """
+def migrate_v1_template_to_v2(value: Any) -> dict[str, Any]:
+    """Strictly read a schema-v1 template and upgrade it to schema v2 dict."""
 
     validate_json_budget(value, limits=load_resource_limits())
     root = _expect_dict(value, "template")
@@ -304,20 +303,55 @@ def migrate_v1_template_to_v2(value: Any) -> ChartTemplate:
             component.setdefault("data", {}).setdefault(
                 "fit_input_range", {"kind": "all"}
             )
+    migrated["schema_version"] = TEMPLATE_SCHEMA_V2_VERSION
+    migrated_figure = deepcopy(_expect_dict(migrated.get("figure"), "figure"))
+    validate_v18_figure(migrated_figure, refs, TEMPLATE_PROJECT_ID, None)
+    return migrated
+
+
+def migrate_v2_template_to_v3(value: Any) -> ChartTemplate:
+    """Strictly read a schema-v2 template and upgrade it to schema v3."""
+
+    validate_json_budget(value, limits=load_resource_limits())
+    root = _expect_dict(value, "template")
+    _exact(root, {"schema", "schema_version", "metadata", "data_contract", "figure"}, "template")
+    if _expect_string(root.get("schema"), "schema") != TEMPLATE_SCHEMA_NAME:
+        raise ValueError("Unsupported template file.")
+    version = root.get("schema_version")
+    if type(version) is not int or version != TEMPLATE_SCHEMA_V2_VERSION:
+        raise ValueError(
+            f"Unsupported template schema version {version!r}; expected exact "
+            f"integer {TEMPLATE_SCHEMA_V2_VERSION}."
+        )
+    contract = _parse_contract(root.get("data_contract"))
+    refs = {
+        ColumnRef(TEMPLATE_PROJECT_ID, sheet.id, column.id): column.type
+        for sheet in contract.sheets
+        for column in sheet.columns
+    }
+    figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
+    validate_v18_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    migrated = deepcopy(value)
+    for component in migrated["figure"]["components"]:
+        if component.get("kind") == "axes":
+            component.setdefault("data", {})["geometry"] = grid_geometry_record()
+            component.setdefault("properties", {}).pop("in_layout", None)
     migrated["schema_version"] = TEMPLATE_SCHEMA_VERSION
     return parse_template(migrated)
 
 
 def parse_template_record(value: Any) -> ChartTemplate:
-    """Parse one stored record, migrating strict schema-v1 templates to v2."""
+    """Parse one stored record, migrating strict schema-v1/v2 templates to v3."""
 
     if (
         isinstance(value, dict)
         and value.get("schema") == TEMPLATE_SCHEMA_NAME
         and type(value.get("schema_version")) is int
-        and value["schema_version"] == TEMPLATE_SCHEMA_V1_VERSION
     ):
-        return migrate_v1_template_to_v2(value)
+        if value["schema_version"] == TEMPLATE_SCHEMA_V1_VERSION:
+            return migrate_v2_template_to_v3(migrate_v1_template_to_v2(value))
+        if value["schema_version"] == TEMPLATE_SCHEMA_V2_VERSION:
+            return migrate_v2_template_to_v3(value)
     return parse_template(value)
 
 

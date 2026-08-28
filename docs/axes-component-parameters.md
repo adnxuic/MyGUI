@@ -72,7 +72,9 @@ Plus the shared export parameters above.
 | Alpha (alpha) | Number | The Axes patch opacity from 0 to 1, or None. | None |
 | Label (label) | Text | The artist label used for lookups. | Empty |
 
-Plus the shared export parameters above.
+Plus the shared export parameters above, except **In layout**. For Axes,
+`in_layout` is derived from Grid/Manual geometry mode and is not independently
+editable or persisted.
 
 ### Other sections
 

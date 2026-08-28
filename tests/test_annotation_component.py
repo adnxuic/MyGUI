@@ -636,7 +636,6 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
 
             raw = load_project_file(path)
-            self.assertEqual(raw["schema_version"], 18)
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
 
             # Reopen in new MainWindow
@@ -778,15 +777,19 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
             mock_add.assert_not_called()
         foreign_axes.remove()
 
-    def test_schema_v16_to_v18_migration(self):
+    def test_schema_v16_to_v19_migration(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "test_v16.mygui.json"
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
+            for comp in raw["figure"]["components"]:
+                if comp["kind"] == "axes" and "geometry" in comp.get("data", {}):
+                    del comp["data"]["geometry"]
+                    comp["properties"]["in_layout"] = True
             raw["schema_version"] = 16
             path.write_text(json.dumps(raw), encoding="utf-8")
             migrated = load_project_file(path)
-            self.assertEqual(migrated["schema_version"], 18)
+            self.assertEqual(migrated["schema_version"], 19)
 
     def test_schema_v17_annotation_contract_and_predecessor_rejection(self):
         self.canvas.add_annotation(
@@ -860,6 +863,10 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
             validate_project_snapshot(bad_parent)
 
         predecessor = json.loads(json.dumps(snapshot))
+        for comp in predecessor["figure"]["components"]:
+            if comp["kind"] == "axes" and "geometry" in comp.get("data", {}):
+                del comp["data"]["geometry"]
+                comp["properties"]["in_layout"] = True
         predecessor["schema_version"] = 16
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "illegal-v16.mygui.json"

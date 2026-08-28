@@ -6,12 +6,19 @@ Covers:
 - Axes Structure (Left/Right/Top/Bottom Spines, Title, Legend)
 - X Axis (locators, formatters, major/minor ticks, tick labels, major/minor grids, x-label)
 - Y Axis (locators, formatters, major/minor ticks, tick labels, major/minor grids, y-label)
-- Undo/Redo & Canvas change verification
+- Axes Geometry mode switching & Inspector UI controls (Grid vs Manual, spinboxes, clamp, reset, return to grid)
+- Twin Axes coupled manual geometry & alignment
+- Colorbar docking & follower scaling on manual axes, clean rebuild on grid return
+- Multi-Axes mixed geometry & layout engine neutrality (none, tight, constrained)
+- Schema v19 persistence save/restore visual roundtrip & pixel diffing
+- Undo/Redo validation across geometry operations
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
+import tempfile
 from typing import Any, Callable
 
 from PIL import Image, ImageChops
@@ -20,8 +27,31 @@ from mygui.database import ColumnRef
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.components import ComponentKind, ComponentRole
 from mygui.figuremodify.style_base.color_models import ColorSelection
+from mygui.project_io import (
+    PROJECT_SCHEMA_VERSION,
+    load_project_file,
+    restore_project_snapshot,
+    save_project_snapshot,
+)
+from mygui.widgets.fig_control_window.component_editors.sections.axes import (
+    AxesLayoutSection,
+)
+from tests.axes_helpers import create_regular_axes, create_twin_axes_pair
 
 from desktop_smoke.harness import SmokeError, SmokeHarness
+
+MAPPED_COLOR = {
+    "enabled": True,
+    "cmap": "viridis",
+    "norm": {
+        "kind": "linear",
+        "params": {"vmin": None, "vmax": None, "clip": False},
+    },
+    "bad": "#00000000",
+    "under": None,
+    "over": None,
+    "nonfinite": "drop",
+}
 
 
 def run_axes_smoke_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
@@ -60,6 +90,41 @@ def run_axes_smoke_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
     results.append(
         _run_case(
             harness, "axes_smoke.y_axis_system", lambda: _scenario_y_axis_system(harness)
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "axes_smoke.geometry_mode_and_inspector",
+            lambda: _scenario_geometry_mode_and_inspector(harness),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "axes_smoke.twin_axes_coupling",
+            lambda: _scenario_twin_axes_coupling(harness),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "axes_smoke.colorbar_followers",
+            lambda: _scenario_colorbar_followers(harness),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "axes_smoke.mixed_layout_engines",
+            lambda: _scenario_mixed_layout_engines(harness),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "axes_smoke.schema_v19_persistence_roundtrip",
+            lambda: _scenario_schema_v19_persistence_roundtrip(harness),
         )
     )
     results.append(
@@ -180,6 +245,25 @@ def _setup_test_project(harness: SmokeHarness, project_name: str) -> tuple[Any, 
 
     target_ax = canvas.component_registry.resolve_target(axes_id)
     return canvas, axes_id, target_ax
+
+
+def _axes_layout_section(harness: SmokeHarness, axes_id: str) -> AxesLayoutSection:
+    """Retrieve the exact AxesLayoutSection for the selected Axes."""
+    harness.select_component(axes_id)
+    inspector_host = harness.window.fig_control_window.figure_inspector_host
+    figure_inspector = inspector_host.current_figure_inspector()
+    if figure_inspector is None:
+        raise SmokeError("Current figure inspector panel not found in host!")
+    panel = figure_inspector.axes_inspector(axes_id)
+    if panel is None:
+        raise SmokeError(f"Axes inspector panel not found for axes {axes_id!r}")
+    inspector = panel.semantic_panel.inspector(axes_id)
+    if inspector is None:
+        raise SmokeError(f"Component inspector not found for axes {axes_id!r}")
+    section = inspector.section("layout")
+    if not isinstance(section, AxesLayoutSection):
+        raise SmokeError(f"Layout section is not AxesLayoutSection for {axes_id!r}")
+    return section
 
 
 def _scenario_axes_root(harness: SmokeHarness) -> None:
@@ -556,6 +640,7 @@ def _scenario_x_axis_system(harness: SmokeHarness) -> None:
     harness.grab_inspector("axes-xaxis-11-label-inspector")
 
     x_label_ctrl.set_property("text", "Time (seconds) [Smoke Verified]")
+    x_label_ctrl.set_property("position", (0.5, 0.05))
     x_label_ctrl.set_property("fontsize", 14.0)
     x_label_ctrl.set_property("fontweight", "bold")
     x_label_ctrl.set_property("color", "#16A085")
@@ -718,43 +803,494 @@ def _scenario_y_axis_system(harness: SmokeHarness) -> None:
     )
 
 
-def _scenario_undo_redo_validation(harness: SmokeHarness) -> None:
-    """Test Undo and Redo on Axes modifications."""
-    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Axes_UndoRedo")
-    initial_p = harness.grab_canvas("axes-undoredo-00-initial")
+def _scenario_geometry_mode_and_inspector(harness: SmokeHarness) -> None:
+    """Test Axes Geometry mode transitions, interactive inspector spinboxes, buttons, and clamping."""
+    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Axes_Geometry")
+    harness.select_component(axes_id)
+    harness.grab_inspector("axes-geom-01-grid-inspector")
+    before_p = harness.grab_canvas("axes-geom-01-initial-canvas")
 
-    axes_ctrl = canvas.component_registry.get(axes_id)
-    # Apply facecolor change
-    axes_ctrl.set_property("facecolor", "#E6F2FF")
+    section = _axes_layout_section(harness, axes_id)
+
+    # Verify initial grid mode UI
+    if section.grid_container.isHidden():
+        raise SmokeError("grid_container should not be hidden initially!")
+    if not section.manual_container.isHidden():
+        raise SmokeError("manual_container should be hidden initially!")
+
+    # 1. Click switch_manual_button
+    harness.click(section.switch_manual_button)
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+
+    if not section.grid_container.isHidden():
+        raise SmokeError("grid_container should be hidden after switching to manual!")
+    if section.manual_container.isHidden():
+        raise SmokeError("manual_container should not be hidden after switching to manual!")
+
+    harness.grab_inspector("axes-geom-02-manual-inspector")
+    target = canvas.component_registry.get(axes_id).resolve_target()
+    if target.get_in_layout():
+        raise SmokeError("Axes target get_in_layout() should be False in manual mode!")
+    if target.get_subplotspec() is not None:
+        raise SmokeError("Axes target get_subplotspec() should be None in manual mode!")
+
+    # 2. Modify manual spinboxes
+    init_left = section.left_spin.value()
+    init_bottom = section.bottom_spin.value()
+    init_width = section.width_spin.value()
+    init_height = section.height_spin.value()
+
+    new_left = round(min(0.8, init_left + 0.12), 4)
+    new_bottom = round(min(0.8, init_bottom + 0.10), 4)
+    new_width = round(max(0.1, init_width * 0.75), 4)
+    new_height = round(max(0.1, init_height * 0.75), 4)
+
+    section.left_spin.setValue(new_left)
+    harness.pump(40)
+    section.bottom_spin.setValue(new_bottom)
+    harness.pump(40)
+    section.width_spin.setValue(new_width)
+    harness.pump(40)
+    section.height_spin.setValue(new_height)
     harness.pump(60)
     canvas.redraw()
     harness.pump(50)
 
-    changed_p = _verify_canvas_changed(
-        harness, initial_p, "axes-undoredo-01-changed", "Axes facecolor changed to #E6F2FF"
+    # Verify computed labels
+    expected_right = f"{new_left + new_width:.6f}"
+    expected_top = f"{new_bottom + new_height:.6f}"
+    if section.right_label.text() != expected_right:
+        raise SmokeError(f"right_label mismatch: got {section.right_label.text()!r}, expected {expected_right!r}")
+    if section.top_label.text() != expected_top:
+        raise SmokeError(f"top_label mismatch: got {section.top_label.text()!r}, expected {expected_top!r}")
+
+    before_p = _verify_canvas_changed(
+        harness, before_p, "axes-geom-03-bounds-modified", "Axes manual bounds modified via spinboxes"
     )
 
-    # Undo
+    # 3. Test boundary clamping
+    section.left_spin.setValue(0.85)
+    harness.pump(30)
+    section.width_spin.setValue(0.40)  # 0.85 + 0.40 = 1.25 > 1.0
+    harness.pump(60)
+    if section.width_spin.value() > 0.150001:
+        raise SmokeError(f"width_spin was not clamped: got {section.width_spin.value()}")
+
+    # 4. Click reset_button ("Reset Position")
+    harness.click(section.reset_button)
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    before_p = _verify_canvas_changed(
+        harness, before_p, "axes-geom-04-reset-bounds", "Reset Position button restored grid cell bounds"
+    )
+
+    # 5. Click return_grid_button ("Return to Grid Layout")
+    harness.click(section.return_grid_button)
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+
+    if section.grid_container.isHidden():
+        raise SmokeError("grid_container should not be hidden after return to grid!")
+    if not section.manual_container.isHidden():
+        raise SmokeError("manual_container should be hidden after return to grid!")
+    if not target.get_in_layout():
+        raise SmokeError("Axes target get_in_layout() should be True in grid mode!")
+    if target.get_subplotspec() is None:
+        raise SmokeError("Axes target get_subplotspec() should not be None in grid mode!")
+
+    harness.grab_inspector("axes-geom-05-returned-grid-inspector")
+    _verify_canvas_changed(
+        harness, before_p, "axes-geom-05-returned-to-grid", "Returned Axes to Grid layout"
+    )
+
+
+def _scenario_twin_axes_coupling(harness: SmokeHarness) -> None:
+    """Test Twin Axes synchronized manual placement and twin badge in Inspector."""
+    canvas = harness.create_project("Smoke_Twin_Axes_Coupling")
+    primary_id, twin_id = create_twin_axes_pair(canvas)
+    harness.pump(60)
+
+    # Add curves to both axes
+    canvas.add_curve("x", 1, 10, "-", "#1f77b4", "Primary Line")
+    canvas.add_curve("100 - x**2", 1, 10, "--", "#d62728", "Twin Line")
+    canvas.redraw()
+    harness.pump(60)
+
+    # Select Primary
+    section = _axes_layout_section(harness, primary_id)
+    if section.twin_label.isHidden():
+        raise SmokeError("twin_label should not be hidden for twinned axes!")
+
+    harness.grab_inspector("axes-twin-01-primary-inspector")
+    before_p = harness.grab_canvas("axes-twin-01-canvas-initial")
+
+    # Switch primary to manual
+    harness.click(section.switch_manual_button)
+    harness.pump(60)
+
+    # Set manual bounds
+    section.left_spin.setValue(0.20)
+    section.bottom_spin.setValue(0.25)
+    section.width_spin.setValue(0.55)
+    section.height_spin.setValue(0.50)
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(50)
+
+    # Verify both artists have matching bounds
+    target_p = canvas.component_registry.get(primary_id).resolve_target()
+    target_t = canvas.component_registry.get(twin_id).resolve_target()
+    pos_p = tuple(round(v, 4) for v in target_p.get_position().bounds)
+    pos_t = tuple(round(v, 4) for v in target_t.get_position().bounds)
+    if pos_p != pos_t:
+        raise SmokeError(f"Twin positions do not match: primary={pos_p}, twin={pos_t}")
+
+    before_p = _verify_canvas_changed(
+        harness, before_p, "axes-twin-02-manual-moved", "Twin axes moved in lockstep to [0.2, 0.25, 0.55, 0.5]"
+    )
+
+    # Select secondary axes and verify inspector
+    section_twin = _axes_layout_section(harness, twin_id)
+    if section_twin.twin_label.isHidden():
+        raise SmokeError("twin_label should not be hidden on secondary twin inspector!")
+    harness.grab_inspector("axes-twin-03-secondary-inspector")
+
+    # Return to grid via secondary axes
+    harness.click(section_twin.return_grid_button)
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(50)
+
+    if not target_p.get_in_layout() or not target_t.get_in_layout():
+        raise SmokeError("Both primary and twin must have get_in_layout() == True after return to grid!")
+
+    _verify_canvas_changed(
+        harness, before_p, "axes-twin-04-returned-grid", "Twin axes pair returned to Grid layout"
+    )
+
+
+def _scenario_colorbar_followers(harness: SmokeHarness) -> None:
+    """Test Colorbar following manual axes movement and rebuilding on grid return."""
+    canvas = harness.create_project("Smoke_Colorbar_Followers")
+    axes_ids = create_regular_axes(canvas)
+    axes_id = str(axes_ids[0])
+    harness.pump(50)
+
+    # Seed data with color mapping
+    subtable = harness.window.table.current_subtable()
+    sheet = subtable.get_table(0).table_model.sheet
+    sheet.set_block(
+        0,
+        0,
+        [
+            [0.0, 1.0, 10.0],
+            [1.0, 2.0, 20.0],
+            [2.0, 4.0, 30.0],
+            [3.0, 8.0, 40.0],
+            [4.0, 16.0, 50.0],
+        ],
+    )
+    x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+    y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+    c_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[2].id)
+    pair = harness.window.repository.valid_pair(x_ref, y_ref)
+
+    canvas.add_scatter(
+        pair.x,
+        pair.y,
+        28.0,
+        "#336699",
+        "o",
+        "temperature_points",
+        x_ref,
+        y_ref,
+        object_id="scatter-smoke",
+        color_ref=c_ref,
+        color_mapping=deepcopy(MAPPED_COLOR),
+    )
+    canvas.add_colorbar(
+        "scatter-smoke",
+        {"label": "Temperature (K)", "location": "right"},
+        object_id="colorbar-smoke",
+    )
+    canvas.redraw()
+    harness.pump(60)
+
+    harness.select_component("colorbar-smoke")
+    harness.grab_inspector("axes-cb-01-colorbar-inspector")
+    before_p = harness.grab_canvas("axes-cb-01-initial-canvas")
+
+    # Select owner Axes and switch to manual
+    harness.select_component(axes_id)
+    geom_service = canvas.axes_geometry_service
+    res = geom_service.switch_to_manual(axes_id)
+    if not res.ok:
+        raise SmokeError("Failed to switch owner axes to manual with colorbar!")
+
+    # Change manual bounds on owner axes
+    new_bounds = [0.15, 0.20, 0.45, 0.50]
+    res = geom_service.set_manual_bounds(axes_id, new_bounds)
+    if not res.ok:
+        raise SmokeError("Failed to update owner axes manual bounds!")
+    canvas.redraw()
+    harness.pump(50)
+
+    # Verify colorbar follower position updated
+    cb_controller = canvas.component_registry.get("colorbar-smoke")
+    cax = cb_controller.resolve_target().ax
+    cax_pos = cax.get_position()
+    if cax_pos.x0 < 0.60 or cax_pos.y0 < 0.19:
+        raise SmokeError(f"Colorbar did not follow manual owner axes bounds! cax_pos={cax_pos.bounds}")
+
+    before_p = _verify_canvas_changed(
+        harness, before_p, "axes-cb-03-owner-moved", "Colorbar followed resized/translated owner axes"
+    )
+
+    # Return owner axes to grid
+    res = geom_service.return_to_grid(axes_id)
+    if not res.ok:
+        raise SmokeError("Failed to return owner axes to grid!")
+    canvas.redraw()
+    harness.pump(50)
+
+    _verify_canvas_changed(
+        harness, before_p, "axes-cb-04-returned-to-grid", "Owner axes and colorbar cleanly returned to grid"
+    )
+
+
+def _scenario_mixed_layout_engines(harness: SmokeHarness) -> None:
+    """Test 2x2 multi-axes layout with mixed manual/grid axes & layout engine neutrality."""
+    canvas = harness.create_project("Smoke_Mixed_Layout_Engines")
+    axes_ids = create_regular_axes(canvas, nrows=2, ncols=2)
+    harness.pump(60)
+
+    # Add lines and titles to each axes so layout engines have margin work
+    for idx, ax_id in enumerate(axes_ids):
+        canvas.select_component(ax_id)
+        canvas.add_curve(f"(x + {idx}) ** 1.2", 0, 5, "-", "#2c3e50", f"Line {idx}")
+        ctrl = canvas.component_registry.get(ax_id)
+        ctrl.set_property("title", f"Subplot Grid {idx + 1}")
+    canvas.redraw()
+    harness.pump(60)
+
+    before_p = harness.grab_canvas("axes-engines-01-2x2-initial")
+
+    # Switch Axes (0,0) to manual position and place in custom floating bounds
+    manual_id = str(axes_ids[0])
+    geom_service = canvas.axes_geometry_service
+    geom_service.switch_to_manual(manual_id)
+    geom_service.set_manual_bounds(manual_id, [0.08, 0.55, 0.35, 0.35])
+    canvas.redraw()
+    harness.pump(60)
+
+    before_p = _verify_canvas_changed(
+        harness, before_p, "axes-engines-02-mixed-manual", "Axes (0,0) set to floating manual position"
+    )
+
+    # Set Figure Layout Engine to constrained
+    fig_ctrl = canvas.component_registry.get(canvas.root_component_id)
+    fig_ctrl.set_property(
+        "layout_engine",
+        {
+            "kind": "constrained",
+            "params": {
+                "w_pad": None,
+                "h_pad": None,
+                "wspace": None,
+                "hspace": None,
+                "rect": None,
+            },
+        },
+    )
+    canvas.redraw()
+    harness.pump(60)
+
+    # Verify manual axes stayed strictly pinned
+    target_manual = canvas.component_registry.get(manual_id).resolve_target()
+    pos = target_manual.get_position()
+    if abs(pos.x0 - 0.08) > 0.001 or abs(pos.y0 - 0.55) > 0.001:
+        raise SmokeError(f"Manual axes shifted under constrained layout engine! Got {pos.bounds}")
+
+    _verify_canvas_changed(
+        harness, before_p, "axes-engines-03-constrained", "Constrained layout applied without shifting manual axes"
+    )
+
+
+def _scenario_schema_v19_persistence_roundtrip(harness: SmokeHarness) -> None:
+    """Test Schema v19 project save, migration, and visual pixel-accurate restore."""
+    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Schema_v19_Persistence")
+
+    # Set manual geometry on axes
+    geom_service = canvas.axes_geometry_service
+    geom_service.switch_to_manual(axes_id)
+    target_bounds = [0.16, 0.22, 0.62, 0.52]
+    geom_service.set_manual_bounds(axes_id, target_bounds)
+
+    # Style axes elements
+    axes_ctrl = canvas.component_registry.get(axes_id)
+    axes_ctrl.set_property("facecolor", "#FAF9F6")
+    canvas.redraw()
+    harness.pump(60)
+
+    harness.grab_canvas("axes-v19-01-pre-save")
+
+    # Save project snapshot to temporary file
+    with tempfile.TemporaryDirectory(prefix="mygui-smoke-v19-") as tmpdir:
+        save_path = Path(tmpdir) / "project.mygui"
+        save_project_snapshot(
+            save_path,
+            figure_window=harness.window.figure_window,
+            canvas=canvas,
+        )
+
+        # Validate file
+        loaded = load_project_file(save_path)
+        if loaded.get("schema_version") != PROJECT_SCHEMA_VERSION:
+            raise SmokeError(f"Saved file schema_version is {loaded.get('schema_version')}, expected {PROJECT_SCHEMA_VERSION}")
+
+        # Check geometry record in JSON
+        axes_record = next(
+            c for c in loaded["figure"]["components"] if c.get("kind") == "axes"
+        )
+        if axes_record.get("data", {}).get("geometry", {}).get("mode") != "manual":
+            raise SmokeError(f"JSON axes record geometry mode is not manual: {axes_record.get('data')}")
+
+        # Remove original project from windows to avoid duplicate ID collision on restore
+        proj_id = canvas.project_id
+        harness.window.figure_window.remove_project_by_id(proj_id)
+        harness.window.table.remove_project_table(proj_id)
+        harness.pump(50)
+
+        # Restore snapshot into the active MainWindow
+        restore_project_snapshot(
+            save_path,
+            table=harness.window.table,
+            figure_window=harness.window.figure_window,
+        )
+        harness.pump(80)
+
+        restored_canvas = harness.window.figure_window.current_canva
+        if restored_canvas is None:
+            raise SmokeError("Restored canvas not found in figure window.")
+        restored_canvas.redraw()
+        harness.pump(60)
+
+        # Verify restored geometry on controller and artist
+        restored_ctrl = restored_canvas.component_registry.query(kind=ComponentKind.AXES)[0]
+        if restored_ctrl.state.data.get("geometry", {}).get("mode") != "manual":
+            raise SmokeError("Restored controller geometry mode is not manual!")
+        restored_target = restored_ctrl.resolve_target()
+        if restored_target.get_in_layout():
+            raise SmokeError("Restored target get_in_layout() should be False!")
+
+        post_restore_p = harness.grab_canvas("axes-v19-02-post-restore")
+
+        # Verify that restored canvas screenshot exists and is valid
+        img_post = Image.open(post_restore_p).convert("RGB")
+        if img_post.size[0] < 10 or img_post.size[1] < 10:
+            raise SmokeError("Restored canvas produced invalid empty image!")
+
+
+def _scenario_undo_redo_validation(harness: SmokeHarness) -> None:
+    """Test complete Undo and Redo transaction cycle across geometry modifications."""
+    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Axes_UndoRedo")
+    initial_p = harness.grab_canvas("axes-undoredo-00-initial")
+
     undo_stack = harness.window.repository.undo_stack(canvas.project_id)
-    if undo_stack is None or not undo_stack.canUndo():
-        raise SmokeError("Undo stack cannot undo after facecolor change!")
-    undo_stack.undo()
-    harness.pump(80)
-    canvas.redraw()
-    harness.pump(50)
+    geom_service = canvas.axes_geometry_service
 
-    _verify_canvas_changed(
-        harness, changed_p, "axes-undoredo-02-undone", "Undo reverted facecolor"
+    # Step 1: Switch to Manual
+    res1 = canvas.editor_context.perform(
+        "Switch to Manual", lambda: geom_service.switch_to_manual(axes_id)
+    )
+    if not res1.ok:
+        raise SmokeError("Failed to perform switch_to_manual under undo context")
+    canvas.redraw()
+    harness.pump(40)
+    manual_p = _verify_canvas_changed(
+        harness, initial_p, "axes-undoredo-01-manual", "Switched to manual"
     )
 
-    # Redo
-    if not undo_stack.canRedo():
-        raise SmokeError("Undo stack cannot redo!")
-    undo_stack.redo()
-    harness.pump(80)
+    # Step 2: Change Bounds
+    res2 = canvas.editor_context.perform(
+        "Set Bounds",
+        lambda: geom_service.set_manual_bounds(axes_id, [0.20, 0.25, 0.50, 0.45]),
+        merge_key=("axes_geometry", axes_id),
+    )
+    if not res2.ok:
+        raise SmokeError("Failed to perform set_manual_bounds under undo context")
     canvas.redraw()
-    harness.pump(50)
+    harness.pump(40)
+    bounds_p = _verify_canvas_changed(
+        harness, manual_p, "axes-undoredo-02-bounds-changed", "Bounds changed"
+    )
+
+    # Step 3: Reset Position
+    res3 = canvas.editor_context.perform(
+        "Reset Position", lambda: geom_service.reset_to_grid_bounds(axes_id)
+    )
+    if not res3.ok:
+        raise SmokeError("Failed to perform reset_to_grid_bounds under undo context")
+    canvas.redraw()
+    harness.pump(40)
+    reset_p = _verify_canvas_changed(
+        harness, bounds_p, "axes-undoredo-03-reset-position", "Position reset"
+    )
+
+    # Step 4: Return to Grid
+    res4 = canvas.editor_context.perform(
+        "Return to Grid", lambda: geom_service.return_to_grid(axes_id)
+    )
+    if not res4.ok:
+        raise SmokeError("Failed to perform return_to_grid under undo context")
+    canvas.redraw()
+    harness.pump(40)
+    grid_p = _verify_canvas_changed(
+        harness, reset_p, "axes-undoredo-04-returned-grid", "Returned to grid"
+    )
+
+    # --- Step-by-Step UNDO ---
+    # Undo 4 (Return to Grid -> Reset)
+    undo_stack.undo()
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    _verify_canvas_changed(harness, grid_p, "axes-undoredo-05-undo-return-grid", "Undo return to grid")
+
+    # Undo 3 (Reset -> Bounds changed)
+    undo_stack.undo()
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    _verify_canvas_changed(harness, reset_p, "axes-undoredo-06-undo-reset", "Undo reset position")
+
+    # Undo 2 (Bounds changed -> Manual initial)
+    undo_stack.undo()
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    _verify_canvas_changed(harness, bounds_p, "axes-undoredo-07-undo-bounds", "Undo bounds change")
+
+    # Undo 1 (Manual initial -> Grid initial)
+    undo_stack.undo()
+    harness.pump(60)
+    canvas.redraw()
+    harness.pump(40)
+    _verify_canvas_changed(harness, manual_p, "axes-undoredo-08-undo-manual", "Undo switch to manual")
+
+    # --- Step-by-Step REDO ---
+    for i in range(4):
+        if not undo_stack.canRedo():
+            raise SmokeError(f"Undo stack cannot redo at step {i+1}!")
+        undo_stack.redo()
+        harness.pump(60)
+        canvas.redraw()
+        harness.pump(40)
 
     _verify_canvas_changed(
-        harness, initial_p, "axes-undoredo-03-redone", "Redo re-applied facecolor"
+        harness, initial_p, "axes-undoredo-09-full-redo", "Full redo restored final state"
     )

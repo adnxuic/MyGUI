@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .services.annotation import AnnotationService
 from .services.axes_command import AxesCommandService, AxesPaletteStatus
+from .services.axes_geometry import AxesGeometryService
 from .services.chart_data import (
     ChartDataService,
     FitService,
@@ -51,6 +52,7 @@ from .services.text_render import TextRenderService
 __all__ = [
     "AnnotationService",
     "AxesCommandService",
+    "AxesGeometryService",
     "AxesPaletteStatus",
     "ChartDataService",
     "ColorConsumptionLedger",

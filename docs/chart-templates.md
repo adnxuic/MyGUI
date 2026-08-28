@@ -97,7 +97,7 @@ materializers and services.
 
 All component, layout, shared-axis, Colorbar-source, Sheet, column, project,
 and data-reference IDs are regenerated. Dynamic text and Fit results (filtered with the saved `fit_input_range` specification) are
-inserted into a complete schema-v18 project snapshot, which is strictly
+inserted into a complete schema-v19 project snapshot, which is strictly
 validated before it reaches the shared Repository/Canvas restore transaction.
 On success the new project is selected, has no file path, has an empty Undo
 stack, and is dirty. On failure no project, tab, Inspector, tree entry, Fit
@@ -119,14 +119,14 @@ The independent root format is:
 ```json
 {
   "schema": "mygui-template",
-  "schema_version": 2,
+  "schema_version": 3,
   "metadata": {},
   "data_contract": {},
   "figure": {}
 }
 ```
 
-Only the exact integer version 2 and closed fields are accepted for newly saved templates. Schema version 1 templates migrate automatically by injecting default `all` fit ranges. Unknown
+Only the exact integer version 3 and closed fields are accepted for newly saved templates. Schema version 1 templates migrate automatically through version 2 (injecting default `all` fit ranges) to version 3 (injecting default `{"mode": "grid"}` Axes geometry). Version 2 templates migrate directly to version 3. Unknown
 fields or versions, non-finite numbers, dangling components, invalid refs,
 unknown variables, oversized files/JSON/images, and invalid component trees
 are rejected. A corrupt file does not prevent startup: Settings shows its

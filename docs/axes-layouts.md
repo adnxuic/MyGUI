@@ -119,9 +119,18 @@ Primary + Right Y can merge entries from both Axes into the primary legend. The 
 
 Deleting a right-Y Axes leaves its primary Axes in place and resets a merged primary Legend to independent entries. Deleting a primary Axes includes its right-Y Axes in the same deletion transaction. If deletion leaves only one member of a sharing group, that survivor becomes independent. An unused Figure layout definition is removed with the final Axes that references it.
 
+## Individual Axes geometry (Grid vs Manual)
+
+In addition to GridSpec arrangement across the Figure, each individual Axes component supports switching between **Grid** and **Manual** projection modes directly in its Component Inspector:
+
+- **Grid mode**: The Axes follows its assigned GridSpec cell in `data.subplot` and respects the Figure layout engine.
+- **Manual mode**: The Axes is detached from the GridSpec cell (`in_layout=False`, `subplotspec=None`) and pinned to explicit normalized figure bounds `[left, bottom, width, height]`. Twin Axes (primary and right-Y) share projection mode and manual bounds atomically. Colorbars attached to manual Axes automatically track their owner's manual bounds as runtime followers.
+
+Axes linked only through `sharex` or `sharey` remain independently positionable; sharing coordinates does not make them geometry twins. Returning to Grid mode rebuilds any attached Colorbar so both the owner and Colorbar resume GridSpec control.
+
 ## Project records
 
-Schema v15 stores geometry under the Figure root in `data.layouts`. Each layout contains:
+Schema v19 stores geometry under the Figure root in `data.layouts`. Each layout contains:
 
 - stable `id`;
 - `nrows`, `ncols`;
@@ -129,4 +138,4 @@ Schema v15 stores geometry under the Figure root in `data.layouts`. Each layout 
 - `margins.left/right/bottom/top`;
 - `spacing.wspace/hspace`.
 
-Each Axes stores `data.subplot` with `layout_id`, zero-based `row` and `column`, `layer` (`primary` or `right_y`), and nullable `share_x_group` / `share_y_group` IDs. Template keys, dialog summaries, expanded groups, XRD import controls, the PRF source path, and other UI state are not persisted.
+Each Axes stores `data.subplot` with `layout_id`, zero-based `row` and `column`, `layer` (`primary` or `right_y`), and nullable `share_x_group` / `share_y_group` IDs, along with `data.geometry` (`{"mode": "grid"}` or `{"mode": "manual", "bounds": [left, bottom, width, height]}`). Template keys, dialog summaries, expanded groups, XRD import controls, the PRF source path, and other UI state are not persisted.

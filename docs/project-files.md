@@ -1,22 +1,22 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 18. One file contains one
+MyGUI project files use strict JSON schema version 19. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v18. Strict v17 input migrates directly to
-v18 (injecting default `fit_input_range: {"kind": "all"}` for Fit Curves), while v10–v16 migrate through every intervening version. Schema v4–v9,
+The loader accepts exact integer v19. Strict v18 input migrates directly to
+v19 (injecting default `geometry: {"mode": "grid"}` for Axes components), while v10–v17 migrate through every intervening version. Schema v4–v9,
 non-integer values, and unknown versions are rejected before application state
 is published.
 
 Reusable chart templates are deliberately separate from project files. They
-use strict `mygui-template` schema version 2, do not contain a Table document,
-and never change project schema version 18. See [Chart Templates](chart-templates.md).
+use strict `mygui-template` schema version 3, do not contain a Table document,
+and never change project schema version 19. See [Chart Templates](chart-templates.md).
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 18,
+  "schema_version": 19,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -27,7 +27,7 @@ and never change project schema version 18. See [Chart Templates](chart-template
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `18`.
+- Newly saved `schema_version` is always the integer `19`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -109,8 +109,11 @@ Each `axes/axes` child stores:
 - `properties.aspect`, margins, box aspect, anchor/adjustable, `facecolor`, `visible`, `autoscalex_on`, and `autoscaley_on`.
 - `properties.color_cycle`: JSON `null` or a complete color-cycle snapshot.
 - `data.subplot`: stable `layout_id`, zero-based `row`/`column`, `layer` (`primary` or `right_y`), and nullable `share_x_group` / `share_y_group` identifiers.
+- `data.geometry`: exact per-Axes projection record, either `{"mode": "grid"}` or `{"mode": "manual", "bounds": [left, bottom, width, height]}`.
 
-Axes position is derived from its Figure layout rather than persisted as an independently editable property. Each X/Y Axis owns its tagged scale, locator, and formatter configuration. Ordered Axes limits are the sole inversion authority.
+`properties.position` remains runtime-derived and non-persistent. Grid-mode position is derived from `data.subplot`; manual-mode position is projected only from `data.geometry.bounds`. Each X/Y Axis owns its tagged scale, locator, and formatter configuration. Ordered Axes limits are the sole inversion authority.
+
+Axes `in_layout` is also runtime-derived from geometry mode (`true` for Grid, `false` for Manual) and is not a schema-v19 property or an independent Inspector control.
 
 Each Tick Label Group persists `fontfamily` as one non-empty primary-family
 string. X/Y Label `position` values use normalized `Axes.transAxes`
@@ -140,7 +143,7 @@ component wire shape.
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v17)](component-properties-v17.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v19)](component-properties-v19.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -239,14 +242,14 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v17.
+snapshot only and does not change schema v19.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v17 save/open round trip. Strict v16 input is
-validated completely, deep-copied, and migrated in memory to v17 by advancing
-the version only. Strict v15 input migrates through v16 to v17; older accepted
+unchanged across every schema-v19 save/open round trip. Strict v18 input is
+validated completely, deep-copied, and migrated in memory to v19 by advancing
+the version and initializing `data.geometry: {"mode": "grid"}` for all Axes. Strict v17 input migrates through v18 to v19; older accepted
 inputs migrate through every intervening version. Tick Label
 `fontfamily` string values remain unchanged; non-empty string lists become only
 their first string during the v13→v14 step. No other component or Table field
@@ -264,7 +267,8 @@ children and source chart/Text artists first, then dynamic Annotation,
 Reference Marks, Reference Guides, `in_axes` Elements, and
 Colorbar after its source, with Legend restored from the component tree.
 After those Matplotlib targets exist, the Canvas
-applies the saved property tree and publishes one final selection. Zoom
+applies the saved property tree, restores per-Axes geometry projection modes
+and manual follower bounds, and publishes one final selection. Zoom
 mirrors receive one final batch refresh after their sources exist. Restore
 does not create legacy chart arrays or Modifier records as an intermediate
 runtime format. The Registry tree is subsequently the source for every save.
@@ -309,15 +313,15 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v17.
+are not added to schema v19.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v17 project stays clean through those UI-only interactions, and a
+schema-v19 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export
 
-- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v17.
+- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v19.
 - 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
 - PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

@@ -33,6 +33,7 @@ from mygui.figuremodify.components import (
     RestorePhase,
 )
 from mygui.figuremodify.components.serialization import validate_v15_figure
+from tests.schema_helpers import figure_as_schema_v18
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
@@ -863,12 +864,12 @@ class ReferenceGuideRuntimeTests(unittest.TestCase):
             self.assertIn(component_id, self.canvas.component_registry)
 
         validate_v15_figure(
-            self.canvas.component_snapshot(),
+            figure_as_schema_v18(self.canvas.component_snapshot()),
             {},
             self.canvas.project_id,
             self.canvas.project_name,
         )
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 18)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 19)
 
 
 if __name__ == "__main__":

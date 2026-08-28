@@ -6,10 +6,36 @@ from copy import deepcopy
 from typing import Any
 
 
+def figure_as_schema_v18(figure: dict[str, Any]) -> dict[str, Any]:
+    """Strip v19-only Axes geometry from one Figure component tree."""
+
+    payload = deepcopy(figure)
+    for component in payload.get("components") or []:
+        if component.get("kind") == "axes":
+            data = component.get("data")
+            if isinstance(data, dict):
+                data.pop("geometry", None)
+            properties = component.get("properties")
+            if isinstance(properties, dict):
+                properties["in_layout"] = True
+    return payload
+
+
+def as_schema_v18(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Strip v19-only Axes geometry so a current snapshot validates as v18."""
+
+    payload = deepcopy(snapshot)
+    payload["schema_version"] = 18
+    figure = payload.get("figure")
+    if isinstance(figure, dict):
+        payload["figure"] = figure_as_schema_v18(figure)
+    return payload
+
+
 def as_schema_v17(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Strip v18-only fit_input_range from Fit Curves so a current snapshot validates as v17."""
 
-    payload = deepcopy(snapshot)
+    payload = as_schema_v18(snapshot)
     payload["schema_version"] = 17
     figure = payload.get("figure") or {}
     for component in figure.get("components") or []:

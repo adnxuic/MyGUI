@@ -13,6 +13,7 @@ from matplotlib.collections import PathCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 
+from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.axes_layout import stable_layout_id, stable_share_group
 
 from .controllers import (
@@ -129,7 +130,8 @@ def _layout_records(
                         "layer": layer,
                         "share_x_group": None,
                         "share_y_group": None,
-                    }
+                    },
+                    "geometry": grid_geometry_record(),
                 }
 
         for dimension, field in (("x", "share_x_group"), ("y", "share_y_group")):
@@ -191,7 +193,8 @@ def _layout_records(
                 "layer": "primary",
                 "share_x_group": None,
                 "share_y_group": None,
-            }
+            },
+            "geometry": grid_geometry_record(),
         }
     return definitions, records
 

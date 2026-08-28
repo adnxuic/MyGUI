@@ -57,6 +57,7 @@ class ComponentRegistrationTransaction:
     def __init__(self, registry: "ComponentRegistry") -> None:
         self._registry = registry
         self._rollback_callbacks: list[Callable[[], None]] = []
+        self._post_restore_rollback_callbacks: list[Callable[[], None]] = []
         self._watched_existing: dict[
             str, tuple[ComponentController[Any], tuple[Any, ...]]
         ] = {}
@@ -65,6 +66,13 @@ class ComponentRegistrationTransaction:
         if not callable(callback):
             raise TypeError("Registration rollback callback must be callable.")
         self._rollback_callbacks.append(callback)
+
+    def on_rollback_after_restore(self, callback: Callable[[], None]) -> None:
+        """Register rollback work that must follow watched target restoration."""
+
+        if not callable(callback):
+            raise TypeError("Registration rollback callback must be callable.")
+        self._post_restore_rollback_callbacks.append(callback)
 
     def watch_existing(self, component_id: str) -> None:
         """Snapshot an existing Controller and target for exact rollback."""
@@ -95,6 +103,15 @@ class ComponentRegistrationTransaction:
             try:
                 controller._restore_transaction_snapshot(snapshot)
             except Exception as exc:
+                errors.append(exc)
+        return tuple(errors)
+
+    def _rollback_after_restore(self) -> tuple[BaseException, ...]:
+        errors: list[BaseException] = []
+        for callback in reversed(self._post_restore_rollback_callbacks):
+            try:
+                callback()
+            except BaseException as exc:
                 errors.append(exc)
         return tuple(errors)
 
@@ -1122,6 +1139,7 @@ class ComponentRegistry:
                     rollback_errors.append(rollback_exc)
             self._children = original_children
             rollback_errors.extend(transaction._restore_watched())
+            rollback_errors.extend(transaction._rollback_after_restore())
             self._pending = original_pending
             del self._event_buffer[event_start:]
             if rollback_errors:

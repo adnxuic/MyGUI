@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from collections.abc import Callable
 from typing import Any
 
 from matplotlib.axes import Axes
@@ -179,6 +179,68 @@ def production_colorbar_source_resolvers(
     return resolvers
 
 
+@dataclass(slots=True)
+class _ColorbarRuntimeRebuildItem:
+    controller: ColorbarController
+    old_target: Colorbar
+    removal_handle: Any
+    new_target: Colorbar
+    controller_runtime: tuple[Any, ...]
+    follower_runtime: dict[str, Any] | None
+
+
+class ColorbarRuntimeRebuildBatch:
+    """Deferred-finalization Colorbar rebuilds with exact rollback."""
+
+    def __init__(self, service: "ColorbarService") -> None:
+        self._service = service
+        self._items: list[_ColorbarRuntimeRebuildItem] = []
+        self._closed = False
+
+    def append(self, item: _ColorbarRuntimeRebuildItem) -> None:
+        self._items.append(item)
+
+    def rollback(self) -> None:
+        if self._closed:
+            return
+        errors: list[BaseException] = []
+        for item in reversed(self._items):
+            try:
+                self._service.destroy_runtime(item.new_target)
+                self._service.registry.locator.bind(
+                    item.controller.component_id,
+                    item.old_target,
+                )
+                (
+                    item.controller._constructor_properties,
+                    item.controller._label_font_value,
+                    item.controller._tick_font_value,
+                    item.controller._minor_ticks,
+                    item.controller._ticklocation,
+                ) = deepcopy(item.controller_runtime)
+                geometry = self._service.geometry_service
+                if geometry is not None:
+                    geometry.restore_colorbar_follower(
+                        item.controller.component_id,
+                        item.follower_runtime,
+                    )
+                item.controller.rollback_remove(item.removal_handle)
+            except BaseException as exc:
+                errors.append(exc)
+        self._closed = True
+        if errors:
+            raise RuntimeError(
+                "Colorbar runtime rebuild rollback was incomplete."
+            ) from errors[0]
+
+    def commit(self) -> None:
+        if self._closed:
+            return
+        for item in self._items:
+            item.controller._finalize_remove(item.removal_handle)
+        self._closed = True
+
+
 class ColorbarService:
     """Create, rebuild, refresh, and inspect Colorbars transactionally."""
 
@@ -187,11 +249,13 @@ class ColorbarService:
         registry: ComponentRegistry,
         *,
         source_resolvers: ColorbarSourceResolverRegistry | None = None,
+        geometry_service: Any | None = None,
     ) -> None:
         self.registry = registry
         self.source_resolvers = (
             source_resolvers or production_colorbar_source_resolvers(registry)
         )
+        self.geometry_service = geometry_service
 
     def dependents(self, source_component_id: str) -> tuple[ColorbarController, ...]:
         return tuple(
@@ -274,34 +338,27 @@ class ColorbarService:
             "ticklocation": properties["ticklocation"],
         }
 
-    @staticmethod
-    def _restore_owner(
-        owner: Axes,
-        active_position,
-        original_position,
-        subplotspec,
-        anchor,
-    ) -> None:
-        if subplotspec is not None:
-            owner.set_subplotspec(subplotspec)
-        owner._set_position(original_position, which="original")
-        owner._set_position(active_position, which="active")
-        owner.set_anchor(anchor)
-
     def _create_runtime(
         self,
         source: ColorbarSourceResolution,
         properties: dict[str, Any],
+        *,
+        component_id: str | None = None,
     ) -> Colorbar:
         owner = source.owner_axes
         figure = owner.figure
         if not isinstance(figure, Figure):
             raise ComponentValidationError("Colorbar owner Axes has no Figure.")
+        geometry = self.geometry_service
+        if geometry is None:
+            raise ComponentValidationError(
+                "Colorbar runtime creation requires AxesGeometryService."
+            )
         before_axes = tuple(figure.axes)
-        active_position = owner.get_position().frozen()
-        original_position = owner.get_position(original=True).frozen()
-        subplotspec = getattr(owner, "get_subplotspec", lambda: None)()
-        anchor = owner.get_anchor()
+        owner_snapshots = geometry.capture_owner_group(source.owner_axes_id)
+        owner_snapshot = next(
+            item for item in owner_snapshots if item.target is owner
+        )
         try:
             colorbar = figure.colorbar(
                 source.mappable,
@@ -314,13 +371,12 @@ class ColorbarService:
                     "Matplotlib did not create the requested Colorbar."
                 )
             colorbar._mygui_owner_restore_state = (
-                (
-                    owner,
-                    active_position,
-                    original_position,
-                    subplotspec,
-                    anchor,
-                ),
+                geometry.colorbar_owner_restore_state(owner_snapshot),
+            )
+            geometry.configure_colorbar_runtime(
+                source.owner_axes_id,
+                colorbar,
+                component_id=component_id,
             )
             return colorbar
         except Exception:
@@ -336,13 +392,7 @@ class ColorbarService:
                         figure.delaxes(axes)
                     except Exception:
                         pass
-            self._restore_owner(
-                owner,
-                active_position,
-                original_position,
-                subplotspec,
-                anchor,
-            )
+            geometry.restore_runtime(owner_snapshots)
             raise
 
     def create_runtime(
@@ -350,6 +400,8 @@ class ColorbarService:
         owner_axes_id: str,
         source_component_id: str,
         properties: dict[str, Any],
+        *,
+        component_id: str | None = None,
     ) -> tuple[Colorbar, dict[str, Any]]:
         """Create one runtime Colorbar after complete source preflight."""
 
@@ -378,7 +430,14 @@ class ColorbarService:
             {"source_component_id": str(source_component_id)},
         )
         ColorbarController(candidate)
-        return self._create_runtime(source, normalized), normalized
+        return (
+            self._create_runtime(
+                source,
+                normalized,
+                component_id=component_id,
+            ),
+            normalized,
+        )
 
     @staticmethod
     def destroy_runtime(colorbar: Colorbar) -> None:
@@ -476,11 +535,29 @@ class ColorbarService:
                 controller._minor_ticks,
                 controller._ticklocation,
             )
+            follower_snapshot = None
+            if self.geometry_service is not None:
+                follower_snapshot = (
+                    self.geometry_service.colorbar_follower_snapshot(
+                        controller.component_id
+                    )
+                )
             old_handle = controller.prepare_remove()
             controller.commit_remove(old_handle)
             new = None
             try:
-                new = self._create_runtime(source, merged)
+                if self.geometry_service is None:
+                    raise ComponentValidationError(
+                        "Colorbar runtime rebuild requires AxesGeometryService."
+                    )
+                self.geometry_service.project_owner_from_state(
+                    source.owner_axes_id
+                )
+                new = self._create_runtime(
+                    source,
+                    merged,
+                    component_id=controller.component_id,
+                )
                 temporary = ColorbarController(candidate, target=new)
                 configured = temporary.apply_state(candidate)
                 if not configured.ok:
@@ -516,6 +593,11 @@ class ColorbarService:
                     controller._minor_ticks,
                     controller._ticklocation,
                 ) = runtime_snapshot
+                if self.geometry_service is not None:
+                    self.geometry_service.restore_colorbar_follower(
+                        controller.component_id,
+                        follower_snapshot,
+                    )
                 controller._state = before.clone()
                 controller.rollback_remove(old_handle)
                 raise
@@ -523,3 +605,111 @@ class ColorbarService:
             return change
         except Exception as exc:
             return _rejected(controller, str(exc))
+
+    def prepare_runtime_rebuilds(
+        self,
+        colorbar_component_ids: tuple[str, ...],
+    ) -> ColorbarRuntimeRebuildBatch:
+        """Stage Colorbar rebuilds while retaining exact rollback handles."""
+
+        batch = ColorbarRuntimeRebuildBatch(self)
+        try:
+            for component_id in dict.fromkeys(colorbar_component_ids):
+                controller = _controller(
+                    self.registry,
+                    component_id,
+                    ColorbarController,
+                )
+                source = self.source_resolvers.resolve(
+                    controller.state.data["source_component_id"],
+                    allow_empty=True,
+                )
+                old = controller.resolve_target()
+                controller_runtime = (
+                    deepcopy(controller._constructor_properties),
+                    deepcopy(controller._label_font_value),
+                    deepcopy(controller._tick_font_value),
+                    controller._minor_ticks,
+                    controller._ticklocation,
+                )
+                follower_runtime = None
+                if self.geometry_service is not None:
+                    follower_runtime = (
+                        self.geometry_service.colorbar_follower_snapshot(
+                            controller.component_id
+                        )
+                    )
+                removal_handle = controller.prepare_remove()
+                controller.commit_remove(removal_handle)
+                new = None
+                try:
+                    if self.geometry_service is None:
+                        raise ComponentValidationError(
+                            "Colorbar runtime rebuild requires "
+                            "AxesGeometryService."
+                        )
+                    self.geometry_service.project_owner_from_state(
+                        source.owner_axes_id
+                    )
+                    new = self._create_runtime(
+                        source,
+                        controller.state.properties,
+                        component_id=controller.component_id,
+                    )
+                    temporary = ColorbarController(
+                        controller.state,
+                        target=new,
+                    )
+                    configured = temporary.apply_state(controller.state)
+                    if not configured.ok:
+                        raise ComponentValidationError(configured.message)
+                    self.registry.locator.bind(controller.component_id, new)
+                    controller._constructor_properties = deepcopy(
+                        temporary._constructor_properties
+                    )
+                    controller._label_font_value = deepcopy(
+                        temporary._label_font_value
+                    )
+                    controller._tick_font_value = deepcopy(
+                        temporary._tick_font_value
+                    )
+                    controller._minor_ticks = temporary._minor_ticks
+                    controller._ticklocation = temporary._ticklocation
+                except Exception:
+                    if new is not None:
+                        self.destroy_runtime(new)
+                    self.registry.locator.bind(controller.component_id, old)
+                    (
+                        controller._constructor_properties,
+                        controller._label_font_value,
+                        controller._tick_font_value,
+                        controller._minor_ticks,
+                        controller._ticklocation,
+                    ) = deepcopy(controller_runtime)
+                    if self.geometry_service is not None:
+                        self.geometry_service.restore_colorbar_follower(
+                            controller.component_id,
+                            follower_runtime,
+                        )
+                    controller.rollback_remove(removal_handle)
+                    raise
+                batch.append(
+                    _ColorbarRuntimeRebuildItem(
+                        controller,
+                        old,
+                        removal_handle,
+                        new,
+                        controller_runtime,
+                        follower_runtime,
+                    )
+                )
+        except Exception:
+            batch.rollback()
+            raise
+        return batch
+
+    def rebuild_runtime(self, colorbar_component_id: str) -> None:
+        """Rebuild one existing Colorbar runtime target using its persisted state."""
+
+        batch = self.prepare_runtime_rebuilds((colorbar_component_id,))
+        batch.commit()

@@ -210,6 +210,85 @@ class ColorbarRuntimeTests(unittest.TestCase):
         self.assertEqual(colorbar.state, before)
         self.assertEqual(target.ax.yaxis.get_ticks_position(), "right")
 
+    def test_manual_geometry_undo_rebuilds_grid_controlled_colorbar(self):
+        colorbar = self.add_colorbar()
+        owner_id = colorbar.state.parent_id
+        owner = self.canvas.component_registry.resolve_target(owner_id)
+        original_colorbar = colorbar.resolve_target()
+        self.assertIsNotNone(original_colorbar.ax.get_subplotspec())
+        self.assertTrue(original_colorbar.ax.get_in_layout())
+
+        result = self.canvas.editor_context.perform(
+            "Switch Axes to manual geometry",
+            lambda: self.canvas.axes_geometry_service.switch_to_manual(owner_id),
+        )
+        self.assertTrue(result.ok)
+        manual_colorbar = colorbar.resolve_target()
+        self.assertIsNone(owner.get_subplotspec())
+        self.assertFalse(owner.get_in_layout())
+        self.assertIsNone(manual_colorbar.ax.get_subplotspec())
+        self.assertFalse(manual_colorbar.ax.get_in_layout())
+
+        stack = self.window.repository.undo_stack(self.canvas.project_id)
+        stack.undo()
+
+        restored_colorbar = colorbar.resolve_target()
+        self.assertEqual(colorbar.state.parent_id, owner_id)
+        self.assertEqual(
+            self.canvas.component_registry.get(owner_id).state.data["geometry"],
+            {"mode": "grid"},
+        )
+        self.assertIsNotNone(owner.get_subplotspec())
+        self.assertTrue(owner.get_in_layout())
+        self.assertIsNot(restored_colorbar, manual_colorbar)
+        self.assertIsNotNone(restored_colorbar.ax.get_subplotspec())
+        self.assertTrue(restored_colorbar.ax.get_in_layout())
+        self.canvas.component_registry.validate_axes_targets()
+        self.canvas.validate_component_snapshot()
+
+    def test_manual_colorbar_follows_owner_after_failed_rebuild(self):
+        colorbar = self.add_colorbar()
+        owner_id = colorbar.state.parent_id
+        geometry = self.canvas.axes_geometry_service
+        self.assertTrue(geometry.switch_to_manual(owner_id).ok)
+        owner = self.canvas.component_registry.resolve_target(owner_id)
+        old_owner_bounds = tuple(owner.get_position().bounds)
+        old_cax_bounds = tuple(colorbar.resolve_target().ax.get_position().bounds)
+
+        with mock.patch.object(
+            self.canvas.colorbar_service,
+            "_create_runtime",
+            side_effect=RuntimeError("injected manual rebuild failure"),
+        ):
+            rejected = self.canvas.colorbar_service.apply_properties(
+                colorbar,
+                {"location": "left"},
+            )
+        self.assertIs(rejected.status, ChangeStatus.REJECTED)
+        for actual, expected_value in zip(
+            colorbar.resolve_target().ax.get_position().bounds,
+            old_cax_bounds,
+        ):
+            self.assertAlmostEqual(actual, expected_value, places=6)
+
+        new_owner_bounds = (0.12, 0.16, 0.54, 0.6)
+        self.assertTrue(
+            geometry.set_manual_bounds(owner_id, new_owner_bounds).ok
+        )
+        new_cax_bounds = tuple(colorbar.resolve_target().ax.get_position().bounds)
+        scale_x = new_owner_bounds[2] / old_owner_bounds[2]
+        scale_y = new_owner_bounds[3] / old_owner_bounds[3]
+        expected = (
+            new_owner_bounds[0]
+            + (old_cax_bounds[0] - old_owner_bounds[0]) * scale_x,
+            new_owner_bounds[1]
+            + (old_cax_bounds[1] - old_owner_bounds[1]) * scale_y,
+            old_cax_bounds[2] * scale_x,
+            old_cax_bounds[3] * scale_y,
+        )
+        for actual, expected_value in zip(new_cax_bounds, expected):
+            self.assertAlmostEqual(actual, expected_value, places=6)
+
     def test_new_layout_after_colorbar_uses_semantic_axes_indexes(self):
         colorbar = self.add_colorbar()
         target = colorbar.resolve_target()
@@ -584,6 +663,47 @@ class ExistingFigureColorbarTests(unittest.TestCase):
 
 
 class ColorbarProjectTests(ColorbarRuntimeTests):
+    def test_manual_axes_colorbar_roundtrip_restores_follower_runtime(self):
+        colorbar = self.add_colorbar(object_id="manual-colorbar")
+        owner_id = colorbar.state.parent_id
+        geometry = self.canvas.axes_geometry_service
+        self.assertTrue(geometry.switch_to_manual(owner_id).ok)
+        bounds = [0.14, 0.18, 0.56, 0.62]
+        self.assertTrue(geometry.set_manual_bounds(owner_id, bounds).ok)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manual-colorbar.mygui.json"
+            save_project_snapshot(path, self.window.figure_window)
+            loaded = MainWindow()
+            try:
+                restore_project_snapshot(path, loaded.table, loaded.figure_window)
+                restored = loaded.figure_window.current_canva
+                restored_owner = restored.component_registry.get(owner_id)
+                restored_colorbar = restored.component_registry.get(
+                    "manual-colorbar"
+                )
+                owner_target = restored_owner.resolve_target()
+                cax = restored_colorbar.resolve_target().ax
+                self.assertEqual(
+                    restored_owner.state.data["geometry"],
+                    {"mode": "manual", "bounds": bounds},
+                )
+                self.assertIsNone(owner_target.get_subplotspec())
+                self.assertFalse(owner_target.get_in_layout())
+                self.assertIsNone(cax.get_subplotspec())
+                self.assertFalse(cax.get_in_layout())
+                before_cax = tuple(cax.get_position().bounds)
+                self.assertTrue(
+                    restored.axes_geometry_service.set_manual_bounds(
+                        owner_id,
+                        [0.1, 0.12, 0.48, 0.54],
+                    ).ok
+                )
+                self.assertNotEqual(tuple(cax.get_position().bounds), before_cax)
+            finally:
+                loaded.close_without_prompt()
+                self.app.processEvents()
+
     def test_schema_v14_roundtrip_preserves_stable_source_relationship(self):
         controller = self.add_colorbar(
             object_id="stable-colorbar",

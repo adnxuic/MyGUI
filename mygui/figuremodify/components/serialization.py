@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v18 Figure trees."""
+"""Normalize and validate strict schema-v10 through v19 Figure trees."""
 
 from __future__ import annotations
 
@@ -164,7 +164,13 @@ def normalize_v17_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v18_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v18 Figure component tree."""
+    """Normalize the predecessor schema-v18 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v19_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v19 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -245,6 +251,17 @@ def _validate_controller_contract(
                 f"Fit Curve data must not contain fit_input_range before "
                 f"schema v18; schema v{schema_version} rejected it."
             )
+    if state.kind is ComponentKind.AXES:
+        has_geometry = "geometry" in state.data
+        if schema_version >= 19 and not has_geometry:
+            raise ComponentValidationError(
+                "Schema v19 Axes data requires geometry."
+            )
+        if schema_version < 19 and has_geometry:
+            raise ComponentValidationError(
+                f"Axes data must not contain geometry before "
+                f"schema v19; schema v{schema_version} rejected it."
+            )
     if state.kind is ComponentKind.TICK_LABEL_GROUP:
         font_path = f"{path}.properties.fontfamily"
         fontfamily = state.properties.get("fontfamily")
@@ -291,13 +308,22 @@ def _validate_controller_contract(
             if spec.persistent
         }
         candidate = state
+        if state.kind is ComponentKind.AXES and schema_version < 19:
+            expected.add("in_layout")
+            candidate = state.clone(
+                properties={
+                    key: value
+                    for key, value in state.properties.items()
+                    if key != "in_layout"
+                }
+            )
         if schema_version < 15:
             if state.kind is ComponentKind.AXES:
                 expected.discard("y_lower_reserve")
                 if "y_lower_reserve" not in state.properties:
-                    candidate = state.clone(
+                    candidate = candidate.clone(
                         properties={
-                            **state.properties,
+                            **candidate.properties,
                             "y_lower_reserve": 0.0,
                         }
                     )
@@ -645,6 +671,8 @@ def _validate_layouts(
     root: ComponentState,
     axes_components: list[ComponentState],
     children: dict[str, list[ComponentState]],
+    *,
+    schema_version: int,
 ) -> None:
     records = root.data["layouts"]
     layouts = {record["id"]: record for record in records}
@@ -701,6 +729,10 @@ def _validate_layouts(
                 raise ValueError("Twin Axes must share one stable X group.")
             if secondary.selector["index"] <= primary.selector["index"]:
                 raise ValueError("A right Y Axes must follow its primary Axes.")
+            if schema_version >= 19 and (
+                primary.data["geometry"] != secondary.data["geometry"]
+            ):
+                raise ValueError("Twin Axes must persist identical geometry.")
         for layer, axes in layers.items():
             legend = next(
                 child
@@ -883,7 +915,7 @@ def _validate_figure(
         raise ValueError("Axes semantic indexes must be contiguous from zero.")
     for axes in axes_components:
         _require_fixed_axes_components(axes, children)
-    _validate_layouts(root, axes_components, children)
+    _validate_layouts(root, axes_components, children, schema_version=schema_version)
 
     chart_orders = [
         state.order for state in states if state.kind in _CHART_KINDS
@@ -1097,7 +1129,7 @@ def validate_v18_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v18 Figure component tree."""
+    """Validate a predecessor schema-v18 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -1105,4 +1137,21 @@ def validate_v18_figure(
         project_id,
         project_name,
         schema_version=18,
+    )
+
+
+def validate_v19_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v19 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=19,
     )

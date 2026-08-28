@@ -33,6 +33,7 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.components.serialization import (
     validate_v15_figure,
 )
+from tests.schema_helpers import figure_as_schema_v18
 from mygui.project_io import (
     load_project_file,
     restore_project_snapshot,
@@ -117,7 +118,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
 
         snapshot = self.canvas.component_snapshot()
         validate_v15_figure(
-            snapshot,
+            figure_as_schema_v18(snapshot),
             self._available_refs(),
             self.canvas.project_id,
             self.canvas.project_name,
@@ -504,7 +505,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(legend_controller.state.properties["entry_scope"], "axes")
         validate_v15_figure(
-            self.canvas.component_snapshot(),
+            figure_as_schema_v18(self.canvas.component_snapshot()),
             self._available_refs(),
             self.canvas.project_id,
             self.canvas.project_name,
@@ -1143,7 +1144,22 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             dialog.input.height_ratios_input.setText("2, 1")
             dialog.input.left_input.setValue(0.25)
             dialog.input.wspace_input.setValue(0.35)
-            QTest.qWait(150)
+
+            # The preview is intentionally debounced.  Under parallel test
+            # load, a fixed sleep can expire after the timer fires but before
+            # the queued redraw completes, so wait for the observable service
+            # state with a bounded deadline instead.
+            for _ in range(20):
+                current_def = (
+                    self.canvas.axes_layout_service.layout_definition(layout_id)
+                )
+                if (
+                    current_def["height_ratios"] == [2.0, 1.0]
+                    and current_def["margins"]["left"] == 0.25
+                    and current_def["spacing"]["wspace"] == 0.35
+                ):
+                    break
+                QTest.qWait(25)
 
             current_def = self.canvas.axes_layout_service.layout_definition(layout_id)
             self.assertEqual(current_def["height_ratios"], [2.0, 1.0])
@@ -1298,7 +1314,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
 
             # Rollback failure on cancel
             dialog.input.left_input.setValue(0.25)
-            QTest.qWait(150)
+            dialog._on_preview_timer_timeout()
             with mock.patch.object(
                 status_messages, "show_error"
             ) as mock_error, mock.patch.object(
@@ -1380,7 +1396,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             self.assertIsNone(dialog._preview_timer)
             dialog.input.left_input.setValue(0.3)
             self.assertIsNone(
-                self.canvas.axes_layout_service.active_geometry_session
+                self.canvas.axes_layout_service.active_layout_session
             )
         finally:
             dialog.close()

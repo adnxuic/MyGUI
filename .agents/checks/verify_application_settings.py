@@ -161,7 +161,7 @@ def main() -> int:
         verification,
         findings=findings,
         architecture_impact=(
-            "Application-settings contracts were checked; project schema v18 is unchanged."
+            "Application-settings contracts were checked; project schema v19 is unchanged."
         ),
         persistence_impact="No MyGUI project-schema change.",
         limitations=[

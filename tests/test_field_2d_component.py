@@ -43,7 +43,7 @@ from mygui.project_io import (
     validate_project_snapshot,
     validate_v15_project_snapshot,
 )
-from tests.schema_helpers import as_schema_v15
+from tests.schema_helpers import as_schema_v15, figure_as_schema_v18
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.fig_control_window.component_editors.spec_editors import (
     ColorMapSpecEditor,
@@ -421,7 +421,7 @@ class Field2DComponentTests(unittest.TestCase):
         self.canvas.add_colorbar("pseudo-save", object_id="cbar-save")
         snapshot = self.canvas.component_snapshot()
         validate_v16_figure(
-            snapshot,
+            figure_as_schema_v18(snapshot),
             {
                 self.x_ref: ColumnType.NUMBER,
                 self.y_ref: ColumnType.NUMBER,
@@ -447,7 +447,7 @@ class Field2DComponentTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 18)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 19)
             roles = {
                 component["role"]
                 for component in raw["figure"]["components"]

@@ -22,6 +22,7 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.components.serialization import (
     validate_v15_figure,
 )
+from tests.schema_helpers import figure_as_schema_v18
 from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
     ZoomInAxesCreateSpec,
@@ -457,7 +458,7 @@ class InAxesTests(unittest.TestCase):
     def test_schema_v10_validation_is_strict_for_in_axes(self):
         self.canvas.add_in_axes(self.zoom_spec())
         self.canvas.add_in_axes(self.image_spec())
-        figure = self.canvas.component_snapshot()
+        figure = figure_as_schema_v18(self.canvas.component_snapshot())
         validate_v15_figure(
             figure,
             {},

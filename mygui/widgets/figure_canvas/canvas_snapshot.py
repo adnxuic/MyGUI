@@ -270,6 +270,7 @@ class CanvasSnapshotApplier:
                 raise ValueError(
                     f"Could not restore component {legend_state.id}: {result.message}"
                 )
+        host.axes_layout_service.restore_persisted_geometry()
         host.axes_layout_service.restore_runtime_relationships(refresh=True)
         host.component_registry.validate_tree()
         host.component_registry.validate_axes_targets()

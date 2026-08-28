@@ -20,7 +20,7 @@ tasks:
       - tests.test_project_object_roundtrip
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
-    documentation: [docs/component-extension-template.md, docs/component-properties-v18.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
+    documentation: [docs/component-extension-template.md, docs/component-properties-v19.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
     manual_smoke: true
   modify_component_property:
     skill: .agents/skills/modify-component-property/SKILL.md
@@ -37,6 +37,7 @@ tasks:
       - tests.test_matplotlib_property_contract
       - tests.test_y_axis_reserve
       - tests.test_reference_marks_table
+      - tests.test_axes_geometry
     documentation: [docs/editing-components/charts/line.md, docs/editing-components/fixed-semantics/axes.md, docs/editing-components/elements/reflection-positions.md, docs/reference-marks-component.md]
     manual_smoke: true
   schema_migration:
@@ -59,7 +60,8 @@ tasks:
       - tests.test_xrd_refinement
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
-    documentation: [docs/project-files.md, docs/component-properties-v18.md]
+      - tests.test_axes_geometry
+    documentation: [docs/project-files.md, docs/component-properties-v19.md]
     manual_smoke: true
   project_io_change:
     skill: .agents/skills/project-io-change/SKILL.md

@@ -175,7 +175,7 @@ class TemplateFeatureTests(unittest.TestCase):
 
     def test_schema_is_closed_exact_and_rejects_nonfinite_and_unknown_tokens(self):
         raw = template_to_dict(self.template())
-        for version in (True, 1, 3, 2.0, 0, -1):
+        for version in (True, 1, 2, 4, 3.0, 0, -1):
             with self.subTest(version=version):
                 candidate = deepcopy(raw)
                 candidate["schema_version"] = version
@@ -339,28 +339,53 @@ class TemplateFeatureTests(unittest.TestCase):
 
     def test_template_v1_migration_and_custom_fit_range(self):
         template = self.template(fit=True)
-        raw_v2 = template_to_dict(template)
+        raw_v3 = template_to_dict(template)
         # Create strict v1 template payload
-        raw_v1 = deepcopy(raw_v2)
+        raw_v1 = deepcopy(raw_v3)
         raw_v1["schema_version"] = 1
         for comp in raw_v1["figure"]["components"]:
             if comp.get("kind") == "line" and comp.get("role") == "fit_curve":
                 comp["data"].pop("fit_input_range", None)
+            if comp.get("kind") == "axes":
+                comp["data"].pop("geometry", None)
+                comp["properties"]["in_layout"] = True
 
         migrated = parse_template_record(raw_v1)
-        self.assertEqual(template_to_dict(migrated)["schema_version"], 2)
+        self.assertEqual(template_to_dict(migrated)["schema_version"], 3)
         fit_v1 = next(
             c for c in migrated.figure["components"]
             if c.get("role") == "fit_curve"
         )
         self.assertEqual(fit_v1["data"]["fit_input_range"], {"kind": "all"})
+        axes_v1 = next(
+            c for c in migrated.figure["components"]
+            if c.get("kind") == "axes"
+        )
+        self.assertEqual(axes_v1["data"]["geometry"], {"mode": "grid"})
+        self.assertNotIn("in_layout", axes_v1["properties"])
+
+        # Test v2 -> v3 migration
+        raw_v2 = deepcopy(raw_v3)
+        raw_v2["schema_version"] = 2
+        for comp in raw_v2["figure"]["components"]:
+            if comp.get("kind") == "axes":
+                comp["data"].pop("geometry", None)
+                comp["properties"]["in_layout"] = True
+        migrated_v2 = parse_template_record(raw_v2)
+        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 3)
+        axes_v2 = next(
+            c for c in migrated_v2.figure["components"]
+            if c.get("kind") == "axes"
+        )
+        self.assertEqual(axes_v2["data"]["geometry"], {"mode": "grid"})
+        self.assertNotIn("in_layout", axes_v2["properties"])
 
         # Bounded fit input range in template
-        fit_v2 = next(
+        fit_v3 = next(
             c for c in template.figure["components"]
             if c.get("role") == "fit_curve"
         )
-        fit_v2["data"]["fit_input_range"] = {
+        fit_v3["data"]["fit_input_range"] = {
             "kind": "bounded",
             "minimum": 1.0,
             "maximum": 3.0,

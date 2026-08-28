@@ -187,7 +187,7 @@ class PyLayoutDialog(QDialog):
         if self.layout_id is not None:
             if canvas is None:
                 raise ValueError("No Figure is available for layout editing.")
-            self._edit_session = canvas.axes_layout_service.begin_geometry_session(
+            self._edit_session = canvas.axes_layout_service.begin_layout_session(
                 self.layout_id
             )
             self._preview_timer = QTimer(self)

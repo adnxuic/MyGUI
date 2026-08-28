@@ -60,7 +60,7 @@ class _AxesDescriptor:
     component_index: int | None = None
 
 
-class AxesGeometryEditSession:
+class AxesLayoutEditSession:
     """Exclusive, rollbackable editing session for one Figure layout's geometry."""
 
     def __init__(self, service: AxesLayoutService, layout_id: str) -> None:
@@ -114,7 +114,7 @@ class AxesGeometryEditSession:
         """Preview geometry changes within this active session."""
 
         if self._closed:
-            raise RuntimeError("Geometry edit session is closed.")
+            raise RuntimeError("Layout edit session is closed.")
         if spec.layout_id != self._layout_id:
             raise ValueError(
                 f"Spec layout id {spec.layout_id!r} does not match session {self._layout_id!r}."
@@ -138,7 +138,7 @@ class AxesGeometryEditSession:
         """Commit pending or specified geometry changes and close the session."""
 
         if self._closed:
-            raise RuntimeError("Geometry edit session is closed.")
+            raise RuntimeError("Layout edit session is closed.")
         controllers = self._service.axes_for_layout(self._layout_id)
         result = tuple(c.component_id for c in controllers)
         if spec is not None:
@@ -163,8 +163,8 @@ class AxesGeometryEditSession:
             self._interaction_started = False
 
         self._closed = True
-        if self._service._active_geometry_session is self:
-            self._service._active_geometry_session = None
+        if self._service._active_layout_session is self:
+            self._service._active_layout_session = None
         return result
 
     def cancel(self) -> None:
@@ -184,8 +184,8 @@ class AxesGeometryEditSession:
             self._interaction_started = False
 
         self._closed = True
-        if self._service._active_geometry_session is self:
-            self._service._active_geometry_session = None
+        if self._service._active_layout_session is self:
+            self._service._active_layout_session = None
 
     def dispose(self) -> None:
         """Idempotent cleanup on unexpected teardown or canvas disposal."""
@@ -198,8 +198,8 @@ class AxesGeometryEditSession:
                 history.cancel_interaction()
             self._interaction_started = False
         self._closed = True
-        if self._service._active_geometry_session is self:
-            self._service._active_geometry_session = None
+        if self._service._active_layout_session is self:
+            self._service._active_layout_session = None
 
 
 class AxesLayoutService:
@@ -209,28 +209,28 @@ class AxesLayoutService:
         self.canvas = canvas
         self.registry = canvas.component_registry
         self._grids: dict[str, Any] = {}
-        self._active_geometry_session: AxesGeometryEditSession | None = None
+        self._active_layout_session: AxesLayoutEditSession | None = None
 
-    def begin_geometry_session(self, layout_id: str) -> AxesGeometryEditSession:
-        """Start an exclusive, rollbackable geometry editing session."""
+    def begin_layout_session(self, layout_id: str) -> AxesLayoutEditSession:
+        """Start an exclusive, rollbackable layout editing session."""
 
-        if self._active_geometry_session is not None:
-            self._active_geometry_session.dispose()
-            self._active_geometry_session = None
-        session = AxesGeometryEditSession(self, layout_id)
-        self._active_geometry_session = session
+        if self._active_layout_session is not None:
+            self._active_layout_session.dispose()
+            self._active_layout_session = None
+        session = AxesLayoutEditSession(self, layout_id)
+        self._active_layout_session = session
         return session
 
     @property
-    def active_geometry_session(self) -> AxesGeometryEditSession | None:
-        return self._active_geometry_session
+    def active_layout_session(self) -> AxesLayoutEditSession | None:
+        return self._active_layout_session
 
     def dispose(self) -> None:
         """Release runtime-only GridSpec references and active edit sessions."""
 
-        if self._active_geometry_session is not None:
-            self._active_geometry_session.dispose()
-            self._active_geometry_session = None
+        if self._active_layout_session is not None:
+            self._active_layout_session.dispose()
+            self._active_layout_session = None
         self._clear_runtime_relationships()
         self._grids.clear()
 
@@ -287,12 +287,7 @@ class AxesLayoutService:
                 _refresh_legend(primary_target)
 
     def restore_persisted_geometry(self) -> None:
-        """Synchronize GridSpecs from authoritative Figure/Axes state.
-
-        Project restore, layout editing, and Figure-history replay all use the
-        same persisted layout definitions.  This method changes only derived
-        Matplotlib geometry and rolls that runtime projection back on failure.
-        """
+        """Rebuild GridSpecs, then delegate per-Axes projection to its owner."""
 
         definitions = {
             str(item["id"]): item for item in self.layout_definitions()
@@ -301,7 +296,7 @@ class AxesLayoutService:
             layout_id: self._grid_from_definition(self.canvas.fig, definition)
             for layout_id, definition in definitions.items()
         }
-        snapshots = []
+        previous_grids = dict(self._grids)
         try:
             for controller in self.registry.query(kind=ComponentKind.AXES):
                 subplot = controller.state.data.get("subplot", {})
@@ -311,24 +306,11 @@ class AxesLayoutService:
                         f"Axes {controller.component_id!r} references an "
                         "unavailable Figure layout."
                     )
-                target = controller.resolve_target()
-                snapshots.append(
-                    (
-                        target,
-                        target.get_subplotspec(),
-                        tuple(target.get_position().bounds),
-                    )
-                )
-                target.set_subplotspec(
-                    grids[layout_id][
-                        int(subplot["row"]),
-                        int(subplot["column"]),
-                    ]
-                )
+            self._grids = grids
+            self.canvas.axes_geometry_service.restore_persisted_geometry()
         except Exception:
-            self._restore_subplot_specs(snapshots)
+            self._grids = previous_grids
             raise
-        self._grids = grids
         self.registry.request_update(self.canvas.fig, UpdateImpact.REDRAW)
 
     def set_legend_scope(self, axes_id: str, scope: str):
@@ -444,6 +426,33 @@ class AxesLayoutService:
             if definition.get("id") == layout_id:
                 return definition
         raise ValueError(f"Unknown Figure layout: {layout_id}")
+
+    def subplot_spec(self, layout_id: str, row: int, column: int):
+        """Return the current GridSpec cell for AxesGeometryService."""
+
+        layout_id = str(layout_id)
+        grid = self._grids.get(layout_id)
+        if grid is None:
+            grid = self._grid_from_definition(
+                self.canvas.fig,
+                self.layout_definition(layout_id),
+            )
+            self._grids[layout_id] = grid
+        return grid[int(row), int(column)]
+
+    def subplot_bounds(
+        self,
+        layout_id: str,
+        row: int,
+        column: int,
+    ) -> tuple[float, float, float, float]:
+        """Return one raw GridSpec cell allocation rectangle."""
+
+        return tuple(
+            self.subplot_spec(layout_id, row, column)
+            .get_position(self.canvas.fig)
+            .bounds
+        )
 
     def _set_layout_definitions(
         self,
@@ -1125,40 +1134,30 @@ class AxesLayoutService:
 
         definition = spec.layout_definition(layout_id)
         new_grid = self._grid_from_definition(self.canvas.fig, definition)
-        snapshots = []
+        previous_grid = self._grids.get(layout_id)
+        projection = None
         with self.registry.registration_transaction() as transaction:
             transaction.watch_existing(self.canvas.root_component_id)
-            for controller in controllers:
-                target = controller.resolve_target()
-                snapshots.append(
-                    (
-                        target,
-                        target.get_subplotspec(),
-                        tuple(target.get_position().bounds),
-                    )
-                )
             transaction.on_rollback(
-                lambda: self._restore_subplot_specs(snapshots)
+                lambda: (
+                    self._grids.pop(layout_id, None)
+                    if previous_grid is None
+                    else self._grids.__setitem__(layout_id, previous_grid)
+                )
             )
             definitions = [
                 definition if item["id"] == layout_id else item
                 for item in self.layout_definitions()
             ]
             self._set_layout_definitions(definitions)
-            for controller in controllers:
-                subplot = controller.state.data["subplot"]
-                target = controller.resolve_target()
-                target.set_subplotspec(
-                    new_grid[subplot["row"], subplot["column"]]
-                )
+            self._grids[layout_id] = new_grid
+            projection = self.canvas.axes_geometry_service.prepare_layout_projection(
+                layout_id
+            )
+            transaction.on_rollback(projection.rollback)
             self.canvas.validate_component_snapshot()
-        self._grids[layout_id] = new_grid
+            self.canvas.redraw()
+        if projection is not None:
+            projection.commit()
         self.canvas.message_presenter.discard_pending()
-        self.canvas.redraw()
         return tuple(controller.component_id for controller in controllers)
-
-    @staticmethod
-    def _restore_subplot_specs(snapshots) -> None:
-        for target, subplot_spec, bounds in snapshots:
-            target.set_subplotspec(subplot_spec)
-            target.set_position(bounds)

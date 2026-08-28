@@ -1,6 +1,7 @@
 """Domain services split from the historical component_services module."""
 
 from .axes_command import AxesCommandService, AxesPaletteStatus
+from .axes_geometry import AxesGeometryService
 from .chart_data import (
     ChartDataService,
     FitService,
@@ -36,6 +37,7 @@ from .text_render import TextRenderService
 
 __all__ = [
     "AxesCommandService",
+    "AxesGeometryService",
     "AxesPaletteStatus",
     "ChartDataService",
     "ColorConsumptionLedger",

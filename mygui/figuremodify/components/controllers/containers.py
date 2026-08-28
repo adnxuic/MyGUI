@@ -9,6 +9,10 @@ from typing import Any
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from mygui.figuremodify.axes_geometry import (
+    AxesGeometrySpec,
+    grid_geometry_record,
+)
 from mygui.figuremodify.y_axis_reserve import (
     read_y_lower_reserve,
     write_y_lower_reserve,
@@ -47,6 +51,11 @@ from ._helpers import (
     _y_lower_reserve_value,
     _figure_style,
     _exact_data_fields,
+)
+
+
+_AXES_ARTIST_EXPORT_PROPERTIES = tuple(
+    spec for spec in _ARTIST_EXPORT_PROPERTIES if spec.key != "in_layout"
 )
 
 class ContainerController(ComponentController[Any]):
@@ -470,17 +479,23 @@ class AxesController(ContainerController):
             advanced=True,
         ),
         PropertySpec("label", str, "", editor="text", advanced=True),
-    ) + _ARTIST_EXPORT_PROPERTIES
+    ) + _AXES_ARTIST_EXPORT_PROPERTIES
     CAPABILITIES = ContainerController.CAPABILITIES | frozenset(
         {"axes_style", "range"}
     )
 
     def __init__(self, state: ComponentState, **kwargs: Any) -> None:
         self._color_cycle = deepcopy(state.properties.get("color_cycle"))
+        if "geometry" not in state.data:
+            # Pre-v19 candidates carry no geometry record; runtime state is
+            # always current-schema, so validate the injected grid default.
+            data = deepcopy(state.data)
+            data["geometry"] = grid_geometry_record()
+            state = state.clone(data=data)
         super().__init__(state, **kwargs)
 
     def _validate_data(self, state: ComponentState) -> None:
-        _exact_data_fields(state, {"subplot"})
+        _exact_data_fields(state, {"subplot", "geometry"})
         subplot = state.data["subplot"]
         if not isinstance(subplot, dict):
             raise ComponentValidationError(
@@ -520,6 +535,10 @@ class AxesController(ContainerController):
             raise ComponentValidationError(
                 "A right Y Axes cannot join a shared Y group."
             )
+        try:
+            AxesGeometrySpec.from_dict(state.data["geometry"])
+        except ValueError as exc:
+            raise ComponentValidationError(str(exc)) from exc
 
     def _read_property(self, target: Axes, spec: PropertySpec) -> Any:
         if spec.key == "color_cycle":

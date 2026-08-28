@@ -32,6 +32,7 @@ from mygui.widgets.fig_control_window.component_editors import (
 from mygui.figuremodify.component_services import (
     AnnotationService,
     AxesCommandService,
+    AxesGeometryService,
     ChartDataService,
     ColorbarService,
     ColorConsumptionLedger,
@@ -125,10 +126,11 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v18_figure,
-    validate_v18_figure,
+    normalize_v19_figure,
+    validate_v19_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
+from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
 from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
@@ -261,6 +263,7 @@ class PyFigureCanvas(QWidget):
         register_production_profiles(self.editor_registry)
         self.axes_commands = AxesCommandService(self.component_registry)
         self.axes_layout_service = AxesLayoutService(self)
+        self.axes_geometry_service = AxesGeometryService(self)
         self.function_curve_service = FunctionCurveService(
             self.component_registry
         )
@@ -268,7 +271,10 @@ class PyFigureCanvas(QWidget):
             self.repository,
             self.component_registry,
         )
-        self.colorbar_service = ColorbarService(self.component_registry)
+        self.colorbar_service = ColorbarService(
+            self.component_registry,
+            geometry_service=self.axes_geometry_service,
+        )
         self.field_2d_service = Field2DService(
             self.repository,
             self.component_registry,
@@ -338,6 +344,7 @@ class PyFigureCanvas(QWidget):
             editor_manager=self.component_editor_manager,
             axes_commands=self.axes_commands,
             axes_layout=self.axes_layout_service,
+            axes_geometry=self.axes_geometry_service,
             function_curves=self.function_curve_service,
             chart_data=self.chart_data_service,
             interpolation=self.interpolation_service,
@@ -1009,7 +1016,10 @@ class PyFigureCanvas(QWidget):
                 "autoscaley_on": bool(axe.get_autoscaley_on()),
                 "color_cycle": None,
             },
-            data={"subplot": deepcopy(subplot)},
+            data={
+                "subplot": deepcopy(subplot),
+                "geometry": grid_geometry_record(),
+            },
         )
         axes_controller = AxesController(axes_state, target=axe)
         axes_controller.sync_from_target(strict=True)
@@ -1262,6 +1272,7 @@ class PyFigureCanvas(QWidget):
         self.component_registry.set_observer_failure_handler(None)
         self.component_editor_manager.close()
         self.axes_layout_service.dispose()
+        self.axes_geometry_service.dispose()
         self.in_axes_service.dispose()
 
     def _tex_runtime_changed(
@@ -3145,9 +3156,18 @@ class PyFigureCanvas(QWidget):
                     owner_axes_id,
                     source_component_id,
                     requested,
+                    component_id=component_id,
                 )
             transaction.on_rollback(
                 lambda target=runtime: self.colorbar_service.destroy_runtime(target)
+            )
+            transaction.on_rollback(
+                lambda component_id=component_id: (
+                    self.axes_geometry_service.restore_colorbar_follower(
+                        component_id,
+                        None,
+                    )
+                )
             )
             state = ComponentState(
                 id=component_id,
@@ -3788,7 +3808,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v18_figure(source)
+        source = normalize_v19_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3829,7 +3849,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v18 component tree used by persistence."""
+        """Return the canonical schema-v19 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3849,10 +3869,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v18_figure(snapshot)
+        return normalize_v19_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v18 Figure tree."""
+        """Validate and return the current complete schema-v19 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3861,7 +3881,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v18_figure(
+        validate_v19_figure(
             snapshot,
             available_refs,
             self.project_id,

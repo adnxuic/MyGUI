@@ -1883,12 +1883,12 @@ AXES_PROFILE = EditorProfile(
             "Advanced",
             _properties(
                 "rasterization_zorder", "alpha", "label", "clip_on", "gid",
-                "in_layout", "rasterized", "sketch_params", "snap", "url",
+                "rasterized", "sketch_params", "snap", "url",
             ),
             collapsed=True,
             property_keys=(
                 "rasterization_zorder", "alpha", "label", "clip_on", "gid",
-                "in_layout", "rasterized", "sketch_params", "snap", "url",
+                "rasterized", "sketch_params", "snap", "url",
             ),
         ),
     ),

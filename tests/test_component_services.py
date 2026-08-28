@@ -194,6 +194,36 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertIn("primary failure", str(error.primary_error))
         self.assertEqual(len(error.rollback_errors), 1)
 
+    def test_registration_post_restore_rollback_runs_after_watched_targets(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "post-restore-order",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        order = []
+        restore = controller._restore_transaction_snapshot
+
+        def record_restore(snapshot):
+            order.append("restore")
+            restore(snapshot)
+
+        with patch.object(
+            controller,
+            "_restore_transaction_snapshot",
+            side_effect=record_restore,
+        ):
+            with self.assertRaisesRegex(ValueError, "injected failure"):
+                with self.registry.registration_transaction() as transaction:
+                    transaction.watch_existing(controller.component_id)
+                    transaction.on_rollback(lambda: order.append("before"))
+                    transaction.on_rollback_after_restore(
+                        lambda: order.append("after")
+                    )
+                    raise ValueError("injected failure")
+
+        self.assertEqual(order, ["before", "restore", "after"])
+
     def test_registry_observer_failure_is_structured_and_non_blocking(self):
         line, = self.axes.plot([0, 1], [1, 2], color="#010101")
         controller = self._line_controller(
@@ -934,4 +964,3 @@ class ComponentServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

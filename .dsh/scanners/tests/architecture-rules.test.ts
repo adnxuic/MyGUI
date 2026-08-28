@@ -246,6 +246,32 @@ test('ARCH-FIGURE-LAYOUT-ENGINE-BYPASS: positive fixture hits; negative workspac
   assert.ok(findings.every((finding) => finding.tags.includes('figure-layout-engine-bypass')));
 });
 
+test('ARCH-AXES-GEOMETRY-BYPASS: positive fixture hits; negative workspace produces zero findings', async () => {
+  const files = loadWorkspace('ws_basic');
+  const findings = await findingsFor(files, 'ARCH-AXES-GEOMETRY-BYPASS');
+  const byLine = new Map(findings.map((finding) => [`${finding.file}:${finding.line}`, finding]));
+
+  assert.ok(
+    byLine.has('mygui/widgets/ui/axes_geometry_bypass.py:5'),
+    'set_position call in widget code',
+  );
+  assert.ok(
+    byLine.has('mygui/widgets/ui/axes_geometry_bypass.py:6'),
+    'set_subplotspec call in widget code',
+  );
+  assert.ok(
+    byLine.has('mygui/widgets/ui/axes_geometry_bypass.py:7'),
+    'set_in_layout call in widget code',
+  );
+  assert.ok(
+    byLine.has('mygui/widgets/ui/axes_geometry_bypass.py:8'),
+    '_subplotspec access in widget code',
+  );
+
+  assert.ok(findings.every((finding) => finding.severity === 'high'));
+  assert.ok(findings.every((finding) => finding.tags.includes('axes-geometry-bypass')));
+});
+
 test('QSS color completeness is not a lexical architecture rule', async () => {
   assert.ok(
     !ARCHITECTURE_RULES.some((rule) => /qss|color-complete|hex/i.test(rule.id)),
