@@ -26,6 +26,7 @@ def run_smoke(
     matplotlib.use("QtAgg")
 
     from desktop_smoke.harness import SmokeHarness
+    from desktop_smoke.scenarios.axes_smoke import run_axes_smoke_scenarios
     from desktop_smoke.scenarios.charts_1d import run_charts_1d_scenarios
     from desktop_smoke.scenarios.deletion_history import (
         run_deletion_history_scenarios,
@@ -71,6 +72,8 @@ def run_smoke(
             scenario_results.extend(run_inspectors_scenarios(harness))
         if "layouts_xrd" in selected:
             scenario_results.extend(run_layouts_xrd_scenarios(harness))
+        if "axes_smoke" in selected:
+            scenario_results.extend(run_axes_smoke_scenarios(harness))
         if "deletion_history" in selected:
             scenario_results.extend(run_deletion_history_scenarios(harness))
         if "project_lifecycle" in selected:

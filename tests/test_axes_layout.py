@@ -9,8 +9,13 @@ from tests.axes_helpers import create_regular_axes
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel
 from matplotlib import ticker
+
+from mygui import status_messages
 
 from mygui.database import ColumnRef
 from mygui.figuremodify.axes_layout import (
@@ -772,11 +777,129 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         self.assertTrue(any(line.get_visible() for line in axes.get_xgridlines()))
         self.assertTrue(any(line.get_visible() for line in axes.get_ygridlines()))
 
-    def test_layout_service_reads_constrained_state_from_figure_controller(self):
+    def test_axes_layout_spec_rejects_constrained_layout_keyword(self):
+        with self.assertRaises(TypeError):
+            AxesLayoutSpec.grid(1, 1, constrained_layout=True)  # type: ignore[call-arg]
+
+        with self.assertRaises(TypeError):
+            AxesLayoutSpec(  # type: ignore[call-arg]
+                1,
+                1,
+                (AxesCellSpec(0, 0),),
+                constrained_layout=True,
+            )
+
+    def test_layout_creation_and_update_preserves_all_figure_layout_engines(self):
         root = self.canvas.component_registry.get(self.canvas.root_component_id)
-        self.assertTrue(
-            root.set_property(
-                "layout_engine",
+        engines = [
+            {"kind": "none", "params": {}},
+            {
+                "kind": "tight",
+                "params": {"pad": 1.08, "w_pad": 0.5, "h_pad": 0.5, "rect": None},
+            },
+            {
+                "kind": "constrained",
+                "params": {
+                    "w_pad": 0.04,
+                    "h_pad": 0.04,
+                    "wspace": 0.08,
+                    "hspace": 0.08,
+                    "rect": None,
+                },
+            },
+            {
+                "kind": "compressed",
+                "params": {
+                    "w_pad": 0.05,
+                    "h_pad": 0.05,
+                    "wspace": 0.1,
+                    "hspace": 0.1,
+                    "rect": None,
+                },
+            },
+        ]
+
+        for engine_spec in engines:
+            with self.subTest(engine_kind=engine_spec["kind"]):
+                # Set authoritative engine via FigureController
+                res = root.set_property("layout_engine", engine_spec)
+                self.assertTrue(res.ok)
+                self.assertEqual(root.state.properties.get("layout_engine"), engine_spec)
+
+                with mock.patch.object(
+                    self.canvas.fig, "set_layout_engine"
+                ) as mock_set_engine:
+                    # 1. Create layout
+                    spec = AxesLayoutSpec.grid(1, 2)
+                    axes_ids = self.canvas.create_axes_layout(spec)
+                    self.assertEqual(len(axes_ids), 2)
+                    mock_set_engine.assert_not_called()
+                    self.assertEqual(
+                        root.state.properties.get("layout_engine"), engine_spec
+                    )
+
+                    # 2. Update layout geometry
+                    layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+                    new_spec = AxesLayoutSpec.grid(
+                        1, 2, width_ratios=(2.0, 1.0), layout_id=layout_id
+                    )
+                    self.canvas.update_axes_layout(new_spec)
+                    mock_set_engine.assert_not_called()
+                    self.assertEqual(
+                        root.state.properties.get("layout_engine"), engine_spec
+                    )
+
+    def test_layout_undo_redo_and_rollback_preserves_figure_layout_engine(self):
+        root = self.canvas.component_registry.get(self.canvas.root_component_id)
+        compressed_spec = {
+            "kind": "compressed",
+            "params": {
+                "w_pad": 0.05,
+                "h_pad": 0.05,
+                "wspace": 0.1,
+                "hspace": 0.1,
+                "rect": None,
+            },
+        }
+        res = root.set_property("layout_engine", compressed_spec)
+        self.assertTrue(res.ok)
+
+        # Create layout under history
+        spec = AxesLayoutSpec.grid(1, 1)
+        self.canvas.create_axes_layout(spec)
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+
+        # Update geometry
+        new_spec = AxesLayoutSpec.grid(
+            1, 1, left=0.15, right=0.85, layout_id=layout_id
+        )
+        self.canvas.update_axes_layout(new_spec)
+        self.assertEqual(root.state.properties.get("layout_engine"), compressed_spec)
+
+        # Undo geometry update
+        undo_stack = self.canvas.repository.undo_stack(self.canvas.project_id)
+        self.assertTrue(undo_stack.canUndo())
+        undo_stack.undo()
+        self.assertEqual(root.state.properties.get("layout_engine"), compressed_spec)
+
+        # Redo geometry update
+        self.assertTrue(undo_stack.canRedo())
+        undo_stack.redo()
+        self.assertEqual(root.state.properties.get("layout_engine"), compressed_spec)
+
+    def test_axes_layout_dialog_read_only_notice_and_preservation(self):
+        root = self.canvas.component_registry.get(self.canvas.root_component_id)
+        kinds_with_specs = [
+            ("none", {"kind": "none", "params": {}}),
+            (
+                "tight",
+                {
+                    "kind": "tight",
+                    "params": {"pad": None, "w_pad": None, "h_pad": None, "rect": None},
+                },
+            ),
+            (
+                "constrained",
                 {
                     "kind": "constrained",
                     "params": {
@@ -787,11 +910,46 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
                         "rect": None,
                     },
                 },
-            ).ok
-        )
-        self.assertTrue(
-            self.canvas.axes_layout_service.constrained_layout_enabled()
-        )
+            ),
+            (
+                "compressed",
+                {
+                    "kind": "compressed",
+                    "params": {
+                        "w_pad": None,
+                        "h_pad": None,
+                        "wspace": None,
+                        "hspace": None,
+                        "rect": None,
+                    },
+                },
+            ),
+        ]
+        for kind, spec in kinds_with_specs:
+            res = root.set_property("layout_engine", spec)
+            self.assertTrue(res.ok)
+            dialog = PyLayoutDialog(
+                dialog_name="Test Layout",
+                figure_window=self.window.figure_window,
+                preset_key="single",
+                parent=self.window,
+            )
+            try:
+                notice = dialog.input.layout_engine_notice.text()
+                self.assertIn("Figure Inspector", notice)
+                if kind == "none":
+                    self.assertIn("None", notice)
+                    self.assertNotIn("adjusted by", notice)
+                elif kind == "tight":
+                    self.assertIn("Tight", notice)
+                    self.assertIn("adjusted by", notice)
+                elif kind == "constrained":
+                    self.assertIn("Constrained", notice)
+                    self.assertIn("adjusted by", notice)
+                elif kind == "compressed":
+                    self.assertIn("Compressed", notice)
+            finally:
+                dialog.close()
 
     def test_registry_rejects_duplicate_live_axes_targets(self):
         create_regular_axes(self.canvas, nrows=1, ncols=2)
@@ -880,6 +1038,353 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
         self.assertIsInstance(target.get_major_formatter(), ticker.FixedFormatter)
         self.assertEqual(axis.state.properties["major_locator"], locator)
         self.assertEqual(axis.state.properties["major_formatter"], formatter)
+
+
+    def test_geometry_spinbox_steps_and_focus_aware_wheel(self):
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        dialog.show()
+        self.app.processEvents()
+        try:
+            for spin in (
+                dialog.input.left_input,
+                dialog.input.right_input,
+                dialog.input.bottom_input,
+                dialog.input.top_input,
+            ):
+                self.assertEqual(spin.singleStep(), 0.005)
+                self.assertEqual(spin.decimals(), 6)
+            for spin in (dialog.input.wspace_input, dialog.input.hspace_input):
+                self.assertEqual(spin.singleStep(), 0.01)
+                self.assertEqual(spin.decimals(), 6)
+
+            dialog.input.right_input.setFocus(Qt.MouseFocusReason)
+            self.app.processEvents()
+            self.assertFalse(dialog.input.left_input.hasFocus())
+            val_before = dialog.input.left_input.value()
+            event = QWheelEvent(
+                QPointF(10, 10),
+                QPointF(10, 10),
+                QPoint(0, 0),
+                QPoint(0, 120),
+                Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier,
+                Qt.ScrollPhase.NoScrollPhase,
+                False,
+            )
+            dialog.input.left_input.wheelEvent(event)
+            self.assertFalse(event.isAccepted())
+            self.assertEqual(dialog.input.left_input.value(), val_before)
+
+            dialog.input.left_input.setFocus(Qt.MouseFocusReason)
+            self.app.processEvents()
+            self.assertTrue(dialog.input.left_input.hasFocus())
+            event_focused = QWheelEvent(
+                QPointF(10, 10),
+                QPointF(10, 10),
+                QPoint(0, 0),
+                QPoint(0, 120),
+                Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier,
+                Qt.ScrollPhase.NoScrollPhase,
+                False,
+            )
+            dialog.input.left_input.wheelEvent(event_focused)
+            self.assertAlmostEqual(
+                dialog.input.left_input.value(), val_before + 0.005, places=6
+            )
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_geometry_debounce_merges_rapid_inputs(self):
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        try:
+            self.assertIsNotNone(dialog._edit_session)
+            with mock.patch.object(
+                dialog._edit_session,
+                "preview",
+                wraps=dialog._edit_session.preview,
+            ) as mock_preview:
+                dialog.input.left_input.setValue(0.13)
+                dialog.input.left_input.setValue(0.14)
+                dialog.input.left_input.setValue(0.15)
+                self.assertEqual(mock_preview.call_count, 0)
+                QTest.qWait(50)
+                self.assertEqual(mock_preview.call_count, 0)
+                dialog.input.left_input.setValue(0.16)
+                QTest.qWait(150)
+                self.assertEqual(mock_preview.call_count, 1)
+                self.assertAlmostEqual(dialog.input.left_input.value(), 0.16)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_geometry_live_preview_updates_canvas_without_apply(self):
+        ids = self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 2))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        try:
+            dialog.input.height_ratios_input.setText("2, 1")
+            dialog.input.left_input.setValue(0.25)
+            dialog.input.wspace_input.setValue(0.35)
+            QTest.qWait(150)
+
+            current_def = self.canvas.axes_layout_service.layout_definition(layout_id)
+            self.assertEqual(current_def["height_ratios"], [2.0, 1.0])
+            self.assertAlmostEqual(current_def["margins"]["left"], 0.25)
+            self.assertAlmostEqual(current_def["spacing"]["wspace"], 0.35)
+            targets = [
+                self.canvas.component_registry.resolve_target(cid) for cid in ids
+            ]
+            for target in targets:
+                self.assertIsNotNone(target.get_subplotspec())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_geometry_invalid_input_stops_preview_and_disables_apply(self):
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        try:
+            dialog.input.left_input.setValue(0.2)
+            QTest.qWait(150)
+            valid_def = self.canvas.axes_layout_service.layout_definition(layout_id)
+            self.assertAlmostEqual(valid_def["margins"]["left"], 0.2)
+
+            # Make input invalid (left >= right)
+            dialog.input.left_input.setValue(0.95)
+            self.assertFalse(dialog.ok_button.isEnabled())
+            self.assertFalse(dialog._preview_timer.isActive())
+            QTest.qWait(150)
+
+            retained_def = self.canvas.axes_layout_service.layout_definition(layout_id)
+            self.assertAlmostEqual(retained_def["margins"]["left"], 0.2)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_geometry_apply_flushes_pending_and_records_single_undo(self):
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        undo_stack = self.canvas.repository.undo_stack(self.canvas.project_id)
+        count_before = undo_stack.count()
+
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        try:
+            dialog.input.left_input.setValue(0.2)
+            QTest.qWait(150)
+            # Pending change flushed on accept
+            dialog.input.top_input.setValue(0.75)
+            dialog.accept()
+
+            self.assertEqual(undo_stack.count(), count_before + 1)
+            self.assertEqual(
+                undo_stack.text(undo_stack.index() - 1), "Change Axes Layout"
+            )
+
+            applied = self.canvas.axes_layout_service.layout_definition(layout_id)
+            self.assertAlmostEqual(applied["margins"]["left"], 0.2)
+            self.assertAlmostEqual(applied["margins"]["top"], 0.75)
+
+            undo_stack.undo()
+            undone = self.canvas.axes_layout_service.layout_definition(layout_id)
+            self.assertAlmostEqual(undone["margins"]["left"], 0.125)
+            self.assertAlmostEqual(undone["margins"]["top"], 0.88)
+
+            undo_stack.redo()
+            redone = self.canvas.axes_layout_service.layout_definition(layout_id)
+            self.assertAlmostEqual(redone["margins"]["left"], 0.2)
+            self.assertAlmostEqual(redone["margins"]["top"], 0.75)
+        finally:
+            dialog.deleteLater()
+
+    def test_geometry_cancel_and_esc_and_close_restores_original_state(self):
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        undo_stack = self.canvas.repository.undo_stack(self.canvas.project_id)
+        initial_count = undo_stack.count()
+
+        # 1. Cancel button
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        dialog.input.left_input.setValue(0.3)
+        dialog.input.hspace_input.setValue(0.4)
+        QTest.qWait(150)
+        previewed = self.canvas.axes_layout_service.layout_definition(layout_id)
+        self.assertAlmostEqual(previewed["margins"]["left"], 0.3)
+        dialog.reject()
+        self.assertEqual(undo_stack.count(), initial_count)
+        restored = self.canvas.axes_layout_service.layout_definition(layout_id)
+        self.assertAlmostEqual(restored["margins"]["left"], 0.125)
+        self.assertAlmostEqual(restored["spacing"]["hspace"], 0.2)
+        dialog.deleteLater()
+
+        # 2. Esc key / reject
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        dialog.input.right_input.setValue(0.7)
+        QTest.qWait(150)
+        dialog.reject()
+        self.assertEqual(undo_stack.count(), initial_count)
+        restored = self.canvas.axes_layout_service.layout_definition(layout_id)
+        self.assertAlmostEqual(restored["margins"]["right"], 0.9)
+        dialog.deleteLater()
+
+        # 3. Window close
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        dialog.input.bottom_input.setValue(0.22)
+        QTest.qWait(150)
+        dialog.close()
+        self.assertEqual(undo_stack.count(), initial_count)
+        restored = self.canvas.axes_layout_service.layout_definition(layout_id)
+        self.assertAlmostEqual(restored["margins"]["bottom"], 0.11)
+        dialog.deleteLater()
+
+    def test_geometry_preview_and_rollback_failure_atomicity(self):
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+            parent=self.window,
+        )
+        try:
+            # Preview failure
+            dialog.input.left_input.setValue(0.2)
+            with mock.patch.object(
+                status_messages, "show_error"
+            ) as mock_error, mock.patch.object(
+                dialog._edit_session._service,
+                "update_geometry",
+                side_effect=RuntimeError("Simulated preview failure"),
+            ):
+                dialog._on_preview_timer_timeout()
+                mock_error.assert_called_once_with("Simulated preview failure")
+
+            # Rollback failure on cancel
+            dialog.input.left_input.setValue(0.25)
+            QTest.qWait(150)
+            with mock.patch.object(
+                status_messages, "show_error"
+            ) as mock_error, mock.patch.object(
+                dialog._edit_session._service,
+                "update_geometry",
+                side_effect=RuntimeError("Simulated rollback failure"),
+            ):
+                dialog.reject()
+                mock_error.assert_called_once_with("Simulated rollback failure")
+                # Dialog remains open and session active
+                self.assertIsNotNone(dialog._edit_session)
+                self.assertTrue(dialog._edit_session.is_active)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_geometry_preview_and_undo_preserves_all_figure_layout_engines(self):
+        root = self.canvas.component_registry.get(self.canvas.root_component_id)
+        engines = [
+            {"kind": "none", "params": {}},
+            {"kind": "tight", "params": {"pad": 1.0, "w_pad": None, "h_pad": None, "rect": None}},
+            {
+                "kind": "constrained",
+                "params": {"w_pad": 0.05, "h_pad": 0.05, "wspace": 0.1, "hspace": 0.1, "rect": None},
+            },
+            {
+                "kind": "compressed",
+                "params": {"w_pad": 0.02, "h_pad": 0.02, "wspace": 0.05, "hspace": 0.05, "rect": None},
+            },
+        ]
+        for engine in engines:
+            self.canvas.axes_layout_service.dispose()
+            res = root.set_property("layout_engine", engine)
+            self.assertTrue(res.ok)
+
+            self.canvas.create_axes_layout(AxesLayoutSpec.grid(2, 1))
+            layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+            undo_stack = self.canvas.repository.undo_stack(self.canvas.project_id)
+
+            dialog = PyLayoutDialog(
+                figure_window=self.window.figure_window,
+                layout_id=layout_id,
+                parent=self.window,
+            )
+            dialog.input.left_input.setValue(0.2)
+            QTest.qWait(150)
+            self.assertEqual(root.state.properties.get("layout_engine"), engine)
+
+            dialog.accept()
+            self.assertEqual(root.state.properties.get("layout_engine"), engine)
+
+            undo_stack.undo()
+            self.assertEqual(root.state.properties.get("layout_engine"), engine)
+
+            undo_stack.redo()
+            self.assertEqual(root.state.properties.get("layout_engine"), engine)
+
+            # Now open and cancel
+            dialog2 = PyLayoutDialog(
+                figure_window=self.window.figure_window,
+                layout_id=layout_id,
+                parent=self.window,
+            )
+            dialog2.input.top_input.setValue(0.7)
+            QTest.qWait(150)
+            dialog2.reject()
+            self.assertEqual(root.state.properties.get("layout_engine"), engine)
+            dialog.deleteLater()
+            dialog2.deleteLater()
+
+    def test_layout_creation_mode_does_not_start_preview_session(self):
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            preset_key="single",
+            parent=self.window,
+        )
+        try:
+            self.assertIsNone(dialog._edit_session)
+            self.assertIsNone(dialog._preview_timer)
+            dialog.input.left_input.setValue(0.3)
+            self.assertIsNone(
+                self.canvas.axes_layout_service.active_geometry_session
+            )
+        finally:
+            dialog.close()
+            dialog.deleteLater()
 
 
 if __name__ == "__main__":

@@ -36,6 +36,13 @@ def run_layouts_xrd_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
             lambda: _scenario_xrd_main_residual(harness),
         )
     )
+    results.append(
+        _run_case(
+            harness,
+            "layouts_xrd.compressed_geometry_edit",
+            lambda: _scenario_compressed_layout_edit(harness),
+        )
+    )
     return results
 
 
@@ -177,3 +184,72 @@ def _scenario_xrd_main_residual(harness: SmokeHarness) -> None:
         )
 
     harness.grab_canvas("xrd-05-main-residual-canvas")
+
+
+def _scenario_compressed_layout_edit(harness: SmokeHarness) -> None:
+    canvas = harness.create_project("Compressed_Layout")
+    figure_window = harness.window.figure_window
+    root_ctrl = canvas.component_registry.get(canvas.root_component_id)
+
+    # Configure Figure with compressed layout engine
+    compressed_engine = {
+        "kind": "compressed",
+        "params": {
+            "w_pad": 0.05,
+            "h_pad": 0.05,
+            "wspace": 0.15,
+            "hspace": 0.15,
+            "rect": None,
+        },
+    }
+    result = root_ctrl.set_property("layout_engine", compressed_engine)
+    if not result.ok:
+        raise SmokeError(
+            f"Failed to set compressed layout engine: {result.message}"
+        )
+    harness.pump(40)
+
+    # Open layout dialog
+    dialog = PyLayoutDialog(
+        dialog_name="Horizontal Comparison",
+        figure_window=figure_window,
+        preset_key="horizontal_compare",
+        parent=harness.window,
+    )
+    dialog.setModal(False)
+    dialog.show()
+    harness.pump(50)
+
+    # Check read-only notice
+    notice_text = dialog.input.layout_engine_notice.text()
+    if "Compressed" not in notice_text:
+        raise SmokeError(
+            f"Expected 'Compressed' in layout notice, got {notice_text!r}"
+        )
+    if "Figure Inspector" not in notice_text:
+        raise SmokeError(
+            f"Expected 'Figure Inspector' in layout notice, got {notice_text!r}"
+        )
+    if "adjusted by" not in notice_text:
+        raise SmokeError(
+            f"Expected engine adjustment warning in layout notice, got {notice_text!r}"
+        )
+
+    harness.grab(dialog, "layout-06-compressed-dialog")
+    dialog.accept()
+    harness.pump(120)
+
+    # Verify Figure layout engine is unchanged
+    current_engine = root_ctrl.state.properties.get("layout_engine")
+    if current_engine != compressed_engine:
+        raise SmokeError(
+            f"Figure layout engine mutated! Expected {compressed_engine}, got {current_engine}"
+        )
+
+    axes = canvas.component_registry.query(kind=ComponentKind.AXES)
+    if len(axes) != 2:
+        raise SmokeError(
+            f"Expected 2 Axes in Horizontal Comparison, got {len(axes)}"
+        )
+
+    harness.grab_canvas("layout-07-compressed-canvas")

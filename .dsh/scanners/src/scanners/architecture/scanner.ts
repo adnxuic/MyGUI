@@ -38,7 +38,7 @@ import {
 export const DEFAULT_EXCLUDE = ['tests/**', '**/test_*.py', '**/fixtures/**', '.agents/**'];
 const DEFAULT_EXCLUDE_RE = DEFAULT_EXCLUDE.map((pattern) => globToRegExp(pattern));
 const SCANNER_ID = 'mygui.architecture';
-const SCANNER_VERSION = '0.4.0';
+const SCANNER_VERSION = '0.5.0';
 const MUTATION_METHOD = /^(?:set_[a-z_][a-z0-9_]*|remove)$/;
 const AMBIGUOUS_RECEIVERS = new Set(['target', 'handle', 'item', 'object', 'current', 'selected']);
 
@@ -129,6 +129,7 @@ export function createArchitectureScanner(): ScannerDefinition {
       'ui_artist_mutation', 'ui_matplotlib_global_state_mutation',
       'matplotlib_rcparams_mutation', 'rendering_configuration_ownership',
       'qsettings_backend_bypass', 'ui_theme_bypass',
+      'figure_layout_engine_ownership',
     ],
     async run(request: ScannerRequest): Promise<ScannerResult> {
       const startedAt = new Date().toISOString();

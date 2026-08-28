@@ -85,9 +85,16 @@ Advanced geometry is collapsed by default during creation and expanded while edi
 
 - `width_ratios`: comma-separated positive column width ratios. The value count must equal the template's fixed column count.
 - `height_ratios`: comma-separated positive row height ratios. The value count must equal the template's fixed row count.
-- `left`, `right`, `bottom`, `top`: normalized Figure margins. They require `0 <= left < right <= 1` and `0 <= bottom < top <= 1`.
-- `wspace`, `hspace`: non-negative horizontal and vertical GridSpec spacing values.
-- `constrained_layout`: applies Matplotlib constrained layout to the Figure.
+- `left`, `right`, `bottom`, `top`: normalized Figure margins with six decimal places and a step of `0.005`. They require `0 <= left < right <= 1` and `0 <= bottom < top <= 1`.
+- `wspace`, `hspace`: non-negative horizontal and vertical GridSpec spacing values with six decimal places and a step of `0.01`.
+
+While editing an existing layout, all GridSpec geometry controls participate in a 120 ms debounced live preview on the active Canvas. Rapid changes within 120 ms are merged into a single redraw. Margin and spacing spinboxes change value by mouse wheel only when they have keyboard focus, preventing accidental edits while scrolling through dialog contents. Valid ratio text changes participate in the same debounced preview once completed.
+
+Invalid geometry stops the live preview, retains the last valid preview on the canvas, reports the error inline, and disables **Apply**.
+
+Clicking **Apply** flushes any pending debounced preview immediately, updates the layout, and records exactly one `Change Axes Layout` command in the project history. That single command can be undone and redone cleanly. Clicking **Cancel**, pressing **Esc**, or closing the dialog window rolls back to the initial layout definition and GridSpec positions and cancels the history interaction without adding any undo entry.
+
+Figure layout engines (`none`, `tight`, `constrained`, `compressed`) and their parameters are configured exclusively through the Figure Inspector on the Figure component. The Axes Layout dialog manages only GridSpec geometry, sharing topology, and Axes structure, preserving active engine settings across live previews, Apply, Cancel, and Undo/Redo. When an automatic layout engine is active, GridSpec geometry remains editable and persistable; the dialog displays a read-only engine status note reminding that final rendered margins and spacing may be adjusted by the active Figure engine.
 
 Invalid geometry is reported inline and disables Create or Apply. Editing geometry preserves existing Axes artists, component IDs, occupied cells, sharing groups, and twin relationships.
 

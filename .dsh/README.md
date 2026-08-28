@@ -95,7 +95,7 @@ DSH tested version: 0.1.0-rc.7
 ScannerResult contract: v2
 mygui-scanners package: 0.2.0
 mygui-scanner-adapter package: 0.2.0
-mygui.architecture scanner: 0.4.0
+mygui.architecture scanner: 0.5.0
 mygui.qt-lifecycle scanner: 0.2.0
 ```
 

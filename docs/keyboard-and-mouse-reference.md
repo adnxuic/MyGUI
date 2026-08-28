@@ -50,6 +50,18 @@ Plot, Scatter, and Interpolation creation dialogs use a checkable multi-select d
 
 See [Multi-Series Chart Creation](multi-series-charts.md).
 
+## Axes layout dialog
+
+When editing an existing Axes layout:
+
+| Key or mouse action | Action |
+| --- | --- |
+| Mouse wheel on focused spinbox | Adjusts margin fields by `0.005` or spacing fields by `0.01`. Unfocused spinboxes ignore the wheel to avoid accidental edits during dialog scrolling. |
+| Esc / Cancel button / Close button | Cancels geometry editing, rolls back any live preview changes to the initial layout state, and leaves project history unchanged. |
+| Enter / Apply button | Commits current geometry values and records one `Change Axes Layout` undo command. |
+
+See [Axes Layout Templates](axes-layouts.md).
+
 ## Figure canvas
 
 Every project tab contains one matplotlib navigation toolbar above its canvas:

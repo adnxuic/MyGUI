@@ -2,6 +2,7 @@
 
 import type { ArchitectureRule } from './common.ts';
 import { controllerBypassRule } from './controller-bypass.ts';
+import { figureLayoutEngineBypassRule } from './figure-layout-engine-bypass.ts';
 import { privateContainerAccessRule } from './private-container-access.ts';
 import { qsettingsBackendBypassRule } from './qsettings-backend-bypass.ts';
 import { secondComponentStateRule } from './second-component-state.ts';
@@ -17,6 +18,8 @@ export const ARCHITECTURE_RULES: readonly ArchitectureRule[] = [
   controllerBypassRule,
   qsettingsBackendBypassRule,
   uiThemeBypassRule,
+  figureLayoutEngineBypassRule,
 ];
 
 export type { ArchitectureRule, RuleOutcome, RuleRunContext } from './common.ts';
+export { figureLayoutEngineBypassRule } from './figure-layout-engine-bypass.ts';

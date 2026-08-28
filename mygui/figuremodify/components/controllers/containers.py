@@ -272,13 +272,34 @@ class FigureController(ContainerController):
             saved = self._state.properties.get("layout_engine")
             if isinstance(saved, dict) and saved.get("kind") == kind:
                 return deepcopy(saved)
+            params = getattr(engine, "_params", None)
+            rect = params.get("rect") if isinstance(params, dict) else None
+            if rect == (0, 0, 1, 1):
+                rect = None
             if kind == "tight":
                 return normalize_figure_layout(
-                    {"kind": kind, "params": {"pad": None, "w_pad": None, "h_pad": None, "rect": None}}
+                    {
+                        "kind": kind,
+                        "params": {
+                            "pad": params.get("pad") if isinstance(params, dict) else None,
+                            "w_pad": params.get("w_pad") if isinstance(params, dict) else None,
+                            "h_pad": params.get("h_pad") if isinstance(params, dict) else None,
+                            "rect": rect,
+                        },
+                    }
                 )
             if kind in {"constrained", "compressed"}:
                 return normalize_figure_layout(
-                    {"kind": kind, "params": {"w_pad": None, "h_pad": None, "wspace": None, "hspace": None, "rect": None}}
+                    {
+                        "kind": kind,
+                        "params": {
+                            "w_pad": params.get("w_pad") if isinstance(params, dict) else None,
+                            "h_pad": params.get("h_pad") if isinstance(params, dict) else None,
+                            "wspace": params.get("wspace") if isinstance(params, dict) else None,
+                            "hspace": params.get("hspace") if isinstance(params, dict) else None,
+                            "rect": rect,
+                        },
+                    }
                 )
             return normalize_figure_layout({"kind": "none", "params": {}})
         return super()._read_property(target, spec)

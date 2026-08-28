@@ -16,6 +16,5 @@ def create_regular_axes(canvas, nrows=1, ncols=1, slots=None):
                 else None
             ),
             cell_view=canvas.axes_layout_service.creation_view_defaults(),
-            constrained_layout=bool(canvas.fig.get_constrained_layout()),
         )
     )

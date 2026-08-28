@@ -21,7 +21,7 @@ test('full scan of the positive workspace returns a valid, deterministic result'
 
   assert.equal(first.contractVersion, 2);
   assert.equal(first.scanner.id, 'mygui.architecture');
-  assert.equal(first.scanner.version, '0.4.0');
+  assert.equal(first.scanner.version, '0.5.0');
   assert.equal(first.scope.workspace, workspace);
   assert.ok(first.coverage.filesVisited.length > 0);
   assert.ok(Number.isFinite(first.durationMs) && first.durationMs >= 0);

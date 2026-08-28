@@ -10,13 +10,12 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 - From the repo root, run `python main.py`. Local verification uses exactly
   `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe`; CI may use its
   workflow-installed Python 3.12.
-- Read nearest implementation, tests, and routed Agent material first.
-  Prefer small local changes; do not mix hygiene or broad architecture into an
-  unrelated fix. Keep GUI behavior, resource names, QSS/JSON paths, historical
-  Canvas names, and tracked artifacts unless targeted. `mygui/widgets/`,
-  `mygui/figuremodify/`, `mygui/database/` keep UI, domain, data roles; new
-  files follow nearest module. Adapter policy lives in that adapter dir. Codex
-  follows `.codex/README.md`; DSH stays under `.dsh/`.
+- Read nearest implementation, tests, and routed material first. Keep changes
+  focused; do not mix unrelated refactoring. Preserve GUI behavior, resources,
+  QSS/JSON paths, historical Canvas names, and tracked artifacts unless targeted.
+  `mygui/widgets/`, `mygui/figuremodify/`, `mygui/database/` keep UI, domain, data
+  roles. Adapter policy lives in adapter dirs. Codex follows `.codex/README.md`;
+  DSH stays under `.dsh/`.
 
 ## Authoritative Runtime Boundaries
 
@@ -41,7 +40,7 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   state atomically, and emits one red result.
 - **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot
   QSettings is the sole preference store. Sessions keep a dirty patch plus base
-  revision; commit is atomic. Narrow ports only to Controllers, Services,
+  revision; commit is atomic. Narrow ports to Controllers, Services,
   `ChartCreationStager`, and `EditorContext`. Settings never enter schema v18,
   Undo/Redo, dirty fingerprints, `ComponentState`, or Canvas materialization.
   Line/Scatter/free-Text use explicit input > Components `NEXT_USE` > Axes
@@ -54,12 +53,18 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   chart-template schema, storage, extraction, matching, ID remapping, dynamic
   text, fitting, and application planning. Templates live under root `template/`
   independently of CWD, use strict `mygui-template` schema v2, contain no Table
-  cell document, and never alter schema v18. Application builds a validated
-  in-memory project snapshot and publishes via staged restore.
+  cell document, and never alter schema v18. Application builds an in-memory
+  project snapshot and publishes via staged restore.
 - **CORE-THEME-OWNER:** `ThemeService` is the sole publisher of application font,
   palette, bundled QSS, and density. Apply `ThemeSnapshot` after settings load
   and before any `QWidget`. UI theme is not Matplotlib Figure style.
-- MATLAB and TeX are optional; failure must not block basic GUI work.
+- **CORE-FIGURE-LAYOUT-ENGINE-OWNER:** `FigureController.properties.layout_engine`
+  is the sole engine authority (`none`, `tight`, `constrained`, `compressed`).
+  Figure Inspector is the only direct UI editor. Axes Layout manages only
+  GridSpec geometry, ratios, margins, spacing, and sharing topology, preserving
+  engine configuration without calling `set_layout_engine`, writing
+  `layout_engine`, or calling Figure `apply_state()`.
+- MATLAB and TeX are optional; failure must not block GUI work.
   `mygui.database.matlab_adapter` is the MATLAB boundary; Python fallbacks in
   `matlab_fallbacks.py` must not start MATLAB or MCR. Replacing user-expression
   evaluation is a dedicated high-risk task.
@@ -105,28 +110,28 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 
 - **CORE-REGISTRATION-ATOMICITY:** Component creation/publication uses
   `ComponentRegistry.registration_transaction()`. Artists, Controllers,
-  Registry/Locator bindings, Inspectors, listeners, IDs, pending state,
-  selection, redraw/events, and color-cycle commits form one logical operation.
-  Publish visible effects only after commit; restore pre-call identity on failure.
-- Axes creation/deletion includes its fixed semantic subtree in one compound
-  transaction. Project creation/restore is staged before tab publication and
-  cleaned up by stable project/object ID on either side of publication.
+  bindings, Inspectors, listeners, IDs, state, selection, redraw/events, and
+  color commits form one logical operation. Publish visible effects only after
+  commit; restore pre-call identity on failure.
+- Axes creation/deletion includes its fixed subtree in one compound transaction.
+  Project creation/restore is staged before tab publication and cleaned up by
+  stable project/object ID on either side.
 - **CORE-DELETION-COORDINATOR:** Every production deletion enters through
-  `DeletionCoordinator` with `DeletionRequest`. Fixed semantics hide; genuinely
-  removable components declare `REMOVE` and exactly one handler. Deletion is an
-  all-or-nothing transaction; post-delete selection comes from confirmed set.
+  `DeletionCoordinator` with `DeletionRequest`. Fixed semantics hide; removable
+  components declare `REMOVE` and one handler. Deletion is an all-or-nothing
+  transaction; post-delete selection comes from confirmed set.
 - **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by its
   `TableRepository` entry for chronological Table/Figure history. Figure commands
   retain immutable `ComponentState` deltas plus explicit runtime mementos, never
-  Artists, Controllers, QWidgets, or whole Figures; replay enters through
-  Controllers, Services, materializers, and `DeletionCoordinator`. Restore,
-  refresh, and replay are recording-suspended. History is runtime-only, absent
-  from schema v18, and invalidated if failed replay cannot prove a safe cursor.
-- **CORE-PERSISTENCE-V18:** Persist component state only through the exact
-  integer schema-v18 component tree. UI profiles, widgets, callbacks, tree
-  keys, and expansion/selection state never enter project files. Strict v17
-  migrates directly to v18; v16–v10 migrate stepwise; v4–v9 stay retired.
-- Runtime-created persisted components declare `RESTORE_PHASE` and exactly one
+  Artists, Controllers, QWidgets, or Figures; replay enters through Controllers,
+  Services, materializers, and `DeletionCoordinator`. Restore, refresh, replay
+  are recording-suspended. History is runtime-only, absent from schema v18, and
+  invalidated if failed replay cannot prove a safe cursor.
+- **CORE-PERSISTENCE-V18:** Persist component state only through the integer
+  schema-v18 component tree. UI profiles, widgets, callbacks, tree keys, and
+  expansion/selection state never enter project files. Strict v17 migrates
+  directly to v18; v16–v10 migrate stepwise; v4–v9 stay retired.
+- Runtime-created persisted components declare `RESTORE_PHASE` and one
   `ComponentMaterializer`; fixed semantic components use `None`. Preserve
   stable IDs and empty valid data-backed components.
 - Detailed transaction, deletion, materialization, palette, and restore
@@ -135,13 +140,12 @@ task routing, and completion gates. Task procedures live under `.agents/`.
 
 ## Documentation and Completion
 
-- User docs live under `docs/` and must appear in `mkdocs.yml`. Feature and
-  property changes update the relevant parameter page and schema summary
-  together. Matplotlib links pin 3.9.0. Nav/build/link policy changes also
-  update `docs/documentation-site.md`.
+- User docs live under `docs/` and appear in `mkdocs.yml`. Feature and property
+  changes update the parameter page and schema summary together. Matplotlib
+  links pin 3.9.0. Nav/build changes also update `docs/documentation-site.md`.
 - Feature pages describe current behavior and document each Inspector field
   (control, meaning, values/default, persisted/runtime key). Uncommon
-  Matplotlib families get pinned 3.9.0 links; each page lists referenced URLs.
+  Matplotlib families get pinned 3.9.0 links; pages list referenced URLs.
   Keep limitations and plans out of `docs/`.
 - New feature state participates in save/import; do not ship runtime state that
   silently disappears on reopen.
@@ -149,9 +153,8 @@ task routing, and completion gates. Task procedures live under `.agents/`.
   `codex_handoff/current-limitations.md` records limitations only; scanner output
   and task evidence stay under ignored `build/agent-results/`.
 - Update this file when a global invariant, architecture owner, schema version,
-  or startup gate changes; update the Skill and architecture page when a
-  workflow changes. `AGENTS.md` outranks `.agents/`, which outranks conflicting
-  `docs/` narrative.
+  or startup gate changes; update Skill and architecture pages on workflow changes.
+  `AGENTS.md` outranks `.agents/`, which outranks conflicting `docs/` narrative.
 - Use `ColorChoiceWidget` with injected `ColorLibrary`; ordered chart colors
   use `ColorCycleState.peek()` and `commit()` only after transaction succeeds.
 - Interactive desktop smoke remains required when a routed task declares it;

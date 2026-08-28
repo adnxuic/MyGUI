@@ -53,6 +53,20 @@ _EXPECTED_PRESET_KEYS = (
 )
 
 
+class FocusAwareDoubleSpinBox(QDoubleSpinBox):
+    """Change value by wheel only after the editor has explicit focus."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
+
+
 @dataclass(frozen=True, slots=True)
 class AxesLayoutPreset:
     """One validated, UI-only fixed layout template."""
@@ -256,6 +270,27 @@ def axes_layout_presets() -> tuple[AxesLayoutPreset, ...]:
     return tuple(presets)
 
 
+def layout_engine_notice_text(kind: str) -> str:
+    """Return the read-only notice text for the active Figure layout engine."""
+
+    normalized_kind = str(kind).strip().lower() if kind else "none"
+    if normalized_kind not in {"none", "tight", "constrained", "compressed"}:
+        normalized_kind = "none"
+    display_name = (
+        normalized_kind.capitalize() if normalized_kind != "none" else "None"
+    )
+    base = (
+        f"Figure layout engine: {display_name}. Axes Layout preserves this "
+        "setting; configure it in Figure Inspector."
+    )
+    if normalized_kind in {"tight", "constrained", "compressed"}:
+        return (
+            f"{base} Note: final rendered margins and spacing may be "
+            "adjusted by the active Figure engine."
+        )
+    return base
+
+
 def axes_layout_preset(key: str) -> AxesLayoutPreset:
     """Resolve one fixed layout template by its stable key."""
 
@@ -281,6 +316,7 @@ class AxesLayoutInput(QWidget):
         occupied_cells: set[tuple[int, int]] | None = None,
         twin_cells: set[tuple[int, int]] | None = None,
         relationship_summary: str | None = None,
+        layout_engine_kind: str = "none",
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -290,6 +326,7 @@ class AxesLayoutInput(QWidget):
         self._color_library = color_library
         self._occupied_cells = set(occupied_cells or ())
         self._twin_cells = set(twin_cells or ())
+        self._layout_engine_kind = str(layout_engine_kind or "none")
         default_view = default_view or AxesViewSpec()
 
         if self._editing:
@@ -430,10 +467,10 @@ class AxesLayoutInput(QWidget):
         margins = QWidget(self.geometry_contents)
         margins_grid = QGridLayout(margins)
         margins_grid.setContentsMargins(0, 0, 0, 0)
-        self.left_input = self._fraction_input(margins, 0.125)
-        self.right_input = self._fraction_input(margins, 0.9)
-        self.bottom_input = self._fraction_input(margins, 0.11)
-        self.top_input = self._fraction_input(margins, 0.88)
+        self.left_input = self._fraction_input(margins, 0.125, step=0.005)
+        self.right_input = self._fraction_input(margins, 0.9, step=0.005)
+        self.bottom_input = self._fraction_input(margins, 0.11, step=0.005)
+        self.top_input = self._fraction_input(margins, 0.88, step=0.005)
         for index, (label, control) in enumerate(
             (
                 ("Left", self.left_input),
@@ -452,10 +489,10 @@ class AxesLayoutInput(QWidget):
         spacing_row = QHBoxLayout(spacing)
         spacing_row.setContentsMargins(0, 0, 0, 0)
         self.wspace_input = self._number_input(
-            spacing, 0.2, minimum=0.0, maximum=5.0
+            spacing, 0.2, minimum=0.0, maximum=5.0, step=0.01
         )
         self.hspace_input = self._number_input(
-            spacing, 0.2, minimum=0.0, maximum=5.0
+            spacing, 0.2, minimum=0.0, maximum=5.0, step=0.01
         )
         spacing_row.addWidget(QLabel("Horizontal", spacing))
         spacing_row.addWidget(self.wspace_input)
@@ -463,10 +500,13 @@ class AxesLayoutInput(QWidget):
         spacing_row.addWidget(self.hspace_input)
         form.addRow("Spacing", spacing)
 
-        self.constrained_input = QCheckBox(
-            "Use constrained layout", self.geometry_contents
+        self.layout_engine_notice = QLabel(
+            layout_engine_notice_text(self._layout_engine_kind),
+            self.geometry_contents,
         )
-        form.addRow("Figure", self.constrained_input)
+        self.layout_engine_notice.setObjectName("layout_engine_notice")
+        self.layout_engine_notice.setWordWrap(True)
+        form.addRow("Figure engine", self.layout_engine_notice)
         group_layout.addWidget(self.geometry_contents)
         host.addWidget(self.geometry_group)
 
@@ -624,16 +664,27 @@ class AxesLayoutInput(QWidget):
         return ", ".join(f"{float(value):g}" for value in values)
 
     @staticmethod
-    def _number_input(parent, value, *, minimum=-1.0e12, maximum=1.0e12):
-        control = QDoubleSpinBox(parent)
+    def _number_input(
+        parent,
+        value,
+        *,
+        minimum=-1.0e12,
+        maximum=1.0e12,
+        step: float | None = None,
+    ):
+        control = FocusAwareDoubleSpinBox(parent)
         control.setDecimals(6)
         control.setRange(float(minimum), float(maximum))
+        if step is not None:
+            control.setSingleStep(float(step))
         control.setValue(float(value))
         return control
 
     @classmethod
-    def _fraction_input(cls, parent, value):
-        return cls._number_input(parent, value, minimum=0.0, maximum=1.0)
+    def _fraction_input(cls, parent, value, *, step: float = 0.005):
+        return cls._number_input(
+            parent, value, minimum=0.0, maximum=1.0, step=step
+        )
 
     @staticmethod
     def _scale_combo(parent):
@@ -827,7 +878,6 @@ class AxesLayoutInput(QWidget):
             share_y=share_y,
             outer_x_labels=outer_x,
             outer_y_labels=outer_y,
-            constrained_layout=self.constrained_input.isChecked(),
             layout_id=layout_id,
         )
 
@@ -860,7 +910,9 @@ class AxesLayoutInput(QWidget):
 __all__ = [
     "AxesLayoutInput",
     "AxesLayoutPreset",
+    "FocusAwareDoubleSpinBox",
     "axes_layout_preset",
     "axes_layout_presets",
+    "layout_engine_notice_text",
     "normalized_layout_icon",
 ]

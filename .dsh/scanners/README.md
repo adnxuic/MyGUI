@@ -127,7 +127,7 @@ once the registry service is available and automatically reloads/unloads it
 when the service changes — registration and unregistration always follow the
 plugin fiber.
 
-## 5. The Architecture Scanner (v0.4.0)
+## 5. The Architecture Scanner (v0.5.0)
 
 `mygui.architecture` — static, read-only checks derived from the rules in the
 repository's `AGENTS.md` (it never modifies the repo, never formats, never
@@ -142,6 +142,7 @@ auto-fixes, never launches the GUI):
 | `ARCH-CONTROLLER-BYPASS` | UI writes to controller state (`state.properties/data/selector` assignments, `.update()/.setdefault()/.pop()/.clear()` calls, whole-state replacement) instead of routing edits through Controllers/Services |
 | `ARCH-QSETTINGS-BACKEND-BYPASS` | `QSettings(...)` construction and QSettings store mutation (`beginGroup`/`endGroup`/`setValue` on a settings store) outside `mygui/application_settings/storage/` |
 | `ARCH-UI-THEME-BYPASS` | `QApplication`/`app` `setFont`/`setPalette`/`setStyleSheet` outside `mygui/application_theme/`; widget-local `setFont` is not reported. Bundled QSS hex completeness stays a Python contract test |
+| `ARCH-FIGURE-LAYOUT-ENGINE-BYPASS` | references to retired `constrained_layout` proxy outside `exposure_contract.py`, Axes Layout flow calling `set_layout_engine` or assigning `layout_engine` property, or `AxesLayoutService` calling Figure `apply_state()` as a whole |
 
 Severity mapping for `ARCH-UI-MPL-GLOBAL-STATE-MUTATION` (the scanner ladder
 has no `warning`/`error`): user `warning` → `medium` (architecture smell,
@@ -154,9 +155,11 @@ equivalent owner").
 
 Registry metadata: the scanner declares `capabilities` —
 `ui_artist_mutation`, `ui_matplotlib_global_state_mutation`,
-`matplotlib_rcparams_mutation`, `rendering_configuration_ownership` — so
-Worker selection matches tasks like "rcParams mutation", "Matplotlib global
-state", and "render configuration ownership".
+`matplotlib_rcparams_mutation`, `rendering_configuration_ownership`,
+`qsettings_backend_bypass`, `ui_theme_bypass`,
+`figure_layout_engine_ownership` — so Worker selection matches tasks like
+"rcParams mutation", "Matplotlib global state", "render configuration
+ownership", and "layout engine ownership".
 
 Test files (`tests/`, `test_*.py`, `fixtures/`) are excluded from the default
 production scan; an explicit `include` pattern re-enables them (findings then

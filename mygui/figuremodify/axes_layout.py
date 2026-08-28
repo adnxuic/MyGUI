@@ -144,7 +144,6 @@ class AxesLayoutSpec:
     share_y: ShareMode = ShareMode.NONE
     outer_x_labels: bool = False
     outer_y_labels: bool = False
-    constrained_layout: bool = False
     layout_id: str | None = None
 
     def __post_init__(self) -> None:

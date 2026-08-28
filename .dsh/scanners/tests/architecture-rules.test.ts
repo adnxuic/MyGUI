@@ -220,6 +220,32 @@ test('ARCH-UI-THEME-BYPASS: positive fixture hits; widget-local setFont does not
   assert.ok(findings.every((finding) => finding.tags.includes('ui-theme-bypass')));
 });
 
+test('ARCH-FIGURE-LAYOUT-ENGINE-BYPASS: positive fixture hits; negative workspace produces zero findings', async () => {
+  const files = loadWorkspace('ws_basic');
+  const findings = await findingsFor(files, 'ARCH-FIGURE-LAYOUT-ENGINE-BYPASS');
+  const byLine = new Map(findings.map((finding) => [`${finding.file}:${finding.line}`, finding]));
+
+  assert.ok(
+    byLine.has('mygui/figuremodify/figure_layout_bypass.py:4'),
+    'constrained_layout parameter in production code',
+  );
+  assert.ok(
+    byLine.has('mygui/figuremodify/figure_layout_bypass.py:10'),
+    'set_layout_engine call in axes layout service',
+  );
+  assert.ok(
+    byLine.has('mygui/figuremodify/figure_layout_bypass.py:13'),
+    'set_property("layout_engine") write in axes layout service',
+  );
+  assert.ok(
+    byLine.has('mygui/figuremodify/figure_layout_bypass.py:16'),
+    'apply_state call in axes layout service',
+  );
+
+  assert.ok(findings.every((finding) => finding.severity === 'high'));
+  assert.ok(findings.every((finding) => finding.tags.includes('figure-layout-engine-bypass')));
+});
+
 test('QSS color completeness is not a lexical architecture rule', async () => {
   assert.ok(
     !ARCHITECTURE_RULES.some((rule) => /qss|color-complete|hex/i.test(rule.id)),

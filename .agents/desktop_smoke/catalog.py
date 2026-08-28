@@ -10,6 +10,7 @@ GROUPS: tuple[str, ...] = (
     "elements",
     "inspectors",
     "layouts_xrd",
+    "axes_smoke",
     "deletion_history",
     "project_lifecycle",
 )

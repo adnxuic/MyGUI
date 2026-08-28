@@ -136,6 +136,28 @@ For data changes, check TableRepository dependencies and whether affected
 charts, Inspector controls, autoscale state, legends, and project fingerprints
 need refresh. Do not add another data authority.
 
+## Figure layout engine ownership
+
+Figure layout engine configuration (`layout_engine` property with kinds `none`,
+`tight`, `constrained`, `compressed` and engine-specific parameters) is owned
+exclusively by `FigureController`. The Figure Inspector is the sole direct UI
+editor.
+
+The corresponding invariant is `CORE-FIGURE-LAYOUT-ENGINE-OWNER` and the
+corresponding scanner rule is `ARCH-FIGURE-LAYOUT-ENGINE-BYPASS`.
+
+- `AxesLayoutService` and the Axes Layout dialog manage GridSpec geometry
+  (rows, columns, width/height ratios, margins, and spacing), sharing topology,
+  and Axes structure only.
+- Updating Figure layout definitions must use pure data mutation:
+  `ComponentMutation(root.component_id, data={"layouts": ...})` applied via
+  `root.apply_mutation()`. `AxesLayoutService` must not call `root.apply_state()`
+  as a whole or touch `properties.layout_engine`.
+- The Axes Layout dialog opens with a read-only engine kind display and preserves
+  active engines. When an automatic layout engine is active, GridSpec geometry
+  remains editable and persistable, and a read-only note informs the user that
+  rendered margins and spacing may be adjusted by the Figure engine.
+
 ## Required declarations
 
 Every supported `(ComponentKind, ComponentRole)` has exactly one Controller

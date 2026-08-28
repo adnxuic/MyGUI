@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
@@ -181,9 +182,18 @@ class PyLayoutDialog(QDialog):
         occupied = None
         twins = None
         relationship_summary = None
+        self._edit_session = None
+        self._preview_timer: QTimer | None = None
         if self.layout_id is not None:
             if canvas is None:
                 raise ValueError("No Figure is available for layout editing.")
+            self._edit_session = canvas.axes_layout_service.begin_geometry_session(
+                self.layout_id
+            )
+            self._preview_timer = QTimer(self)
+            self._preview_timer.setSingleShot(True)
+            self._preview_timer.setInterval(120)
+            self._preview_timer.timeout.connect(self._on_preview_timer_timeout)
             definition = canvas.axes_layout_service.layout_definition(self.layout_id)
             occupied = set()
             twins = set()
@@ -213,6 +223,14 @@ class PyLayoutDialog(QDialog):
                 f'{len(occupied)} primary Axes · {" · ".join(relationships)}'
             )
 
+        engine_kind = "none"
+        if canvas is not None:
+            root_ctrl = canvas.component_registry.get(canvas.root_component_id)
+            if root_ctrl is not None:
+                layout_engine = root_ctrl.state.properties.get("layout_engine") or {}
+                if isinstance(layout_engine, dict):
+                    engine_kind = str(layout_engine.get("kind", "none"))
+
         self.layout = QVBoxLayout()
         self._layout_valid = True
         self._xrd_valid = True
@@ -224,12 +242,9 @@ class PyLayoutDialog(QDialog):
             occupied_cells=occupied,
             twin_cells=twins,
             relationship_summary=relationship_summary,
+            layout_engine_kind=engine_kind,
             parent=self,
         )
-        if canvas is not None:
-            self.input.constrained_input.setChecked(
-                canvas.axes_layout_service.constrained_layout_enabled()
-            )
         self.xrd_input: XrdRefinementInput | None = None
         if self.layout_id is None and self.preset_key in {"single", "main_residual"}:
             if self.input.tabs is None:
@@ -263,12 +278,19 @@ class PyLayoutDialog(QDialog):
         subscribe_theme_window(self)
         self.resize(720, 620)
         self._layout_validity_changed(*self.input.refresh_validation())
+        if self._preview_timer is not None:
+            self._preview_timer.stop()
         if self.xrd_input is not None:
             self._xrd_validity_changed(*self.xrd_input.refresh_validation())
 
     def _layout_validity_changed(self, valid: bool, _message: str) -> None:
         self._layout_valid = bool(valid)
         self._sync_accept_enabled()
+        if self._edit_session is not None and self._preview_timer is not None:
+            if valid:
+                self._preview_timer.start(120)
+            else:
+                self._preview_timer.stop()
 
     def _xrd_validity_changed(self, valid: bool, _message: str) -> None:
         self._xrd_valid = bool(valid)
@@ -279,6 +301,17 @@ class PyLayoutDialog(QDialog):
 
         self.ok_button.setEnabled(self._layout_valid and self._xrd_valid)
 
+    def _on_preview_timer_timeout(self) -> None:
+        if self._edit_session is None:
+            return
+        if not (self._layout_valid and self._xrd_valid):
+            return
+        try:
+            spec = self.input.spec()
+            self._edit_session.preview(spec)
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+
     def accept(self):
         """Submit the controller-free request to the Canvas layout service."""
 
@@ -286,6 +319,8 @@ class PyLayoutDialog(QDialog):
         if canvas is None:
             status_messages.show_error("Create a Figure before adding a layout.")
             return
+        if self._preview_timer is not None:
+            self._preview_timer.stop()
         try:
             spec = self.input.spec()
             if self.layout_id is None:
@@ -312,7 +347,11 @@ class PyLayoutDialog(QDialog):
                         f"{outcome.table.reflection_sheet.name}; created the plot."
                     )
             else:
-                component_ids = canvas.update_axes_layout(spec)
+                if self._edit_session is not None:
+                    component_ids = self._edit_session.apply(spec)
+                    self._edit_session = None
+                else:
+                    component_ids = canvas.update_axes_layout(spec)
                 message = f"Updated layout for {len(component_ids)} Axes."
         except Exception as exc:
             status_messages.show_error(str(exc))
@@ -323,3 +362,28 @@ class PyLayoutDialog(QDialog):
             )
         status_messages.show_success(message)
         super().accept()
+
+    def reject(self):
+        if self._preview_timer is not None:
+            self._preview_timer.stop()
+        if self._edit_session is not None:
+            try:
+                self._edit_session.cancel()
+            except Exception as exc:
+                status_messages.show_error(str(exc))
+                return
+            self._edit_session = None
+        super().reject()
+
+    def closeEvent(self, event):
+        if self._preview_timer is not None:
+            self._preview_timer.stop()
+        if self._edit_session is not None:
+            try:
+                self._edit_session.cancel()
+            except Exception as exc:
+                status_messages.show_error(str(exc))
+                event.ignore()
+                return
+            self._edit_session = None
+        super().closeEvent(event)

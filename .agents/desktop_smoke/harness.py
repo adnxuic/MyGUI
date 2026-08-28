@@ -413,7 +413,6 @@ class SmokeHarness:
                 1,
                 1,
                 cell_view=cell_view,
-                constrained_layout=bool(canvas.fig.get_constrained_layout()),
             )
         )
         if not axes_ids:

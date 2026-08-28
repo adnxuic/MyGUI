@@ -15,6 +15,7 @@ rules:
   - {id: CORE-COLORBAR-AUXILIARY-AXES, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_colorbar_component]}
   - {id: CORE-APPLICATION-SETTINGS, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts, tests.test_application_settings_components, tests.test_application_settings_component_creation]}
   - {id: CORE-THEME-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme]}
+  - {id: CORE-FIGURE-LAYOUT-ENGINE-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_axes_layout, mygui.architecture]}
   - {id: ARCH-PRIVATE-CONTAINER-ACCESS, source: .agents/architecture/inspector.md, enforcement: [mygui.architecture]}
   - {id: ARCH-UI-ARTIST-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}
   - {id: ARCH-UI-MPL-GLOBAL-STATE-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}
@@ -22,6 +23,7 @@ rules:
   - {id: ARCH-CONTROLLER-BYPASS, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
   - {id: ARCH-QSETTINGS-BACKEND-BYPASS, source: .agents/architecture/application-settings.md, enforcement: [mygui.architecture]}
   - {id: ARCH-UI-THEME-BYPASS, source: .agents/architecture/application-theme.md, enforcement: [mygui.architecture]}
+  - {id: ARCH-FIGURE-LAYOUT-ENGINE-BYPASS, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
   - {id: QT-TIMER-OWNERSHIP, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
   - {id: QT-THREAD-LIFECYCLE, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
   - {id: QT-SIGNAL-REBIND, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}

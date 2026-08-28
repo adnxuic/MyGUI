@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 
 from mygui.figuremodify.axes_layout import (
+    AxesCellSpec,
     AxesLayer,
     AxesLayoutSpec,
     AxesViewSpec,
@@ -59,6 +60,148 @@ class _AxesDescriptor:
     component_index: int | None = None
 
 
+class AxesGeometryEditSession:
+    """Exclusive, rollbackable editing session for one Figure layout's geometry."""
+
+    def __init__(self, service: AxesLayoutService, layout_id: str) -> None:
+        self._service = service
+        self._layout_id = str(layout_id)
+        self._initial_definition = deepcopy(service.layout_definition(self._layout_id))
+        self._interaction_started = False
+        self._last_applied_definition = deepcopy(self._initial_definition)
+        self._closed = False
+
+    @property
+    def layout_id(self) -> str:
+        return self._layout_id
+
+    @property
+    def initial_definition(self) -> dict[str, Any]:
+        return deepcopy(self._initial_definition)
+
+    @property
+    def is_active(self) -> bool:
+        return not self._closed
+
+    def _spec_from_definition(self, definition: dict[str, Any]) -> AxesLayoutSpec:
+        controllers = self._service.axes_for_layout(self._layout_id)
+        cells_set = {
+            (
+                int(c.state.data["subplot"]["row"]),
+                int(c.state.data["subplot"]["column"]),
+            )
+            for c in controllers
+        }
+        cells = tuple(AxesCellSpec(row, col) for row, col in sorted(cells_set))
+        margins = definition["margins"]
+        spacing = definition["spacing"]
+        return AxesLayoutSpec(
+            nrows=int(definition["nrows"]),
+            ncols=int(definition["ncols"]),
+            cells=cells,
+            width_ratios=tuple(float(v) for v in definition["width_ratios"]),
+            height_ratios=tuple(float(v) for v in definition["height_ratios"]),
+            left=float(margins["left"]),
+            right=float(margins["right"]),
+            bottom=float(margins["bottom"]),
+            top=float(margins["top"]),
+            wspace=float(spacing["wspace"]),
+            hspace=float(spacing["hspace"]),
+            layout_id=self._layout_id,
+        )
+
+    def preview(self, spec: AxesLayoutSpec) -> tuple[str, ...]:
+        """Preview geometry changes within this active session."""
+
+        if self._closed:
+            raise RuntimeError("Geometry edit session is closed.")
+        if spec.layout_id != self._layout_id:
+            raise ValueError(
+                f"Spec layout id {spec.layout_id!r} does not match session {self._layout_id!r}."
+            )
+        new_def = spec.layout_definition(self._layout_id)
+        if new_def == self._last_applied_definition:
+            controllers = self._service.axes_for_layout(self._layout_id)
+            return tuple(c.component_id for c in controllers)
+
+        if not self._interaction_started:
+            history = getattr(self._service.canvas, "figure_history", None)
+            if history is not None:
+                history.begin_interaction("Change Axes Layout")
+            self._interaction_started = True
+
+        result = self._service.update_geometry(spec)
+        self._last_applied_definition = deepcopy(new_def)
+        return result
+
+    def apply(self, spec: AxesLayoutSpec | None = None) -> tuple[str, ...]:
+        """Commit pending or specified geometry changes and close the session."""
+
+        if self._closed:
+            raise RuntimeError("Geometry edit session is closed.")
+        controllers = self._service.axes_for_layout(self._layout_id)
+        result = tuple(c.component_id for c in controllers)
+        if spec is not None:
+            if spec.layout_id != self._layout_id:
+                raise ValueError(
+                    f"Spec layout id {spec.layout_id!r} does not match session {self._layout_id!r}."
+                )
+            new_def = spec.layout_definition(self._layout_id)
+            if new_def != self._last_applied_definition:
+                if not self._interaction_started:
+                    history = getattr(self._service.canvas, "figure_history", None)
+                    if history is not None:
+                        history.begin_interaction("Change Axes Layout")
+                    self._interaction_started = True
+                result = self._service.update_geometry(spec)
+                self._last_applied_definition = deepcopy(new_def)
+
+        if self._interaction_started:
+            history = getattr(self._service.canvas, "figure_history", None)
+            if history is not None:
+                history.end_interaction()
+            self._interaction_started = False
+
+        self._closed = True
+        if self._service._active_geometry_session is self:
+            self._service._active_geometry_session = None
+        return result
+
+    def cancel(self) -> None:
+        """Roll back any previewed geometry changes and close the session."""
+
+        if self._closed:
+            return
+        if self._last_applied_definition != self._initial_definition:
+            initial_spec = self._spec_from_definition(self._initial_definition)
+            self._service.update_geometry(initial_spec)
+            self._last_applied_definition = deepcopy(self._initial_definition)
+
+        if self._interaction_started:
+            history = getattr(self._service.canvas, "figure_history", None)
+            if history is not None:
+                history.cancel_interaction()
+            self._interaction_started = False
+
+        self._closed = True
+        if self._service._active_geometry_session is self:
+            self._service._active_geometry_session = None
+
+    def dispose(self) -> None:
+        """Idempotent cleanup on unexpected teardown or canvas disposal."""
+
+        if self._closed:
+            return
+        if self._interaction_started:
+            history = getattr(self._service.canvas, "figure_history", None)
+            if history is not None:
+                history.cancel_interaction()
+            self._interaction_started = False
+        self._closed = True
+        if self._service._active_geometry_session is self:
+            self._service._active_geometry_session = None
+
+
 class AxesLayoutService:
     """Own multi-Axes geometry, relationships, and linked view mutations."""
 
@@ -66,10 +209,28 @@ class AxesLayoutService:
         self.canvas = canvas
         self.registry = canvas.component_registry
         self._grids: dict[str, Any] = {}
+        self._active_geometry_session: AxesGeometryEditSession | None = None
+
+    def begin_geometry_session(self, layout_id: str) -> AxesGeometryEditSession:
+        """Start an exclusive, rollbackable geometry editing session."""
+
+        if self._active_geometry_session is not None:
+            self._active_geometry_session.dispose()
+            self._active_geometry_session = None
+        session = AxesGeometryEditSession(self, layout_id)
+        self._active_geometry_session = session
+        return session
+
+    @property
+    def active_geometry_session(self) -> AxesGeometryEditSession | None:
+        return self._active_geometry_session
 
     def dispose(self) -> None:
-        """Release runtime-only GridSpec references."""
+        """Release runtime-only GridSpec references and active edit sessions."""
 
+        if self._active_geometry_session is not None:
+            self._active_geometry_session.dispose()
+            self._active_geometry_session = None
         self._clear_runtime_relationships()
         self._grids.clear()
 
@@ -274,18 +435,6 @@ class AxesLayoutService:
             y_minor_grid=y_minor,
         )
 
-    def constrained_layout_enabled(self) -> bool:
-        """Return constrained/compressed layout from Figure Controller state."""
-
-        layout = self._root().read_state().properties.get(
-            "layout_engine",
-            {"kind": "none", "params": {}},
-        )
-        return isinstance(layout, dict) and layout.get("kind") in {
-            "constrained",
-            "compressed",
-        }
-
     def layout_definitions(self) -> tuple[dict[str, Any], ...]:
         data = self._root().state.data
         return tuple(deepcopy(data.get("layouts", ())))
@@ -299,30 +448,11 @@ class AxesLayoutService:
     def _set_layout_definitions(
         self,
         definitions: Iterable[dict[str, Any]],
-        *,
-        constrained_layout: bool | None = None,
     ) -> None:
         root = self._root()
-        state = root.state
-        properties = dict(state.properties)
-        if constrained_layout is not None:
-            properties["layout_engine"] = (
-                {
-                    "kind": "constrained",
-                    "params": {
-                        "w_pad": None,
-                        "h_pad": None,
-                        "wspace": None,
-                        "hspace": None,
-                        "rect": None,
-                    },
-                }
-                if constrained_layout
-                else {"kind": "none", "params": {}}
-            )
-        change = root.apply_state(
-            state.clone(
-                properties=properties,
+        change = root.apply_mutation(
+            ComponentMutation(
+                root.component_id,
                 data={"layouts": [deepcopy(item) for item in definitions]},
             )
         )
@@ -648,10 +778,7 @@ class AxesLayoutService:
             )
             definitions = list(self.layout_definitions())
             definitions.append(definition)
-            self._set_layout_definitions(
-                definitions,
-                constrained_layout=spec.constrained_layout,
-            )
+            self._set_layout_definitions(definitions)
             with matplotlib_style_context(self.canvas.component_style):
                 for cell in sorted(spec.cells, key=lambda item: (item.row, item.column)):
                     x_group, y_group = groups[(cell.row, cell.column)]
@@ -1017,10 +1144,7 @@ class AxesLayoutService:
                 definition if item["id"] == layout_id else item
                 for item in self.layout_definitions()
             ]
-            self._set_layout_definitions(
-                definitions,
-                constrained_layout=spec.constrained_layout,
-            )
+            self._set_layout_definitions(definitions)
             for controller in controllers:
                 subplot = controller.state.data["subplot"]
                 target = controller.resolve_target()
