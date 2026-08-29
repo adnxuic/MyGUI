@@ -1,6 +1,6 @@
 ---
 name: maintain-agent-core
-description: Change MyGUI Agent Engineering instructions, routing, contracts, checks, Codex adapters, or DSH integration without altering application behavior.
+description: Change MyGUI Agent Engineering instructions, routing, contracts, checks, or Codex adapters without altering application behavior.
 ---
 
 # Maintain Agent Core
@@ -10,11 +10,10 @@ nearest affected contracts, checks, adapters, and tests. Preserve every
 applicable `CORE-*` invariant and keep MyGUI runtime and persistence out of
 scope unless the user separately requests them.
 
-Keep root `AGENTS.md` compact: it owns bootstrap order, global summaries, and
-Scanner-dependent explicit clauses. Detailed rule text belongs at the source
-declared in `rule-catalog.yaml`; task procedure belongs in Skills; routing
-belongs only in `task-map.yaml`. Preserve TaskResult v1, ScannerResult v2, DSH
-read-only separation, and stable rule IDs unless the task is an explicit
+Keep root `AGENTS.md` compact: it owns bootstrap order and global summaries.
+Detailed rule text belongs at the source declared in `rule-catalog.yaml`;
+task procedure belongs in Skills; routing belongs only in `task-map.yaml`.
+Preserve TaskResult v1 and stable rule IDs unless the task is an explicit
 contract or rule migration.
 
 Before moving rules, prove the old and new CORE ID sets are identical and add

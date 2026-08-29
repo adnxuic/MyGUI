@@ -45,17 +45,9 @@ not create a private library.
 
 `mygui.figuremodify.matplotlib_adapter` owns style/catalog contexts;
 `mygui.tex_config` owns TeX rcParams. These boundaries are enforced by
-`ARCH-UI-ARTIST-MUTATION` and
-`ARCH-UI-MPL-GLOBAL-STATE-MUTATION`. Ambiguous presentation-layer `.set_*`
-calls or indirect Matplotlib global-state candidates are gray boundaries, not
-silent clean results.
+`tests.test_matplotlib_boundaries`.
 
 ## Text and diagnostics
-
-`CORE-TEX-OWNER` makes `mygui.tex_config` the sole writer of TeX rcParams. TeX
-starts disabled and is enabled only after validation. `CORE-FONT-DIAGNOSTICS`
-makes `mygui.font_diagnostics` the sole bridge for Matplotlib missing-glyph and
-DirectWrite diagnostics; install it after `QApplication` and before widgets.
 
 `CORE-TEX-OWNER` makes `mygui.tex_config` the sole writer of TeX rcParams. TeX
 starts disabled and is enabled only after validation. `CORE-FONT-DIAGNOSTICS`
@@ -89,6 +81,5 @@ active Figure project. An editable `QLineEdit`, `QTextEdit`, or
 committed Inspector values and spin-box edits use project history. The Figure
 toolbar actions and Table toolbar actions bind the same per-project stack.
 
-These are enforced by `QT-TIMER-OWNERSHIP`, `QT-THREAD-LIFECYCLE`, and
-`QT-SIGNAL-REBIND`. Unproven ownership or shutdown paths are emitted as gray
-boundaries for review.
+These rules ensure clean Qt resource lifecycle. Unproven ownership or shutdown
+paths should be reviewed and resolved.

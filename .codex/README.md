@@ -1,7 +1,7 @@
 # Codex Adapter for MyGUI
 
 This directory describes how Codex consumes the harness-neutral MyGUI Agent
-Core. It does not redefine application architecture or Scanner rules.
+Core. It does not redefine application architecture or Agent Core rules.
 
 ## Task flow
 
@@ -11,14 +11,11 @@ Core. It does not redefine application architecture or Scanner rules.
    catalog source of each materially touched CORE rule before implementation.
    Use the union when more than one task route applies; do not reconstruct a
    route from prose elsewhere.
-4. Obtain each required ScannerResult from the read-only DSH Worker or the
-   deterministic Scanner CLI. Validate `contractVersion: 2`; preserve findings,
-   errors, coverage, and gray boundaries without rewriting Scanner logic.
-5. Implement only the requested repository change. Codex owns code changes,
-   tests, documentation, and diff review; DSH remains detection-only.
-6. Run every routed check with the project interpreter. A required failed,
+4. Implement only the requested repository change. Codex owns code changes,
+   tests, documentation, and diff review.
+5. Run every routed check with the project interpreter. A required failed,
    unknown, or not-run result prevents completion.
-7. Emit a TaskResult v1 under `build/agent-results/` and summarize the same
+6. Emit a TaskResult v1 under `build/agent-results/` and summarize the same
    status to the user. Temporary evidence is never committed or copied into
    `codex_handoff/`.
 
@@ -43,7 +40,6 @@ For long-running asynchronous work:
 - These tools return early when the process or cell completes.
   Do not wake the model merely to report that work is still running.
 
-If the DSH Worker is unavailable, build the scanner package and use its CLI;
-do not substitute ad-hoc versions of registered rules. Missing capability is
-reported explicitly. External writes, commits, pushes, releases, and PR actions
-still require the authority supplied by the user and the active environment.
+Missing capability is reported explicitly. External writes, commits, pushes,
+releases, and PR actions still require the authority supplied by the user and
+the active environment.

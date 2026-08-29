@@ -10,7 +10,7 @@ serializable business record. UI code sends complete edits to Controllers or
 domain Services and observes committed Registry events; it does not mutate an
 Artist, Controller state dictionary, or a parallel UI state model.
 
-The corresponding scanner rules are `ARCH-SECOND-COMPONENT-STATE` and
+The corresponding rules are `ARCH-SECOND-COMPONENT-STATE` and
 `ARCH-CONTROLLER-BYPASS`. The broader invariant is `CORE-COMPONENT-STATE`.
 
 Explicit user-intent entry points also pass through the project
@@ -158,7 +158,7 @@ exclusively by `FigureController`. The Figure Inspector is the sole direct UI
 editor.
 
 The corresponding invariant is `CORE-FIGURE-LAYOUT-ENGINE-OWNER` and the
-corresponding scanner rule is `ARCH-FIGURE-LAYOUT-ENGINE-BYPASS`.
+corresponding rule is `ARCH-FIGURE-LAYOUT-ENGINE-BYPASS`.
 
 - `AxesLayoutService` and the Axes Layout dialog manage GridSpec geometry
   (rows, columns, width/height ratios, margins, and spacing), sharing topology,
@@ -179,7 +179,7 @@ rectangle (`bounds` as `[left, bottom, width, height]`) are owned exclusively by
 `AxesGeometryService`.
 
 The corresponding invariant is `CORE-AXES-GEOMETRY-OWNER` and the corresponding
-scanner rule is `ARCH-AXES-GEOMETRY-BYPASS`.
+rule is `ARCH-AXES-GEOMETRY-BYPASS`.
 
 - `AxesGeometryService` manages individual Axes grid/manual modes, manual bounds,
   Colorbar follower tracking, and position resets.

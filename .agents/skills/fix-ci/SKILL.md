@@ -12,9 +12,7 @@ weakening coverage, schema, architecture, or environment requirements.
 Reproduce the exact command and runtime first. Classify the failure as product,
 test, dependency/bootstrap, platform, or reporting. Fix the narrow owner and
 add a regression check when the failure could recur. Windows owns the
-PySide6/application profile; Ubuntu owns Agent Core/DSH/Node/Bash. Model-driven
-evals are scheduled/manual, while deterministic DSH tests and E2E remain
-blocking.
+PySide6/application profile; Ubuntu owns Agent Core verification.
 
 Application verification (`verify_full --profile application` / `local`) uses
 one shared process pool. `MYGUI_TEST_SHARDS` is the pool concurrency cap

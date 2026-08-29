@@ -13,7 +13,6 @@ ENV/
 build/
 dist/
 site/
-.dsh/.tooling/
 *.egg-info/
 .eggs/
 

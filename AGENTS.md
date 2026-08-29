@@ -15,7 +15,7 @@ and global rule index; detailed normative text lives at the exact sources in
    when multiple routes match.
 4. Skills define task procedure without redefining architecture. User docs
    describe shipped behavior and never override Agent Core.
-5. Codex follows `.codex/README.md`; DSH stays detection-only under `.dsh/`.
+5. Codex follows `.codex/README.md`.
 
 If routing, a required source, or a required capability is missing or
 ambiguous, stop and report it rather than inventing a substitute.
@@ -43,7 +43,7 @@ ambiguous, stop and report it rather than inventing a substitute.
   `mygui.figuremodify.matplotlib_adapter` owns global style contexts/catalogs.
   Presentation/UI code must not mutate Matplotlib process-global configuration
   or rcParams directly; changes must go through the declared configuration
-  owner. This explicit prohibition is consumed by the architecture Scanner.
+  owner.
 - **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` belongs to the Colorbar
   Component, is not an ordinary Axes component, and enters via `ColorbarService`.
 - **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of TeX rcParams;
@@ -107,11 +107,11 @@ ambiguous, stop and report it rather than inventing a substitute.
 - User docs live under `docs/` and `mkdocs.yml`. Feature/property changes update
   their parameter page and schema summary together; Matplotlib links pin 3.9.0.
   Keep limitations in `codex_handoff/current-limitations.md`, not shipped docs.
-- `.agents/` is harness-neutral Agent Engineering knowledge. Generated scanner,
-  test, and task evidence belongs only under ignored `build/agent-results/`.
-- Update this root file only when bootstrap flow, the global CORE index, or a
-  Scanner-dependent root clause changes. Update detailed rule sources, Skills,
-  routing, and enforcement at their single owners.
+- `.agents/` is harness-neutral Agent Engineering knowledge. Generated test
+  and task evidence belongs only under ignored `build/agent-results/`.
+- Update this root file only when bootstrap flow or the global CORE index
+  changes. Update detailed rule sources, Skills, routing, and enforcement at
+  their single owners.
 - Run every check required by the union of matched routes with the project
   interpreter. Failed, unknown, or not-run required checks block completion;
   report exact commands, results, coverage, gray boundaries, and limitations.

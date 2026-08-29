@@ -15,8 +15,8 @@ synchronization in that order. Canvas host helpers (`ChartCreationStager`,
 materializer handlers, `CanvasSnapshotApplier`, popout window, and project
 toolbar) are not a second selection or component-state store;
 `PyFigureCanvas.current_component_id` remains the only selection authority.
-Table model/view code must go through `TableRepository`. Run both architecture
-scanners on the affected scope. Inspect disposal, repeated signal binding,
+Table model/view code must go through `TableRepository`. Run architecture
+checks on the affected scope. Inspect disposal, repeated signal binding,
 Timer/Thread ownership, stale async callbacks, recursive signals, and render
 rollback before changing code.
 

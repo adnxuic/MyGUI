@@ -254,7 +254,7 @@ locator, formatter, aspect, and margins are not Axes Components defaults; a
 later Axes Inspector property must decide whether it also joins that page.
 `ARCH-COMPONENT-DEFAULTS-BYPASS` remains
 a planned gray candidate for `evolve-architecture-rule`; this task does not
-add a Scanner rule.
+add a new rule.
 
 ## Color library
 
@@ -321,12 +321,11 @@ previous slot and log.
 A workspace-layout write on exit that cannot be proven still leaves the last
 good slot intact.
 
-## Promoted scanner rules
+## Promoted architecture rules
 
-These candidates were recorded as planned gray boundaries during settings
+These candidates were recorded as planned boundaries during settings
 decoupling, then classified `new_invariant` after production callers left the
-storage adapter. Positive and negative fixtures live under
-`.dsh/scanners/tests/fixtures/`.
+storage adapter.
 
 - `ARCH-QSETTINGS-BACKEND-BYPASS` — production code outside
   `mygui/application_settings/storage/` must not construct `QSettings(...)`
@@ -340,14 +339,9 @@ storage adapter. Positive and negative fixtures live under
   `QApplication.instance().setFont`. Widget-local `setFont` is not application
   chrome. **Promoted.**
 
-`scan.js` exits non-zero on `verdict: violation` (and `unknown` / failed /
-partial). `verify_architecture` still treats gray as non-blocking unless
-`--fail-on-gray`.
-
 QSS color completeness is a Python contract (`tests.test_application_theme_qss`),
-not a lexical Scanner rule, so Matplotlib and user colors are not false
-positives. Do not implement Scanner rules in a setting-key change; keep these
-invariants when touching QSettings or chrome publishers.
+so Matplotlib and user colors are not false
+positives. Keep these invariants when touching QSettings or chrome publishers.
 
 ## Completion checklist
 

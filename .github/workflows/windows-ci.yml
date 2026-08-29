@@ -38,32 +38,16 @@ jobs:
   agent-engineering:
     name: Ubuntu Agent Engineering
     runs-on: ubuntu-latest
-    env:
-      DSH_BIN: ${{ github.workspace }}/.dsh/.tooling/node_modules/.bin/dsh
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: |
-            .dsh/scanners/package-lock.json
-            .dsh/adapters/scanner/package-lock.json
       - name: Install Agent Core dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
-      - name: Install pinned DSH in isolation
-        run: npm install --prefix .dsh/.tooling --no-save --no-audit --no-fund @deepseek-ai/dsh@0.1.0-rc.7
-      - name: Install deterministic scanner dependencies
-        run: |
-          bash .dsh/scanners/scripts/link-host-deps.sh
-          npm ci --prefix .dsh/scanners --no-audit --no-fund
-          npm ci --prefix .dsh/adapters/scanner --no-audit --no-fund
       - name: Run shared Agent Engineering profile
         run: python .agents/checks/verify_full.py --profile agent-engineering
       - name: Upload Agent Engineering evidence

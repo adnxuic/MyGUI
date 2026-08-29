@@ -61,8 +61,8 @@ contract v3 (`maxWorkers`, `isolationMode`, deterministic `launchOrder`, batch
 durations, and completeness). Per-test and aggregated per-module timings remain
 available in `build/agent-results/application-test-timings.json`. Windows CI
 pins four pool workers and uploads both evidence locations. The
-agent-engineering profile validates routing/contracts and deterministic DSH
-typecheck/tests/E2E. Documentation uses `mkdocs build --strict`.
+agent-engineering profile validates routing/contracts and deterministic
+architecture boundary tests. Documentation uses `mkdocs build --strict`.
 
 ## Fault injection
 

@@ -1080,18 +1080,14 @@ def _application_steps() -> list[dict]:
 
 
 def _agent_steps() -> list[dict]:
-    verification = [run_step("agent_core", [sys.executable, ".agents/checks/verify_agent_core.py"])]
-    command = ["bash", ".dsh/scripts/verify.sh", "--quiet"]
-    if os.name == "nt":
-        value = Path(ROOT).resolve().as_posix()
-        wsl_root = f"/mnt/{value[0].lower()}/{value[3:]}"
-        command = ["wsl", "-d", "Ubuntu", "bash", "-lc", f"cd '{wsl_root}' && bash .dsh/scripts/verify.sh --quiet"]
-    verification.append(run_step("dsh_deterministic", command, timeout=1800))
-    verification.append(run_step(
-        "architecture_scanners",
-        [sys.executable, ".agents/checks/verify_architecture.py", "--skip-python"],
-        timeout=300,
-    ))
+    verification = [
+        run_step("agent_core", [sys.executable, ".agents/checks/verify_agent_core.py"]),
+        run_step(
+            "architecture_boundary_tests",
+            [sys.executable, ".agents/checks/verify_architecture.py"],
+            timeout=300,
+        ),
+    ]
     return verification
 
 

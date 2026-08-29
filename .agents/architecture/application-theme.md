@@ -22,7 +22,7 @@ Presentation widgets bind through an injected `ThemeBindingPort`. They do not
 call `QApplication.setFont`, `setPalette`, or `setStyleSheet` for application
 chrome, and they do not load bundled QSS with a private token table.
 
-`ARCH-UI-THEME-BYPASS` is the promoted Scanner rule for that bypass. It
+`ARCH-UI-THEME-BYPASS` is the promoted architecture rule for that bypass. It
 reports `QApplication`/`app` `setFont`/`setPalette`/`setStyleSheet` outside
 `mygui/application_theme/`, including `QApplication.instance().setFont`.
 Widget-local `setFont` is not a finding. QSS color completeness stays a

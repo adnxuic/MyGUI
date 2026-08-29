@@ -24,10 +24,6 @@ KNOWN_CHECKS = {
     "verify_architecture", "verify_project_io", "verify_full",
     "verify_application_settings",
 }
-FORBIDDEN_IMPLEMENTATION_TOKENS = {
-    "cordis_define", "cordis_run", "cordis_stop", "dynamicCordisRunner",
-    "scanner-readonly.mjs",
-}
 COMPILED_PYTHON_SUFFIXES = {".pyc", ".pyo"}
 CORE_RULE_PATTERN = re.compile(r"\bCORE-[A-Z0-9-]+\b")
 MARKDOWN_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
@@ -44,16 +40,7 @@ def _agent_source_files(agents: Path):
 
 
 def _scanner_ids(root: Path) -> set[str]:
-    ids: set[str] = set()
-    scanners = root / ".dsh" / "scanners" / "src" / "scanners"
-    for path in scanners.glob("*/scanner.ts"):
-        text = path.read_text(encoding="utf-8")
-        match = re.search(r"\bSCANNER_ID\s*=\s*['\"]([^'\"]+)['\"]", text)
-        if match is None:
-            match = re.search(r"\bid:\s*['\"]([^'\"]+)['\"]", text)
-        if match:
-            ids.add(match.group(1))
-    return ids
+    return set()
 
 
 def _module_path(root: Path, module: str) -> Path:
@@ -197,14 +184,6 @@ def validate_agent_core(root: Path = ROOT) -> list[str]:
 
     agents_text = (root / "AGENTS.md").read_text(encoding="utf-8")
     errors.extend(_validate_rule_catalog(root, catalog, agents_text))
-
-    for path in _agent_source_files(agents):
-        if path.resolve() == Path(__file__).resolve():
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        for token in FORBIDDEN_IMPLEMENTATION_TOKENS:
-            if token in text:
-                errors.append(f"{path.relative_to(root)} duplicates DSH implementation token {token}")
 
     errors.extend(_validate_agents_size(root / "AGENTS.md"))
     return errors

@@ -143,7 +143,7 @@ class AgentEngineeringTests(unittest.TestCase):
             source.parent.mkdir(parents=True)
             bytecode.parent.mkdir(parents=True)
             source.write_text("authored source", encoding="utf-8")
-            bytecode.write_bytes(b"cordis_run dynamicCordisRunner")
+            bytecode.write_bytes(b"compiled_bytecode")
 
             self.assertEqual(list(self.agent_core._agent_source_files(agents)), [source])
 

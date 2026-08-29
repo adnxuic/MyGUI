@@ -2,10 +2,10 @@ version: 1
 rules:
   - {id: CORE-RESOURCE-BOUNDARY, source: .agents/architecture/runtime-boundaries.md#bundled-resources, enforcement: [tests.test_resource_locator]}
   - {id: CORE-TABLE-REPOSITORY, source: .agents/architecture/runtime-boundaries.md#table-data-authority, enforcement: [tests.test_package_boundary]}
-  - {id: CORE-MATPLOTLIB-BOUNDARY, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [tests.test_matplotlib_boundaries, mygui.architecture]}
-  - {id: CORE-TEX-OWNER, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_matplotlib_boundaries, mygui.architecture]}
+  - {id: CORE-MATPLOTLIB-BOUNDARY, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [tests.test_matplotlib_boundaries]}
+  - {id: CORE-TEX-OWNER, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_matplotlib_boundaries]}
   - {id: CORE-FONT-DIAGNOSTICS, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_font_diagnostics]}
-  - {id: CORE-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [tests.test_component_controllers, mygui.architecture]}
+  - {id: CORE-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [tests.test_component_controllers]}
   - {id: CORE-EDITOR-PROFILES, source: .agents/architecture/inspector.md#editor-contracts, enforcement: [tests.test_component_inspector, tests.test_matplotlib_property_contract]}
   - {id: CORE-SELECTION-AUTHORITY, source: .agents/architecture/inspector.md#tree-and-selection, enforcement: [tests.test_component_tree]}
   - {id: CORE-REGISTRATION-ATOMICITY, source: .agents/architecture/persistence.md#registration-and-restore, enforcement: [tests.test_component_services, tests.test_component_runtime_integration]}
@@ -16,17 +16,5 @@ rules:
   - {id: CORE-COLORBAR-AUXILIARY-AXES, source: .agents/architecture/component-system.md#colorbar-auxiliary-axes, enforcement: [tests.test_colorbar_component]}
   - {id: CORE-APPLICATION-SETTINGS, source: .agents/architecture/application-settings.md#authority, enforcement: [tests.test_application_settings_contracts, tests.test_application_settings_components, tests.test_application_settings_component_creation]}
   - {id: CORE-THEME-OWNER, source: .agents/architecture/application-theme.md#owner, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme]}
-  - {id: CORE-FIGURE-LAYOUT-ENGINE-OWNER, source: .agents/architecture/component-system.md#figure-layout-engine-ownership, enforcement: [tests.test_axes_layout, mygui.architecture]}
-  - {id: CORE-AXES-GEOMETRY-OWNER, source: .agents/architecture/component-system.md#individual-axes-geometry-ownership, enforcement: [tests.test_axes_geometry, mygui.architecture]}
-  - {id: ARCH-PRIVATE-CONTAINER-ACCESS, source: .agents/architecture/inspector.md#container-ownership, enforcement: [mygui.architecture]}
-  - {id: ARCH-UI-ARTIST-MUTATION, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [mygui.architecture]}
-  - {id: ARCH-UI-MPL-GLOBAL-STATE-MUTATION, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [mygui.architecture]}
-  - {id: ARCH-SECOND-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [mygui.architecture]}
-  - {id: ARCH-CONTROLLER-BYPASS, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [mygui.architecture]}
-  - {id: ARCH-QSETTINGS-BACKEND-BYPASS, source: .agents/architecture/application-settings.md#promoted-scanner-rules, enforcement: [mygui.architecture]}
-  - {id: ARCH-UI-THEME-BYPASS, source: .agents/architecture/application-theme.md#owner, enforcement: [mygui.architecture]}
-  - {id: ARCH-FIGURE-LAYOUT-ENGINE-BYPASS, source: .agents/architecture/component-system.md#figure-layout-engine-ownership, enforcement: [mygui.architecture]}
-  - {id: ARCH-AXES-GEOMETRY-BYPASS, source: .agents/architecture/component-system.md#individual-axes-geometry-ownership, enforcement: [mygui.architecture]}
-  - {id: QT-TIMER-OWNERSHIP, source: .agents/architecture/ui-state-boundaries.md#qt-lifetime, enforcement: [mygui.qt-lifecycle]}
-  - {id: QT-THREAD-LIFECYCLE, source: .agents/architecture/ui-state-boundaries.md#qt-lifetime, enforcement: [mygui.qt-lifecycle]}
-  - {id: QT-SIGNAL-REBIND, source: .agents/architecture/ui-state-boundaries.md#qt-lifetime, enforcement: [mygui.qt-lifecycle]}
+  - {id: CORE-FIGURE-LAYOUT-ENGINE-OWNER, source: .agents/architecture/component-system.md#figure-layout-engine-ownership, enforcement: [tests.test_axes_layout]}
+  - {id: CORE-AXES-GEOMETRY-OWNER, source: .agents/architecture/component-system.md#individual-axes-geometry-ownership, enforcement: [tests.test_axes_geometry]}

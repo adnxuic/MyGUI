@@ -12,14 +12,14 @@ shared result contracts, and deterministic verification entry points.
 3. `task-map.yaml` is the only task-routing source and connects work to Skills,
    architecture, checks, scanners, tests, documentation, and manual smoke.
 4. `skills/` defines task-specific procedure without redefining rules.
-5. `contracts/` defines portable evidence exchanged by Codex, DSH, and CI;
+5. `contracts/` defines portable evidence exchanged by Codex and CI;
    `architecture/testing-map.md` is the only detailed verification narrative.
 
-DSH implementation belongs in `.dsh/`; Codex-specific invocation guidance
-belongs in `.codex/`. Do not copy scanner rules, adapters, worker lifecycle
-code, or application documentation into this directory.
+Codex-specific invocation guidance belongs in `.codex/`. Do not copy
+adapters, worker lifecycle code, or application documentation into this
+directory.
 
-Generated task/scanner results belong under `build/agent-results/`. The build
+Generated task results belong under `build/agent-results/`. The build
 directory is ignored and must never become a handoff or documentation store.
 
 ## Constitution migration index
@@ -43,5 +43,5 @@ it is the rule-loss audit for the split.
 | Application settings / theme | `application-settings.md`; `application-theme.md`; modify-application-setting Skill |
 
 Global summaries remain in `AGENTS.md`; the catalog destinations hold detailed
-normative text and implementation maps. Update the root only for bootstrap,
-CORE-index, or Scanner-dependent clause changes.
+normative text and implementation maps. Update the root only for bootstrap
+flow or global CORE-index changes.

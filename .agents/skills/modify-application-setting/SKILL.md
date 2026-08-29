@@ -27,7 +27,7 @@ Do not use this Skill for:
 - Figure/Inspector `PropertySpec` work → `modify-component-property`
 - Project schema keys, kinds, or wire shape → `schema-migration`
 - Save/open/restore publication → `project-io-change`
-- Scanner promotion of QSettings or theme bypasses →
+- Promotion of QSettings or theme bypass rules →
   `evolve-architecture-rule` (hardening phase, after evidence exists)
 - Theme engine internals with no setting-key change → still update
   `application-theme.md`, but do not invent a second preference store
@@ -83,8 +83,8 @@ require their own confirmation.
 - Starting MATLAB, MCR, or TeX from verification
 
 `ARCH-QSETTINGS-BACKEND-BYPASS` and `ARCH-UI-THEME-BYPASS` are promoted
-Scanner rules. Do not weaken them. QSS color completeness remains a Python
-contract test, not a lexical Scanner rule.
+architecture rules. Do not weaken them. QSS color completeness remains a Python
+contract test.
 
 ## Verification
 

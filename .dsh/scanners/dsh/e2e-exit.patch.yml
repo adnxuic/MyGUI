@@ -1,7 +1,0 @@
-# E2E verification overlay (verification only — never part of a production
-# composition). Loaded together with scanners.patch.yml by dsh/verify-e2e.sh;
-# the plugin asserts the full lifecycle, prints E2E-OK lines, and exits the
-# process.
-- insert:
-    - id: mygui-scanners-e2e-exit
-      name: mygui-scanners/dist/plugins/e2e-exit-plugin.js
