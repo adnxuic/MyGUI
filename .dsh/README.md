@@ -10,7 +10,8 @@ on, or ship anything from `.dsh/`.
 
 | Path | What lives there |
 | --- | --- |
-| `AGENTS.md` | Generic coding-agent / Codex project rules for the whole repository |
+| `AGENTS.md` | Compact bootstrap contract and global CORE rule index |
+| `.agents/` | Harness-neutral detailed rule sources, routing, Skills, contracts, and checks |
 | `.dsh/scanners/` | Persistent, **non-model-facing** Scanner Plugins (Scanner Registry + scanner implementations) |
 | `.dsh/agents/` | DSH specialized agents (the Scanner Worker preset) |
 | `.dsh/adapters/` | Dynamic Scanner Adapter support code (temporary model-facing bridges) |

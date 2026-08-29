@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import type { ScannerFinding } from '../src/contracts.ts';
 import { buildPyFileModel, type PyFileModel } from '../src/lib/py/model.ts';
 import { ARCHITECTURE_RULES } from '../src/scanners/architecture/rules/index.ts';
+import { agentsMdEscalates } from '../src/scanners/architecture/rules/ui-matplotlib-global-state-mutation.ts';
 
 const FIXTURES = resolve(import.meta.dirname, 'fixtures');
 
@@ -56,6 +57,16 @@ async function runAllRules(files: PyFileModel[]) {
 async function findingsFor(files: PyFileModel[], ruleId: string): Promise<ScannerFinding[]> {
   return (await runAllRules(files)).filter((finding) => finding.ruleId === ruleId);
 }
+
+test('AGENTS.md keeps the explicit Matplotlib global-state escalation clause', () => {
+  const agentsMd = readFileSync(resolve(import.meta.dirname, '../../../AGENTS.md'), 'utf8');
+  assert.equal(agentsMdEscalates(agentsMd), true);
+  assert.equal(
+    agentsMdEscalates('UI code must not mutate Matplotlib Artists directly.'),
+    false,
+    'Artist-only prohibitions must not escalate the independent global-state rule',
+  );
+});
 
 test('ARCH-PRIVATE-CONTAINER-ACCESS: positive fixture hits, owner/subclass accesses do not', async () => {
   const files = loadWorkspace('ws_basic');

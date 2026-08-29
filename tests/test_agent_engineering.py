@@ -59,6 +59,82 @@ class AgentEngineeringTests(unittest.TestCase):
     def test_current_agent_core_is_consistent(self):
         self.assertEqual(self.agent_core.validate_agent_core(ROOT), [])
 
+    def test_agents_size_normalizes_line_endings_and_has_only_an_upper_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lf = root / "lf.md"
+            crlf = root / "crlf.md"
+            short = root / "short.md"
+            oversized = root / "oversized.md"
+            lf.write_bytes(b"first\nsecond\n")
+            crlf.write_bytes(b"first\r\nsecond\r\n")
+            short.write_text("# Rules\n", encoding="utf-8")
+            oversized.write_text("x" * (8 * 1024 + 1), encoding="utf-8")
+
+            self.assertEqual(
+                self.agent_core._normalized_lf_size(lf),
+                self.agent_core._normalized_lf_size(crlf),
+            )
+            self.assertEqual(self.agent_core._validate_agents_size(short), [])
+            self.assertTrue(self.agent_core._validate_agents_size(oversized))
+
+    def test_catalog_core_ids_match_the_root_index_exactly(self):
+        catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
+        catalog_ids = {
+            entry["id"] for entry in catalog["rules"]
+            if entry["id"].startswith("CORE-")
+        }
+        root_ids = set(self.agent_core.CORE_RULE_PATTERN.findall(
+            (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        ))
+        self.assertEqual(len(catalog_ids), 18)
+        self.assertEqual(root_ids, catalog_ids)
+
+    def test_catalog_validation_is_bidirectional_and_checks_anchors_and_enforcement(self):
+        catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
+        agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+        missing_root = agents_text.replace("CORE-RESOURCE-BOUNDARY", "REMOVED-RULE")
+        errors = self.agent_core._validate_rule_catalog(ROOT, catalog, missing_root)
+        self.assertTrue(any("absent from AGENTS.md" in error for error in errors))
+
+        extra_root = agents_text + "\nCORE-UNREGISTERED\n"
+        errors = self.agent_core._validate_rule_catalog(ROOT, catalog, extra_root)
+        self.assertTrue(any("Unregistered global rules" in error for error in errors))
+
+        bad_anchor = copy.deepcopy(catalog)
+        bad_anchor["rules"][0]["source"] = ".agents/architecture/runtime-boundaries.md#missing"
+        errors = self.agent_core._validate_rule_catalog(ROOT, bad_anchor, agents_text)
+        self.assertTrue(any("missing source anchor" in error for error in errors))
+
+        absent_anchor = copy.deepcopy(catalog)
+        absent_anchor["rules"][0]["source"] = ".agents/architecture/runtime-boundaries.md"
+        errors = self.agent_core._validate_rule_catalog(ROOT, absent_anchor, agents_text)
+        self.assertTrue(any("must include a Markdown anchor" in error for error in errors))
+
+        wrong_source = copy.deepcopy(catalog)
+        wrong_source["rules"][0]["source"] = ".agents/architecture/agent-core.md#authority-and-loading"
+        errors = self.agent_core._validate_rule_catalog(ROOT, wrong_source, agents_text)
+        self.assertTrue(any("rule ID is absent" in error for error in errors))
+
+        bad_enforcement = copy.deepcopy(catalog)
+        bad_enforcement["rules"][0]["enforcement"] = ["tests.missing_contract"]
+        errors = self.agent_core._validate_rule_catalog(ROOT, bad_enforcement, agents_text)
+        self.assertTrue(any("missing enforcement test module" in error for error in errors))
+
+        bad_scanner = copy.deepcopy(catalog)
+        bad_scanner["rules"][0]["enforcement"] = ["mygui.unknown"]
+        errors = self.agent_core._validate_rule_catalog(ROOT, bad_scanner, agents_text)
+        self.assertTrue(any("unknown enforcement target" in error for error in errors))
+
+    def test_rule_catalog_schema_rejects_unknown_fields(self):
+        catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
+        catalog["rules"][0]["unexpected"] = True
+        schema = json.loads((
+            ROOT / ".agents/contracts/rule-catalog.schema.json"
+        ).read_text(encoding="utf-8"))
+        self.assertTrue(list(Draft202012Validator(schema).iter_errors(catalog)))
+
     def test_agent_source_scan_ignores_generated_python_bytecode(self):
         with tempfile.TemporaryDirectory() as directory:
             agents = Path(directory) / ".agents"
@@ -583,6 +659,13 @@ class AgentEngineeringTests(unittest.TestCase):
         unknown_scanner = copy.deepcopy(task_map)
         unknown_scanner["tasks"]["architecture_audit"]["scanners"] = ["mygui.unknown"]
         self.assertTrue(any("unknown scanner" in error for error in self.agent_core.validate_task_routes(ROOT, unknown_scanner)))
+
+        missing_test = copy.deepcopy(task_map)
+        missing_test["tasks"]["maintain_agent_core"]["focused_tests"] = ["tests.missing_agent_core"]
+        self.assertTrue(any(
+            "missing focused test module" in error
+            for error in self.agent_core.validate_task_routes(ROOT, missing_test)
+        ))
 
     def test_task_map_schema_rejects_unknown_fields(self):
         task_map = self.runner.load_task_map(ROOT)

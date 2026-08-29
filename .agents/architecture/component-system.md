@@ -136,6 +136,20 @@ For data changes, check TableRepository dependencies and whether affected
 charts, Inspector controls, autoscale state, legends, and project fingerprints
 need refresh. Do not add another data authority.
 
+## Colorbar auxiliary Axes
+
+`CORE-COLORBAR-AUXILIARY-AXES` assigns `Colorbar.ax` to the Colorbar Component.
+It is never an ordinary `ComponentKind.AXES`, never receives the fixed Axes
+subtree, and enters creation, restore, refresh, and deletion through
+`ColorbarService` and its declared materializer/removal paths.
+
+## Colorbar auxiliary Axes
+
+`CORE-COLORBAR-AUXILIARY-AXES` assigns `Colorbar.ax` to the Colorbar Component.
+It is never an ordinary `ComponentKind.AXES`, never receives the fixed Axes
+subtree, and enters creation, restore, refresh, and deletion through
+`ColorbarService` and its declared materializer/removal paths.
+
 ## Figure layout engine ownership
 
 Figure layout engine configuration (`layout_engine` property with kinds `none`,

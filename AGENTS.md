@@ -1,193 +1,120 @@
 # MyGUI Agent Constitution
 
-Scope: whole repo. Defines global invariants, task routing, and completion
-gates. Task procedures live under `.agents/`.
+Scope: whole repository. This compact file is the mandatory bootstrap contract
+and global rule index; detailed normative text lives at the exact sources in
+`.agents/rule-catalog.yaml`.
+
+## Authority and Required Loading
+
+1. This file defines global scope, precedence, and CORE summaries.
+2. `.agents/rule-catalog.yaml` maps every stable rule ID to its authoritative
+   detailed source and enforcement. Read the source of every CORE rule touched
+   by the task, even when it is not already named by a task route.
+3. Classify work only through `.agents/task-map.yaml`. Read every matching
+   `SKILL.md` and routed architecture page before implementation; use the union
+   when multiple routes match.
+4. Skills define task procedure without redefining architecture. User docs
+   describe shipped behavior and never override Agent Core.
+5. Codex follows `.codex/README.md`; DSH stays detection-only under `.dsh/`.
+
+If routing, a required source, or a required capability is missing or
+ambiguous, stop and report it rather than inventing a substitute.
 
 ## Environment and Work Boundaries
 
 - MyGUI is a PySide6 desktop app for table-driven Matplotlib charts. Target
   Python 3.12, Matplotlib 3.9.0, and PySide6 6.7.1; do not use later APIs.
-- From repo root, run `python main.py`. Local verification uses exactly
-  `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe`; CI uses workflow Python.
-- Read nearest implementation, tests, and routed material first. Keep changes
-  focused; do not mix unrelated refactoring. Preserve GUI behavior, resources,
-  QSS/JSON paths, historical Canvas names, and tracked artifacts.
-  `mygui/widgets/`, `mygui/figuremodify/`, `mygui/database/` keep UI, domain,
-  data roles. Adapter policy lives in adapter dirs. Codex follows
-  `.codex/README.md`; DSH stays under `.dsh/`.
+- Run from the repository root with `python main.py`. Local verification uses
+  exactly `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe`; CI uses its
+  workflow Python.
+- Read nearest implementation, tests, and routed knowledge first. Keep changes
+  focused and preserve unrelated work, GUI behavior, resources, QSS/JSON paths,
+  historical Canvas names, and tracked artifacts.
+- MATLAB and TeX are optional; their absence must not block unrelated GUI work.
+  Replacing user-expression evaluation is a dedicated high-risk task.
 
-## Authoritative Runtime Boundaries
+## Global CORE Rule Index
 
 - **CORE-RESOURCE-BOUNDARY:** Resolve bundled icons, QSS, and JSON only through
   `mygui.resources`; production behavior must not depend on CWD.
-- **CORE-TABLE-REPOSITORY:** `TableRepository` created by `MainWindow` is the
-  shared runtime data authority. Do not add global table stores; refresh
-  dependent artifacts when authoritative data changes.
-- **CORE-MATPLOTLIB-BOUNDARY:** `mygui.figuremodify.matplotlib_adapter` is the
-  sole boundary for global style contexts and catalogs. Presentation modules
-  must not import Matplotlib, read `canvas.fig`, resolve live targets, or mutate
-  Artists directly (`main.py` startup backend-selection exception).
-- **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` is owned by Colorbar
-  Component. It is never an ordinary `ComponentKind.AXES` and never receives
-  fixed Axes subtree; lifecycle enters via `ColorbarService`.
-- **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of TeX rcParams. TeX
-  starts disabled and is enabled only after validation; render-sensitive changes
-  go through `TextRenderService`.
-- **CORE-FONT-DIAGNOSTICS:** `mygui.font_diagnostics` is the sole bridge for
-  Matplotlib missing-glyph and DirectWrite diagnostics. Install after
-  `QApplication` and before fonts/widgets. Missing glyph rejects edit, restores
-  state atomically, and emits one red result.
+- **CORE-TABLE-REPOSITORY:** The `TableRepository` created by `MainWindow` is
+  the shared runtime Table authority; do not add global or parallel stores.
+- **CORE-MATPLOTLIB-BOUNDARY:**
+  `mygui.figuremodify.matplotlib_adapter` owns global style contexts/catalogs.
+  Presentation/UI code must not mutate Matplotlib process-global configuration
+  or rcParams directly; changes must go through the declared configuration
+  owner. This explicit prohibition is consumed by the architecture Scanner.
+- **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` belongs to the Colorbar
+  Component, is not an ordinary Axes component, and enters via `ColorbarService`.
+- **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of TeX rcParams;
+  enable TeX only after validation and use `TextRenderService` for render edits.
+- **CORE-FONT-DIAGNOSTICS:** `mygui.font_diagnostics` solely bridges Matplotlib
+  glyph and DirectWrite diagnostics; failed glyph edits roll back atomically.
 - **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot
-  QSettings is sole preference store. Sessions keep dirty patch plus base
-  revision; commit is atomic. Narrow ports to Controllers, Services,
-  `ChartCreationStager`, `EditorContext`. Settings never enter schema v19,
-  Undo/Redo, dirty fingerprints, `ComponentState`, or Canvas materialization.
-  Line/Scatter/free-Text use explicit input > Components `NEXT_USE` > Axes
-  palette/Figure style > Matplotlib 3.9 fallback; ordinary Axes use explicit
-  layout/XRD > Axes Components `NEXT_USE` > Figure style > 3.9 fallback. Restore, materializers, history replay, layout updates, Colorbar
-  auxiliary Axes, In-Axes, `add_component_line`, and Reference Guide must not
-  read `ComponentDefaultsProvider`; Apply must not mutate existing Artists.
-- **CORE-TEMPLATE-LIBRARY:** `mygui.template_library` is sole owner of
-  chart-template schema, storage, extraction, matching, ID remapping, dynamic
-  text, fitting, and application planning. Templates live under root
-  `template/` independently of CWD, use strict `mygui-template` schema v5,
-  contain no Table cell document, and never alter schema v21. Application
-  builds an in-memory project snapshot and publishes via staged restore.
-- **CORE-THEME-OWNER:** `ThemeService` is sole publisher of application font,
-  palette, bundled QSS, and density. Apply `ThemeSnapshot` after settings load
-  and before any `QWidget`. UI theme is not Matplotlib Figure style.
+  storage is the only preference authority. Settings stay outside project
+  schema v21, Undo/Redo, dirty fingerprints, and component state.
+- **CORE-TEMPLATE-LIBRARY:** `mygui.template_library` solely owns template
+  schema/storage/planning; templates remain independent of project schema v21.
+- **CORE-THEME-OWNER:** `ThemeService` solely publishes application font,
+  palette, bundled QSS, and density before widget creation; UI theme is not
+  Matplotlib Figure style.
 - **CORE-FIGURE-LAYOUT-ENGINE-OWNER:** `FigureController.properties.layout_engine`
-  is sole engine authority (`none`, `tight`, `constrained`, `compressed`);
-  Figure Inspector is the only direct UI editor. Axes Layout manages only
-  GridSpec geometry, ratios, margins, spacing, and sharing topology,
-  preserving engine configuration without calling `set_layout_engine`,
-  writing `layout_engine`, or calling Figure `apply_state()`.
-- **CORE-AXES-GEOMETRY-OWNER:** `AxesGeometryService` is sole authority for
-  individual Axes grid vs manual projection and manual bounds. `grid` mode
-  tracks the GridSpec cell and Figure layout engine; `manual` mode pins the
-  Axes (`in_layout=False`, `subplotspec=None`). Presentation, Inspector, Axes
-  Layout, and Canvas helpers must not call `set_position`, `set_subplotspec`,
-  `set_in_layout`, or access `_subplotspec` directly.
-- MATLAB and TeX are optional; failure must not block GUI work.
-  `mygui.database.matlab_adapter` is the MATLAB boundary; Python fallbacks in
-  `matlab_fallbacks.py` must not start MATLAB or MCR. Replacing user-expression
-  evaluation is a dedicated high-risk task.
+  is the only Figure layout-engine authority; Axes Layout edits GridSpec only.
+- **CORE-AXES-GEOMETRY-OWNER:** `AxesGeometryService` solely owns individual
+  Axes grid/manual projection, bounds, and related Colorbar geometry.
+- **CORE-COMPONENT-STATE:** Registry, immutable `ComponentState`, Controllers,
+  and domain Services are the only Figure-component business-state path; UI
+  submits through them and never mutates Artists or parallel state directly.
+- **CORE-EDITOR-PROFILES:** Production uses `ComponentInspector` and one exact
+  `EditorProfile` per `(ComponentKind, ComponentRole)` with explicit property
+  editor contracts and no silent generic or editable-JSON fallback.
+- **CORE-SELECTION-AUTHORITY:**
+  `PyFigureCanvas.current_component_id` is the only component selection
+  authority; projection/search state is UI-only and never persisted.
+- **CORE-REGISTRATION-ATOMICITY:** Component creation/publication, IDs,
+  bindings, Inspectors, selection, events, redraw, and color commits form one
+  `registration_transaction()` with exact rollback on failure.
+- **CORE-DELETION-COORDINATOR:** Every production component deletion enters
+  through `DeletionCoordinator` with `DeletionRequest` and commits atomically.
+- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by its
+  `TableRepository` entry; replay re-enters authoritative services and history
+  remains runtime-only.
+- **CORE-PERSISTENCE-V21:** Persist Figure business state only through the
+  strict integer schema-v21 component tree and declared materializers. Project
+  create/restore publishes only after complete staged validation.
 
-## Component, Inspector, and Selection Invariants
+## Universal Change Rules
 
-- **CORE-COMPONENT-STATE:** `ComponentRegistry`, `ComponentState`, Controllers,
-  and domain Services are the only mutable Figure-component business-state
-  path. UI submits through them and synchronizes from Registry events; never
-  keep a second state model or mutate Artists/Controller state. Import
-  Controllers from `mygui.figuremodify.components` and Services from
-  `mygui.figuremodify.component_services`; implementations live in
-  `components/controllers/` and `services/`.
-- **CORE-EDITOR-PROFILES:** Production editors use `ComponentInspector` and
-  one exact `EditorProfile` per `(ComponentKind, ComponentRole)`, composed
-  from reusable Sections. `ComponentEditorManager.create()` is the only
-  visible editor creation path; no role-specific panels or silent generic
-  fallbacks.
-- Every persistent `PropertySpec` has an explicit production editor contract;
-  composite values use closed tagged normalizers in `property_values.py`;
-  production properties never use editable JSON.
-  `EditorRegistry.validate_production_profiles()` and Matplotlib exposure
-  validation remain startup gates.
-- **CORE-SELECTION-AUTHORITY:** `PyFigureCanvas.current_component_id` is the
-  only component selection authority. Tree search affects display only. Tree
-  groups use typed `GroupNodeKey`; `COMPONENT_ID_ROLE` is reserved for real
-  IDs, and UI projection state is never persisted. Keep historical filename
-  `py_figure_canves.py`. Host-protocol helpers (`ChartCreationStager`,
-  `canvas_materialize_handlers`, `CanvasSnapshotApplier`,
-  `CanvasPopoutWindow`, `ProjectNavigationToolbar`) run through Canvas and
-  must not cache `ComponentState`, selection IDs, or color-cycle state.
-- Inspector ownership, lifecycle, tree projection, data refresh, and editor
-  placement follow `.agents/architecture/inspector.md`. Containers expose
-  public APIs and idempotent recursive `dispose()`; never access private Qt
-  stack/toolbox fields.
-- UI synchronization blocks recursive signals, rolls back
-  UI/Controller/Artist state atomically on failure, detaches listeners during
-  disposal, and emits at most one Message Bar result per user action.
+- Controllers are imported from `mygui.figuremodify.components`; Services from
+  `mygui.figuremodify.component_services`. Keep historical filename
+  `py_figure_canves.py` unless a dedicated naming task says otherwise.
+- Production UI submits through public Controllers, Services, Canvas
+  capabilities, Inspector/container APIs, and `DeletionCoordinator`; it does
+  not reach private Qt containers, live Matplotlib targets, or mutable state.
+- Component publication, Axes fixed subtrees, deletion cascades, project
+  creation/restore, history replay, and UI synchronization are all-or-nothing.
+  Block recursive signals, detach listeners on idempotent disposal, and emit at
+  most one Message Bar result per user action.
+- New persisted state requires the applicable property/component/schema/project
+  routes, explicit editor/materializer/deletion declarations, strict round
+  trips, rollback coverage, and user documentation. Application settings never
+  enter project persistence.
+- Do not perform unrelated refactors. Existing dirty work belongs to the user;
+  preserve it and stop if a safe non-overlapping change is impossible.
 
-## Transactions, Deletion, and Persistence
+## Documentation, Evidence, and Completion
 
-- **CORE-REGISTRATION-ATOMICITY:** Component creation/publication uses
-  `ComponentRegistry.registration_transaction()`. Artists, Controllers,
-  bindings, Inspectors, listeners, IDs, state, selection, redraw/events, and
-  color commits form one operation. Publish visible effects only after
-  commit; restore pre-call identity on failure.
-- Axes creation/deletion includes its fixed subtree in one compound
-  transaction. Project creation/restore is staged before tab publication and
-  cleaned up by stable project/object ID on either side.
-- **CORE-DELETION-COORDINATOR:** Every production deletion enters through
-  `DeletionCoordinator` with `DeletionRequest`. Fixed semantics hide; removable
-  components declare `REMOVE` and one handler. Deletion is all-or-nothing;
-  post-delete selection comes from the confirmed set.
-- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by
-  its `TableRepository` entry for chronological Table/Figure history. Figure
-  commands retain immutable `ComponentState` deltas plus runtime mementos,
-  never Artists, Controllers, QWidgets, or Figures; replay enters through
-  Controllers, Services, materializers, and `DeletionCoordinator`. Restore,
-  refresh, replay are recording-suspended. History is runtime-only, absent
-  from schema v21, and invalidated if failed replay cannot prove a safe
-  cursor.
-- **CORE-PERSISTENCE-V21:** Persist component state only through the integer
-  schema-v21 component tree; UI profiles, widgets, callbacks, tree keys, and
-  expansion/selection state never enter project files. Strict v20 migrates
-  directly to v21 (deterministic Error Bar defaults injected); v19–v10
-  migrate stepwise; v4–v9 stay retired.
-- Runtime-created persisted components declare `RESTORE_PHASE` and one
-  `ComponentMaterializer`; fixed semantic components use `None`. Preserve
-  stable IDs and empty valid data-backed components. Detailed procedures live
-  in `.agents/architecture/persistence.md` and `.agents/architecture/deletion.md`.
-
-## Documentation and Completion
-
-- User docs live under `docs/` and appear in `mkdocs.yml`. Feature and
-  property changes update the parameter page and schema summary together.
-  Matplotlib links pin 3.9.0. Nav/build changes update
-  `docs/documentation-site.md`. Feature pages document each Inspector field;
-  keep limitations and plans out of `docs/`. New feature state participates
-  in save/import; never ship runtime state that silently disappears.
-- `.agents/` is Agent Engineering knowledge, not user docs.
-  `codex_handoff/current-limitations.md` records limitations only; scanner
-  output and task evidence stay under ignored `build/agent-results/`.
-- Update this file when a global invariant, architecture owner, schema
-  version, or startup gate changes; update Skill and architecture pages on
-  workflow changes. `AGENTS.md` outranks `.agents/`, which outranks
-  conflicting `docs/` narrative.
-- Use `ColorChoiceWidget` with injected `ColorLibrary`; ordered chart colors
-  use `ColorCycleState.peek()` and `commit()` only after transaction succeeds.
-- Interactive desktop smoke stays required when a routed task declares it;
-  Qt offscreen tests do not cover multi-monitor scaling, native dialogs, real
-  TeX/MATLAB runtimes, or drag/drop.
-
-## Task Router
-
-Matching work reads routed Skill and architecture pages in `.agents/task-map.yaml`:
-
-| Task | Required Skill |
-| --- | --- |
-| New Figure/chart/element component | `.agents/skills/add-figure-component/SKILL.md` |
-| Add/change an Inspector property | `.agents/skills/modify-component-property/SKILL.md` |
-| Add/change an application setting | `.agents/skills/modify-application-setting/SKILL.md` |
-| Change persisted schema or fields | `.agents/skills/schema-migration/SKILL.md` |
-| Change save/open/restore publication | `.agents/skills/project-io-change/SKILL.md` |
-| Diagnose GUI state/lifecycle regression | `.agents/skills/debug-gui-regression/SKILL.md` |
-| Audit architecture boundaries | `.agents/skills/architecture-audit/SKILL.md` |
-| Promote or dismiss a gray boundary | `.agents/skills/evolve-architecture-rule/SKILL.md` |
-| Diagnose or repair CI | `.agents/skills/fix-ci/SKILL.md` |
-
-When multiple routes apply, use all applicable Skills and union of their checks.
-
-## Verification Protocol
-
-- Run routed checks from `.agents/checks/` with project interpreter. Local
-  full command:
-  `E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_full.py --profile local`.
-- Baseline: compileall, Ruff, complete unittest suite with
-  `QT_QPA_PLATFORM=offscreen`, branch coverage (global 74%, listed critical
-  files 80%), and applicable focused fault-injection/round-trip tests.
-- Documentation changes run `python -m mkdocs build --strict`; docs-only
-  changes skip the Python application suite.
-- A failed, unknown, or not-run required check blocks completion. Report
-  verification exactly; never equate “not run” with pass.
+- User docs live under `docs/` and `mkdocs.yml`. Feature/property changes update
+  their parameter page and schema summary together; Matplotlib links pin 3.9.0.
+  Keep limitations in `codex_handoff/current-limitations.md`, not shipped docs.
+- `.agents/` is harness-neutral Agent Engineering knowledge. Generated scanner,
+  test, and task evidence belongs only under ignored `build/agent-results/`.
+- Update this root file only when bootstrap flow, the global CORE index, or a
+  Scanner-dependent root clause changes. Update detailed rule sources, Skills,
+  routing, and enforcement at their single owners.
+- Run every check required by the union of matched routes with the project
+  interpreter. Failed, unknown, or not-run required checks block completion;
+  report exact commands, results, coverage, gray boundaries, and limitations.
+- Routes with `manual_smoke: true` require appropriate interactive Windows
+  smoke. Offscreen Qt does not prove native dialogs, drag/drop, multi-monitor
+  scaling, or real TeX/MATLAB runtimes.

@@ -1,32 +1,32 @@
 version: 1
 rules:
-  - {id: CORE-RESOURCE-BOUNDARY, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_resource_locator]}
-  - {id: CORE-TABLE-REPOSITORY, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_package_boundary]}
-  - {id: CORE-MATPLOTLIB-BOUNDARY, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_matplotlib_boundaries, mygui.architecture]}
-  - {id: CORE-TEX-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_matplotlib_boundaries, mygui.architecture]}
-  - {id: CORE-FONT-DIAGNOSTICS, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_font_diagnostics]}
-  - {id: CORE-COMPONENT-STATE, source: AGENTS.md#component-inspector-and-selection-invariants, enforcement: [tests.test_component_controllers, mygui.architecture]}
-  - {id: CORE-EDITOR-PROFILES, source: AGENTS.md#component-inspector-and-selection-invariants, enforcement: [tests.test_component_inspector, tests.test_matplotlib_property_contract]}
-  - {id: CORE-SELECTION-AUTHORITY, source: AGENTS.md#component-inspector-and-selection-invariants, enforcement: [tests.test_component_tree]}
-  - {id: CORE-REGISTRATION-ATOMICITY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_component_services, tests.test_component_runtime_integration]}
-  - {id: CORE-DELETION-COORDINATOR, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_component_deletion_and_project_close]}
-  - {id: CORE-PROJECT-HISTORY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_figure_history]}
-  - {id: CORE-PERSISTENCE-V21, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides, tests.test_field_2d_component, tests.test_annotation_component, tests.test_axes_geometry, tests.test_errorbar_component]}
-  - {id: CORE-TEMPLATE-LIBRARY, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_template_library]}
-  - {id: CORE-COLORBAR-AUXILIARY-AXES, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_colorbar_component]}
-  - {id: CORE-APPLICATION-SETTINGS, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts, tests.test_application_settings_components, tests.test_application_settings_component_creation]}
-  - {id: CORE-THEME-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme]}
-  - {id: CORE-FIGURE-LAYOUT-ENGINE-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_axes_layout, mygui.architecture]}
-  - {id: CORE-AXES-GEOMETRY-OWNER, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_axes_geometry, mygui.architecture]}
-  - {id: ARCH-PRIVATE-CONTAINER-ACCESS, source: .agents/architecture/inspector.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-UI-ARTIST-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-UI-MPL-GLOBAL-STATE-MUTATION, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-SECOND-COMPONENT-STATE, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-CONTROLLER-BYPASS, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-QSETTINGS-BACKEND-BYPASS, source: .agents/architecture/application-settings.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-UI-THEME-BYPASS, source: .agents/architecture/application-theme.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-FIGURE-LAYOUT-ENGINE-BYPASS, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
-  - {id: ARCH-AXES-GEOMETRY-BYPASS, source: .agents/architecture/component-system.md, enforcement: [mygui.architecture]}
-  - {id: QT-TIMER-OWNERSHIP, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
-  - {id: QT-THREAD-LIFECYCLE, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
-  - {id: QT-SIGNAL-REBIND, source: .agents/architecture/ui-state-boundaries.md, enforcement: [mygui.qt-lifecycle]}
+  - {id: CORE-RESOURCE-BOUNDARY, source: .agents/architecture/runtime-boundaries.md#bundled-resources, enforcement: [tests.test_resource_locator]}
+  - {id: CORE-TABLE-REPOSITORY, source: .agents/architecture/runtime-boundaries.md#table-data-authority, enforcement: [tests.test_package_boundary]}
+  - {id: CORE-MATPLOTLIB-BOUNDARY, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [tests.test_matplotlib_boundaries, mygui.architecture]}
+  - {id: CORE-TEX-OWNER, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_matplotlib_boundaries, mygui.architecture]}
+  - {id: CORE-FONT-DIAGNOSTICS, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_font_diagnostics]}
+  - {id: CORE-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [tests.test_component_controllers, mygui.architecture]}
+  - {id: CORE-EDITOR-PROFILES, source: .agents/architecture/inspector.md#editor-contracts, enforcement: [tests.test_component_inspector, tests.test_matplotlib_property_contract]}
+  - {id: CORE-SELECTION-AUTHORITY, source: .agents/architecture/inspector.md#tree-and-selection, enforcement: [tests.test_component_tree]}
+  - {id: CORE-REGISTRATION-ATOMICITY, source: .agents/architecture/persistence.md#registration-and-restore, enforcement: [tests.test_component_services, tests.test_component_runtime_integration]}
+  - {id: CORE-DELETION-COORDINATOR, source: .agents/architecture/deletion.md#atomic-deletion, enforcement: [tests.test_component_deletion_and_project_close]}
+  - {id: CORE-PROJECT-HISTORY, source: .agents/architecture/persistence.md#project-history, enforcement: [tests.test_figure_history]}
+  - {id: CORE-PERSISTENCE-V21, source: .agents/architecture/persistence.md#schema-authority, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides, tests.test_field_2d_component, tests.test_annotation_component, tests.test_axes_geometry, tests.test_errorbar_component]}
+  - {id: CORE-TEMPLATE-LIBRARY, source: .agents/architecture/persistence.md#chart-template-persistence, enforcement: [tests.test_template_library]}
+  - {id: CORE-COLORBAR-AUXILIARY-AXES, source: .agents/architecture/component-system.md#colorbar-auxiliary-axes, enforcement: [tests.test_colorbar_component]}
+  - {id: CORE-APPLICATION-SETTINGS, source: .agents/architecture/application-settings.md#authority, enforcement: [tests.test_application_settings_contracts, tests.test_application_settings_components, tests.test_application_settings_component_creation]}
+  - {id: CORE-THEME-OWNER, source: .agents/architecture/application-theme.md#owner, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme]}
+  - {id: CORE-FIGURE-LAYOUT-ENGINE-OWNER, source: .agents/architecture/component-system.md#figure-layout-engine-ownership, enforcement: [tests.test_axes_layout, mygui.architecture]}
+  - {id: CORE-AXES-GEOMETRY-OWNER, source: .agents/architecture/component-system.md#individual-axes-geometry-ownership, enforcement: [tests.test_axes_geometry, mygui.architecture]}
+  - {id: ARCH-PRIVATE-CONTAINER-ACCESS, source: .agents/architecture/inspector.md#container-ownership, enforcement: [mygui.architecture]}
+  - {id: ARCH-UI-ARTIST-MUTATION, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [mygui.architecture]}
+  - {id: ARCH-UI-MPL-GLOBAL-STATE-MUTATION, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [mygui.architecture]}
+  - {id: ARCH-SECOND-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [mygui.architecture]}
+  - {id: ARCH-CONTROLLER-BYPASS, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [mygui.architecture]}
+  - {id: ARCH-QSETTINGS-BACKEND-BYPASS, source: .agents/architecture/application-settings.md#promoted-scanner-rules, enforcement: [mygui.architecture]}
+  - {id: ARCH-UI-THEME-BYPASS, source: .agents/architecture/application-theme.md#owner, enforcement: [mygui.architecture]}
+  - {id: ARCH-FIGURE-LAYOUT-ENGINE-BYPASS, source: .agents/architecture/component-system.md#figure-layout-engine-ownership, enforcement: [mygui.architecture]}
+  - {id: ARCH-AXES-GEOMETRY-BYPASS, source: .agents/architecture/component-system.md#individual-axes-geometry-ownership, enforcement: [mygui.architecture]}
+  - {id: QT-TIMER-OWNERSHIP, source: .agents/architecture/ui-state-boundaries.md#qt-lifetime, enforcement: [mygui.qt-lifecycle]}
+  - {id: QT-THREAD-LIFECYCLE, source: .agents/architecture/ui-state-boundaries.md#qt-lifetime, enforcement: [mygui.qt-lifecycle]}
+  - {id: QT-SIGNAL-REBIND, source: .agents/architecture/ui-state-boundaries.md#qt-lifetime, enforcement: [mygui.qt-lifecycle]}

@@ -19,6 +19,6 @@ and project IO atomically.
 
 Test malformed and non-finite data, unknown keys, graph/reference errors,
 migration failure before publication, stable-ID round trips, save replacement
-failure, and exact-version rejection. Update `AGENTS.md`, persistence
-architecture, project/schema documentation, and all routed checks in the same
-change.
+failure, and exact-version rejection. Update persistence architecture, the rule
+catalog/source, project/schema documentation, and all routed checks in the same
+change. Update root `AGENTS.md` only when its CORE index or summary changes.

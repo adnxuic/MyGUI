@@ -173,3 +173,15 @@ tasks:
       - docs/keyboard-and-mouse-reference.md
       - docs/smoke-test.md
     manual_smoke: true
+  maintain_agent_core:
+    skill: .agents/skills/maintain-agent-core/SKILL.md
+    architecture:
+      - .agents/architecture/agent-core.md
+      - .agents/architecture/rule-evolution.md
+      - .agents/architecture/testing-map.md
+    checks: [verify_fast, verify_agent_core, verify_architecture, verify_full]
+    scanners: [mygui.architecture, mygui.qt-lifecycle]
+    focused_tests:
+      - tests.test_agent_engineering
+    documentation: []
+    manual_smoke: false

@@ -7,8 +7,10 @@ Core. It does not redefine application architecture or Scanner rules.
 
 1. Read root `AGENTS.md` and preserve all applicable global invariants.
 2. Classify the request with `.agents/task-map.yaml`.
-3. Read every matching `SKILL.md` and its routed architecture pages before
-   implementation. Use the union when more than one task route applies.
+3. Read every matching `SKILL.md`, every routed architecture page, and the
+   catalog source of each materially touched CORE rule before implementation.
+   Use the union when more than one task route applies; do not reconstruct a
+   route from prose elsewhere.
 4. Obtain each required ScannerResult from the read-only DSH Worker or the
    deterministic Scanner CLI. Validate `contractVersion: 2`; preserve findings,
    errors, coverage, and gray boundaries without rewriting Scanner logic.

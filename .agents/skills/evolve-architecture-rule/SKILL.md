@@ -12,6 +12,7 @@ not generalize one incident without repository evidence.
 Reproduce the candidate, identify its authoritative owner, and classify it as
 not a risk, a new invariant, or insufficient evidence. Dismissals require an
 explicit rationale plus a negative fixture. Promotions require a stable rule
-ID, architecture update, global `AGENTS.md` update only when applicable,
-Scanner implementation, positive/negative fixtures, catalog entry, and shared
-check coverage. Unexplained allowlists are forbidden.
+ID, authoritative architecture source, Scanner implementation,
+positive/negative fixtures, catalog entry, and shared check coverage. Update
+root `AGENTS.md` only for a global CORE index/summary or Scanner-dependent
+clause. Unexplained allowlists are forbidden.

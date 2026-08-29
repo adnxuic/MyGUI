@@ -153,6 +153,11 @@ Matplotlib global configuration directly", or "Matplotlib configuration
 mutation must go through TexConfigService / RenderingService / Controller /
 equivalent owner").
 
+The compact root contract intentionally retains that explicit prohibition.
+`architecture-rules.test.ts` reads the real root `AGENTS.md` and locks both the
+positive escalation and the Artist-only negative case, so instruction
+refactors cannot silently change Scanner severity.
+
 Registry metadata: the scanner declares `capabilities` —
 `ui_artist_mutation`, `ui_matplotlib_global_state_mutation`,
 `matplotlib_rcparams_mutation`, `rendering_configuration_ownership`,

@@ -5,6 +5,18 @@ signals, background work, Text rendering, or GUI regression diagnosis.
 
 ## Matplotlib
 
+`CORE-MATPLOTLIB-BOUNDARY` makes
+`mygui.figuremodify.matplotlib_adapter` the sole boundary for global style
+contexts and catalogs. Presentation/UI code must not mutate Matplotlib
+process-global configuration or rcParams directly; those changes use the
+declared configuration owners.
+
+`CORE-MATPLOTLIB-BOUNDARY` makes
+`mygui.figuremodify.matplotlib_adapter` the sole boundary for global style
+contexts and catalogs. Presentation/UI code must not mutate Matplotlib
+process-global configuration or rcParams directly; those changes use the
+declared configuration owners.
+
 Presentation code under `mygui/widgets/fig_control_window/`, `title_bar/`,
 `component_tree/`, and `bottom_bar/` must use Controllers, Services, Canvas
 capability queries, and immutable adapter catalogs. It must not import
@@ -39,6 +51,16 @@ calls or indirect Matplotlib global-state candidates are gray boundaries, not
 silent clean results.
 
 ## Text and diagnostics
+
+`CORE-TEX-OWNER` makes `mygui.tex_config` the sole writer of TeX rcParams. TeX
+starts disabled and is enabled only after validation. `CORE-FONT-DIAGNOSTICS`
+makes `mygui.font_diagnostics` the sole bridge for Matplotlib missing-glyph and
+DirectWrite diagnostics; install it after `QApplication` and before widgets.
+
+`CORE-TEX-OWNER` makes `mygui.tex_config` the sole writer of TeX rcParams. TeX
+starts disabled and is enabled only after validation. `CORE-FONT-DIAGNOSTICS`
+makes `mygui.font_diagnostics` the sole bridge for Matplotlib missing-glyph and
+DirectWrite diagnostics; install it after `QApplication` and before widgets.
 
 Render-sensitive Text edits go through `TextRenderService`; one logical
 multi-target edit uses `apply_many()`. Legend remains on `LegendController` and

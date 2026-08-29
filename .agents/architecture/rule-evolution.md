@@ -9,9 +9,10 @@ preferences.
 3. Classify it as `not_a_risk`, `new_invariant`, or `insufficient_evidence`.
 4. For `not_a_risk`, record the rationale in the scanner fixture/test and keep
    an explicit negative example; do not add an unexplained allowlist.
-5. For `new_invariant`, allocate a stable rule ID, update the relevant
-   architecture page, update `AGENTS.md` only if repository-global, implement
-   the Scanner rule, and add positive and negative fixtures.
+5. For `new_invariant`, allocate a stable rule ID, update the authoritative
+   architecture source, implement the Scanner rule, and add positive and
+   negative fixtures. Update root `AGENTS.md` only for a global CORE
+   index/summary or a Scanner-dependent root clause.
 6. Update `rule-catalog.yaml`, task routing, shared checks, and documentation
    ownership in the same change.
 7. Run `verify_agent_core` and `verify_architecture`; an architecture-audit
