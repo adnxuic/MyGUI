@@ -126,6 +126,23 @@ class Field2DRemovalHandle:
 
 
 @dataclass(slots=True)
+class ErrorBarRemovalHandle:
+    """Pinned Error Bar container, artists, and owner-list locations."""
+
+    runtime: Any
+    container: Any
+    container_owner: list[Any]
+    container_index: int
+    artist_handles: tuple[RemovalHandle, ...]
+    subject: Axes | Figure | None
+    detached: bool = False
+
+    @property
+    def target(self) -> Any:
+        return self.runtime
+
+
+@dataclass(slots=True)
 class AxesSubtreeRemovalHandle:
     """Compose an owner Axes removal with external Colorbar auxiliary Axes."""
 
@@ -416,6 +433,37 @@ class MatplotlibRemovalAdapter:
         )
         return Field2DRemovalHandle(runtime=runtime, artist_handles=handles)
 
+    @staticmethod
+    def prepare_errorbar(runtime: Any) -> ErrorBarRemovalHandle:
+        """Capture one Error Bar container plus every owned artist."""
+
+        axes = getattr(runtime, "axes", None)
+        if not isinstance(axes, Axes):
+            raise ComponentValidationError(
+                "Error Bar runtime is not attached to an Axes."
+            )
+        container = getattr(runtime, "container", None)
+        owner = getattr(axes, "containers", None)
+        if container is None or not isinstance(owner, list) or container not in owner:
+            raise ComponentValidationError(
+                "Error Bar container is detached from its Axes."
+            )
+        handles = tuple(
+            MatplotlibRemovalAdapter.prepare_artist(
+                artist,
+                subject=axes,
+            )
+            for artist in tuple(runtime.iter_artists())
+        )
+        return ErrorBarRemovalHandle(
+            runtime=runtime,
+            container=container,
+            container_owner=owner,
+            container_index=owner.index(container),
+            artist_handles=handles,
+            subject=axes,
+        )
+
     def commit(self, handle) -> None:
         if handle.detached:
             return
@@ -425,6 +473,14 @@ class MatplotlibRemovalAdapter:
                 try:
                     for artist_handle in handle.artist_handles:
                         self.commit(artist_handle)
+                except Exception:
+                    self.force_restore(handle)
+                    raise
+            elif isinstance(handle, ErrorBarRemovalHandle):
+                try:
+                    for artist_handle in handle.artist_handles:
+                        self.commit(artist_handle)
+                    handle.container_owner.remove(handle.container)
                 except Exception:
                     self.force_restore(handle)
                     raise
@@ -491,6 +547,19 @@ class MatplotlibRemovalAdapter:
         if isinstance(handle, Field2DRemovalHandle):
             for artist_handle in reversed(handle.artist_handles):
                 MatplotlibRemovalAdapter.force_restore(artist_handle)
+            handle.detached = False
+            return
+        if isinstance(handle, ErrorBarRemovalHandle):
+            for artist_handle in sorted(
+                handle.artist_handles,
+                key=lambda item: item.index,
+            ):
+                MatplotlibRemovalAdapter.force_restore(artist_handle)
+            if handle.container not in handle.container_owner:
+                handle.container_owner.insert(
+                    min(handle.container_index, len(handle.container_owner)),
+                    handle.container,
+                )
             handle.detached = False
             return
         if isinstance(handle, AxesSubtreeRemovalHandle):
@@ -587,6 +656,10 @@ class MatplotlibRemovalAdapter:
     @staticmethod
     def finalize(handle) -> None:
         if isinstance(handle, Field2DRemovalHandle):
+            for artist_handle in handle.artist_handles:
+                MatplotlibRemovalAdapter.finalize(artist_handle)
+            return
+        if isinstance(handle, ErrorBarRemovalHandle):
             for artist_handle in handle.artist_handles:
                 MatplotlibRemovalAdapter.finalize(artist_handle)
             return

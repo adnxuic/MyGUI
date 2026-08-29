@@ -26,7 +26,11 @@ class TemplateAxesAutoscaleService:
             axes = controller.resolve_target()
             if not axes.has_data():
                 continue
-            axes.relim()
+            from mygui.figuremodify.matplotlib_adapter import (
+                relim_with_errorbars,
+            )
+
+            relim_with_errorbars(axes)
             for collection in axes.collections:
                 try:
                     axes.update_datalim(collection.get_datalim(axes.transData))

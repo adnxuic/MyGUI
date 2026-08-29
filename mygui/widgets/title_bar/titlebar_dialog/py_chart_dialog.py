@@ -977,10 +977,17 @@ class PyContourDialog(_Field2DDialog):
         return properties
 
 
+# The Error Bar dialog reuses this module's frozen-plan helpers; import it
+# after they are defined so the package cycle stays one-directional at load.
+from mygui.widgets.title_bar.titlebar_dialog.py_errorbar_dialog import (
+    PyErrorBarDialog,
+)
+
 chart_dialog_dict = {
     'curve': PyCurveDialog,
     'plot': PyPlotDialog,
     'scatter': PyScatterDialog,
+    'errorbar': PyErrorBarDialog,
     'pseudocolor': PyPseudocolorDialog,
     'heatmap': PyHeatmapDialog,
     'contour': PyContourDialog,

@@ -61,6 +61,9 @@ class ComponentDependencyService:
                 refs.add(_column_ref(state.data[key]))
             except (KeyError, ValueError, TypeError):
                 continue
+        for key in ("xerr", "yerr"):
+            for ref in ComponentDependencyService._nested_refs(state.data.get(key)):
+                refs.add(ref)
         placement = state.data.get("placement")
         if not isinstance(placement, dict):
             return refs
@@ -75,6 +78,29 @@ class ComponentDependencyService:
                 refs.add(_column_ref(item))
             except (TypeError, ValueError):
                 continue
+        return refs
+
+    @staticmethod
+    def _nested_refs(value: Any) -> list[ColumnRef]:
+        """Recursively collect column references inside one data value.
+
+        Error Bar error specs embed their column references one or two levels
+        deep, so the generic recursion keeps cascade deletion aligned with
+        any closed nested shape instead of hard-coding spec keys.
+        """
+
+        refs: list[ColumnRef] = []
+        if isinstance(value, dict):
+            try:
+                refs.append(_column_ref(value))
+                return refs
+            except (TypeError, ValueError):
+                pass
+            for item in value.values():
+                refs.extend(ComponentDependencyService._nested_refs(item))
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                refs.extend(ComponentDependencyService._nested_refs(item))
         return refs
 
     def dependent_states(

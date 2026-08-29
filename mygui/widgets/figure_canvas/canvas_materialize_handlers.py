@@ -42,6 +42,9 @@ class CanvasMaterializeHost(Protocol):
     def add_scatter(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
+    def add_errorbar(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
     def add_pseudocolor(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
@@ -94,6 +97,9 @@ class CanvasMaterializeHost(Protocol):
         ...
 
     def _materialize_scatter(self, state: Any, _transaction: Any) -> None:
+        ...
+
+    def _materialize_errorbar(self, state: Any, _transaction: Any) -> None:
         ...
 
     def _materialize_field_2d(self, state: Any, _transaction: Any) -> None:
@@ -290,6 +296,52 @@ def materialize_scatter(host: CanvasMaterializeHost, state, _transaction) -> Non
         ),
         color_mapping=state.properties["color_mapping"],
         size_mapping=state.properties["size_mapping"],
+    )
+
+
+def materialize_errorbar(host: CanvasMaterializeHost, state, _transaction) -> None:
+    if (
+        state.kind is not ComponentKind.ERRORBAR
+        or state.role is not ComponentRole.ERROR_BAR
+    ):
+        raise ValueError("Error Bar materializer requires an Error Bar state.")
+    x_ref, y_ref, preprocess, _pair = materializer_pair(
+        host,
+        state,
+        preserve_gaps=False,
+    )
+    properties = state.properties
+    host.add_errorbar(
+        x_ref,
+        y_ref,
+        properties.get("label", ""),
+        xerr=state.data.get("xerr"),
+        yerr=state.data.get("yerr"),
+        preprocess=preprocess,
+        object_id=state.id,
+        color_order=state.order,
+        color=properties.get("color", "black"),
+        linestyle=properties.get("linestyle"),
+        linewidth=properties.get("linewidth"),
+        marker=properties.get("marker"),
+        markersize=properties.get("markersize"),
+        markeredgewidth=properties.get("markeredgewidth"),
+        markerfacecoloralt=properties.get("markerfacecoloralt"),
+        fillstyle=properties.get("fillstyle"),
+        drawstyle=properties.get("drawstyle"),
+        antialiased=properties.get("antialiased"),
+        ecolor=properties.get("ecolor"),
+        elinewidth=properties.get("elinewidth"),
+        capsize=properties.get("capsize"),
+        capthick=properties.get("capthick"),
+        error_linestyle=properties.get("error_linestyle"),
+        error_capstyle=properties.get("error_capstyle"),
+        error_antialiased=properties.get("error_antialiased"),
+        errorevery=properties.get("errorevery"),
+        lolims=properties.get("lolims"),
+        uplims=properties.get("uplims"),
+        xlolims=properties.get("xlolims"),
+        xuplims=properties.get("xuplims"),
     )
 
 
@@ -516,6 +568,13 @@ def register_canvas_materializers(host: CanvasMaterializeHost, expected_phases) 
             host._materialize_scatter,
             expected_phases[
                 (ComponentKind.SCATTER, ComponentRole.SCATTER)
+            ],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.ERRORBAR, ComponentRole.ERROR_BAR),
+            host._materialize_errorbar,
+            expected_phases[
+                (ComponentKind.ERRORBAR, ComponentRole.ERROR_BAR)
             ],
         ),
         ComponentMaterializer(

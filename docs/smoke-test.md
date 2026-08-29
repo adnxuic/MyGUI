@@ -7,7 +7,7 @@ Run these checks from the repository root after GUI-facing changes.
 A code-driven Windows walk opens the real MainWindow, clicks controls, and
 writes PNG evidence plus `summary.json`. Groups are selected with `--only`.
 The walk covers Settings Center (including Templates), NEXT_USE creation
-defaults, Chart Templates extract/apply, 1D charts, Field 2D, Elements, all 31
+defaults, Chart Templates extract/apply, 1D charts including Error Bar, Field 2D, Elements, all 32
 Inspector profiles, layout templates, XRD import, deletion/history, and
 project save/restore, export, and Canvas popout. Native file dialogs, drag and
 drop, multi-monitor DPI, and live TeX/MATLAB remain on the interactive checks

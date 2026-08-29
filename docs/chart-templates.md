@@ -4,6 +4,10 @@ Chart templates reproduce a complete Figure with new data from the same kind
 of instrument or workflow. A template keeps layout, Axes, charts, elements,
 styles, data bindings, preprocessing, and Fit configuration. Applying one
 always creates a new project; it never replaces the current project.
+Current files use strict `mygui-template` schema v5 with a schema-v21 Figure
+blueprint. Strict v4 files migrate by injecting the deterministic Error Bar
+line, marker, error-style, sampling, and limit-arrow defaults; malformed v4
+records are rejected before a project is staged.
 
 ## Extract a template
 
@@ -97,7 +101,7 @@ materializers and services.
 
 All component, layout, shared-axis, Colorbar-source, Sheet, column, project,
 and data-reference IDs are regenerated. Dynamic text and Fit results (filtered with the saved `fit_input_range` specification) are
-inserted into a complete schema-v19 project snapshot, which is strictly
+inserted into a complete schema-v21 project snapshot, which is strictly
 validated before it reaches the shared Repository/Canvas restore transaction.
 On success the new project is selected, has no file path, has an empty Undo
 stack, and is dirty. On failure no project, tab, Inspector, tree entry, Fit
@@ -119,7 +123,7 @@ The independent root format is:
 ```json
 {
   "schema": "mygui-template",
-  "schema_version": 3,
+  "schema_version": 5,
   "metadata": {},
   "data_contract": {},
   "figure": {}

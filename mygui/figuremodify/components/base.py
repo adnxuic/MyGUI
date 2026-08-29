@@ -144,7 +144,11 @@ def apply_update_impacts(
     figure: Figure
     if isinstance(subject, Axes):
         if UpdateImpact.RELIM in impacts:
-            subject.relim()
+            from mygui.figuremodify.matplotlib_adapter import (
+                relim_with_errorbars,
+            )
+
+            relim_with_errorbars(subject)
         if UpdateImpact.AUTOSCALE in impacts and subject.has_data():
             subject.autoscale_view()
             from mygui.figuremodify.x_axis_tight import apply_tight_xlim

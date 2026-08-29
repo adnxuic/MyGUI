@@ -17,11 +17,16 @@ from mygui.database.table_document import new_id
 from mygui.figuremodify.components import (
     ComponentRole,
     DataPlotController,
+    ErrorBarData,
+    ErrorBarController,
     InterpolationController,
     ScatterController,
 )
 from mygui.figuremodify.matplotlib_adapter import matplotlib_style_context
 from mygui.figuremodify.style_base.color_models import ColorSelection
+from mygui.figuremodify.style_base.creation_preferences import (
+    ResolvedErrorBarAppearance,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +47,23 @@ class PreparedChartSeries:
     y: Any
     label: str
     color: str
+    excluded_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedErrorBarSeries:
+    """Already-resolved Error Bar data plus specs for one creation."""
+
+    x_ref: ColumnRef
+    y_ref: ColumnRef
+    x: Any
+    y: Any
+    xerr: Any
+    yerr: Any
+    label: str
+    xerr_spec: dict[str, Any]
+    yerr_spec: dict[str, Any]
+    preprocess: DataPreprocessSpec
     excluded_count: int
 
 
@@ -93,6 +115,68 @@ class ChartCreationStager:
 
     def __init__(self, host: ChartCreationHost) -> None:
         self._host = host
+
+    def stage_errorbar(
+        self,
+        transaction,
+        series: PreparedErrorBarSeries,
+        *,
+        appearance: ResolvedErrorBarAppearance,
+        object_id: str | None = None,
+        color_order: int | None = None,
+    ):
+        """Create one Error Bar runtime and register its Controller."""
+
+        from mygui.figuremodify.component_services import (
+            ErrorBarRuntime,
+            create_errorbar_container,
+            errorbar_properties_from_appearance,
+        )
+
+        host = self._host
+        object_id = object_id or new_id()
+        properties = errorbar_properties_from_appearance(
+            appearance,
+            label=series.label,
+        )
+        drawable = ErrorBarData(
+            series.x,
+            series.y,
+            series.xerr,
+            series.yerr,
+        )
+        axes = host.current_axes
+        if axes is None:
+            raise ValueError("Select an axes before adding a chart.")
+        with matplotlib_style_context(host.component_style):
+            container = create_errorbar_container(axes, drawable, properties)
+        runtime = ErrorBarRuntime(
+            axes,
+            container,
+            data=drawable,
+            properties=properties,
+        )
+        transaction.on_rollback(
+            lambda target=runtime: host.errorbar_service.destroy_runtime(target)
+        )
+        component_order = host._claim_color_order(color_order)
+        controller = host._register_chart_controller(
+            ErrorBarController,
+            object_id,
+            ComponentRole.ERROR_BAR,
+            runtime,
+            component_order,
+            properties,
+            {
+                "x_ref": series.x_ref.to_dict(),
+                "y_ref": series.y_ref.to_dict(),
+                "xerr": deepcopy(series.xerr_spec),
+                "yerr": deepcopy(series.yerr_spec),
+                "preprocess": series.preprocess.to_dict(),
+            },
+        )
+        host._prepare_created_component(controller, transaction)
+        return runtime, controller
 
     def normalize_batch_refs(
         self,

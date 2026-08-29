@@ -42,6 +42,7 @@ class DataReferenceInput(QFrame):
         self.repository = repository
         self.project_id = project_id
         self._disposed = False
+        self._initialized = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -125,6 +126,17 @@ class DataReferenceInput(QFrame):
             )
         self._populate(self.x_data_input, x_refs, current_x)
         self._populate(self.y_data_input, y_refs, current_y)
+        if not self._initialized:
+            selected_x = self.get_x_ref()
+            selected_y = self.get_y_ref()
+            if selected_x is not None and selected_y == selected_x:
+                distinct_y = next(
+                    (ref for ref in y_refs if ref != selected_x),
+                    None,
+                )
+                if distinct_y is not None:
+                    self.set_y_ref(distinct_y)
+            self._initialized = bool(x_refs or y_refs)
 
     def _populate(
         self,

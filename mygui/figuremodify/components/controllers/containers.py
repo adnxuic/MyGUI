@@ -553,6 +553,34 @@ class AxesController(ContainerController):
             return
         super()._write_property(target, spec, value)
 
+    def _request_updates(
+        self, impacts: UpdateImpact, target: Any | None = None
+    ) -> None:
+        super()._request_updates(impacts, target)
+        self._refresh_child_errorbar_limit_arrows()
+
+    def _refresh_child_errorbar_limit_arrows(self) -> None:
+        """Refresh child Error Bar limit arrows after Axes updates.
+
+        Matplotlib 3.9 chooses the limit-arrow caret direction from the axis
+        inversion state at container creation time, so flipping an Axes
+        direction would leave already-drawn arrows pointing the wrong way.
+        Each Error Bar runtime compares its build-time direction snapshot
+        against the live Axes and only rebuilds when limit arrows are active
+        and a flip actually happened.
+        """
+
+        if self._registry is None:
+            return
+        try:
+            for controller in self._registry.query(
+                kind=ComponentKind.ERRORBAR,
+                parent_id=self.component_id,
+            ):
+                controller.refresh_limit_arrows()
+        except Exception:
+            return
+
     def _replacement_impacts(
         self,
         impacts: UpdateImpact,

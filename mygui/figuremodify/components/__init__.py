@@ -14,6 +14,7 @@ from .controllers import (
     ContourController,
     DataPlotController,
     FigureController,
+    ErrorBarController,
     Field2DController,
     FitCurveController,
     FunctionCurveController,
@@ -53,6 +54,7 @@ from .controllers import (
 from .matplotlib_removal import (
     AxesSubtreeRemovalHandle,
     ColorbarRemovalHandle,
+    ErrorBarRemovalHandle,
     Field2DRemovalHandle,
 )
 from .errors import (
@@ -82,6 +84,8 @@ from .models import (
     ComponentState,
     DeletionPolicy,
     EditorKind,
+    ErrorBarData,
+    ErrorBarRuntimeSnapshot,
     FitEngine,
     KEEP_RUNTIME_DATA,
     MessageLevel,
@@ -134,6 +138,10 @@ __all__ = [
     "ContainerController",
     "ContourController",
     "DataPlotController",
+    "ErrorBarController",
+    "ErrorBarData",
+    "ErrorBarRemovalHandle",
+    "ErrorBarRuntimeSnapshot",
     "Field2DController",
     "Field2DData",
     "Field2DRemovalHandle",

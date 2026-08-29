@@ -1239,7 +1239,11 @@ class ScatterController(CollectionController):
         collection = target if target is not None else self.resolve_target()
         axes = getattr(collection, "axes", None)
         if UpdateImpact.RELIM in impacts and isinstance(axes, Axes):
-            axes.relim()
+            from mygui.figuremodify.matplotlib_adapter import (
+                relim_with_errorbars,
+            )
+
+            relim_with_errorbars(axes)
             if len(collection.get_offsets()):
                 axes.update_datalim(collection.get_datalim(axes.transData))
             impacts &= ~UpdateImpact.RELIM

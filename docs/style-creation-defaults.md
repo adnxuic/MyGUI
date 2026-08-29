@@ -26,6 +26,7 @@ schema-v17 properties and do not read Components or Axes Components settings.
 | Scatter | marker, size, line width, chart color; mapped/XRD explicit fields still win |
 | Fit | line style, line width, marker, marker size, marker edge width, chart color |
 | Interpolation | line style, line width, marker, marker size, marker edge width, chart color |
+| Error Bar | Shared Line appearance fields (line style, line width, marker, marker size, marker edge width, chart color; marker face and edge follow the resolved color), plus style-probed draw/fill/antialias and error line/cap fields. The dialog can explicitly override error color, sampling, limit arrows, and `barsabove`. |
 | Text | font family, font size, color, weight, and style (free Text only) |
 | Annotation | Text font family, size, color, weight, and style; arrow color follows text color and arrow width follows Line width; does not consume the chart color sequence |
 | Ordinary Axes | facecolor, frameon, axisbelow, four spines, X/Y major/minor ticks, tick labels, and grid |
@@ -35,7 +36,8 @@ schema-v17 properties and do not read Components or Axes Components settings.
 | Reference Band | Reference Marks color for its face and edge plus tick-line width; does not consume the chart color sequence |
 
 Settings → Components does not cover Annotation, In-Axes, Reference Marks/Line/Band,
-Colorbar, Title, or axis labels. Settings → Axes Components covers later
+Error Bar error-dimension fields, Colorbar, Title, or axis labels. Error Bar
+reuses the Line Components `NEXT_USE` values for its line and marker fields. Settings → Axes Components covers later
 ordinary Axes (main, shared, right Y, and XRD layout Axes) only. It does not
 cover Colorbar auxiliary Axes, In-Axes, restore, or history replay. Title,
 Axis Label, Legend, limits, scale, locator, formatter, aspect, and margins
@@ -103,7 +105,7 @@ palette. A Figure style change alone does not recolor existing components.
 - Figure `properties.style` stores the selected Matplotlib style.
 - Axes `properties.color_cycle` stores the active palette snapshot and
   `next_index` after the first successful palette-backed creation.
-- Line, Scatter, and Text components store their resolved concrete visual
+- Line, Scatter, Error Bar, and Text components store their resolved concrete visual
   properties.
 - Annotation stores its resolved Text/Line-derived appearance without reading
   Components Settings and without changing the Axes chart-color cursor.

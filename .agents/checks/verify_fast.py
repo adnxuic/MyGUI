@@ -22,6 +22,7 @@ _ISOLATED_FOCUSED_MODULES = frozenset({
     "tests.test_application_theme_chrome",
     "tests.test_application_theme_qss",
     "tests.test_field_2d_component",
+    "tests.test_errorbar_component",
 })
 
 

@@ -7,7 +7,7 @@ material, not user documentation.
 
 Preserve `CORE-APPLICATION-SETTINGS`. Application settings are not Figure
 component state. Do not route a setting-key change through `schema-migration`
-or write keys into schema v19.
+or write keys into schema v21.
 
 ## Authority
 
@@ -26,7 +26,7 @@ sibling document on the same backend, not a field of
 
 These values never enter:
 
-- integer schema-v19 project files
+- integer schema-v21 project files
 - the per-project `QUndoStack` / `FigureHistoryService`
 - project dirty fingerprints
 - `ComponentState`
@@ -236,7 +236,7 @@ fallbacks in `resolve_axes_appearance()`; Settings/UI must not import
 Matplotlib. Creation dialogs freeze one snapshot in `__init__` and ignore
 later Apply until a new dialog opens. `AxesLayoutService.create()` accepts
 that frozen `ResolvedAxesAppearance` or reads the provider once at the start
-of a programmatic create. `load_project_figure_snapshot`, schema-v19 open,
+of a programmatic create. `load_project_figure_snapshot`, schema-v21 open,
 materializers, Undo/Redo replay, layout geometry updates, Colorbar auxiliary
 Axes, In-Axes, `add_component_line`, and Reference Guide restore never
 call `ComponentDefaultsProvider`. `ChartCreationStager` receives resolved
@@ -248,8 +248,8 @@ project history. Components and Axes Components keys use
 `{"kind": "inherit"|"override", "value": ...}`; inherit still stores the last
 custom value. Envelope `schema_version` stays `1`: a missing `components`
 or `components.axes` section loads as all inherit; same-version unknown
-fields stay `READ_ONLY_FUTURE`. Do not put these keys in schema v19 or
-`docs/component-properties-v19.md`. Title, Axis Label, Legend, limits, scale,
+fields stay `READ_ONLY_FUTURE`. Do not put these keys in schema v21 or
+`docs/component-properties-v21.md`. Title, Axis Label, Legend, limits, scale,
 locator, formatter, aspect, and margins are not Axes Components defaults; a
 later Axes Inspector property must decide whether it also joins that page.
 `ARCH-COMPONENT-DEFAULTS-BYPASS` remains
@@ -363,7 +363,7 @@ invariants when touching QSettings or chrome publishers.
   snapshot.
 - Runtime tests cover apply success, apply failure rollback, and rollback
   failure without a fake success.
-- Isolation tests prove settings are absent from schema v19, Undo/Redo, dirty
+- Isolation tests prove settings are absent from schema v21, Undo/Redo, dirty
   fingerprints, `ComponentState`, and Canvas snapshots.
 - Color-library write failure leaves memory, `changed`, and project color
   cycles unchanged. Reset-all leaves the library intact.

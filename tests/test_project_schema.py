@@ -374,14 +374,14 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "fontfamily"):
                     validate_project_snapshot(candidate)
 
-    def test_only_exact_integer_v10_through_v19_are_accepted(self):
+    def test_only_exact_integer_v10_through_v21_are_accepted(self):
         current = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for version in (
                 4,
                 9,
-                20,
+                22,
                 True,
                 14.0,
                 15.0,
@@ -404,7 +404,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 19)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 21)
 
     def test_schema_v15_axes_reserve_and_v14_migration_defaults(self):
         current = self.snapshot()

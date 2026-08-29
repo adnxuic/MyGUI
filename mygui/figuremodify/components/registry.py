@@ -46,7 +46,12 @@ _STANDARD_SPINES = frozenset({"left", "right", "bottom", "top"})
 _AXIS_NAMES = frozenset({"x", "y"})
 _TICK_LEVELS = frozenset({"major", "minor"})
 _CHART_KINDS = frozenset(
-    {ComponentKind.LINE, ComponentKind.SCATTER, ComponentKind.FIELD_2D}
+    {
+        ComponentKind.LINE,
+        ComponentKind.SCATTER,
+        ComponentKind.ERRORBAR,
+        ComponentKind.FIELD_2D,
+    }
 )
 LOGGER = logging.getLogger(__name__)
 

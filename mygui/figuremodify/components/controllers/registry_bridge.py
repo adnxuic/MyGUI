@@ -31,6 +31,7 @@ from .collections import (
     ScatterController,
 )
 from .containers import AxesController, FigureController
+from .errorbar import ErrorBarController
 from .field_2d import (
     ContourController,
     HeatmapController,
@@ -86,6 +87,7 @@ CONTROLLER_TYPES: dict[
         ComponentRole.INTERPOLATION,
     ): InterpolationController,
     (ComponentKind.SCATTER, ComponentRole.SCATTER): ScatterController,
+    (ComponentKind.ERRORBAR, ComponentRole.ERROR_BAR): ErrorBarController,
     (
         ComponentKind.FIELD_2D,
         ComponentRole.PSEUDOCOLOR,

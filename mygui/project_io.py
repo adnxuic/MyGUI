@@ -1,4 +1,4 @@
-"""Validate, migrate, save, and load strict schema-v19 project snapshots."""
+"""Validate, migrate, save, and load strict schema-v21 project snapshots."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.components.serialization import (
-    normalize_v19_figure,
+    normalize_v21_figure,
     validate_v10_figure,
     validate_v11_figure,
     validate_v12_figure,
@@ -25,12 +25,16 @@ from mygui.figuremodify.components.serialization import (
     validate_v17_figure,
     validate_v18_figure,
     validate_v19_figure,
+    validate_v20_figure,
+    validate_v21_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 19
+PROJECT_SCHEMA_VERSION = 21
+SCHEMA_V20_VERSION = 20
+SCHEMA_V19_VERSION = 19
 SCHEMA_V18_VERSION = 18
 SCHEMA_V17_VERSION = 17
 SCHEMA_V16_VERSION = 16
@@ -193,11 +197,31 @@ def _validate_project_snapshot_version(
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
-    """Validate one exact current schema-v19 project snapshot."""
+    """Validate one exact current schema-v21 project snapshot."""
 
     _validate_project_snapshot_version(
         snapshot,
         version=PROJECT_SCHEMA_VERSION,
+        figure_validator=validate_v21_figure,
+    )
+
+
+def validate_v20_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate one exact predecessor schema-v20 project snapshot."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=SCHEMA_V20_VERSION,
+        figure_validator=validate_v20_figure,
+    )
+
+
+def validate_v19_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate one exact predecessor schema-v19 project snapshot."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=SCHEMA_V19_VERSION,
         figure_validator=validate_v19_figure,
     )
 
@@ -396,6 +420,50 @@ def migrate_v17_to_v18(snapshot: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def migrate_v19_to_v20(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Promote a strictly valid schema-v19 tree to schema v20 without rewrite."""
+
+    validate_v19_project_snapshot(snapshot)
+    migrated = deepcopy(snapshot)
+    migrated["schema_version"] = SCHEMA_V20_VERSION
+    validate_v20_project_snapshot(migrated)
+    return migrated
+
+
+ERROR_BAR_V21_MIGRATION_DEFAULTS: dict[str, Any] = {
+    "markeredgewidth": 1.0,
+    "markerfacecoloralt": "none",
+    "fillstyle": "full",
+    "drawstyle": "default",
+    "antialiased": True,
+    "error_linestyle": {"kind": "preset", "value": "-"},
+    "error_capstyle": None,
+    "error_antialiased": True,
+    "errorevery": {"kind": "all"},
+    "lolims": False,
+    "uplims": False,
+    "xlolims": False,
+    "xuplims": False,
+}
+
+
+def migrate_v20_to_v21(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Extend Error Bar properties with deterministic v21 defaults."""
+
+    validate_v20_project_snapshot(snapshot)
+    migrated = deepcopy(snapshot)
+    for component in migrated["figure"]["components"]:
+        if (
+            component.get("kind") == "errorbar"
+            and component.get("role") == "error_bar"
+        ):
+            properties = component.setdefault("properties", {})
+            properties.update(deepcopy(ERROR_BAR_V21_MIGRATION_DEFAULTS))
+    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
+    validate_project_snapshot(migrated)
+    return migrated
+
+
 def migrate_v18_to_v19(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Replace persisted Axes in-layout flags with v19 grid geometry."""
 
@@ -409,8 +477,8 @@ def migrate_v18_to_v19(snapshot: dict[str, Any]) -> dict[str, Any]:
             # never touches stable IDs, order, layouts, or sharing groups.
             data["geometry"] = grid_geometry_record()
             component.setdefault("properties", {}).pop("in_layout", None)
-    migrated["schema_version"] = PROJECT_SCHEMA_VERSION
-    validate_project_snapshot(migrated)
+    migrated["schema_version"] = SCHEMA_V19_VERSION
+    validate_v19_project_snapshot(migrated)
     return migrated
 
 
@@ -424,7 +492,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v19_figure(canvas.component_snapshot())
+    figure = normalize_v21_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -489,7 +557,7 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
             "must use exact integers."
         )
     if version == SCHEMA_V10_VERSION:
-        return migrate_v18_to_v19(
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
             migrate_v17_to_v18(
                 migrate_v16_to_v17(
                     migrate_v15_to_v16(
@@ -503,9 +571,9 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
                     )
                 )
             )
-        )
+        )))
     if version == SCHEMA_V11_VERSION:
-        return migrate_v18_to_v19(
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
             migrate_v17_to_v18(
                 migrate_v16_to_v17(
                     migrate_v15_to_v16(
@@ -517,9 +585,9 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
                     )
                 )
             )
-        )
+        )))
     if version == SCHEMA_V12_VERSION:
-        return migrate_v18_to_v19(
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
             migrate_v17_to_v18(
                 migrate_v16_to_v17(
                     migrate_v15_to_v16(
@@ -529,38 +597,43 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
                     )
                 )
             )
-        )
+        )))
     if version == SCHEMA_V13_VERSION:
-        return migrate_v18_to_v19(
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
             migrate_v17_to_v18(
                 migrate_v16_to_v17(
                     migrate_v15_to_v16(migrate_v14_to_v15(migrate_v13_to_v14(snapshot)))
                 )
             )
-        )
+        )))
     if version == SCHEMA_V14_VERSION:
-        return migrate_v18_to_v19(
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
             migrate_v17_to_v18(
                 migrate_v16_to_v17(migrate_v15_to_v16(migrate_v14_to_v15(snapshot)))
             )
-        )
+        )))
     if version == SCHEMA_V15_VERSION:
-        return migrate_v18_to_v19(
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
             migrate_v17_to_v18(migrate_v16_to_v17(migrate_v15_to_v16(snapshot)))
-        )
+        )))
     if version == SCHEMA_V16_VERSION:
-        return migrate_v18_to_v19(migrate_v17_to_v18(migrate_v16_to_v17(snapshot)))
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(migrate_v17_to_v18(migrate_v16_to_v17(snapshot)))))
     if version == SCHEMA_V17_VERSION:
-        return migrate_v18_to_v19(migrate_v17_to_v18(snapshot))
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(migrate_v17_to_v18(snapshot))))
+    if version == SCHEMA_V19_VERSION:
+        return migrate_v20_to_v21(migrate_v19_to_v20(snapshot))
+    if version == SCHEMA_V20_VERSION:
+        return migrate_v20_to_v21(snapshot)
     if version == SCHEMA_V18_VERSION:
-        return migrate_v18_to_v19(snapshot)
+        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(snapshot)))
     if version != PROJECT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported project schema version {version!r}; only schema "
-            f"v{PROJECT_SCHEMA_VERSION}, strict v18 migration, strict v17 "
-            "migration, strict v16 migration, strict v15 migration, strict "
-            "v14 migration, strict v13 migration, and chained strict "
-            "v10-v12 migration are supported."
+            f"v{PROJECT_SCHEMA_VERSION}, strict v20 migration, strict v19 "
+            "migration, strict v18 migration, strict v17 migration, strict "
+            "v16 migration, strict v15 migration, strict v14 migration, "
+            "strict v13 migration, and chained strict v10-v12 migration are "
+            "supported."
         )
     validate_project_snapshot(snapshot)
     return snapshot

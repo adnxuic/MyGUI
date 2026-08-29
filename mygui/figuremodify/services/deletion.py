@@ -288,6 +288,7 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
     ):
         handlers.register(ComponentKind.LINE, role, palette_leaf)
     handlers.register(ComponentKind.SCATTER, ComponentRole.SCATTER, palette_leaf)
+    handlers.register(ComponentKind.ERRORBAR, ComponentRole.ERROR_BAR, palette_leaf)
     field_leaf = DeletionHandler()
     for role in (
         ComponentRole.PSEUDOCOLOR,

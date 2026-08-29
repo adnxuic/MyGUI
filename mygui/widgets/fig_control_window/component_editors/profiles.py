@@ -32,6 +32,7 @@ from .sections import (
     AxesLimitsSection,
     ColorbarSourceSection,
     DataReferenceSection,
+    ErrorBarDataSection,
     Field2DDataSection,
     ImageInAxesSourceSection,
     LegendLocationSection,
@@ -909,6 +910,14 @@ LINE_PROFILES = {
 }
 
 
+def _errorbar_data(controller, context, parent):
+    return ErrorBarDataSection(
+        controller,
+        context=context,
+        parent=parent,
+    )
+
+
 SCATTER_PROFILE = EditorProfile(
     "scatter",
     "Scatter",
@@ -937,6 +946,109 @@ SCATTER_PROFILE = EditorProfile(
     tree=TreePresentationSpec(
         "Scatter", "Scatters", "scatter", _line_preview, 30,
         delete_label="Scatter",
+    ),
+)
+
+
+ERROR_BAR_PROFILE = EditorProfile(
+    "errorbar",
+    "Error Bar",
+    (
+        SectionSpec(
+            "data",
+            "Data",
+            _errorbar_data,
+            data_keys=("x_ref", "y_ref", "xerr", "yerr", "preprocess"),
+        ),
+        SectionSpec(
+            "line",
+            "Line",
+            _properties(
+                "label",
+                "color",
+                "linestyle",
+                "linewidth",
+                "drawstyle",
+                "antialiased",
+                "visible",
+            ),
+            property_keys=(
+                "label",
+                "color",
+                "linestyle",
+                "linewidth",
+                "drawstyle",
+                "antialiased",
+                "visible",
+            ),
+        ),
+        SectionSpec(
+            "marker",
+            "Marker",
+            _properties(
+                "marker",
+                "markersize",
+                "markerfacecolor",
+                "markeredgecolor",
+                "markeredgewidth",
+                "markerfacecoloralt",
+                "fillstyle",
+            ),
+            property_keys=(
+                "marker",
+                "markersize",
+                "markerfacecolor",
+                "markeredgecolor",
+                "markeredgewidth",
+                "markerfacecoloralt",
+                "fillstyle",
+            ),
+        ),
+        SectionSpec(
+            "error_bars",
+            "Error Bars",
+            _properties(
+                "ecolor",
+                "elinewidth",
+                "capsize",
+                "capthick",
+                "error_linestyle",
+                "error_capstyle",
+                "error_antialiased",
+                "errorevery",
+                "lolims",
+                "uplims",
+                "xlolims",
+                "xuplims",
+                "barsabove",
+            ),
+            property_keys=(
+                "ecolor",
+                "elinewidth",
+                "capsize",
+                "capthick",
+                "error_linestyle",
+                "error_capstyle",
+                "error_antialiased",
+                "errorevery",
+                "lolims",
+                "uplims",
+                "xlolims",
+                "xuplims",
+                "barsabove",
+            ),
+        ),
+        SectionSpec(
+            "advanced",
+            "Advanced",
+            _properties("alpha", "zorder", "clip_on"),
+            property_keys=("alpha", "zorder", "clip_on"),
+        ),
+    ),
+    placement=EditorPlacement.CHART,
+    tree=TreePresentationSpec(
+        "Error Bar", "Error Bars", "errorbar", _line_preview, 30,
+        delete_label="Error Bar",
     ),
 )
 
@@ -2035,6 +2147,11 @@ def register_production_profiles(editor_registry) -> None:
         ComponentKind.SCATTER,
         SCATTER_PROFILE,
         role=ComponentRole.SCATTER,
+    )
+    editor_registry.register_profile(
+        ComponentKind.ERRORBAR,
+        ERROR_BAR_PROFILE,
+        role=ComponentRole.ERROR_BAR,
     )
     editor_registry.register_profile(
         ComponentKind.FIELD_2D,

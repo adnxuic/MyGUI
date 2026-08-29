@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v19 Figure trees."""
+"""Normalize and validate strict schema-v10 through v21 Figure trees."""
 
 from __future__ import annotations
 
@@ -11,13 +11,23 @@ from uuid import NAMESPACE_URL, uuid5
 from mygui.database import ColumnRef, ColumnType, DataPreprocessSpec
 from mygui.figuremodify.style_base.color_models import normalize_color
 
-from .controllers import controller_type_for, decode_in_axes_image
+from .controllers import (
+    ERROR_BAR_V20_PROPERTY_KEYS,
+    ERROR_BAR_V21_DEFAULTS,
+    controller_type_for,
+    decode_in_axes_image,
+)
 from .errors import ComponentValidationError
 from .models import ComponentKind, ComponentRole, ComponentState
 
 
 _CHART_KINDS = frozenset(
-    {ComponentKind.LINE, ComponentKind.SCATTER, ComponentKind.FIELD_2D}
+    {
+        ComponentKind.LINE,
+        ComponentKind.SCATTER,
+        ComponentKind.ERRORBAR,
+        ComponentKind.FIELD_2D,
+    }
 )
 _DATA_ROLES = frozenset(
     {
@@ -25,6 +35,7 @@ _DATA_ROLES = frozenset(
         ComponentRole.FIT_CURVE,
         ComponentRole.INTERPOLATION,
         ComponentRole.SCATTER,
+        ComponentRole.ERROR_BAR,
     }
 )
 _SPINE_NAMES = frozenset({"left", "right", "bottom", "top"})
@@ -170,7 +181,19 @@ def normalize_v18_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v19_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v19 Figure component tree."""
+    """Normalize the predecessor schema-v19 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v20_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the predecessor schema-v20 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v21_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v21 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -345,6 +368,26 @@ def _validate_controller_contract(
                     "Reference Marks data requires positions, position_ref, "
                     "and placement."
                 )
+        if (
+            state.kind is ComponentKind.ERRORBAR
+            and schema_version < 21
+        ):
+            # Schema v20 pins the exact predecessor Error Bar property set;
+            # the live Controller contract already owns the extended v21 set,
+            # so the migration defaults below must come from the recorded
+            # constant, not from the Controller.
+            if set(state.properties) != ERROR_BAR_V20_PROPERTY_KEYS:
+                raise ComponentValidationError(
+                    "Schema v20 Error Bar properties must be exactly "
+                    f"{sorted(ERROR_BAR_V20_PROPERTY_KEYS)!r}."
+                )
+            state = state.clone(
+                properties={
+                    **state.properties,
+                    **deepcopy(ERROR_BAR_V21_DEFAULTS),
+                }
+            )
+            candidate = state
         actual = set(state.properties)
         if actual != expected:
             details = []
@@ -596,6 +639,20 @@ def _validate_data_references(
                     available_refs,
                     x_axis=False,
                 )
+    if state.role is ComponentRole.ERROR_BAR:
+        from .property_values import error_spec_references
+
+        for key in ("xerr", "yerr"):
+            for index, raw in enumerate(
+                error_spec_references(state.data.get(key))
+            ):
+                _validate_reference(
+                    raw,
+                    f"{path}.data.{key}[{index}]",
+                    project_id,
+                    available_refs,
+                    x_axis=False,
+                )
     try:
         preprocess = DataPreprocessSpec.from_dict(state.data.get("preprocess"))
         if available_refs[x_ref] is ColumnType.DATETIME:
@@ -837,6 +894,14 @@ def _validate_figure(
         ):
             raise ValueError(
                 f"Invalid project field {path}: Annotation is not part "
+                f"of schema v{schema_version}."
+            )
+        if (
+            schema_version < 20
+            and state.kind is ComponentKind.ERRORBAR
+        ):
+            raise ValueError(
+                f"Invalid project field {path}: Error Bar is not part "
                 f"of schema v{schema_version}."
             )
         if state.id in by_id:
@@ -1146,7 +1211,7 @@ def validate_v19_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v19 Figure component tree."""
+    """Validate the predecessor schema-v19 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -1154,4 +1219,38 @@ def validate_v19_figure(
         project_id,
         project_name,
         schema_version=19,
+    )
+
+
+def validate_v20_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the predecessor schema-v20 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=20,
+    )
+
+
+def validate_v21_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v21 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=21,
     )

@@ -89,7 +89,7 @@ the real MainWindow, clicks controls, and writes PNG plus `summary.json` under
 `layouts_xrd`, `deletion_history`, and `project_lifecycle`. Settings includes
 the Templates page (Restore disabled, isolated empty library). The templates
 group extracts, duplicates, and applies a chart template without native file
-dialogs. Inspectors walk all 31 production `(ComponentKind, ComponentRole)`
+dialogs. Inspectors walk all 32 production `(ComponentKind, ComponentRole)`
 profiles. Native file dialogs, drag/drop, multi-monitor DPI, and live
 TeX/MATLAB remain on the manual smoke page. It is **not** part of
 `APPLICATION_TEST_MODULES` or `verify_full`. Do not set

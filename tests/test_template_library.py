@@ -175,7 +175,7 @@ class TemplateFeatureTests(unittest.TestCase):
 
     def test_schema_is_closed_exact_and_rejects_nonfinite_and_unknown_tokens(self):
         raw = template_to_dict(self.template())
-        for version in (True, 1, 2, 4, 3.0, 0, -1):
+        for version in (True, 1, 2, 3, 4, 5.0, 0, -1):
             with self.subTest(version=version):
                 candidate = deepcopy(raw)
                 candidate["schema_version"] = version
@@ -351,7 +351,7 @@ class TemplateFeatureTests(unittest.TestCase):
                 comp["properties"]["in_layout"] = True
 
         migrated = parse_template_record(raw_v1)
-        self.assertEqual(template_to_dict(migrated)["schema_version"], 3)
+        self.assertEqual(template_to_dict(migrated)["schema_version"], 5)
         fit_v1 = next(
             c for c in migrated.figure["components"]
             if c.get("role") == "fit_curve"
@@ -372,13 +372,25 @@ class TemplateFeatureTests(unittest.TestCase):
                 comp["data"].pop("geometry", None)
                 comp["properties"]["in_layout"] = True
         migrated_v2 = parse_template_record(raw_v2)
-        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 3)
+        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 5)
         axes_v2 = next(
             c for c in migrated_v2.figure["components"]
             if c.get("kind") == "axes"
         )
         self.assertEqual(axes_v2["data"]["geometry"], {"mode": "grid"})
         self.assertNotIn("in_layout", axes_v2["properties"])
+
+        # Test v3 -> v4 -> v5 and direct v4 -> v5 migrations
+        raw_v3_direct = template_to_dict(template)
+        raw_v3_direct["schema_version"] = 3
+        migrated_v3 = parse_template_record(raw_v3_direct)
+        self.assertEqual(template_to_dict(migrated_v3)["schema_version"], 5)
+        self.assertEqual(migrated_v3.figure, template.figure)
+        raw_v4_direct = template_to_dict(template)
+        raw_v4_direct["schema_version"] = 4
+        migrated_v4 = parse_template_record(raw_v4_direct)
+        self.assertEqual(template_to_dict(migrated_v4)["schema_version"], 5)
+        self.assertEqual(migrated_v4.figure, template.figure)
 
         # Bounded fit input range in template
         fit_v3 = next(

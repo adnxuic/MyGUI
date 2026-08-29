@@ -140,6 +140,7 @@ APPLICATION_TEST_MODULES = {
     "test_py_figure_canvas": (ISOLATION_GUI_MODULE, 5.5),
     "test_project_metadata": (ISOLATION_GUI_MODULE, 0.5),
     "test_template_library": (ISOLATION_GUI_MODULE, 15.0),
+    "test_errorbar_component": (ISOLATION_GUI_MODULE, 40.0),
 }
 
 GUI_SENSITIVE_TEST_MODULES = frozenset(
@@ -1109,7 +1110,7 @@ def main() -> int:
     result = task_result(
         f"full:{args.profile}", verification,
         architecture_impact="Shared Agent Engineering and application gates executed.",
-        persistence_impact="MyGUI schema-v19 behavior and predecessor migrations are verified.",
+        persistence_impact="MyGUI schema-v21 behavior and predecessor migrations are verified.",
     )
     return finish(result, args.json_out, f"full-{args.profile}")
 

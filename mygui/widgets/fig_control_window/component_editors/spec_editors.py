@@ -36,6 +36,7 @@ from mygui.figuremodify.components.property_values import (
     normalize_connector,
     normalize_contour_label_spec,
     normalize_contour_levels_spec,
+    normalize_error_every,
     normalize_figure_layout,
     normalize_font,
     normalize_formatter,
@@ -252,6 +253,14 @@ _MARKEVERY_FIELDS = {
     "spacing": (
         _Field("start", "Start offset", "number", 0.0),
         _Field("distance", "Display distance", "number", 0.1),
+    ),
+}
+
+_ERROR_EVERY_FIELDS = {
+    "all": (),
+    "stride": (
+        _Field("start", "First error point", "int", 0),
+        _Field("step", "Every N points", "int", 1),
     ),
 }
 
@@ -813,6 +822,33 @@ class MarkEveryEditor(_StructuredValueEditor):
         if kind == "indices":
             return f"{len(value['values'])} selected points"
         return f"Every {float(value['distance']):g} of display width"
+
+
+class ErrorEveryEditor(_StructuredValueEditor):
+    """Edit the closed all/stride Error Bar sampling specification."""
+
+    def __init__(self, value: Any, parent=None):
+        super().__init__(
+            value,
+            title="error points",
+            normalizer=normalize_error_every,
+            parent=parent,
+        )
+
+    def _dialog(self) -> _TaggedSpecDialog:
+        return _TaggedSpecDialog(
+            "Error points",
+            self.value(),
+            _ERROR_EVERY_FIELDS,
+            normalize_error_every,
+            self,
+            flat=True,
+        )
+
+    def _summary_text(self, value: Any) -> str:
+        if value["kind"] == "all":
+            return "Every point"
+        return f"Every {value['step']} points from {value['start']}"
 
 
 class NormSpecEditor(_StructuredValueEditor):
@@ -1814,6 +1850,7 @@ __all__ = [
     "ColorMapSpecEditor",
     "ContourLabelSpecEditor",
     "ContourLevelsSpecEditor",
+    "ErrorEveryEditor",
     "FigureLayoutEditor",
     "FontSpecEditor",
     "GridEdgeSpecEditor",

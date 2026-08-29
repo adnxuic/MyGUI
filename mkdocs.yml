@@ -126,6 +126,7 @@ nav:
                   - Fit Curves: editing-components/charts/fit-curve.md
                   - Interpolations: editing-components/charts/interpolation.md
                   - Scatters: editing-components/charts/scatter.md
+                  - Error Bars: editing-components/charts/errorbar.md
                   - Pseudocolor: editing-components/charts/pseudocolor.md
                   - Heatmaps: editing-components/charts/heatmap.md
                   - Contours: editing-components/charts/contour.md
@@ -153,7 +154,9 @@ nav:
       - Component Inspector Architecture: component-inspector.md
       - Atomic Component Deletion: component-deletion.md
       - Component Extension Template: component-extension-template.md
-      - Component Properties (schema v19): component-properties-v19.md
+      - Component Properties (schema v21): component-properties-v21.md
+      - Legacy schema v20 migration properties: component-properties-v20.md
+      - Legacy schema v19 migration properties: component-properties-v19.md
       - Legacy schema v18 migration properties: component-properties-v18.md
       - Legacy schema v17 migration properties: component-properties-v17.md
       - Legacy schema v16 migration properties: component-properties-v16.md

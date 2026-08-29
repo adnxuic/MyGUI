@@ -41,6 +41,7 @@ from mygui.figuremodify.component_services import (
     ComponentDependencyService,
     DeleteReason,
     DeletionRequest,
+    ErrorBarDataService,
     Field2DService,
     default_field_2d_properties,
     FitService,
@@ -49,6 +50,7 @@ from mygui.figuremodify.component_services import (
     ReferenceGuideService,
     ReferenceMarksService,
     TextRenderService,
+    resolve_errorbar_data,
 )
 from mygui.figuremodify.history import FigureHistoryService
 from mygui.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
@@ -67,10 +69,12 @@ from mygui.widgets.figure_canvas.chart_creation import (
     ChartBatchCreationResult,
     ChartCreationStager,
     PreparedChartSeries,
+    PreparedErrorBarSeries,
 )
 from mygui.widgets.figure_canvas.canvas_materialize_handlers import (
     materialize_colorbar,
     materialize_data_plot,
+    materialize_errorbar,
     materialize_field_2d,
     materialize_fit,
     materialize_function_curve,
@@ -126,8 +130,8 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v19_figure,
-    validate_v19_figure,
+    normalize_v21_figure,
+    validate_v21_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_geometry import grid_geometry_record
@@ -178,9 +182,11 @@ from mygui.figuremodify.style_base.creation_defaults import (
 )
 from mygui.figuremodify.style_base.creation_preferences import (
     ResolvedAxesAppearance,
+    ResolvedErrorBarAppearance,
     ResolvedLineAppearance,
     ResolvedScatterAppearance,
     ResolvedTextAppearance,
+    resolve_errorbar_appearance,
     resolve_line_appearance,
     resolve_scatter_appearance,
     resolve_text_appearance,
@@ -271,6 +277,10 @@ class PyFigureCanvas(QWidget):
             self.repository,
             self.component_registry,
         )
+        self.errorbar_service = ErrorBarDataService(
+            self.repository,
+            self.component_registry,
+        )
         self.colorbar_service = ColorbarService(
             self.component_registry,
             geometry_service=self.axes_geometry_service,
@@ -347,6 +357,7 @@ class PyFigureCanvas(QWidget):
             axes_geometry=self.axes_geometry_service,
             function_curves=self.function_curve_service,
             chart_data=self.chart_data_service,
+            errorbars=self.errorbar_service,
             interpolation=self.interpolation_service,
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
@@ -895,6 +906,68 @@ class PyFigureCanvas(QWidget):
             linewidth=linewidth,
         )
 
+    def _resolve_errorbar_creation(
+        self,
+        *,
+        settings=None,
+        color=None,
+        color_selection: ColorSelection | None = None,
+        linestyle=None,
+        linewidth=None,
+        marker=None,
+        markersize=None,
+        markeredgewidth=None,
+        markerfacecoloralt=None,
+        fillstyle=None,
+        drawstyle=None,
+        antialiased=None,
+        ecolor=None,
+        elinewidth=None,
+        capsize=None,
+        capthick=None,
+        error_linestyle=None,
+        error_capstyle=None,
+        error_antialiased=None,
+        errorevery=None,
+        lolims=None,
+        uplims=None,
+        xlolims=None,
+        xuplims=None,
+        barsabove=None,
+    ) -> ResolvedErrorBarAppearance:
+        defaults = self.component_creation_defaults()
+        palette = self._palette_selection_for_creation()
+        return resolve_errorbar_appearance(
+            defaults.line,
+            defaults.error_bar,
+            settings,
+            palette_selection=palette,
+            color=color,
+            color_selection=color_selection,
+            linestyle=linestyle,
+            linewidth=linewidth,
+            marker=marker,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
+            markerfacecoloralt=markerfacecoloralt,
+            fillstyle=fillstyle,
+            drawstyle=drawstyle,
+            antialiased=antialiased,
+            ecolor=ecolor,
+            elinewidth=elinewidth,
+            capsize=capsize,
+            capthick=capthick,
+            error_linestyle=error_linestyle,
+            error_capstyle=error_capstyle,
+            error_antialiased=error_antialiased,
+            errorevery=errorevery,
+            lolims=lolims,
+            uplims=uplims,
+            xlolims=xlolims,
+            xuplims=xuplims,
+            barsabove=barsabove,
+        )
+
     def _resolve_text_creation(
         self,
         *,
@@ -933,9 +1006,11 @@ class PyFigureCanvas(QWidget):
         """Return the per-Axes preview cursor without consuming it."""
 
         return sum(
-            controller.state.kind in {
+            controller.state.kind
+            in {
                 ComponentKind.LINE,
                 ComponentKind.SCATTER,
+                ComponentKind.ERRORBAR,
             }
             for controller in self.component_registry.children(axes_id)
         )
@@ -1306,6 +1381,11 @@ class PyFigureCanvas(QWidget):
                 changes.changed_columns
             )
             results.extend(
+                self.errorbar_service.refresh_affected(
+                    changes.changed_columns
+                )
+            )
+            results.extend(
                 self.field_2d_service.refresh_affected(
                     changes.changed_columns
                 )
@@ -1320,6 +1400,9 @@ class PyFigureCanvas(QWidget):
             )
         self._observer_failures.extend(
             self.chart_data_service.drain_observer_failures()
+        )
+        self._observer_failures.extend(
+            self.errorbar_service.drain_observer_failures()
         )
         self._observer_failures.extend(
             self.field_2d_service.drain_observer_failures()
@@ -1404,9 +1487,11 @@ class PyFigureCanvas(QWidget):
         orders = [
             controller.state.order
             for controller in self.component_registry.query()
-            if controller.state.kind in {
+            if controller.state.kind
+            in {
                 ComponentKind.LINE,
                 ComponentKind.SCATTER,
+                ComponentKind.ERRORBAR,
                 ComponentKind.FIELD_2D,
             }
         ]
@@ -1617,6 +1702,23 @@ class PyFigureCanvas(QWidget):
             marker=marker,
             markersize=markersize,
             markeredgewidth=markeredgewidth,
+        )
+
+    def _stage_errorbar(
+        self,
+        transaction,
+        series: PreparedErrorBarSeries,
+        *,
+        appearance: ResolvedErrorBarAppearance,
+        object_id: str | None = None,
+        color_order: int | None = None,
+    ):
+        return self._chart_stager.stage_errorbar(
+            transaction,
+            series,
+            appearance=appearance,
+            object_id=object_id,
+            color_order=color_order,
         )
 
     def _commit_chart_batch(
@@ -2183,6 +2285,198 @@ class PyFigureCanvas(QWidget):
             color_transitions=transitions,
             record_recent=record_recent,
         )
+
+    # Add error bar
+    @_history_command("Create Error Bar")
+    def add_errorbar(
+        self,
+        x_ref: ColumnRef,
+        y_ref: ColumnRef,
+        label: str,
+        xerr: dict[str, Any] | None = None,
+        yerr: dict[str, Any] | None = None,
+        preprocess: DataPreprocessSpec | dict[str, Any] | None = None,
+        *,
+        object_id: str | None = None,
+        color_order: int | None = None,
+        color=None,
+        color_selection: ColorSelection | None = None,
+        preview_cycle: ColorCycleState | None = None,
+        linestyle=None,
+        linewidth=None,
+        marker=None,
+        markersize=None,
+        markeredgewidth=None,
+        markerfacecoloralt=None,
+        fillstyle=None,
+        drawstyle=None,
+        antialiased=None,
+        ecolor=None,
+        elinewidth=None,
+        capsize=None,
+        capthick=None,
+        error_linestyle=None,
+        error_capstyle=None,
+        error_antialiased=None,
+        errorevery=None,
+        lolims=None,
+        uplims=None,
+        xlolims=None,
+        xuplims=None,
+        barsabove=None,
+    ):
+        """Create and publish one table-driven Error Bar atomically."""
+
+        from mygui.figuremodify.components.property_values import (
+            DEFAULT_ERROR_SPEC,
+            normalize_error_spec,
+        )
+
+        preprocess_spec = DataPreprocessSpec.from_dict(preprocess)
+        xerr_spec = normalize_error_spec(
+            xerr if xerr is not None else deepcopy(DEFAULT_ERROR_SPEC)
+        )
+        yerr_spec = normalize_error_spec(
+            yerr if yerr is not None else deepcopy(DEFAULT_ERROR_SPEC)
+        )
+        drawable = resolve_errorbar_data(
+            self.repository,
+            x_ref,
+            y_ref,
+            xerr_spec,
+            yerr_spec,
+            preprocess_spec,
+        )
+        if self._restoring_component_tree_now:
+            resolved = ResolvedErrorBarAppearance(
+                color=normalize_color(color),
+                linestyle=(
+                    deepcopy(linestyle)
+                    if linestyle is not None
+                    else {"kind": "preset", "value": "-"}
+                ),
+                linewidth=float(linewidth) if linewidth is not None else 1.5,
+                marker=(
+                    deepcopy(marker)
+                    if marker is not None
+                    else {"kind": "symbol", "value": "None"}
+                ),
+                markersize=float(markersize) if markersize is not None else 6.0,
+                markeredgewidth=(
+                    float(markeredgewidth) if markeredgewidth is not None else 1.0
+                ),
+                markerfacecoloralt=(
+                    str(markerfacecoloralt)
+                    if markerfacecoloralt is not None
+                    else "none"
+                ),
+                fillstyle=str(fillstyle) if fillstyle is not None else "full",
+                drawstyle=str(drawstyle) if drawstyle is not None else "default",
+                antialiased=bool(antialiased) if antialiased is not None else True,
+                ecolor=(
+                    normalize_color(ecolor)
+                    if ecolor is not None
+                    else normalize_color(color)
+                ),
+                elinewidth=float(elinewidth) if elinewidth is not None else 1.5,
+                capsize=float(capsize) if capsize is not None else 0.0,
+                capthick=float(capthick) if capthick is not None else 1.0,
+                error_linestyle=(
+                    deepcopy(error_linestyle)
+                    if error_linestyle is not None
+                    else {"kind": "preset", "value": "-"}
+                ),
+                error_capstyle=(
+                    None if error_capstyle is None else str(error_capstyle)
+                ),
+                error_antialiased=(
+                    bool(error_antialiased) if error_antialiased is not None else True
+                ),
+                errorevery=(
+                    deepcopy(errorevery) if errorevery is not None else {"kind": "all"}
+                ),
+                lolims=bool(lolims) if lolims is not None else False,
+                uplims=bool(uplims) if uplims is not None else False,
+                xlolims=bool(xlolims) if xlolims is not None else False,
+                xuplims=bool(xuplims) if xuplims is not None else False,
+                barsabove=bool(barsabove) if barsabove is not None else False,
+                color_selection=(
+                    color_selection
+                    if color_selection is not None
+                    else ColorSelection(normalize_color(color))
+                ),
+            )
+            commit_selection = color_selection
+        else:
+            resolved = self._resolve_errorbar_creation(
+                settings=self._read_component_defaults(),
+                color=color,
+                color_selection=color_selection,
+                linestyle=linestyle,
+                linewidth=linewidth,
+                marker=marker,
+                markersize=markersize,
+                markeredgewidth=markeredgewidth,
+                markerfacecoloralt=markerfacecoloralt,
+                fillstyle=fillstyle,
+                drawstyle=drawstyle,
+                antialiased=antialiased,
+                ecolor=ecolor,
+                elinewidth=elinewidth,
+                capsize=capsize,
+                capthick=capthick,
+                error_linestyle=error_linestyle,
+                error_capstyle=error_capstyle,
+                error_antialiased=error_antialiased,
+                errorevery=errorevery,
+                lolims=lolims,
+                uplims=uplims,
+                xlolims=xlolims,
+                xuplims=xuplims,
+                barsabove=barsabove,
+            )
+            commit_selection, preview_cycle = self._commit_resolved_line_color(
+                resolved, color_selection, preview_cycle
+            )
+        series = PreparedErrorBarSeries(
+            x_ref=x_ref,
+            y_ref=y_ref,
+            x=drawable.x,
+            y=drawable.y,
+            xerr=drawable.xerr,
+            yerr=drawable.yerr,
+            label=str(label),
+            xerr_spec=xerr_spec,
+            yerr_spec=yerr_spec,
+            preprocess=preprocess_spec,
+            excluded_count=0,
+        )
+        axes_id = self.current_axes_component_id
+        if axes_id is None:
+            raise ValueError("Select an axes before adding a chart.")
+        with self.component_registry.registration_transaction() as transaction:
+            transaction.watch_existing(axes_id)
+            runtime, controller = self._stage_errorbar(
+                transaction,
+                series,
+                appearance=resolved,
+                object_id=object_id,
+                color_order=color_order,
+            )
+            color_transition = self._commit_single_creation_color(
+                transaction,
+                commit_selection,
+                preview_cycle,
+            )
+        self._finish_created_component(controller)
+        if color_transition is not None and axes_id is not None:
+            self.color_consumption_ledger.record(
+                axes_id,
+                controller.component_id,
+                *color_transition,
+            )
+            self.color_library.record_recent(resolved.color)
+        return runtime
 
     # Add fit curve
     @_history_command("Create Fit Curve")
@@ -3553,6 +3847,9 @@ class PyFigureCanvas(QWidget):
     def _materialize_scatter(self, state, _transaction) -> None:
         materialize_scatter(self, state, _transaction)
 
+    def _materialize_errorbar(self, state, _transaction) -> None:
+        materialize_errorbar(self, state, _transaction)
+
     def _materialize_field_2d(self, state, _transaction) -> None:
         materialize_field_2d(self, state, _transaction)
 
@@ -3808,7 +4105,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v19_figure(source)
+        source = normalize_v21_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -3849,7 +4146,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v19 component tree used by persistence."""
+        """Return the canonical schema-v21 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -3869,10 +4166,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v19_figure(snapshot)
+        return normalize_v21_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v19 Figure tree."""
+        """Validate and return the current complete schema-v21 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -3881,7 +4178,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v19_figure(
+        validate_v21_figure(
             snapshot,
             available_refs,
             self.project_id,

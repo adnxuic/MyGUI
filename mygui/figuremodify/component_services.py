@@ -45,6 +45,14 @@ from .services.dependency import (
     ComponentDependencyService,
     ComponentDependencySnapshot,
 )
+from .services.errorbar import (
+    ErrorBarDataService,
+    ErrorBarRuntime,
+    ErrorBarSwapMemento,
+    create_errorbar_container,
+    errorbar_properties_from_appearance,
+    resolve_errorbar_data,
+)
 from .services.field_2d import Field2DService, default_field_2d_properties
 from .services.reference_marks import ReferenceGuideService, ReferenceMarksService
 from .services.text_render import TextRenderService
@@ -70,6 +78,11 @@ __all__ = [
     "DeletionOutcome",
     "DeletionPlan",
     "DeletionRequest",
+    "ErrorBarDataService",
+    "ErrorBarRuntime",
+    "ErrorBarSwapMemento",
+    "create_errorbar_container",
+    "errorbar_properties_from_appearance",
     "FitService",
     "Field2DColorbarSourceResolver",
     "Field2DService",
@@ -83,4 +96,7 @@ __all__ = [
     "default_field_2d_properties",
     "production_colorbar_source_resolvers",
     "production_deletion_handlers",
+    "resolve_errorbar_data",
+    "create_errorbar_container",
+    "errorbar_properties_from_appearance",
 ]

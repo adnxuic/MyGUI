@@ -31,6 +31,14 @@ from .deletion import (
     production_deletion_handlers,
 )
 from .dependency import ComponentDependencyService, ComponentDependencySnapshot
+from .errorbar import (
+    ErrorBarDataService,
+    ErrorBarRuntime,
+    ErrorBarSwapMemento,
+    create_errorbar_container,
+    errorbar_properties_from_appearance,
+    resolve_errorbar_data,
+)
 from .field_2d import Field2DService, default_field_2d_properties, field_2d_style_seed
 from .reference_marks import ReferenceGuideService, ReferenceMarksService
 from .text_render import TextRenderService
@@ -55,6 +63,11 @@ __all__ = [
     "DeletionOutcome",
     "DeletionPlan",
     "DeletionRequest",
+    "ErrorBarDataService",
+    "ErrorBarRuntime",
+    "ErrorBarSwapMemento",
+    "create_errorbar_container",
+    "errorbar_properties_from_appearance",
     "FitService",
     "Field2DColorbarSourceResolver",
     "Field2DService",
@@ -69,4 +82,7 @@ __all__ = [
     "field_2d_style_seed",
     "production_colorbar_source_resolvers",
     "production_deletion_handlers",
+    "resolve_errorbar_data",
+    "create_errorbar_container",
+    "errorbar_properties_from_appearance",
 ]

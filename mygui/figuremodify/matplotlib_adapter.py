@@ -123,3 +123,41 @@ def available_font_families() -> tuple[str, ...]:
     )
     _FONT_FAMILY_CATALOG = catalog
     return catalog
+
+
+def relim_with_errorbars(axes: Any) -> None:
+    """Recompute Axes data limits including Error Bar error extents.
+
+    Matplotlib 3.9 ``Axes.relim()`` deliberately skips Collections, so the
+    error-bar ``barlinecols`` segments never contribute on their own.  This
+    helper first runs the ordinary relim (data line and caplines) and then
+    folds every ``ErrorbarContainer`` error-bar segment back into the data
+    limits so both growing and shrinking error extents update either way.
+    """
+
+    import numpy as np
+    from matplotlib.axes import Axes
+    from matplotlib.container import ErrorbarContainer
+
+    if not isinstance(axes, Axes):
+        return
+    axes.relim()
+    for container in tuple(getattr(axes, "containers", ())):
+        if not isinstance(container, ErrorbarContainer):
+            continue
+        points: list[Any] = []
+        try:
+            bar_collections = tuple(container[2])
+        except (TypeError, IndexError):
+            continue
+        for collection in bar_collections:
+            try:
+                segments = collection.get_segments()
+            except (AttributeError, TypeError, ValueError):
+                continue
+            for segment in segments:
+                array = np.asarray(segment, dtype=float)
+                if array.ndim == 2 and array.shape[1] == 2 and len(array):
+                    points.append(array)
+        if points:
+            axes.update_datalim(np.vstack(points))

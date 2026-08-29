@@ -20,6 +20,10 @@ from .data import (
     ImageInAxesSourceSection,
 )
 
+from .errorbar import (
+    ErrorBarDataSection,
+)
+
 from .axes import (
     AxesLimitsSection,
     AxesLayoutSection,
@@ -75,6 +79,7 @@ __all__ = [
     "ScatterMappingSection",
     "ColorbarSourceSection",
     "ImageInAxesSourceSection",
+    "ErrorBarDataSection",
     "AxesLimitsSection",
     "AxesLayoutSection",
     "LineAppearanceSection",

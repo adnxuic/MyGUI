@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from PIL import Image
 from matplotlib.collections import LineCollection
 
-from mygui.database import ColumnRef, ColumnType
+from mygui.database import ColumnRef, ColumnType, DataPreprocessSpec
 from mygui.database.interpolate_func import interpolate_dict
 from mygui.figuremodify.components import (
     ComponentKind,
@@ -121,6 +121,10 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         sheet.set_block(0, 0, [[0, 1], [1, 2], [2, 4], [3, 8]])
         x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
         y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+        error_minus = sheet.add_column("ErrorMinus", ColumnType.NUMBER, values=[0.1, 0.2, 0.1, 0.2])
+        error_plus = sheet.add_column("ErrorPlus", ColumnType.NUMBER, values=[0.3, 0.4, 0.3, 0.4])
+        error_minus_ref = ColumnRef(canvas.project_id, sheet.id, error_minus.id)
+        error_plus_ref = ColumnRef(canvas.project_id, sheet.id, error_plus.id)
         field_x = sheet.add_column("FieldX", ColumnType.NUMBER, values=[0.0, 1.0, 0.0, 1.0])
         field_y = sheet.add_column("FieldY", ColumnType.NUMBER, values=[0.0, 0.0, 1.0, 1.0])
         field_z = sheet.add_column("FieldZ", ColumnType.NUMBER, values=[1.0, 2.0, 3.0, 4.0])
@@ -258,10 +262,24 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             field_z_ref,
             object_id="roundtrip-contour",
         )
+        canvas.add_errorbar(
+            x_ref,
+            y_ref,
+            "errorbar",
+            xerr={
+                "kind": "asymmetric_ref",
+                "minus_ref": error_minus_ref.to_dict(),
+                "plus_ref": error_plus_ref.to_dict(),
+            },
+            yerr={"kind": "constant", "minus": 0.25, "plus": 0.25},
+            preprocess=DataPreprocessSpec().to_dict(),
+            object_id="roundtrip-errorbar",
+        )
 
         data_roles = {
             ComponentRole.DATA_PLOT,
             ComponentRole.SCATTER,
+            ComponentRole.ERROR_BAR,
             ComponentRole.INTERPOLATION,
             ComponentRole.FIT_CURVE,
             ComponentRole.PSEUDOCOLOR,

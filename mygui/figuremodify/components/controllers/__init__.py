@@ -124,6 +124,14 @@ from .field_2d import (
     PseudocolorController,
 )
 
+from .errorbar import (
+    ERROR_BAR_DATA_FIELDS,
+    ERROR_BAR_V20_PROPERTY_KEYS,
+    ERROR_BAR_V21_DEFAULTS,
+    ERROR_BAR_STRUCTURE_PROPERTY_KEYS,
+    ErrorBarController,
+)
+
 from .colorbar import (
     ColorbarController,
 )
@@ -226,6 +234,11 @@ __all__ = [
     "ReferenceLineController",
     "ReferenceBandController",
     "ScatterController",
+    "ERROR_BAR_DATA_FIELDS",
+    "ERROR_BAR_STRUCTURE_PROPERTY_KEYS",
+    "ERROR_BAR_V20_PROPERTY_KEYS",
+    "ERROR_BAR_V21_DEFAULTS",
+    "ErrorBarController",
     "Field2DController",
     "PseudocolorController",
     "HeatmapController",

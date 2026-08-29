@@ -11,7 +11,7 @@ rules:
   - {id: CORE-REGISTRATION-ATOMICITY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_component_services, tests.test_component_runtime_integration]}
   - {id: CORE-DELETION-COORDINATOR, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_component_deletion_and_project_close]}
   - {id: CORE-PROJECT-HISTORY, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_figure_history]}
-  - {id: CORE-PERSISTENCE-V19, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides, tests.test_field_2d_component, tests.test_annotation_component, tests.test_axes_geometry]}
+  - {id: CORE-PERSISTENCE-V21, source: AGENTS.md#transactions-deletion-and-persistence, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides, tests.test_field_2d_component, tests.test_annotation_component, tests.test_axes_geometry, tests.test_errorbar_component]}
   - {id: CORE-TEMPLATE-LIBRARY, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_template_library]}
   - {id: CORE-COLORBAR-AUXILIARY-AXES, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_colorbar_component]}
   - {id: CORE-APPLICATION-SETTINGS, source: AGENTS.md#authoritative-runtime-boundaries, enforcement: [tests.test_application_settings_contracts, tests.test_application_settings_components, tests.test_application_settings_component_creation]}

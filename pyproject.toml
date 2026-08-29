@@ -13,3 +13,6 @@ select = ["E4", "E7", "E9", "F"]
 # Matplotlib backend, TeX runtime, and font diagnostics must be initialized
 # before importing the application widgets. Keep this startup ordering intact.
 "main.py" = ["E402"]
+# The Error Bar creation dialog reuses this module's frozen-plan helpers; the
+# late import keeps the package cycle one-directional at load time.
+"mygui/widgets/title_bar/titlebar_dialog/py_chart_dialog.py" = ["E402"]

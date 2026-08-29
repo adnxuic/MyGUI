@@ -29,7 +29,7 @@ DOCS_DIR = ROOT / "docs"
 SNIPPETS_DIR = DOCS_DIR / "_snippets"
 MKDOCS_YML = ROOT / "mkdocs.yml"
 
-# Checked-in mapping of the 31 production Inspector profiles onto their
+# Checked-in mapping of the 32 production Inspector profiles onto their
 # dedicated MkDocs pages. CI must not read generated files under build/.
 PROFILE_DOC_PAGES: dict[tuple[str, str], str] = {
     ("annotation", "annotation"): "editing-components/elements/annotation.md",
@@ -51,6 +51,7 @@ PROFILE_DOC_PAGES: dict[tuple[str, str], str] = {
     ("reference_guide", "reference_line"): "editing-components/elements/reference-line.md",
     ("reference_marks", "reflection_positions"): "editing-components/elements/reflection-positions.md",
     ("scatter", "scatter"): "editing-components/charts/scatter.md",
+    ("errorbar", "error_bar"): "editing-components/charts/errorbar.md",
     ("field_2d", "pseudocolor"): "editing-components/charts/pseudocolor.md",
     ("field_2d", "heatmap"): "editing-components/charts/heatmap.md",
     ("field_2d", "contour"): "editing-components/charts/contour.md",
@@ -169,14 +170,14 @@ class ComponentDocumentationContractTests(unittest.TestCase):
             p = ROOT / doc_page_rel
         return p
 
-    def test_all_31_inspector_profiles_have_dedicated_pages(self):
-        """Validate all 31 registered production EditorProfiles have dedicated doc pages."""
+    def test_all_32_inspector_profiles_have_dedicated_pages(self):
+        """Validate all 32 registered production EditorProfiles have dedicated doc pages."""
         all_expected_keys = {
             (kind, role)
             for kind, roles in ROLES_BY_KIND.items()
             for role in roles
         }
-        self.assertEqual(len(all_expected_keys), 31)
+        self.assertEqual(len(all_expected_keys), 32)
 
         for kind, role in all_expected_keys:
             profile = self.registry.profile_for(kind, role)
@@ -204,7 +205,7 @@ class ComponentDocumentationContractTests(unittest.TestCase):
             )
             seen_pages.add(doc_path.resolve())
 
-        self.assertEqual(len(seen_pages), 31)
+        self.assertEqual(len(seen_pages), 32)
 
     def test_parameter_tables_strictly_follow_5_column_format(self):
         """Validate all parameter tables adhere to standard 5-column format."""
@@ -435,14 +436,14 @@ class ComponentDocumentationContractTests(unittest.TestCase):
         self.assertIn("axes-component-parameters.md", redirect_maps)
 
     def test_profile_doc_mapping_is_complete_without_build_artifacts(self):
-        """Keep the 31-profile mapping checked in so Windows CI does not need build/."""
+        """Keep the 32-profile mapping checked in so Windows CI does not need build/."""
         expected = {
             (kind.value, role.value)
             for kind, roles in ROLES_BY_KIND.items()
             for role in roles
         }
         self.assertEqual(set(PROFILE_DOC_PAGES), expected)
-        self.assertEqual(len(PROFILE_DOC_PAGES), 31)
+        self.assertEqual(len(PROFILE_DOC_PAGES), 32)
         for doc_rel in PROFILE_DOC_PAGES.values():
             self.assertTrue(
                 (DOCS_DIR / doc_rel).is_file(),

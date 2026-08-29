@@ -123,12 +123,12 @@ MATPLOTLIB_39_EXPOSURE: dict[str, ArtistExposureContract] = {
         unsupported={"agg_filter", "animated", "clip_box", "clip_path", "figure", "mouseover", "offset_transform", "path_effects", "picker", "pickradius", "transform"},
     ),
     "LineCollection": _contract(
-        core={"alpha", "clip_on", "color", "label", "linestyle", "linewidth", "visible", "zorder"},
+        core={"alpha", "antialiased", "capstyle", "clip_on", "color", "label", "linestyle", "linewidth", "visible", "zorder"},
         advanced={"gid", "in_layout", "rasterized", "sketch_params", "snap", "url"},
         aliases={"colors", "edgecolor", "facecolor", "verts"},
         derived={"paths", "segments", "transform"},
-        unsupported={"agg_filter", "animated", "antialiased", "array", "capstyle", "clim", "clip_box", "clip_path", "cmap", "figure", "gapcolor", "hatch", "joinstyle", "mouseover", "norm", "offset_transform", "offsets", "path_effects", "picker", "pickradius", "urls"},
-        unsupported_reason="excluded from the fixed reflection-mark collection contract",
+        unsupported={"agg_filter", "animated", "array", "clim", "clip_box", "clip_path", "cmap", "figure", "gapcolor", "hatch", "joinstyle", "mouseover", "norm", "offset_transform", "offsets", "path_effects", "picker", "pickradius", "urls"},
+        unsupported_reason="excluded from the persisted collection contracts",
     ),
     "AxesImage": _contract(
         core={"alpha", "extent", "filternorm", "filterrad", "interpolation", "interpolation_stage", "resample", "visible", "zorder"},

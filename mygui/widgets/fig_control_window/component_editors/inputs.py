@@ -13,6 +13,10 @@ from .data_inputs import (
     MultiSeriesDataReferenceInput,
     ScatterMappingInput,
 )
+from .errorbar_inputs import (
+    ErrorBarDataInput,
+    ErrorSpecInput,
+)
 from .reference_inputs import (
     ColorbarInput,
     ReferenceBandInput,
@@ -23,6 +27,8 @@ from .reference_inputs import (
 __all__ = [
     "ColorbarInput",
     "DataReferenceInput",
+    "ErrorBarDataInput",
+    "ErrorSpecInput",
     "Field2DDataReferenceInput",
     "InAxesInput",
     "InterpolationOptionsInput",

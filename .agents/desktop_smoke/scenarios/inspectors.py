@@ -1,4 +1,4 @@
-"""All 31 Component Inspector Profiles desktop smoke. Group id: inspectors."""
+"""All 32 Component Inspector Profiles desktop smoke. Group id: inspectors."""
 
 from __future__ import annotations
 
@@ -111,6 +111,19 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
         marker="o",
         preprocess=None,
         color_selection=ColorSelection(color="#2ca02c"),
+    )
+    canvas.add_errorbar(
+        x_ref,
+        y_refs[0],
+        "Error Bar",
+        xerr=None,
+        yerr={
+            "kind": "constant",
+            "minus": 0.2,
+            "plus": 0.4,
+        },
+        preprocess=None,
+        color_selection=ColorSelection(color="#8c564b"),
     )
     canvas.add_interpolate_curves(
         x_ref,

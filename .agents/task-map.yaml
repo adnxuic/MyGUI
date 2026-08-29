@@ -10,6 +10,7 @@ tasks:
     checks: [verify_fast, verify_component_contracts, verify_project_io, verify_architecture]
     scanners: [mygui.architecture, mygui.qt-lifecycle]
     focused_tests:
+      - tests.test_errorbar_component
       - tests.test_component_controllers
       - tests.test_component_materializers
       - tests.test_component_inspector
@@ -20,7 +21,7 @@ tasks:
       - tests.test_project_object_roundtrip
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
-    documentation: [docs/component-extension-template.md, docs/component-properties-v19.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
+    documentation: [docs/component-extension-template.md, docs/component-properties-v21.md, docs/project-files.md, docs/chart-templates.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/errorbar.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
     manual_smoke: true
   modify_component_property:
     skill: .agents/skills/modify-component-property/SKILL.md
@@ -31,6 +32,7 @@ tasks:
     checks: [verify_fast, verify_component_contracts, verify_architecture]
     scanners: [mygui.architecture]
     focused_tests:
+      - tests.test_errorbar_component
       - tests.test_component_controllers
       - tests.test_component_editors
       - tests.test_component_inspector
@@ -38,7 +40,7 @@ tasks:
       - tests.test_y_axis_reserve
       - tests.test_reference_marks_table
       - tests.test_axes_geometry
-    documentation: [docs/editing-components/charts/line.md, docs/editing-components/fixed-semantics/axes.md, docs/editing-components/elements/reflection-positions.md, docs/reference-marks-component.md]
+    documentation: [docs/editing-components/charts/line.md, docs/editing-components/charts/errorbar.md, docs/editing-components/fixed-semantics/axes.md, docs/editing-components/elements/reflection-positions.md, docs/reference-marks-component.md]
     manual_smoke: true
   schema_migration:
     skill: .agents/skills/schema-migration/SKILL.md
@@ -49,6 +51,7 @@ tasks:
     checks: [verify_fast, verify_component_contracts, verify_project_io, verify_architecture]
     scanners: [mygui.architecture]
     focused_tests:
+      - tests.test_errorbar_component
       - tests.test_project_schema
       - tests.test_project_io
       - tests.test_project_object_roundtrip
@@ -61,7 +64,7 @@ tasks:
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
       - tests.test_axes_geometry
-    documentation: [docs/project-files.md, docs/component-properties-v19.md]
+    documentation: [docs/project-files.md, docs/chart-templates.md, docs/component-properties-v21.md]
     manual_smoke: true
   project_io_change:
     skill: .agents/skills/project-io-change/SKILL.md
@@ -72,13 +75,14 @@ tasks:
     checks: [verify_fast, verify_project_io, verify_architecture]
     scanners: [mygui.architecture]
     focused_tests:
+      - tests.test_errorbar_component
       - tests.test_project_io
       - tests.test_project_object_roundtrip
       - tests.test_gui_file_flow
       - tests.test_component_deletion_and_project_close
       - tests.test_xrd_refinement
       - tests.test_field_2d_component
-    documentation: [docs/project-files.md]
+    documentation: [docs/project-files.md, docs/chart-templates.md]
     manual_smoke: true
   debug_gui_regression:
     skill: .agents/skills/debug-gui-regression/SKILL.md

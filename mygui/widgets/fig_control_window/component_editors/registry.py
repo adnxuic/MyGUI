@@ -47,6 +47,9 @@ EDITABLE_DATA_KEYS: dict[EditorKey, frozenset[str]] = {
     (ComponentKind.SCATTER, ComponentRole.SCATTER): frozenset(
         {"x_ref", "y_ref", "color_ref", "size_ref", "preprocess"}
     ),
+    (ComponentKind.ERRORBAR, ComponentRole.ERROR_BAR): frozenset(
+        {"x_ref", "y_ref", "xerr", "yerr", "preprocess"}
+    ),
     (ComponentKind.FIELD_2D, ComponentRole.PSEUDOCOLOR): frozenset(
         {"x_ref", "y_ref", "z_ref"}
     ),

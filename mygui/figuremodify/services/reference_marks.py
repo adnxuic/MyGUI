@@ -91,7 +91,9 @@ class ReferenceMarksService:
     def _ensure_owner_autoscale(self, owner: Axes, owner_axes_id: str) -> None:
         if not owner.get_autoscaley_on() or not owner.has_data():
             return
-        owner.relim()
+        from mygui.figuremodify.matplotlib_adapter import relim_with_errorbars
+
+        relim_with_errorbars(owner)
         # Matplotlib 3.9 Axes.relim() ignores Collections. Scatter offsets must
         # be folded back into dataLim so Observed Yobs participates in autoscale
         # before automatic Reflection placement.

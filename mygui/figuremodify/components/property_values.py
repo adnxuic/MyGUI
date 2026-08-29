@@ -1138,6 +1138,111 @@ def contour_label_fmt(value: Any) -> str:
     return CONTOUR_LABEL_FORMATTERS[spec["fmt"]]
 
 
+def normalize_error_spec(value: Any) -> dict[str, Any]:
+    """Normalize the closed tagged Error Bar magnitude specification.
+
+    ``none`` disables that dimension; ``constant`` stores asymmetric finite
+    non-negative minus/plus magnitudes; ``symmetric_ref`` and
+    ``asymmetric_ref`` reference numeric table columns.  Whether a reference
+    resolves inside the current project is checked at data resolution and
+    schema validation time, not here.
+    """
+
+    spec = _mapping(value, "Error spec")
+    kind = spec.get("kind")
+    if kind == "none":
+        _exact(spec, {"kind"}, "Error spec")
+        return {"kind": "none"}
+    if kind == "constant":
+        _exact(spec, {"kind", "minus", "plus"}, "Error spec")
+        return {
+            "kind": "constant",
+            "minus": _positive(spec["minus"], "Error minus magnitude", allow_zero=True),
+            "plus": _positive(spec["plus"], "Error plus magnitude", allow_zero=True),
+        }
+    if kind == "symmetric_ref":
+        _exact(spec, {"kind", "ref"}, "Error spec")
+        return {"kind": "symmetric_ref", "ref": _error_spec_reference(spec["ref"])}
+    if kind == "asymmetric_ref":
+        _exact(spec, {"kind", "minus_ref", "plus_ref"}, "Error spec")
+        return {
+            "kind": "asymmetric_ref",
+            "minus_ref": _error_spec_reference(spec["minus_ref"]),
+            "plus_ref": _error_spec_reference(spec["plus_ref"]),
+        }
+    raise ComponentValidationError(
+        "Error spec kind must be none, constant, symmetric_ref, or "
+        "asymmetric_ref."
+    )
+
+
+def _error_spec_reference(value: Any) -> dict[str, str]:
+    """Validate one embedded Error Bar column reference object."""
+
+    if not isinstance(value, Mapping):
+        raise ComponentValidationError("Error spec reference must be an object.")
+    expected = {"project_id", "sheet_id", "column_id"}
+    if set(value) != expected or any(
+        not isinstance(value[key], str) or not value[key].strip()
+        for key in expected
+    ):
+        raise ComponentValidationError(
+            "Error spec reference is not a valid column reference."
+        )
+    return deepcopy(dict(value))
+
+
+def error_spec_references(value: Any) -> list[dict[str, str]]:
+    """Return every column reference embedded in one normalized Error spec."""
+
+    spec = normalize_error_spec(value)
+    if spec["kind"] == "symmetric_ref":
+        return [spec["ref"]]
+    if spec["kind"] == "asymmetric_ref":
+        return [spec["minus_ref"], spec["plus_ref"]]
+    return []
+
+
+DEFAULT_ERROR_SPEC = {"kind": "none"}
+
+
+def normalize_error_every(value: Any) -> dict[str, Any]:
+    """Normalize the closed Error Bar ``errorevery`` specification.
+
+    ``{"kind": "all"}`` draws error bars on every point;
+    ``{"kind": "stride", "start": int, "step": int}`` draws them on
+    ``data[start::step]``.  ``start=0, step=1`` is the canonical spelling of
+    ``all`` and normalizes to it.
+    """
+
+    spec = _mapping(value, "Error every")
+    kind = spec.get("kind")
+    if kind == "all":
+        _exact(spec, {"kind"}, "Error every")
+        return {"kind": "all"}
+    if kind == "stride":
+        _exact(spec, {"kind", "start", "step"}, "Error every")
+        start = spec["start"]
+        step = spec["step"]
+        if isinstance(start, bool) or not isinstance(start, int) or start < 0:
+            raise ComponentValidationError(
+                "Error every start must be a non-negative integer."
+            )
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise ComponentValidationError(
+                "Error every step must be an integer of at least one."
+            )
+        if start == 0 and step == 1:
+            return {"kind": "all"}
+        return {"kind": "stride", "start": int(start), "step": int(step)}
+    raise ComponentValidationError(
+        "Error every kind must be all or stride."
+    )
+
+
+DEFAULT_ERROR_EVERY = {"kind": "all"}
+
+
 def normalize_scatter_color_map(value: Any) -> dict[str, Any]:
     spec = _mapping(value, "Scatter color map")
     expected = {"enabled", "cmap", "norm", "bad", "under", "over", "nonfinite"}

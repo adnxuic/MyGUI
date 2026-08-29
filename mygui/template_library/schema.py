@@ -14,6 +14,8 @@ from mygui.figuremodify.components.serialization import (
     validate_v17_figure,
     validate_v18_figure,
     validate_v19_figure,
+    validate_v20_figure,
+    validate_v21_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
@@ -27,8 +29,10 @@ from .models import (
 
 
 TEMPLATE_SCHEMA_NAME = "mygui-template"
-TEMPLATE_SCHEMA_VERSION = 3
+TEMPLATE_SCHEMA_VERSION = 5
 TEMPLATE_SCHEMA_V2_VERSION = 2
+TEMPLATE_SCHEMA_V3_VERSION = 3
+TEMPLATE_SCHEMA_V4_VERSION = 4
 TEMPLATE_SCHEMA_V1_VERSION = 1
 TEMPLATE_MATCH_ALGORITHM_VERSION = 1
 TEMPLATE_PROJECT_ID = "template-project"
@@ -230,19 +234,24 @@ def template_to_dict(template: ChartTemplate) -> dict[str, Any]:
     }
 
 
-def parse_template(value: Any) -> ChartTemplate:
-    """Parse and strictly validate a schema-v3 template object."""
+def _parse_template_payload(
+    value: Any,
+    *,
+    version: int,
+    figure_validator,
+) -> ChartTemplate:
+    """Parse one template payload at one exact version and figure schema."""
 
     validate_json_budget(value, limits=load_resource_limits())
     root = _expect_dict(value, "template")
     _exact(root, {"schema", "schema_version", "metadata", "data_contract", "figure"}, "template")
     if _expect_string(root.get("schema"), "schema") != TEMPLATE_SCHEMA_NAME:
         raise ValueError("Unsupported template file.")
-    version = root.get("schema_version")
-    if type(version) is not int or version != TEMPLATE_SCHEMA_VERSION:
+    actual_version = root.get("schema_version")
+    if type(actual_version) is not int or actual_version != version:
         raise ValueError(
-            f"Unsupported template schema version {version!r}; expected exact "
-            f"integer {TEMPLATE_SCHEMA_VERSION}."
+            f"Unsupported template schema version {actual_version!r}; expected exact "
+            f"integer {version}."
         )
     metadata_value = _expect_dict(root.get("metadata"), "metadata")
     _exact(metadata_value, {"id", "name", "notes", "created_at", "updated_at"}, "metadata")
@@ -267,9 +276,19 @@ def parse_template(value: Any) -> ChartTemplate:
         for column in sheet.columns
     }
     figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
-    validate_v19_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    figure_validator(figure, refs, TEMPLATE_PROJECT_ID, None)
     _validate_tokens(figure, allowed_tokens(contract), "figure")
     return ChartTemplate(metadata, contract, figure)
+
+
+def parse_template(value: Any) -> ChartTemplate:
+    """Parse and strictly validate a schema-v5 template object."""
+
+    return _parse_template_payload(
+        value,
+        version=TEMPLATE_SCHEMA_VERSION,
+        figure_validator=validate_v21_figure,
+    )
 
 
 def migrate_v1_template_to_v2(value: Any) -> dict[str, Any]:
@@ -309,8 +328,8 @@ def migrate_v1_template_to_v2(value: Any) -> dict[str, Any]:
     return migrated
 
 
-def migrate_v2_template_to_v3(value: Any) -> ChartTemplate:
-    """Strictly read a schema-v2 template and upgrade it to schema v3."""
+def migrate_v2_template_to_v3(value: Any) -> dict[str, Any]:
+    """Strictly read a schema-v2 template and upgrade it to a schema-v3 dict."""
 
     validate_json_budget(value, limits=load_resource_limits())
     root = _expect_dict(value, "template")
@@ -336,12 +355,110 @@ def migrate_v2_template_to_v3(value: Any) -> ChartTemplate:
         if component.get("kind") == "axes":
             component.setdefault("data", {})["geometry"] = grid_geometry_record()
             component.setdefault("properties", {}).pop("in_layout", None)
+    migrated["schema_version"] = TEMPLATE_SCHEMA_V3_VERSION
+    _parse_template_payload(
+        migrated,
+        version=TEMPLATE_SCHEMA_V3_VERSION,
+        figure_validator=validate_v19_figure,
+    )
+    return migrated
+
+
+def migrate_v3_template_to_v4(value: Any) -> dict[str, Any]:
+    """Strictly read a schema-v3 template and upgrade it to a schema-v4 dict.
+
+    v3 blueprints are full schema-v19 figures and therefore cannot contain
+    Error Bar records; the migration only advances the version and revalidates
+    the identical component tree against schema v20.
+    """
+
+    validate_json_budget(value, limits=load_resource_limits())
+    root = _expect_dict(value, "template")
+    _exact(root, {"schema", "schema_version", "metadata", "data_contract", "figure"}, "template")
+    if _expect_string(root.get("schema"), "schema") != TEMPLATE_SCHEMA_NAME:
+        raise ValueError("Unsupported template file.")
+    version = root.get("schema_version")
+    if type(version) is not int or version != TEMPLATE_SCHEMA_V3_VERSION:
+        raise ValueError(
+            f"Unsupported template schema version {version!r}; expected exact "
+            f"integer {TEMPLATE_SCHEMA_V3_VERSION}."
+        )
+    contract = _parse_contract(root.get("data_contract"))
+    refs = {
+        ColumnRef(TEMPLATE_PROJECT_ID, sheet.id, column.id): column.type
+        for sheet in contract.sheets
+        for column in sheet.columns
+    }
+    figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
+    validate_v19_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    migrated = deepcopy(value)
+    migrated["schema_version"] = TEMPLATE_SCHEMA_V4_VERSION
+    _parse_template_payload(
+        migrated,
+        version=TEMPLATE_SCHEMA_V4_VERSION,
+        figure_validator=validate_v20_figure,
+    )
+    return migrated
+
+
+ERROR_BAR_TEMPLATE_V5_DEFAULTS: dict[str, Any] = {
+    "markeredgewidth": 1.0,
+    "markerfacecoloralt": "none",
+    "fillstyle": "full",
+    "drawstyle": "default",
+    "antialiased": True,
+    "error_linestyle": {"kind": "preset", "value": "-"},
+    "error_capstyle": None,
+    "error_antialiased": True,
+    "errorevery": {"kind": "all"},
+    "lolims": False,
+    "uplims": False,
+    "xlolims": False,
+    "xuplims": False,
+}
+
+
+def migrate_v4_template_to_v5(value: Any) -> ChartTemplate:
+    """Strictly read a schema-v4 template and upgrade it to schema v5.
+
+    v4 blueprints are full schema-v20 figures whose Error Bar records carry
+    exactly the v20 property set; the migration injects the deterministic
+    v21 defaults and revalidates against the extended schema-v21 figure.
+    """
+
+    validate_json_budget(value, limits=load_resource_limits())
+    root = _expect_dict(value, "template")
+    _exact(root, {"schema", "schema_version", "metadata", "data_contract", "figure"}, "template")
+    if _expect_string(root.get("schema"), "schema") != TEMPLATE_SCHEMA_NAME:
+        raise ValueError("Unsupported template file.")
+    version = root.get("schema_version")
+    if type(version) is not int or version != TEMPLATE_SCHEMA_V4_VERSION:
+        raise ValueError(
+            f"Unsupported template schema version {version!r}; expected exact "
+            f"integer {TEMPLATE_SCHEMA_V4_VERSION}."
+        )
+    contract = _parse_contract(root.get("data_contract"))
+    refs = {
+        ColumnRef(TEMPLATE_PROJECT_ID, sheet.id, column.id): column.type
+        for sheet in contract.sheets
+        for column in sheet.columns
+    }
+    figure = deepcopy(_expect_dict(root.get("figure"), "figure"))
+    validate_v20_figure(figure, refs, TEMPLATE_PROJECT_ID, None)
+    migrated = deepcopy(value)
+    for component in migrated["figure"]["components"]:
+        if (
+            component.get("kind") == "errorbar"
+            and component.get("role") == "error_bar"
+        ):
+            properties = component.setdefault("properties", {})
+            properties.update(deepcopy(ERROR_BAR_TEMPLATE_V5_DEFAULTS))
     migrated["schema_version"] = TEMPLATE_SCHEMA_VERSION
     return parse_template(migrated)
 
 
 def parse_template_record(value: Any) -> ChartTemplate:
-    """Parse one stored record, migrating strict schema-v1/v2 templates to v3."""
+    """Parse one stored record, migrating strict older templates to v5."""
 
     if (
         isinstance(value, dict)
@@ -349,9 +466,19 @@ def parse_template_record(value: Any) -> ChartTemplate:
         and type(value.get("schema_version")) is int
     ):
         if value["schema_version"] == TEMPLATE_SCHEMA_V1_VERSION:
-            return migrate_v2_template_to_v3(migrate_v1_template_to_v2(value))
+            return migrate_v4_template_to_v5(
+                migrate_v3_template_to_v4(
+                    migrate_v2_template_to_v3(migrate_v1_template_to_v2(value))
+                )
+            )
         if value["schema_version"] == TEMPLATE_SCHEMA_V2_VERSION:
-            return migrate_v2_template_to_v3(value)
+            return migrate_v4_template_to_v5(
+                migrate_v3_template_to_v4(migrate_v2_template_to_v3(value))
+            )
+        if value["schema_version"] == TEMPLATE_SCHEMA_V3_VERSION:
+            return migrate_v4_template_to_v5(migrate_v3_template_to_v4(value))
+        if value["schema_version"] == TEMPLATE_SCHEMA_V4_VERSION:
+            return migrate_v4_template_to_v5(value)
     return parse_template(value)
 
 

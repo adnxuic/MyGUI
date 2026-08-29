@@ -7,7 +7,9 @@ call it.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from mygui.figuremodify.style_base.color_models import ColorSelection, normalize_color
@@ -110,6 +112,192 @@ class ResolvedScatterAppearance:
     @property
     def consume_palette(self) -> bool:
         return self.color_selection.palette is not None
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedErrorBarAppearance:
+    """Concrete Error Bar values for one creation. Not a style-probe snapshot.
+
+    Line and marker fields reuse the Line resolution chain (explicit input >
+    Line Components ``NEXT_USE`` > Axes palette/Figure style > Matplotlib 3.9
+    fallback); error-dimension and remaining line-artist values resolve
+    explicit input > Figure style probe > Matplotlib 3.9 fallback, with
+    ``ecolor`` defaulting to the main color. ``errorevery`` and the four
+    limit switches have no style probe and default to the Matplotlib
+    behavior (every point, no limit arrows).
+    """
+
+    color: str
+    linestyle: str
+    linewidth: float
+    marker: str
+    markersize: float
+    markeredgewidth: float
+    markerfacecoloralt: str
+    fillstyle: str
+    drawstyle: str
+    antialiased: bool
+    ecolor: str
+    elinewidth: float
+    capsize: float
+    capthick: float
+    error_linestyle: dict
+    error_capstyle: str | None
+    error_antialiased: bool
+    errorevery: dict
+    lolims: bool
+    uplims: bool
+    xlolims: bool
+    xuplims: bool
+    barsabove: bool
+    color_selection: ColorSelection
+
+    @property
+    def consume_palette(self) -> bool:
+        return self.color_selection.palette is not None
+
+
+def resolve_errorbar_appearance(
+    style: LineCreationDefaults | None,
+    error_style: Any | None,
+    settings: Any | None,
+    *,
+    palette_selection: ColorSelection,
+    color: Any = None,
+    color_selection: ColorSelection | None = None,
+    linestyle: Any = None,
+    linewidth: Any = None,
+    marker: Any = None,
+    markersize: Any = None,
+    markeredgewidth: Any = None,
+    markerfacecoloralt: Any = None,
+    fillstyle: Any = None,
+    drawstyle: Any = None,
+    antialiased: Any = None,
+    ecolor: Any = None,
+    elinewidth: Any = None,
+    capsize: Any = None,
+    capthick: Any = None,
+    error_linestyle: Any = None,
+    error_capstyle: Any = None,
+    error_antialiased: Any = None,
+    errorevery: Any = None,
+    lolims: Any = None,
+    uplims: Any = None,
+    xlolims: Any = None,
+    xuplims: Any = None,
+    barsabove: Any = None,
+) -> ResolvedErrorBarAppearance:
+    """Resolve Error Bar appearance for one creation.
+
+    ``style`` is the Line style probe and ``error_style`` the error-dimension
+    probe; ``settings`` is the optional Components ``NEXT_USE`` snapshot whose
+    Line section participates in the Line resolution chain.
+    """
+
+    if error_style is None:
+        error_style = _MATPLOTLIB_39_ERROR_BAR_FALLBACK
+    line = resolve_line_appearance(
+        style,
+        settings,
+        palette_selection=palette_selection,
+        color=color,
+        color_selection=color_selection,
+        linestyle=linestyle,
+        linewidth=linewidth,
+        marker=marker,
+        markersize=markersize,
+        markeredgewidth=markeredgewidth,
+    )
+    resolved_ecolor = normalize_color(ecolor) if ecolor is not None else line.color
+    return ResolvedErrorBarAppearance(
+        color=line.color,
+        linestyle=line.linestyle,
+        linewidth=line.linewidth,
+        marker=line.marker,
+        markersize=line.markersize,
+        markeredgewidth=line.markeredgewidth,
+        markerfacecoloralt=str(
+            resolve_inheritable(
+                markerfacecoloralt, None, error_style.markerfacecoloralt
+            )
+        ),
+        fillstyle=str(
+            resolve_inheritable(fillstyle, None, error_style.fillstyle)
+        ),
+        drawstyle=str(
+            resolve_inheritable(drawstyle, None, error_style.drawstyle)
+        ),
+        antialiased=bool(
+            resolve_inheritable(antialiased, None, error_style.antialiased)
+        ),
+        ecolor=resolved_ecolor,
+        elinewidth=float(
+            resolve_inheritable(elinewidth, None, error_style.elinewidth)
+        ),
+        capsize=float(resolve_inheritable(capsize, None, error_style.capsize)),
+        capthick=float(
+            resolve_inheritable(capthick, None, error_style.capthick)
+        ),
+        error_linestyle=_resolve_error_linestyle_spec(
+            error_linestyle, error_style.error_linestyle
+        ),
+        error_capstyle=_resolve_error_capstyle(
+            error_capstyle, error_style.error_capstyle
+        ),
+        error_antialiased=bool(
+            resolve_inheritable(
+                error_antialiased, None, error_style.error_antialiased
+            )
+        ),
+        errorevery=errorevery if errorevery is not None else {"kind": "all"},
+        lolims=bool(lolims) if lolims is not None else False,
+        uplims=bool(uplims) if uplims is not None else False,
+        xlolims=bool(xlolims) if xlolims is not None else False,
+        xuplims=bool(xuplims) if xuplims is not None else False,
+        barsabove=bool(barsabove) if barsabove is not None else False,
+        color_selection=line.color_selection,
+    )
+
+
+def _resolve_error_linestyle_spec(explicit: Any, inherited: Any) -> dict:
+    """Resolve the tagged error-bar line pattern."""
+
+    if explicit is None:
+        return deepcopy(inherited)
+    if isinstance(explicit, dict):
+        return deepcopy(explicit)
+    if isinstance(explicit, (tuple, list)) and len(explicit) == 2:
+        return {
+            "kind": "custom",
+            "offset": float(explicit[0]),
+            "dashes": [float(item) for item in explicit[1]],
+        }
+    return {"kind": "preset", "value": str(explicit)}
+
+
+def _resolve_error_capstyle(explicit: Any, inherited: Any) -> str | None:
+    """Resolve the error-bar cap style; ``None`` keeps the style default."""
+
+    if explicit is None:
+        return None if inherited is None else str(inherited)
+    value = str(explicit)
+    return None if value.lower() == "none" else value
+
+
+_MATPLOTLIB_39_ERROR_BAR_FALLBACK = SimpleNamespace(
+    ecolor="#1f77b4",
+    elinewidth=1.5,
+    capsize=0.0,
+    capthick=1.0,
+    drawstyle="default",
+    antialiased=True,
+    markerfacecoloralt="none",
+    fillstyle="full",
+    error_linestyle={"kind": "preset", "value": "-"},
+    error_capstyle=None,
+    error_antialiased=True,
+)
 
 
 @dataclass(frozen=True, slots=True)

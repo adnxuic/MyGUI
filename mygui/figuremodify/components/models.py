@@ -30,6 +30,7 @@ class ComponentKind(str, Enum):
     LEGEND = "legend"
     LINE = "line"
     SCATTER = "scatter"
+    ERRORBAR = "errorbar"
     FIELD_2D = "field_2d"
     COLORBAR = "colorbar"
     IN_AXES = "in_axes"
@@ -62,6 +63,7 @@ class ComponentRole(str, Enum):
     FIT_CURVE = "fit_curve"
     INTERPOLATION = "interpolation"
     SCATTER = "scatter"
+    ERROR_BAR = "error_bar"
     PSEUDOCOLOR = "pseudocolor"
     HEATMAP = "heatmap"
     CONTOUR = "contour"
@@ -141,6 +143,7 @@ class EditorKind(StrEnum):
     LINE_PATTERN = "line_pattern"
     MARKER_SPEC = "marker_spec"
     MARKEVERY = "markevery"
+    ERROR_EVERY = "error_every"
     OPTIONAL_COLOR = "optional_color"
     NAMED_NUMBER = "named_number"
     TEXT_BOX = "text_box"
@@ -216,6 +219,7 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
         }
     ),
     ComponentKind.SCATTER: frozenset({ComponentRole.SCATTER}),
+    ComponentKind.ERRORBAR: frozenset({ComponentRole.ERROR_BAR}),
     ComponentKind.FIELD_2D: frozenset(
         {
             ComponentRole.PSEUDOCOLOR,
@@ -322,6 +326,30 @@ class ScatterData:
     y: Any
     colors: Any = None
     sizes: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorBarData:
+    """Transient Error Bar arrays in post-preprocessing coordinates.
+
+    ``xerr``/``yerr`` follow Matplotlib errorbar shapes: ``None`` when that
+    dimension carries no error, a one-dimensional symmetric array, or a
+    ``2 x N`` minus/plus array.  Values are absolute magnitudes and are never
+    preprocessed mathematically.
+    """
+
+    x: Any
+    y: Any
+    xerr: Any = None
+    yerr: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorBarRuntimeSnapshot:
+    """Deep-copied Error Bar drawable data plus style values for rollback."""
+
+    data: ErrorBarData
+    properties: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)

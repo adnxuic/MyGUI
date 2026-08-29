@@ -10,9 +10,9 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
   Contour feature pages, Projects and
   Appearance includes Figure Export, Getting Started includes Application
   Settings, Developer Reference documents the
-  Controller/Service/Canvas package layout plus the current schema-v19
+  Controller/Service/Canvas package layout plus the current schema-v21
   property contract and legacy v18, v17, v16, v15, v14, v13, v12, and v10 migration references,
-  and Editing Components mirrors the full 31-profile runtime component
+  and Editing Components mirrors the full 32-profile runtime component
   hierarchy.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.
 
@@ -27,7 +27,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 ## Navigation hierarchy and component tree
 
-The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 31 production Inspector profiles:
+The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 32 production Inspector profiles:
 
 1. **Fixed Semantics (14 profiles)**:
    - `Figure` (`editing-components/fixed-semantics/figure.md`)
@@ -81,7 +81,7 @@ Component documentation uses `pymdownx.snippets` to maintain single-source-of-tr
 
 ## Redirect policy
 
-Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 31-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
+Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 32-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
 
 - `chart-component-parameters.md` -> `editing-components/charts/line.md`
 - `axes-component-parameters.md` -> `editing-components/fixed-semantics/axes.md`

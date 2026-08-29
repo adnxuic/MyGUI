@@ -1,7 +1,7 @@
 # MyGUI Agent Constitution
 
-Scope: this file applies to whole repo. Defines global invariants, task routing,
-and completion gates. Task procedures live under `.agents/`.
+Scope: whole repo. Defines global invariants, task routing, and completion
+gates. Task procedures live under `.agents/`.
 
 ## Environment and Work Boundaries
 
@@ -12,9 +12,9 @@ and completion gates. Task procedures live under `.agents/`.
 - Read nearest implementation, tests, and routed material first. Keep changes
   focused; do not mix unrelated refactoring. Preserve GUI behavior, resources,
   QSS/JSON paths, historical Canvas names, and tracked artifacts.
-  `mygui/widgets/`, `mygui/figuremodify/`, `mygui/database/` keep UI, domain, data
-  roles. Adapter policy lives in adapter dirs. Codex follows `.codex/README.md`;
-  DSH stays under `.dsh/`.
+  `mygui/widgets/`, `mygui/figuremodify/`, `mygui/database/` keep UI, domain,
+  data roles. Adapter policy lives in adapter dirs. Codex follows
+  `.codex/README.md`; DSH stays under `.dsh/`.
 
 ## Authoritative Runtime Boundaries
 
@@ -43,31 +43,30 @@ and completion gates. Task procedures live under `.agents/`.
   `ChartCreationStager`, `EditorContext`. Settings never enter schema v19,
   Undo/Redo, dirty fingerprints, `ComponentState`, or Canvas materialization.
   Line/Scatter/free-Text use explicit input > Components `NEXT_USE` > Axes
-  palette/Figure style > Matplotlib 3.9 fallback. Ordinary Axes use explicit
-  layout/XRD > Axes Components `NEXT_USE` > Figure style > Matplotlib 3.9
-  fallback. Restore, materializers, history replay, layout updates, Colorbar
+  palette/Figure style > Matplotlib 3.9 fallback; ordinary Axes use explicit
+  layout/XRD > Axes Components `NEXT_USE` > Figure style > 3.9 fallback. Restore, materializers, history replay, layout updates, Colorbar
   auxiliary Axes, In-Axes, `add_component_line`, and Reference Guide must not
   read `ComponentDefaultsProvider`; Apply must not mutate existing Artists.
 - **CORE-TEMPLATE-LIBRARY:** `mygui.template_library` is sole owner of
   chart-template schema, storage, extraction, matching, ID remapping, dynamic
-  text, fitting, and application planning. Templates live under root `template/`
-  independently of CWD, use strict `mygui-template` schema v3, contain no Table
-  cell document, and never alter schema v19. Application builds in-memory
-  project snapshot and publishes via staged restore.
+  text, fitting, and application planning. Templates live under root
+  `template/` independently of CWD, use strict `mygui-template` schema v5,
+  contain no Table cell document, and never alter schema v21. Application
+  builds an in-memory project snapshot and publishes via staged restore.
 - **CORE-THEME-OWNER:** `ThemeService` is sole publisher of application font,
   palette, bundled QSS, and density. Apply `ThemeSnapshot` after settings load
   and before any `QWidget`. UI theme is not Matplotlib Figure style.
 - **CORE-FIGURE-LAYOUT-ENGINE-OWNER:** `FigureController.properties.layout_engine`
-  is sole engine authority (`none`, `tight`, `constrained`, `compressed`).
-  Figure Inspector is only direct UI editor. Axes Layout manages only GridSpec
-  geometry, ratios, margins, spacing, and sharing topology, preserving engine
-  configuration without calling `set_layout_engine`, writing `layout_engine`,
-  or calling Figure `apply_state()`.
+  is sole engine authority (`none`, `tight`, `constrained`, `compressed`);
+  Figure Inspector is the only direct UI editor. Axes Layout manages only
+  GridSpec geometry, ratios, margins, spacing, and sharing topology,
+  preserving engine configuration without calling `set_layout_engine`,
+  writing `layout_engine`, or calling Figure `apply_state()`.
 - **CORE-AXES-GEOMETRY-OWNER:** `AxesGeometryService` is sole authority for
   individual Axes grid vs manual projection and manual bounds. `grid` mode
-  tracks GridSpec cell and Figure layout engine; `manual` mode pins the Axes
-  (`in_layout=False`, `subplotspec=None`). Presentation, Inspector, Axes
-  Layout, and Canvas helper code must not call `set_position`, `set_subplotspec`,
+  tracks the GridSpec cell and Figure layout engine; `manual` mode pins the
+  Axes (`in_layout=False`, `subplotspec=None`). Presentation, Inspector, Axes
+  Layout, and Canvas helpers must not call `set_position`, `set_subplotspec`,
   `set_in_layout`, or access `_subplotspec` directly.
 - MATLAB and TeX are optional; failure must not block GUI work.
   `mygui.database.matlab_adapter` is the MATLAB boundary; Python fallbacks in
@@ -78,89 +77,87 @@ and completion gates. Task procedures live under `.agents/`.
 
 - **CORE-COMPONENT-STATE:** `ComponentRegistry`, `ComponentState`, Controllers,
   and domain Services are the only mutable Figure-component business-state
-  path. UI submits through them and synchronizes from Registry events; it must
-  not keep a second state model or mutate Artists/Controller state. Import
+  path. UI submits through them and synchronizes from Registry events; never
+  keep a second state model or mutate Artists/Controller state. Import
   Controllers from `mygui.figuremodify.components` and Services from
   `mygui.figuremodify.component_services`; implementations live in
   `components/controllers/` and `services/`.
-- **CORE-EDITOR-PROFILES:** Production editors use `ComponentInspector` and one
-  exact `EditorProfile` per `(ComponentKind, ComponentRole)`, composed from
-  reusable Sections. `ComponentEditorManager.create()` is the only visible
-  editor creation path; do not reintroduce role-specific panels or silent
-  generic fallbacks.
-- Every persistent `PropertySpec` has an explicit production editor contract.
-  Composite values use closed tagged normalizers in `property_values.py`;
+- **CORE-EDITOR-PROFILES:** Production editors use `ComponentInspector` and
+  one exact `EditorProfile` per `(ComponentKind, ComponentRole)`, composed
+  from reusable Sections. `ComponentEditorManager.create()` is the only
+  visible editor creation path; no role-specific panels or silent generic
+  fallbacks.
+- Every persistent `PropertySpec` has an explicit production editor contract;
+  composite values use closed tagged normalizers in `property_values.py`;
   production properties never use editable JSON.
   `EditorRegistry.validate_production_profiles()` and Matplotlib exposure
   validation remain startup gates.
 - **CORE-SELECTION-AUTHORITY:** `PyFigureCanvas.current_component_id` is the
   only component selection authority. Tree search affects display only. Tree
   groups use typed `GroupNodeKey`; `COMPONENT_ID_ROLE` is reserved for real
-  IDs, and UI projection state is never persisted. Keep historical
-  filename `py_figure_canves.py`. Host-protocol helpers
-  (`ChartCreationStager`, `canvas_materialize_handlers`,
-  `CanvasSnapshotApplier`, `CanvasPopoutWindow`, `ProjectNavigationToolbar`)
-  run through Canvas and must not cache `ComponentState`, selection IDs,
-  or color-cycle state.
+  IDs, and UI projection state is never persisted. Keep historical filename
+  `py_figure_canves.py`. Host-protocol helpers (`ChartCreationStager`,
+  `canvas_materialize_handlers`, `CanvasSnapshotApplier`,
+  `CanvasPopoutWindow`, `ProjectNavigationToolbar`) run through Canvas and
+  must not cache `ComponentState`, selection IDs, or color-cycle state.
 - Inspector ownership, lifecycle, tree projection, data refresh, and editor
   placement follow `.agents/architecture/inspector.md`. Containers expose
-  public APIs and idempotent recursive `dispose()`; do not access private Qt
+  public APIs and idempotent recursive `dispose()`; never access private Qt
   stack/toolbox fields.
-- UI synchronization blocks recursive signals, rolls back UI/Controller/Artist
-  state atomically on failure, detaches listeners during disposal, and emits
-  at most one Message Bar result per user action.
+- UI synchronization blocks recursive signals, rolls back
+  UI/Controller/Artist state atomically on failure, detaches listeners during
+  disposal, and emits at most one Message Bar result per user action.
 
 ## Transactions, Deletion, and Persistence
 
 - **CORE-REGISTRATION-ATOMICITY:** Component creation/publication uses
   `ComponentRegistry.registration_transaction()`. Artists, Controllers,
   bindings, Inspectors, listeners, IDs, state, selection, redraw/events, and
-  color commits form one logical operation. Publish visible effects only after
+  color commits form one operation. Publish visible effects only after
   commit; restore pre-call identity on failure.
-- Axes creation/deletion includes fixed subtree in one compound transaction.
-  Project creation/restore is staged before tab publication and cleaned up by
-  stable project/object ID on either side.
+- Axes creation/deletion includes its fixed subtree in one compound
+  transaction. Project creation/restore is staged before tab publication and
+  cleaned up by stable project/object ID on either side.
 - **CORE-DELETION-COORDINATOR:** Every production deletion enters through
   `DeletionCoordinator` with `DeletionRequest`. Fixed semantics hide; removable
-  components declare `REMOVE` and one handler. Deletion is an all-or-nothing
-  transaction; post-delete selection comes from confirmed set.
-- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by its
-  `TableRepository` entry for chronological Table/Figure history. Figure commands
-  retain immutable `ComponentState` deltas plus explicit runtime mementos, never
-  Artists, Controllers, QWidgets, or Figures; replay enters through Controllers,
-  Services, materializers, and `DeletionCoordinator`. Restore, refresh, replay
-  are recording-suspended. History is runtime-only, absent from schema v19, and
-  invalidated if failed replay cannot prove a safe cursor.
-- **CORE-PERSISTENCE-V19:** Persist component state only through integer
-  schema-v19 component tree. UI profiles, widgets, callbacks, tree keys, and
-  expansion/selection state never enter project files. Strict v18 migrates
-  directly to v19; v17–v10 migrate stepwise; v4–v9 stay retired.
+  components declare `REMOVE` and one handler. Deletion is all-or-nothing;
+  post-delete selection comes from the confirmed set.
+- **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by
+  its `TableRepository` entry for chronological Table/Figure history. Figure
+  commands retain immutable `ComponentState` deltas plus runtime mementos,
+  never Artists, Controllers, QWidgets, or Figures; replay enters through
+  Controllers, Services, materializers, and `DeletionCoordinator`. Restore,
+  refresh, replay are recording-suspended. History is runtime-only, absent
+  from schema v21, and invalidated if failed replay cannot prove a safe
+  cursor.
+- **CORE-PERSISTENCE-V21:** Persist component state only through the integer
+  schema-v21 component tree; UI profiles, widgets, callbacks, tree keys, and
+  expansion/selection state never enter project files. Strict v20 migrates
+  directly to v21 (deterministic Error Bar defaults injected); v19–v10
+  migrate stepwise; v4–v9 stay retired.
 - Runtime-created persisted components declare `RESTORE_PHASE` and one
   `ComponentMaterializer`; fixed semantic components use `None`. Preserve
-  stable IDs and empty valid data-backed components.
-- Detailed transaction, deletion, materialization, palette, and restore
-  procedures live in `.agents/architecture/persistence.md` and
-  `.agents/architecture/deletion.md`.
+  stable IDs and empty valid data-backed components. Detailed procedures live
+  in `.agents/architecture/persistence.md` and `.agents/architecture/deletion.md`.
 
 ## Documentation and Completion
 
-- User docs live under `docs/` and appear in `mkdocs.yml`. Feature and property
-  changes update parameter page and schema summary together. Matplotlib
-  links pin 3.9.0. Nav/build changes update `docs/documentation-site.md`.
-- Feature pages describe current behavior and document each Inspector field.
-  Uncommon Matplotlib families get pinned 3.9.0 links; pages list URLs.
-  Keep limitations and plans out of `docs/`.
-- New feature state participates in save/import; do not ship runtime state that
-  silently disappears on reopen.
+- User docs live under `docs/` and appear in `mkdocs.yml`. Feature and
+  property changes update the parameter page and schema summary together.
+  Matplotlib links pin 3.9.0. Nav/build changes update
+  `docs/documentation-site.md`. Feature pages document each Inspector field;
+  keep limitations and plans out of `docs/`. New feature state participates
+  in save/import; never ship runtime state that silently disappears.
 - `.agents/` is Agent Engineering knowledge, not user docs.
-  `codex_handoff/current-limitations.md` records limitations only; scanner output
-  and task evidence stay under ignored `build/agent-results/`.
-- Update this file when a global invariant, architecture owner, schema version,
-  or startup gate changes; update Skill and architecture pages on workflow changes.
-  `AGENTS.md` outranks `.agents/`, which outranks conflicting `docs/` narrative.
+  `codex_handoff/current-limitations.md` records limitations only; scanner
+  output and task evidence stay under ignored `build/agent-results/`.
+- Update this file when a global invariant, architecture owner, schema
+  version, or startup gate changes; update Skill and architecture pages on
+  workflow changes. `AGENTS.md` outranks `.agents/`, which outranks
+  conflicting `docs/` narrative.
 - Use `ColorChoiceWidget` with injected `ColorLibrary`; ordered chart colors
   use `ColorCycleState.peek()` and `commit()` only after transaction succeeds.
-- Interactive desktop smoke remains required when a routed task declares it;
+- Interactive desktop smoke stays required when a routed task declares it;
   Qt offscreen tests do not cover multi-monitor scaling, native dialogs, real
   TeX/MATLAB runtimes, or drag/drop.
 
@@ -191,6 +188,6 @@ When multiple routes apply, use all applicable Skills and union of their checks.
   `QT_QPA_PLATFORM=offscreen`, branch coverage (global 74%, listed critical
   files 80%), and applicable focused fault-injection/round-trip tests.
 - Documentation changes run `python -m mkdocs build --strict`; docs-only
-  changes skip Python application suite.
-- A required check that is failed, unknown, or not run blocks completion.
-  Report verification exactly; never equate “not run” with pass.
+  changes skip the Python application suite.
+- A failed, unknown, or not-run required check blocks completion. Report
+  verification exactly; never equate “not run” with pass.

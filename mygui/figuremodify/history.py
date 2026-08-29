@@ -31,6 +31,7 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
     ComponentState,
+    ErrorBarController,
     FitCurveController,
     FunctionCurveController,
     Field2DController,
@@ -649,6 +650,12 @@ class FigureHistoryService:
                     drawable=XYData(selected.x, selected.y),
                 )
             self._require_result(result, "Could not restore Fit data.")
+        elif isinstance(controller, ErrorBarController):
+            result = self.canvas.errorbar_service.apply_state(
+                controller,
+                state,
+            )
+            self._require_result(result, "Could not restore Error Bar state.")
         elif isinstance(controller, ScatterController) and "x_ref" in state.data:
             data = state.data
             result = self.canvas.chart_data_service.set_refs(

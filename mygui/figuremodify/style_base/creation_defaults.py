@@ -202,6 +202,53 @@ class ReferenceMarksCreationDefaults:
 
 
 @dataclass(frozen=True, slots=True)
+class ErrorBarCreationDefaults:
+    """Error-specific defaults for a newly created Error Bar component.
+
+    Line/marker fields reuse :class:`LineCreationDefaults` (including
+    ``markeredgewidth``); the remaining fields are probed here because
+    Matplotlib resolves them from the active style rather than exposing
+    style-independent constants. ``errorevery`` and the four limit switches
+    have no style probe and always start at their Matplotlib defaults.
+    """
+
+    ecolor: str
+    elinewidth: float
+    capsize: float
+    capthick: float
+    drawstyle: str
+    antialiased: bool
+    markerfacecoloralt: str
+    fillstyle: str
+    error_linestyle: dict
+    error_capstyle: str | None
+    error_antialiased: bool
+
+
+def _collection_linestyle_tagged(collection) -> dict:
+    """Convert one probed LineCollection dash pattern to the tagged form."""
+
+    from mygui.figuremodify.components.property_values import (
+        normalize_line_pattern,
+    )
+
+    styles = collection.get_linestyle()
+    offset, dashes = tuple(styles[0]) if len(styles) else (0.0, None)
+    if dashes is None:
+        return {"kind": "preset", "value": "-"}
+    try:
+        return normalize_line_pattern(
+            {
+                "kind": "custom",
+                "offset": float(offset),
+                "dashes": [float(item) for item in dashes],
+            }
+        )
+    except (TypeError, ValueError):
+        return {"kind": "preset", "value": "-"}
+
+
+@dataclass(frozen=True, slots=True)
 class SpineCreationDefaults:
     """Effective defaults for one Axes spine."""
 
@@ -298,6 +345,7 @@ class ComponentCreationDefaults:
     text: TextCreationDefaults
     in_axes: InAxesCreationDefaults
     reference_marks: ReferenceMarksCreationDefaults
+    error_bar: ErrorBarCreationDefaults
     chart_palette: PaletteDefinition
     axes: AxesCreationDefaults
 
@@ -361,6 +409,11 @@ def resolve_component_creation_defaults(
         reference_tick = text_axes.xaxis.get_major_ticks()[0].tick1line
         inset = text_axes.inset_axes((0.55, 0.55, 0.35, 0.35))
         indicator, _connectors = text_axes.indicate_inset_zoom(inset)
+        error_probe = line_axes.errorbar(
+            [0.0],
+            [0.0],
+            yerr=[[1.0], [1.0]],
+        )
 
         cycle_colors = tuple(
             normalize_color(color)
@@ -375,6 +428,20 @@ def resolve_component_creation_defaults(
         scatter_sizes = scatter.get_sizes()
         scatter_widths = scatter.get_linewidths()
         text_families = text.get_fontfamily()
+        error_bars = error_probe[2][0]
+        error_caps = error_probe[1][0] if error_probe[1] else None
+        error_capsize = (
+            float(error_caps.get_markersize()) / 2.0 if error_caps else 0.0
+        )
+        error_antialiased_raw = error_bars.get_antialiased()
+        if isinstance(error_antialiased_raw, (list, tuple)):
+            error_antialiased_raw = (
+                error_antialiased_raw[0] if len(error_antialiased_raw) else True
+            )
+        capstyle_probe = error_bars.get_capstyle()
+        capstyle_value = (
+            None if capstyle_probe is None else str(capstyle_probe)
+        )
 
         defaults = ComponentCreationDefaults(
             style=style_name,
@@ -424,6 +491,25 @@ def resolve_component_creation_defaults(
             reference_marks=ReferenceMarksCreationDefaults(
                 color=normalize_color(reference_tick.get_color()),
                 linewidth=float(reference_tick.get_markeredgewidth()),
+            ),
+            error_bar=ErrorBarCreationDefaults(
+                ecolor=normalize_color(error_bars.get_color()),
+                elinewidth=(
+                    float(error_bars.get_linewidths()[0])
+                    if len(error_bars.get_linewidths())
+                    else float(line.get_linewidth())
+                ),
+                capsize=error_capsize,
+                capthick=float(error_caps.get_markeredgewidth())
+                if error_caps is not None
+                else float(line.get_markeredgewidth()),
+                drawstyle=str(line.get_drawstyle()),
+                antialiased=bool(line.get_antialiased()),
+                markerfacecoloralt=str(line.get_markerfacecoloralt()),
+                fillstyle=str(line.get_fillstyle()),
+                error_linestyle=_collection_linestyle_tagged(error_bars),
+                error_capstyle=capstyle_value,
+                error_antialiased=bool(error_antialiased_raw),
             ),
             chart_palette=_style_palette(style_name, cycle_colors),
             axes=_axes_creation_defaults(line_axes),
