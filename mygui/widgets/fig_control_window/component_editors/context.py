@@ -483,6 +483,7 @@ class EditorContext:
     reference_marks: object | None = None
     reference_guides: object | None = None
     annotations: object | None = None
+    axis_ticks: object | None = None
     axes_layout: object | None = None
     axes_geometry: object | None = None
     in_axes: object | None = None

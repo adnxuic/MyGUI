@@ -52,9 +52,9 @@ ambiguous, stop and report it rather than inventing a substitute.
   glyph and DirectWrite diagnostics; failed glyph edits roll back atomically.
 - **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot
   storage is the only preference authority. Settings stay outside project
-  schema v21, Undo/Redo, dirty fingerprints, and component state.
+  schema v22, Undo/Redo, dirty fingerprints, and component state.
 - **CORE-TEMPLATE-LIBRARY:** `mygui.template_library` solely owns template
-  schema/storage/planning; templates remain independent of project schema v21.
+  schema/storage/planning; templates remain independent of project schema v22.
 - **CORE-THEME-OWNER:** `ThemeService` solely publishes application font,
   palette, bundled QSS, and density before widget creation; UI theme is not
   Matplotlib Figure style.
@@ -79,8 +79,8 @@ ambiguous, stop and report it rather than inventing a substitute.
 - **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by its
   `TableRepository` entry; replay re-enters authoritative services and history
   remains runtime-only.
-- **CORE-PERSISTENCE-V21:** Persist Figure business state only through the
-  strict integer schema-v21 component tree and declared materializers. Project
+- **CORE-PERSISTENCE-V22:** Persist Figure business state only through the
+  strict integer schema-v22 component tree and declared materializers. Project
   create/restore publishes only after complete staged validation.
 
 ## Universal Change Rules

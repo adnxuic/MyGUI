@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import json
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import matplotlib
 
@@ -15,6 +16,8 @@ from matplotlib.ticker import (
     AsinhLocator,
     AutoLocator,
     AutoMinorLocator,
+    FormatStrFormatter,
+    IndexLocator,
     LogitLocator,
     LogLocator,
     SymmetricalLogLocator,
@@ -47,10 +50,17 @@ from mygui.figuremodify.components import (
 )
 from mygui.figuremodify.components.property_values import (
     DEFAULT_MINOR_LOCATOR,
+    build_formatter,
     build_locator,
     default_minor_locator_for_scale,
     default_scale_for_name,
+    formatter_from_axis,
     locator_from_axis,
+    normalize_formatter,
+)
+from mygui.figuremodify.component_services import (
+    AxisTickPreviewRenderer,
+    AxisTickSettingsService,
 )
 
 
@@ -192,6 +202,33 @@ class ComponentModelTests(unittest.TestCase):
             )["params"]["nbins"],
             "auto",
         )
+
+    def test_v22_index_locator_and_format_str_formatter_are_safe_round_trips(self):
+        locator_spec = {
+            "kind": "index",
+            "params": {"base": 2.5, "offset": -1.0},
+        }
+        formatter_spec = {
+            "kind": "format_str",
+            "params": {"format": "value=%1.2f%%"},
+        }
+        locator = build_locator(locator_spec)
+        formatter = build_formatter(formatter_spec)
+        self.assertIsInstance(locator, IndexLocator)
+        self.assertIsInstance(formatter, FormatStrFormatter)
+        self.assertEqual(
+            locator_from_axis(locator, {}, minor=False), locator_spec
+        )
+        self.assertEqual(
+            formatter_from_axis(formatter, {}, minor=False), formatter_spec
+        )
+        for unsafe in ("%s %s", "%(x)f", "%*f", "%.*f", "%", "plain"):
+            with self.subTest(format=unsafe), self.assertRaises(
+                ComponentValidationError
+            ):
+                normalize_formatter(
+                    {"kind": "format_str", "params": {"format": unsafe}}
+                )
 
     def test_controller_mapping_covers_every_controlled_kind_and_role(self):
         expected = {
@@ -681,6 +718,254 @@ class SemanticControllerTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         return matches[0]
 
+    def test_axis_tick_settings_commit_is_atomic_and_preview_is_isolated(self):
+        axis = next(
+            controller
+            for controller in self.registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = self.registry.get(axis.state.parent_id)
+        service = AxisTickSettingsService(
+            self.registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+        opening = service.snapshot(axis.component_id)
+        with self.assertRaisesRegex(ValueError, "finite"):
+            service.validate(replace(opening, limits=(0.0, float("nan"))))
+        fixed = replace(
+            opening,
+            major=replace(
+                opening.major,
+                locator={
+                    "kind": "fixed",
+                    "params": {"locations": [0.0, 0.5, 1.0], "nbins": None},
+                },
+                formatter={
+                    "kind": "fixed",
+                    "params": {"labels": ["zero", "half", "one"]},
+                },
+                tick_properties={
+                    **opening.major.tick_properties,
+                    "direction": "in",
+                },
+            ),
+        )
+        preview = AxisTickPreviewRenderer().render(fixed)
+        self.assertTrue(preview.png.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertEqual(axis.state, opening.expected_states[0])
+
+        result = service.apply(fixed)
+        self.assertTrue(result.committed, result.message)
+        self.assertEqual(axis.state.properties["major_locator"]["kind"], "fixed")
+        self.assertEqual(axis.state.properties["major_formatter"]["kind"], "fixed")
+        self.assertEqual(
+            self._one(TickGroupController, axis="x", level="major")
+            .state.properties["direction"],
+            "in",
+        )
+
+        current = service.snapshot(axis.component_id)
+        invalid = replace(
+            current,
+            major=replace(
+                current.major,
+                formatter={
+                    "kind": "fixed",
+                    "params": {"labels": ["only one"]},
+                },
+            ),
+        )
+        before = axis.state
+        rejected = service.apply(invalid)
+        self.assertFalse(rejected.committed)
+        self.assertEqual(axis.state, before)
+
+    def test_axis_tick_settings_reports_an_incomplete_appearance_subtree(self):
+        axis = next(
+            controller
+            for controller in self.registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = self.registry.get(axis.state.parent_id)
+        service = AxisTickSettingsService(
+            self.registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+
+        with (
+            patch.object(service.registry, "find_one", return_value=None),
+            self.assertRaisesRegex(
+                ValueError, "Axis tick component subtree is incomplete"
+            ),
+        ):
+            service._appearance(axis.component_id, "major")
+
+    def test_axis_tick_symlog_defaults_keep_minor_subs_independent(self):
+        axis = next(
+            controller
+            for controller in self.registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = self.registry.get(axis.state.parent_id)
+        service = AxisTickSettingsService(
+            self.registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+        opening = service.snapshot(axis.component_id)
+
+        defaults = service.scale_defaults(
+            replace(
+                opening,
+                scale=default_scale_for_name("symlog"),
+            )
+        )
+
+        self.assertEqual(defaults.major.locator["params"]["subs"], [1.0])
+        self.assertIsNone(defaults.minor.locator["params"]["subs"])
+        self.assertIsNot(defaults.major.locator, defaults.minor.locator)
+
+    def test_axis_tick_preview_applies_multialignment(self):
+        from matplotlib.text import Text
+
+        axis = next(
+            controller
+            for controller in self.registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = self.registry.get(axis.state.parent_id)
+        service = AxisTickSettingsService(
+            self.registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+        opening = service.snapshot(axis.component_id)
+        candidate = replace(
+            opening,
+            major=replace(
+                opening.major,
+                label_properties={
+                    **opening.major.label_properties,
+                    "multialignment": "left",
+                },
+            ),
+        )
+        alignments = []
+        original = Text.set_multialignment
+
+        def recording_set_multialignment(label, value):
+            alignments.append(value)
+            return original(label, value)
+
+        with patch.object(
+            Text,
+            "set_multialignment",
+            new=recording_set_multialignment,
+        ):
+            preview = AxisTickPreviewRenderer().render(candidate)
+
+        self.assertTrue(preview.png.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertIn("left", alignments)
+
+    def test_axis_tick_settings_rejects_stale_opening_snapshot(self):
+        axis = next(
+            controller
+            for controller in self.registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = self.registry.get(axis.state.parent_id)
+        service = AxisTickSettingsService(
+            self.registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+        opening = service.snapshot(axis.component_id)
+        self.assertTrue(axis.set_property("offset_visible", False).ok)
+        result = service.apply(opening)
+        self.assertFalse(result.committed)
+        self.assertIn("reopen", result.message)
+
+    def test_axis_tick_settings_syncs_shared_tickers_and_rolls_back_mid_commit(self):
+        figure = Figure()
+        first_axes, second_axes = figure.subplots(2, 1, sharex=True)
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=False,
+        )
+        owners = tuple(registry.query(kind=ComponentKind.AXES))
+        selected_axis = next(
+            controller
+            for controller in registry.query(kind=ComponentKind.AXIS)
+            if controller.state.parent_id == owners[0].component_id
+            and controller.state.selector == {"axis": "x"}
+        )
+        service = AxisTickSettingsService(
+            registry,
+            linked_axes=lambda _axes_id, _dimension: owners,
+        )
+        opening = service.snapshot(selected_axis.component_id)
+        candidate = replace(
+            opening,
+            major=replace(
+                opening.major,
+                locator={
+                    "kind": "fixed",
+                    "params": {"locations": [0.0, 1.0], "nbins": None},
+                },
+                formatter={
+                    "kind": "fixed",
+                    "params": {"labels": ["zero", "one"]},
+                },
+                tick_properties={
+                    **opening.major.tick_properties,
+                    "direction": "in",
+                },
+            ),
+        )
+        linked_axes = [
+            next(
+                controller
+                for controller in registry.query(kind=ComponentKind.AXIS)
+                if controller.state.parent_id == owner.component_id
+                and controller.state.selector == {"axis": "x"}
+            )
+            for owner in owners
+        ]
+        selected_target = selected_axis.resolve_target()
+        original_setter = selected_target.set_tick_params
+        calls = 0
+
+        def fail_once(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("injected shared-axis failure")
+            return original_setter(*args, **kwargs)
+
+        before = {item.component_id: item.state for item in linked_axes}
+        with patch.object(
+            selected_target,
+            "set_tick_params",
+            side_effect=fail_once,
+        ):
+            rejected = service.apply(candidate)
+        self.assertFalse(rejected.committed)
+        self.assertTrue(rejected.rollback_complete)
+        for item in linked_axes:
+            self.assertEqual(item.state, before[item.component_id], item.component_id)
+        self.assertIs(
+            first_axes.xaxis.get_major_locator(),
+            second_axes.xaxis.get_major_locator(),
+        )
+
+        fresh = service.snapshot(selected_axis.component_id)
+        committed = service.apply(replace(candidate, expected_states=fresh.expected_states))
+        self.assertTrue(committed.committed, committed.message)
+        self.assertTrue(
+            all(
+                item.state.properties["major_locator"]["kind"] == "fixed"
+                for item in linked_axes
+            )
+        )
+
     def test_minor_visibility_roundtrips_through_pending_tick_parameters(self):
         figure = Figure()
         axes = figure.subplots()
@@ -751,6 +1036,43 @@ class SemanticControllerTests(unittest.TestCase):
                 if tick.gridline.get_visible()
             )
         )
+
+    def test_tick_label_state_replay_restores_nonstandard_text_styles(self):
+        labels = self._one(
+            TickLabelGroupController, axis="x", level="major"
+        )
+        bbox = {
+            "enabled": True,
+            "boxstyle": "round",
+            "facecolor": "#ffffff",
+            "edgecolor": "#000000",
+            "linewidth": 1.0,
+            "line_pattern": {"kind": "preset", "value": "-"},
+            "alpha": None,
+            "fill": True,
+            "hatch": None,
+            "pad": 0.3,
+        }
+        self.assertTrue(labels.set_property("fontweight", "bold").ok)
+        self.assertTrue(labels.set_property("fontstyle", "italic").ok)
+        self.assertTrue(labels.set_property("bbox", bbox).ok)
+        authoritative = labels.state
+
+        self.axes.xaxis.reset_ticks()
+        recreated = self.axes.xaxis.get_major_ticks()
+        self.assertTrue(recreated)
+        self.assertTrue(
+            all(tick.label1.get_bbox_patch() is None for tick in recreated)
+        )
+
+        replayed = labels.apply_state(authoritative)
+
+        self.assertTrue(replayed.ok, replayed.message)
+        for tick in self.axes.xaxis.get_major_ticks():
+            for label in (tick.label1, tick.label2):
+                self.assertEqual(label.get_fontweight(), "bold")
+                self.assertEqual(label.get_fontstyle(), "italic")
+                self.assertIsNotNone(label.get_bbox_patch())
 
     def test_tick_label_fontfamily_is_one_string_in_state_and_artist(self):
         labels = self._one(
@@ -1340,4 +1662,3 @@ class ControllerValidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

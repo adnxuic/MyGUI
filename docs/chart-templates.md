@@ -4,10 +4,11 @@ Chart templates reproduce a complete Figure with new data from the same kind
 of instrument or workflow. A template keeps layout, Axes, charts, elements,
 styles, data bindings, preprocessing, and Fit configuration. Applying one
 always creates a new project; it never replaces the current project.
-Current files use strict `mygui-template` schema v5 with a schema-v21 Figure
-blueprint. Strict v4 files migrate by injecting the deterministic Error Bar
-line, marker, error-style, sampling, and limit-arrow defaults; malformed v4
-records are rejected before a project is staged.
+Current files use strict `mygui-template` schema v6 with a schema-v22 Figure
+blueprint. Strict v5 files first validate their schema-v21 Figure and then
+advance without content changes. Strict v4 files migrate through v5 by
+injecting deterministic Error Bar defaults; malformed predecessors are
+rejected before a project is staged.
 
 ## Extract a template
 
@@ -101,7 +102,7 @@ materializers and services.
 
 All component, layout, shared-axis, Colorbar-source, Sheet, column, project,
 and data-reference IDs are regenerated. Dynamic text and Fit results (filtered with the saved `fit_input_range` specification) are
-inserted into a complete schema-v21 project snapshot, which is strictly
+inserted into a complete schema-v22 project snapshot, which is strictly
 validated before it reaches the shared Repository/Canvas restore transaction.
 On success the new project is selected, has no file path, has an empty Undo
 stack, and is dirty. On failure no project, tab, Inspector, tree entry, Fit
@@ -123,14 +124,16 @@ The independent root format is:
 ```json
 {
   "schema": "mygui-template",
-  "schema_version": 5,
+  "schema_version": 6,
   "metadata": {},
   "data_contract": {},
   "figure": {}
 }
 ```
 
-Only the exact integer version 3 and closed fields are accepted for newly saved templates. Schema version 1 templates migrate automatically through version 2 (injecting default `all` fit ranges) to version 3 (injecting default `{"mode": "grid"}` Axes geometry). Version 2 templates migrate directly to version 3. Unknown
+Only exact integer version 6 and closed fields are accepted for newly saved
+templates. Versions 1–5 migrate through every intervening version; v5→v6
+preserves the complete validated Figure blueprint. Unknown
 fields or versions, non-finite numbers, dangling components, invalid refs,
 unknown variables, oversized files/JSON/images, and invalid component trees
 are rejected. A corrupt file does not prevent startup: Settings shows its

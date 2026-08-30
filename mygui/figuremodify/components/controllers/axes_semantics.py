@@ -534,6 +534,18 @@ class TickGroupController(AxisComponentController):
             else target.get_minor_ticks()
         )
 
+    def _safe_snapshot(self) -> ComponentState:
+        """Keep incidental Tick recreation from replacing business state."""
+
+        return self._state.clone()
+
+    def set_property(self, key: str, value: Any) -> ComponentChange:
+        """Submit one edit through the full-style mutation transaction."""
+
+        return self.apply_mutation(
+            ComponentMutation(self.component_id, properties={key: value})
+        )
+
     def _read_property(self, target: Axis, spec: PropertySpec) -> Any:
         ticks = self._ticks(target)
         if not ticks:
@@ -587,6 +599,25 @@ class TickGroupController(AxisComponentController):
                         getattr(line, name)(value)
             return
         target.set_tick_params(which=level, **{spec.key: value})
+
+    def _properties_require_data_apply(
+        self, property_patch: dict[str, Any]
+    ) -> bool:
+        """Replay the complete style after a batch may recreate Tick objects."""
+
+        return bool(property_patch)
+
+    def _apply_data(self, target: Axis, state: ComponentState) -> None:
+        """Apply authoritative line style to every currently active Tick."""
+
+        specs = self.property_specs()
+        for key, value in state.properties.items():
+            self._write_property(target, specs[key], deepcopy(value))
+
+    def reapply_runtime_style(self) -> None:
+        """Replay authoritative style after Matplotlib recreates Tick objects."""
+
+        self._apply_data(self.resolve_target(), self._state)
 
     def _delete_target(self, target: Axis) -> None:
         self._write_property(target, self.property_specs()["primary_visible"], False)
@@ -682,6 +713,18 @@ class TickLabelGroupController(AxisComponentController):
             else target.get_minor_ticks()
         )
 
+    def _safe_snapshot(self) -> ComponentState:
+        """Keep incidental Tick recreation from replacing business state."""
+
+        return self._state.clone()
+
+    def set_property(self, key: str, value: Any) -> ComponentChange:
+        """Submit one edit through the full-style mutation transaction."""
+
+        return self.apply_mutation(
+            ComponentMutation(self.component_id, properties={key: value})
+        )
+
     def _label(self, tick: Any) -> Text:
         return tick.label1
 
@@ -768,6 +811,25 @@ class TickLabelGroupController(AxisComponentController):
             "pad": "pad",
         }[spec.key]
         target.set_tick_params(which=level, **{option: value})
+
+    def _properties_require_data_apply(
+        self, property_patch: dict[str, Any]
+    ) -> bool:
+        """Replay the complete style after a batch may recreate Tick objects."""
+
+        return bool(property_patch)
+
+    def _apply_data(self, target: Axis, state: ComponentState) -> None:
+        """Apply authoritative text style to every currently active Tick."""
+
+        specs = self.property_specs()
+        for key, value in state.properties.items():
+            self._write_property(target, specs[key], deepcopy(value))
+
+    def reapply_runtime_style(self) -> None:
+        """Replay authoritative style after Matplotlib recreates Tick objects."""
+
+        self._apply_data(self.resolve_target(), self._state)
 
     def _delete_target(self, target: Axis) -> None:
         self._write_property(target, self.property_specs()["primary_visible"], False)

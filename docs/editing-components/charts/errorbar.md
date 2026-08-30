@@ -93,11 +93,11 @@ rebuilds the container so the arrows keep pointing the Matplotlib-correct way.
 
 ## Project record
 
-Schema v21 persists Error Bar as `kind: "errorbar"`, `role: "error_bar"`, with
+Schema v21 introduced the current Error Bar record as `kind: "errorbar"`, `role: "error_bar"`, with
 `selector: {"object_id": component_id}` under its parent Axes and exactly the
 five data fields `x_ref`, `y_ref`, `xerr`, `yerr`, and `preprocess`. The v20
 predecessor property set migrates by injecting the deterministic extension
-defaults. Template files require `mygui-template` schema v5.
+defaults. Current template files require `mygui-template` schema v6.
 
 ## Referenced Matplotlib 3.9.0 URLs
 

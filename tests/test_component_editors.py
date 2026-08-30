@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QLineEdit,
     QPlainTextEdit,
     QVBoxLayout,
@@ -24,6 +25,7 @@ from mygui import status_messages
 from mygui.database import ColumnRef, TableRepository
 from mygui.figuremodify.component_services import (
     AxesCommandService,
+    AxisTickSettingsService,
     ChartDataService,
     FitService,
     FunctionCurveService,
@@ -55,6 +57,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     AxisFormatterEditor,
     AxisLocatorEditor,
     AxisScaleEditor,
+    AxisTickSettingsDialog,
     ComponentEditorBase,
     ComponentEditorManager,
     DebouncedTextBinding,
@@ -592,6 +595,135 @@ class ComponentEditorTests(unittest.TestCase):
             self.assertEqual(events[0][1], "error")
         finally:
             status_messages.clear_status_handler()
+
+    def test_unified_axis_tick_dialog_uses_fixed_row_editor_without_side_effects(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=False,
+        )
+        axis = next(
+            controller
+            for controller in registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = registry.get(axis.state.parent_id)
+        context = _editor_context(registry, TableRepository(), ColorLibrary())
+        context.axis_ticks = AxisTickSettingsService(
+            registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+        inspector = context.editor_manager.create(axis, context=context)
+        dialog = None
+        try:
+            section = inspector.section("ticks_labels")
+            self.assertTrue(section.configure_button.isEnabled())
+            self.assertNotIn("major_locator", inspector.section("properties").editors())
+            opening = context.axis_ticks.snapshot(axis.component_id)
+            dialog = AxisTickSettingsDialog(opening, context=context)
+            dialog.major_page.locator_editor.set_value(
+                {
+                    "kind": "fixed",
+                    "params": {"locations": [0.0, 1.0], "nbins": None},
+                },
+                emit=True,
+            )
+            dialog.major_page.formatter_editor.set_value(
+                {
+                    "kind": "fixed",
+                    "params": {"labels": ["zero", "one"]},
+                },
+                emit=True,
+            )
+            self.assertEqual(dialog.major_page.fixed_table.rowCount(), 2)
+            dialog.major_page.fixed_table.item(0, 0).setText("abc")
+            self.assertFalse(dialog.error_label.isHidden())
+            self.assertFalse(
+                dialog.buttons.button(
+                    QDialogButtonBox.StandardButton.Ok
+                ).isEnabled()
+            )
+            with self.assertRaisesRegex(ValueError, "valid numeric values"):
+                dialog.current_draft()
+            dialog.major_page.fixed_table.item(0, 0).setText("0")
+            self.assertTrue(dialog.error_label.isHidden())
+            self.assertTrue(
+                dialog.buttons.button(
+                    QDialogButtonBox.StandardButton.Ok
+                ).isEnabled()
+            )
+            dialog.major_page.fixed_table.item(1, 1).setText("ONE")
+            candidate = context.axis_ticks.validate(dialog.current_draft())
+            self.assertEqual(
+                candidate.major.formatter["params"]["labels"],
+                ["zero", "ONE"],
+            )
+            dialog._copy(dialog.major_page, dialog.minor_page)
+            self.assertEqual(
+                dialog.minor_page.level().locator,
+                dialog.major_page.level().locator,
+            )
+            dialog._restore_scale_defaults()
+            self.assertEqual(
+                dialog.current_draft().major.locator["kind"], "auto"
+            )
+            self.assertEqual(axis.state, opening.expected_states[0])
+        finally:
+            if dialog is not None:
+                dialog.reject()
+                dialog.deleteLater()
+            inspector.close()
+            context.editor_manager.close()
+
+    def test_axis_tick_dialog_accepts_without_message_presenter(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=False,
+        )
+        axis = next(
+            controller
+            for controller in registry.query(kind=ComponentKind.AXIS)
+            if controller.state.selector == {"axis": "x"}
+        )
+        owner = registry.get(axis.state.parent_id)
+        context = _editor_context(registry, TableRepository(), ColorLibrary())
+        context.axis_ticks = AxisTickSettingsService(
+            registry,
+            linked_axes=lambda _axes_id, _dimension: (owner,),
+        )
+        context.messages = None
+        dialog = AxisTickSettingsDialog(
+            context.axis_ticks.snapshot(axis.component_id),
+            context=context,
+        )
+        try:
+            fontsize = dialog.major_page.level().label_properties["fontsize"]
+            dialog.major_page.label_form.apply_property(
+                "fontsize", fontsize + 1.0
+            )
+            result = SimpleNamespace(ok=True, message="Tick settings updated.")
+            with (
+                patch(
+                    "mygui.widgets.fig_control_window.component_editors.sections."
+                    "axis_ticks.perform_editor_action",
+                    return_value=result,
+                ),
+                patch.object(status_messages, "show_success") as show_success,
+            ):
+                dialog._accept_settings()
+            self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+            show_success.assert_called_once_with("Tick settings updated.")
+        finally:
+            dialog.dispose()
+            dialog.close()
+            context.editor_manager.close()
 
     def test_curve_panel_uses_controller_for_range_and_rolls_back_bad_expression(self):
         figure = Figure()
@@ -1751,6 +1883,152 @@ class ComponentSpecEditorTests(unittest.TestCase):
             self.assertEqual(marks.summary.text(), "Every point")
         finally:
             editor.close()
+
+    def test_tick_level_page_preserves_bbox_and_common_properties_without_overwriting(self):
+        from mygui.figuremodify.components import (
+            TickGroupController,
+            TickLabelGroupController,
+        )
+        from mygui.figuremodify.components.property_values import (
+            DEFAULT_FORMATTER,
+            DEFAULT_MAJOR_LOCATOR,
+        )
+        from mygui.figuremodify.services.axis_ticks import TickLevelSettings
+        from mygui.widgets.fig_control_window.component_editors.sections.axis_ticks import (
+            _TickLevelPage,
+        )
+
+        tick_defaults = {
+            k: v.default
+            for k, v in TickGroupController.property_specs().items()
+            if v.persistent
+        }
+        label_defaults = {
+            k: v.default
+            for k, v in TickLabelGroupController.property_specs().items()
+            if v.persistent
+        }
+        level = TickLevelSettings(
+            DEFAULT_MAJOR_LOCATOR,
+            DEFAULT_FORMATTER,
+            tick_defaults,
+            label_defaults,
+        )
+        page = _TickLevelPage(level, color_library=ColorLibrary())
+        try:
+            # 1. Modify common property
+            page.label_form.apply_property("fontsize", 22.0)
+            self.assertEqual(page.level().label_properties["fontsize"], 22.0)
+
+            # 2. Modify bbox to enabled
+            bbox_enabled = {
+                "enabled": True,
+                "boxstyle": "round",
+                "facecolor": "#FFFFFF",
+                "edgecolor": "#000000",
+                "linewidth": 1.0,
+                "line_pattern": {"kind": "preset", "value": "-"},
+                "alpha": None,
+                "fill": True,
+                "hatch": None,
+                "pad": 0.3,
+            }
+            page.label_form.apply_property("bbox", bbox_enabled)
+            self.assertTrue(page.level().label_properties["bbox"]["enabled"])
+
+            # 3. Modify bbox to disabled
+            page.label_form.apply_property("bbox", {"enabled": False})
+            self.assertFalse(page.level().label_properties["bbox"]["enabled"])
+
+            # 4. Modify advanced property and verify common property is retained
+            page.label_advanced_form.apply_property("antialiased", False)
+            self.assertFalse(page.level().label_properties["antialiased"])
+            self.assertEqual(page.level().label_properties["fontsize"], 22.0)
+        finally:
+            page.dispose()
+            page.close()
+
+    def test_tick_level_page_blocks_recursive_table_rebuilds_and_row_signals(self):
+        from mygui.figuremodify.components import (
+            TickGroupController,
+            TickLabelGroupController,
+        )
+        from mygui.figuremodify.components.property_values import (
+            DEFAULT_FORMATTER,
+            DEFAULT_MAJOR_LOCATOR,
+        )
+        from mygui.figuremodify.services.axis_ticks import TickLevelSettings
+        from mygui.widgets.fig_control_window.component_editors.sections.axis_ticks import (
+            _TickLevelPage,
+        )
+
+        level = TickLevelSettings(
+            DEFAULT_MAJOR_LOCATOR,
+            DEFAULT_FORMATTER,
+            {
+                key: spec.default
+                for key, spec in TickGroupController.property_specs().items()
+                if spec.persistent
+            },
+            {
+                key: spec.default
+                for key, spec in TickLabelGroupController.property_specs().items()
+                if spec.persistent
+            },
+        )
+        page = _TickLevelPage(level, color_library=ColorLibrary())
+        try:
+            page.locator_editor.set_value(
+                {
+                    "kind": "fixed",
+                    "params": {"locations": [0.0, 1.0], "nbins": None},
+                },
+                emit=True,
+            )
+            page.formatter_editor.set_value(
+                {
+                    "kind": "fixed",
+                    "params": {"labels": []},
+                },
+                emit=True,
+            )
+            self.assertEqual(
+                page.formatter_editor.value()["params"]["labels"],
+                ["", ""],
+            )
+            self.assertEqual(
+                page.level().formatter["params"]["labels"],
+                ["", ""],
+            )
+            changed_items = []
+            page.fixed_table.itemChanged.connect(changed_items.append)
+            original_set_value = page.locator_editor.set_value
+
+            def emitting_set_value(value, *, emit=False):
+                del emit
+                original_set_value(value, emit=True)
+
+            edited_item = page.fixed_table.item(0, 0)
+            with (
+                patch.object(
+                    page.locator_editor,
+                    "set_value",
+                    side_effect=emitting_set_value,
+                ),
+                patch.object(page, "_sync_table", wraps=page._sync_table) as sync,
+            ):
+                edited_item.setText("0.25")
+            self.assertEqual(sync.call_count, 0)
+            self.assertIs(page.fixed_table.item(0, 0), edited_item)
+
+            changed_items.clear()
+            page._add_row()
+            page._move_row(-1)
+            page._remove_row()
+            self.assertEqual(changed_items, [])
+        finally:
+            page.dispose()
+            page.close()
 
     def test_sync_from_controller_does_not_reapply_compound_values(self):
         _figure, registry = self._figure_registry()

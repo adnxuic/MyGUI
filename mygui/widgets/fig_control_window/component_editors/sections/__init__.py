@@ -28,6 +28,10 @@ from .axes import (
     AxesLimitsSection,
     AxesLayoutSection,
 )
+from .axis_ticks import (
+    AxisTickSettingsDialog,
+    AxisTickSettingsSection,
+)
 
 from .appearance import (
     LineAppearanceSection,
@@ -82,6 +86,8 @@ __all__ = [
     "ErrorBarDataSection",
     "AxesLimitsSection",
     "AxesLayoutSection",
+    "AxisTickSettingsDialog",
+    "AxisTickSettingsSection",
     "LineAppearanceSection",
     "ScatterAppearanceSection",
     "TextContentSection",

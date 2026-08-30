@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from mygui.database import ColumnRef
 from mygui.figuremodify.components import ComponentRole
-from mygui.figuremodify.components.serialization import normalize_v21_figure
+from mygui.figuremodify.components.serialization import normalize_v22_figure
 
 from .models import (
     ChartTemplate,
@@ -155,7 +155,7 @@ class TemplateExtractor:
         if canvas is None:
             raise ValueError("Select a Figure before extracting a template.")
         project = self.repository.project(canvas.project_id)
-        figure = normalize_v21_figure(canvas.component_snapshot())
+        figure = normalize_v22_figure(canvas.component_snapshot())
         for component in figure["components"]:
             for (component_id, property_name), value in dict(
                 dynamic_text_overrides or {}

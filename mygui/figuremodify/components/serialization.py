@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v21 Figure trees."""
+"""Normalize and validate strict schema-v10 through v22 Figure trees."""
 
 from __future__ import annotations
 
@@ -193,7 +193,13 @@ def normalize_v20_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v21_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v21 Figure component tree."""
+    """Normalize the predecessor schema-v21 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v22_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v22 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -285,6 +291,19 @@ def _validate_controller_contract(
                 f"Axes data must not contain geometry before "
                 f"schema v19; schema v{schema_version} rejected it."
             )
+    if state.kind is ComponentKind.AXIS and schema_version < 22:
+        for key in ("major_locator", "minor_locator"):
+            value = state.properties.get(key)
+            if isinstance(value, dict) and value.get("kind") == "index":
+                raise ComponentValidationError(
+                    f"{key} kind 'index' is not part of schema v{schema_version}."
+                )
+        for key in ("major_formatter", "minor_formatter"):
+            value = state.properties.get(key)
+            if isinstance(value, dict) and value.get("kind") == "format_str":
+                raise ComponentValidationError(
+                    f"{key} kind 'format_str' is not part of schema v{schema_version}."
+                )
     if state.kind is ComponentKind.TICK_LABEL_GROUP:
         font_path = f"{path}.properties.fontfamily"
         fontfamily = state.properties.get("fontfamily")
@@ -1245,7 +1264,7 @@ def validate_v21_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v21 Figure component tree."""
+    """Validate the predecessor schema-v21 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -1253,4 +1272,21 @@ def validate_v21_figure(
         project_id,
         project_name,
         schema_version=21,
+    )
+
+
+def validate_v22_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v22 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=22,
     )

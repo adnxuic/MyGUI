@@ -10,8 +10,8 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
   Contour feature pages, Projects and
   Appearance includes Figure Export, Getting Started includes Application
   Settings, Developer Reference documents the
-  Controller/Service/Canvas package layout plus the current schema-v21
-  property contract and legacy v18, v17, v16, v15, v14, v13, v12, and v10 migration references,
+  Controller/Service/Canvas package layout plus the current schema-v22
+  property contract and legacy v21 through v10 migration references,
   and Editing Components mirrors the full 32-profile runtime component
   hierarchy.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.

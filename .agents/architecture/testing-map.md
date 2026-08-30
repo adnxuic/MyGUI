@@ -86,7 +86,7 @@ not claimed by offscreen automation.
 the real MainWindow, clicks controls, and writes PNG plus `summary.json` under
 `build/agent-results/desktop-smoke/`. Groups (`--only`) are `settings`,
 `templates`, `field_2d`, `charts_1d`, `elements`, `inspectors`,
-`layouts_xrd`, `deletion_history`, and `project_lifecycle`. Settings includes
+`layouts_xrd`, `axes_smoke`, `deletion_history`, and `project_lifecycle`. Settings includes
 the Templates page (Restore disabled, isolated empty library). The templates
 group extracts, duplicates, and applies a chart template without native file
 dialogs. Inspectors walk all 32 production `(ComponentKind, ComponentRole)`

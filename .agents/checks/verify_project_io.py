@@ -27,7 +27,18 @@ def main() -> int:
         "durationMs": 0, "evidence": "\n".join(errors) if errors else "Runtime versions match.",
     }]
     verification.append(python_unittest_step("project_io_contracts", MODULES))
-    return finish(task_result("project-io", verification, persistence_impact="Schema-v18 behavior, strict v17 migration, and chained v16/v15/v14/v13/v12/v11/v10 migration verified."), args.json_out, "project-io")
+    return finish(
+        task_result(
+            "project-io",
+            verification,
+            persistence_impact=(
+                "Schema-v22 behavior, strict content-preserving v21 migration, "
+                "and the chained v10-v20 migrations were verified."
+            ),
+        ),
+        args.json_out,
+        "project-io",
+    )
 
 
 if __name__ == "__main__":

@@ -125,6 +125,16 @@ _LOCATOR_FIELDS = {
     "auto_minor": (
         _Field("n", "Intervals", "enum", None, _choice(None, 4, 5)),
     ),
+    "index": (
+        _Field(
+            "base",
+            "Index interval",
+            "number",
+            1.0,
+            tooltip="Use for index-like data with a regular item interval.",
+        ),
+        _Field("offset", "Index offset", "number", 0.0),
+    ),
     "max_n": (
         _Field("nbins", "Maximum bins", "auto_int", "auto"),
         _Field("steps", "Allowed steps", "optional_numbers", None),
@@ -189,6 +199,15 @@ _FORMATTER_FIELDS = {
         _Field("decimals", "Decimal places", "optional_int", None),
         _Field("symbol", "Symbol", "text", "%"),
         _Field("is_latex", "Symbol is TeX", "bool", False),
+    ),
+    "format_str": (
+        _Field(
+            "format",
+            "Percent format",
+            "text",
+            "%g",
+            tooltip="One safe percent conversion; %% inserts a literal percent sign.",
+        ),
     ),
     "str_method": (
         _Field("format", "Format", "text", "{x:g}"),
@@ -646,6 +665,7 @@ class AxisFormatterEditor(_StructuredValueEditor):
 
     def _summary_text(self, value: Any) -> str:
         names = {
+            "format_str": "Percent format",
             "str_method": "String format",
             "log_exponent": "Log exponent",
             "log_mathtext": "Log math text",

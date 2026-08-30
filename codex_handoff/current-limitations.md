@@ -2,9 +2,9 @@
 
 ## Project and component state
 
-- Project files save exact integer schema v15. The loader accepts strictly
-  valid v14 by in-memory migration, and strictly valid v13, v12, v11, and v10
-  through every intervening version. Versions v4-v9 remain unsupported.
+- Project files save exact integer schema v22. Strict v10-v21 inputs migrate
+  through every intervening version in memory. Versions v4-v9 remain
+  unsupported.
 - The Components tree does not provide drag reparenting or ordering, inline
   rename, visibility controls, or canvas highlighting. Selection and expansion
   state last only for the current application session.
@@ -17,9 +17,10 @@
   `axes.prop_cycle` keys such as line style, marker, or width are not advanced
   by `ColorCycleState`.
 - Variable-length numeric and text sequences, such as custom dash lengths,
-  tick locations, legend scatter offsets, and Scatter URLs, are typed as
-  comma-separated or line-separated text. There is no per-item row editor, and
-  the Inspector has no visual dash, marker, or box-style preview.
+  legend scatter offsets, and Scatter URLs, still use comma-separated or
+  line-separated text. Fixed tick positions and labels now have a row editor;
+  other sequences have no per-item row editor, and the Inspector has no visual
+  dash, marker, or box-style preview.
 
 ## Table and import boundaries
 

@@ -13,6 +13,13 @@ from __future__ import annotations
 from .services.annotation import AnnotationService
 from .services.axes_command import AxesCommandService, AxesPaletteStatus
 from .services.axes_geometry import AxesGeometryService
+from .services.axis_ticks import (
+    AxisTickPreview,
+    AxisTickPreviewRenderer,
+    AxisTickSettingsDraft,
+    AxisTickSettingsService,
+    TickLevelSettings,
+)
 from .services.chart_data import (
     ChartDataService,
     FitService,
@@ -62,6 +69,10 @@ __all__ = [
     "AxesCommandService",
     "AxesGeometryService",
     "AxesPaletteStatus",
+    "AxisTickPreview",
+    "AxisTickPreviewRenderer",
+    "AxisTickSettingsDraft",
+    "AxisTickSettingsService",
     "ChartDataService",
     "ColorConsumptionLedger",
     "ColorCycleDeletionEffect",
@@ -93,6 +104,7 @@ __all__ = [
     "ReferenceMarksService",
     "ScatterColorbarSourceResolver",
     "TextRenderService",
+    "TickLevelSettings",
     "default_field_2d_properties",
     "production_colorbar_source_resolvers",
     "production_deletion_handlers",

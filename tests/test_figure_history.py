@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import base64
 import os
 from pathlib import Path
@@ -129,6 +130,49 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
         )
         self.stack.clear()
         return controller, inspector
+
+    def test_unified_tick_confirmation_is_one_undoable_command(self):
+        axes_id = self._create_axes_baseline()
+        axis = self.canvas.component_registry.find_one(
+            parent_id=axes_id,
+            kind=ComponentKind.AXIS,
+            role=ComponentRole.X_AXIS,
+            recursive=False,
+        )
+        opening = self.canvas.axis_tick_settings_service.snapshot(
+            axis.component_id
+        )
+        candidate = replace(
+            opening,
+            major=replace(
+                opening.major,
+                locator={
+                    "kind": "fixed",
+                    "params": {"locations": [0.0, 0.5, 1.0], "nbins": None},
+                },
+                formatter={
+                    "kind": "fixed",
+                    "params": {"labels": ["zero", "half", "one"]},
+                },
+                tick_properties={
+                    **opening.major.tick_properties,
+                    "direction": "in",
+                },
+            ),
+        )
+        result = self.canvas.figure_history.perform(
+            "Change X Axis Ticks & Labels",
+            lambda: self.canvas.axis_tick_settings_service.apply(candidate),
+            scan_all=True,
+        )
+        self.assertTrue(result.committed, result.message)
+        self.assertEqual(self.stack.count(), 1)
+        self.assertEqual(axis.state.properties["major_locator"]["kind"], "fixed")
+
+        self.stack.undo()
+        self.assertEqual(axis.state.properties["major_locator"], opening.major.locator)
+        self.stack.redo()
+        self.assertEqual(axis.state.properties["major_locator"]["kind"], "fixed")
 
     def test_property_edits_merge_and_noop_does_not_pollute_history(self):
         controller = self.canvas.component_registry.get(
@@ -1385,7 +1429,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
             raw = load_project_file(path)
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 21)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 22)
             self.assertEqual(
                 set(raw["figure"]),
                 {"root_component_id", "components"},

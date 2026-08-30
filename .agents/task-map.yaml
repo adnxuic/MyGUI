@@ -21,7 +21,7 @@ tasks:
       - tests.test_project_object_roundtrip
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
-    documentation: [docs/component-extension-template.md, docs/component-properties-v21.md, docs/project-files.md, docs/chart-templates.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/errorbar.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
+    documentation: [docs/component-extension-template.md, docs/component-properties-v22.md, docs/project-files.md, docs/chart-templates.md, docs/editing-components/elements/annotation.md, docs/editing-components/charts/errorbar.md, docs/editing-components/charts/pseudocolor.md, docs/editing-components/charts/heatmap.md, docs/editing-components/charts/contour.md, docs/pseudocolor.md, docs/heatmap.md, docs/contour.md]
     manual_smoke: true
   modify_component_property:
     skill: .agents/skills/modify-component-property/SKILL.md
@@ -64,7 +64,7 @@ tasks:
       - tests.test_field_2d_grid
       - tests.test_field_2d_component
       - tests.test_axes_geometry
-    documentation: [docs/project-files.md, docs/chart-templates.md, docs/component-properties-v21.md]
+    documentation: [docs/project-files.md, docs/chart-templates.md, docs/component-properties-v22.md]
     manual_smoke: true
   project_io_change:
     skill: .agents/skills/project-io-change/SKILL.md

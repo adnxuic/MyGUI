@@ -33,6 +33,7 @@ from mygui.figuremodify.component_services import (
     AnnotationService,
     AxesCommandService,
     AxesGeometryService,
+    AxisTickSettingsService,
     ChartDataService,
     ColorbarService,
     ColorConsumptionLedger,
@@ -130,8 +131,8 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v21_figure,
-    validate_v21_figure,
+    normalize_v22_figure,
+    validate_v22_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_geometry import grid_geometry_record
@@ -198,6 +199,28 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
 import numpy as np
+
+
+class _ControllerAwareFigureCanvas(FigureCanvasQTAgg):
+    """Run controller-owned runtime synchronization before each render."""
+
+    def __init__(self, figure: Figure, *, before_draw) -> None:
+        self._before_draw = before_draw
+        self._synchronizing_before_draw = False
+        super().__init__(figure)
+
+    def set_before_draw(self, callback) -> None:
+        self._before_draw = callback
+
+    def draw(self) -> None:
+        callback = self._before_draw
+        if callable(callback) and not self._synchronizing_before_draw:
+            self._synchronizing_before_draw = True
+            try:
+                callback()
+            finally:
+                self._synchronizing_before_draw = False
+        super().draw()
 
 
 class PyFigureCanvas(QWidget):
@@ -269,6 +292,10 @@ class PyFigureCanvas(QWidget):
         register_production_profiles(self.editor_registry)
         self.axes_commands = AxesCommandService(self.component_registry)
         self.axes_layout_service = AxesLayoutService(self)
+        self.axis_tick_settings_service = AxisTickSettingsService(
+            self.component_registry,
+            linked_axes=self.axes_layout_service.linked_axes,
+        )
         self.axes_geometry_service = AxesGeometryService(self)
         self.function_curve_service = FunctionCurveService(
             self.component_registry
@@ -353,6 +380,7 @@ class PyFigureCanvas(QWidget):
             messages=self.message_presenter,
             editor_manager=self.component_editor_manager,
             axes_commands=self.axes_commands,
+            axis_ticks=self.axis_tick_settings_service,
             axes_layout=self.axes_layout_service,
             axes_geometry=self.axes_geometry_service,
             function_curves=self.function_curve_service,
@@ -409,7 +437,10 @@ class PyFigureCanvas(QWidget):
         )
         self.repository.transaction_committed.connect(self._table_changed)
 
-        self.canva = FigureCanvasQTAgg(self.fig)
+        self.canva = _ControllerAwareFigureCanvas(
+            self.fig,
+            before_draw=self.axis_tick_settings_service.reapply_runtime_styles,
+        )
         size_inches = self.fig.get_size_inches()
         self.canva.setFixedSize(
             round(float(size_inches[0]) * self._document_dpi),
@@ -1329,6 +1360,7 @@ class PyFigureCanvas(QWidget):
             )
             self._tex_render_listener = None
         self.cancel_pending_draw()
+        self.canva.set_before_draw(None)
         try:
             self.repository.transaction_committed.disconnect(self._table_changed)
         except (RuntimeError, TypeError):
@@ -4105,7 +4137,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v21_figure(source)
+        source = normalize_v22_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -4146,7 +4178,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v21 component tree used by persistence."""
+        """Return the canonical schema-v22 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -4166,10 +4198,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v21_figure(snapshot)
+        return normalize_v22_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v21 Figure tree."""
+        """Validate and return the current complete schema-v22 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -4178,7 +4210,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v21_figure(
+        validate_v22_figure(
             snapshot,
             available_refs,
             self.project_id,

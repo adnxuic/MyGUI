@@ -8,19 +8,20 @@ A code-driven Windows walk opens the real MainWindow, clicks controls, and
 writes PNG evidence plus `summary.json`. Groups are selected with `--only`.
 The walk covers Settings Center (including Templates), NEXT_USE creation
 defaults, Chart Templates extract/apply, 1D charts including Error Bar, Field 2D, Elements, all 32
-Inspector profiles, layout templates, XRD import, deletion/history, and
-project save/restore, export, and Canvas popout. Native file dialogs, drag and
+Inspector profiles, shared X/Y ticker synchronization, layout templates, XRD
+import, deletion/history, and project save/restore, export, and Canvas popout. Native file dialogs, drag and
 drop, multi-monitor DPI, and live TeX/MATLAB remain on the interactive checks
 below. Offscreen Qt tests still do not cover those.
 
 ```powershell
 E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only settings
 E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only templates
+E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only axes_smoke
 E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desktop_smoke.py --only field_2d,charts_1d,elements,inspectors,layouts_xrd,deletion_history,project_lifecycle
 ```
 
 Available groups: `settings`, `templates`, `field_2d`, `charts_1d`, `elements`,
-`inspectors`, `layouts_xrd`, `deletion_history`, `project_lifecycle`.
+`inspectors`, `layouts_xrd`, `axes_smoke`, `deletion_history`, `project_lifecycle`.
 `--all-styles` is ignored. Evidence lands under
 `build/agent-results/desktop-smoke/`. Do not set `QT_QPA_PLATFORM=offscreen`.
 This check is local-only and is not part of `verify_full`. Remaining Start,

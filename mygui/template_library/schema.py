@@ -16,6 +16,7 @@ from mygui.figuremodify.components.serialization import (
     validate_v19_figure,
     validate_v20_figure,
     validate_v21_figure,
+    validate_v22_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
@@ -29,7 +30,8 @@ from .models import (
 
 
 TEMPLATE_SCHEMA_NAME = "mygui-template"
-TEMPLATE_SCHEMA_VERSION = 5
+TEMPLATE_SCHEMA_VERSION = 6
+TEMPLATE_SCHEMA_V5_VERSION = 5
 TEMPLATE_SCHEMA_V2_VERSION = 2
 TEMPLATE_SCHEMA_V3_VERSION = 3
 TEMPLATE_SCHEMA_V4_VERSION = 4
@@ -202,12 +204,14 @@ def _parse_contract(value: Any) -> TemplateDataContract:
     return TemplateDataContract(version, allow_extra, tuple(sheets))
 
 
-def template_to_dict(template: ChartTemplate) -> dict[str, Any]:
-    """Return the strict JSON wire representation for one template."""
+def _template_to_dict_version(
+    template: ChartTemplate, *, version: int
+) -> dict[str, Any]:
+    """Return one exact template wire version from the in-memory model."""
 
     return {
         "schema": TEMPLATE_SCHEMA_NAME,
-        "schema_version": TEMPLATE_SCHEMA_VERSION,
+        "schema_version": version,
         "metadata": {
             "id": template.metadata.id,
             "name": template.metadata.name,
@@ -232,6 +236,12 @@ def template_to_dict(template: ChartTemplate) -> dict[str, Any]:
         },
         "figure": deepcopy(template.figure),
     }
+
+
+def template_to_dict(template: ChartTemplate) -> dict[str, Any]:
+    """Return the strict current JSON wire representation for one template."""
+
+    return _template_to_dict_version(template, version=TEMPLATE_SCHEMA_VERSION)
 
 
 def _parse_template_payload(
@@ -282,12 +292,12 @@ def _parse_template_payload(
 
 
 def parse_template(value: Any) -> ChartTemplate:
-    """Parse and strictly validate a schema-v5 template object."""
+    """Parse and strictly validate a schema-v6 template object."""
 
     return _parse_template_payload(
         value,
         version=TEMPLATE_SCHEMA_VERSION,
-        figure_validator=validate_v21_figure,
+        figure_validator=validate_v22_figure,
     )
 
 
@@ -453,12 +463,40 @@ def migrate_v4_template_to_v5(value: Any) -> ChartTemplate:
         ):
             properties = component.setdefault("properties", {})
             properties.update(deepcopy(ERROR_BAR_TEMPLATE_V5_DEFAULTS))
-    migrated["schema_version"] = TEMPLATE_SCHEMA_VERSION
+    migrated["schema_version"] = TEMPLATE_SCHEMA_V5_VERSION
+    return _parse_template_payload(
+        migrated,
+        version=TEMPLATE_SCHEMA_V5_VERSION,
+        figure_validator=validate_v21_figure,
+    )
+
+
+def migrate_v5_template_to_v6(value: Any) -> ChartTemplate:
+    """Promote a strict schema-v5 template without changing Figure content."""
+
+    parsed = _parse_template_payload(
+        value,
+        version=TEMPLATE_SCHEMA_V5_VERSION,
+        figure_validator=validate_v21_figure,
+    )
+    migrated = _template_to_dict_version(
+        parsed,
+        version=TEMPLATE_SCHEMA_VERSION,
+    )
     return parse_template(migrated)
 
 
+def _finish_v5_migration(template: ChartTemplate) -> ChartTemplate:
+    return migrate_v5_template_to_v6(
+        _template_to_dict_version(
+            template,
+            version=TEMPLATE_SCHEMA_V5_VERSION,
+        )
+    )
+
+
 def parse_template_record(value: Any) -> ChartTemplate:
-    """Parse one stored record, migrating strict older templates to v5."""
+    """Parse one stored record, migrating strict older templates to v6."""
 
     if (
         isinstance(value, dict)
@@ -466,19 +504,29 @@ def parse_template_record(value: Any) -> ChartTemplate:
         and type(value.get("schema_version")) is int
     ):
         if value["schema_version"] == TEMPLATE_SCHEMA_V1_VERSION:
-            return migrate_v4_template_to_v5(
-                migrate_v3_template_to_v4(
-                    migrate_v2_template_to_v3(migrate_v1_template_to_v2(value))
+            return _finish_v5_migration(
+                migrate_v4_template_to_v5(
+                    migrate_v3_template_to_v4(
+                        migrate_v2_template_to_v3(
+                            migrate_v1_template_to_v2(value)
+                        )
+                    )
                 )
             )
         if value["schema_version"] == TEMPLATE_SCHEMA_V2_VERSION:
-            return migrate_v4_template_to_v5(
-                migrate_v3_template_to_v4(migrate_v2_template_to_v3(value))
+            return _finish_v5_migration(
+                migrate_v4_template_to_v5(
+                    migrate_v3_template_to_v4(migrate_v2_template_to_v3(value))
+                )
             )
         if value["schema_version"] == TEMPLATE_SCHEMA_V3_VERSION:
-            return migrate_v4_template_to_v5(migrate_v3_template_to_v4(value))
+            return _finish_v5_migration(
+                migrate_v4_template_to_v5(migrate_v3_template_to_v4(value))
+            )
         if value["schema_version"] == TEMPLATE_SCHEMA_V4_VERSION:
-            return migrate_v4_template_to_v5(value)
+            return _finish_v5_migration(migrate_v4_template_to_v5(value))
+        if value["schema_version"] == TEMPLATE_SCHEMA_V5_VERSION:
+            return migrate_v5_template_to_v6(value)
     return parse_template(value)
 
 

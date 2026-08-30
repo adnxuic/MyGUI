@@ -928,7 +928,7 @@ class ErrorBarProjectIoTests(ErrorBarGuiTestCase):
             path = Path(directory) / "v20.mygui.json"
             path.write_text(json.dumps(trimmed), encoding="utf-8")
             loaded = load_project_file(path)
-        self.assertEqual(loaded["schema_version"], 21)
+        self.assertEqual(loaded["schema_version"], 22)
         loaded_errorbar = next(
             component
             for component in loaded["figure"]["components"]
@@ -1082,7 +1082,7 @@ class ErrorBarTemplateTests(ErrorBarGuiTestCase):
             del component["properties"][key]
         current["schema_version"] = 4
         migrated = migrate_v4_template_to_v5(current)
-        self.assertEqual(template_to_dict(migrated)["schema_version"], 5)
+        self.assertEqual(template_to_dict(migrated)["schema_version"], 6)
         migrated_component = next(
             item
             for item in migrated.figure["components"]

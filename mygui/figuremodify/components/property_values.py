@@ -291,6 +291,7 @@ def normalize_locator(value: Any) -> dict[str, Any]:
     expected = {
         "auto": set(),
         "auto_minor": {"n"},
+        "index": {"base", "offset"},
         "max_n": {"nbins", "steps", "integer", "symmetric", "prune", "min_n_ticks"},
         "multiple": {"base", "offset"},
         "linear": {"numticks"},
@@ -308,6 +309,11 @@ def normalize_locator(value: Any) -> dict[str, Any]:
     if kind == "auto_minor":
         if result["n"] not in {None, 4, 5}:
             raise ComponentValidationError("AutoMinor locator n must be null, 4, or 5.")
+    elif kind == "index":
+        result = {
+            "base": _positive(result["base"], "Index base"),
+            "offset": _finite(result["offset"], "Index offset"),
+        }
     elif kind == "max_n":
         if result["nbins"] != "auto":
             result["nbins"] = int(_positive(result["nbins"], "MaxN nbins"))
@@ -361,6 +367,7 @@ def build_locator(value: Any) -> ticker.Locator:
     factories = {
         "auto": ticker.AutoLocator,
         "auto_minor": ticker.AutoMinorLocator,
+        "index": ticker.IndexLocator,
         "max_n": ticker.MaxNLocator,
         "multiple": ticker.MultipleLocator,
         "linear": ticker.LinearLocator,
@@ -384,6 +391,7 @@ def build_locator(value: Any) -> ticker.Locator:
 _LOCATOR_CLASSES = {
     "auto": ticker.AutoLocator,
     "auto_minor": ticker.AutoMinorLocator,
+    "index": ticker.IndexLocator,
     "max_n": ticker.MaxNLocator,
     "multiple": ticker.MultipleLocator,
     "linear": ticker.LinearLocator,
@@ -427,12 +435,89 @@ def locator_from_axis(
             return default
     if isinstance(locator, ticker.FixedLocator):
         return normalize_locator({"kind": "fixed", "params": {"locations": list(np.asarray(locator.locs, dtype=float)), "nbins": getattr(locator, "nbins", None)}})
+    if isinstance(locator, ticker.IndexLocator):
+        return normalize_locator(
+            {
+                "kind": "index",
+                "params": {
+                    "base": float(locator._base),
+                    "offset": float(locator.offset),
+                },
+            }
+        )
     if isinstance(locator, ticker.LinearLocator):
         return normalize_locator({"kind": "linear", "params": {"numticks": int(locator.numticks)}})
     if isinstance(locator, ticker.MultipleLocator):
         edge = getattr(locator, "_edge", None)
         return normalize_locator({"kind": "multiple", "params": {"base": float(getattr(edge, "step", 1.0)), "offset": float(getattr(locator, "_offset", 0.0))}})
     return normalize_locator(DEFAULT_MINOR_LOCATOR if minor else DEFAULT_MAJOR_LOCATOR)
+
+
+def _normalize_percent_format(value: Any) -> str:
+    """Validate one non-mapping, single-value old-style format string.
+
+    ``FormatStrFormatter`` delegates to Python's percent formatting.  Keep the
+    persisted form deliberately narrow: literal ``%%`` escapes are allowed,
+    while mapping keys, dynamic widths/precision and more than one conversion
+    are rejected before a project can reach Matplotlib.
+    """
+
+    template = str(value)
+    conversions = 0
+    index = 0
+    length = len(template)
+    conversion_types = frozenset("diouxXeEfFgGcrsa")
+    while index < length:
+        if template[index] != "%":
+            index += 1
+            continue
+        index += 1
+        if index < length and template[index] == "%":
+            index += 1
+            continue
+        if index >= length:
+            raise ComponentValidationError(
+                "FormatStr format contains an incomplete percent conversion."
+            )
+        if template[index] == "(":
+            raise ComponentValidationError(
+                "FormatStr format must not use mapping keys."
+            )
+        while index < length and template[index] in "#0- +":
+            index += 1
+        if index < length and template[index] == "*":
+            raise ComponentValidationError(
+                "FormatStr format must not use dynamic width or precision."
+            )
+        while index < length and template[index].isdigit():
+            index += 1
+        if index < length and template[index] == ".":
+            index += 1
+            if index < length and template[index] == "*":
+                raise ComponentValidationError(
+                    "FormatStr format must not use dynamic width or precision."
+                )
+            while index < length and template[index].isdigit():
+                index += 1
+        while index < length and template[index] in "hlL":
+            index += 1
+        if index >= length or template[index] not in conversion_types:
+            raise ComponentValidationError(
+                "FormatStr format contains an invalid percent conversion."
+            )
+        conversions += 1
+        index += 1
+    if conversions != 1:
+        raise ComponentValidationError(
+            "FormatStr format requires exactly one value conversion."
+        )
+    try:
+        template % 1.25
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ComponentValidationError(
+            "FormatStr format must accept one numeric tick value."
+        ) from exc
+    return template
 
 
 def normalize_formatter(value: Any) -> dict[str, Any]:
@@ -444,6 +529,7 @@ def normalize_formatter(value: Any) -> dict[str, Any]:
         "scalar": {"use_offset", "use_math_text", "use_locale", "scientific", "powerlimits"},
         "engineering": {"unit", "places", "sep", "usetex", "use_math_text"},
         "percent": {"xmax", "decimals", "symbol", "is_latex"},
+        "format_str": {"format"},
         "str_method": {"format"},
         "fixed": {"labels"},
         "log": {"base", "label_only_base", "minor_thresholds", "linthresh"},
@@ -483,6 +569,8 @@ def normalize_formatter(value: Any) -> dict[str, Any]:
         if not fields or not fields.issubset({"x", "pos"}):
             raise ComponentValidationError("StrMethod format may reference only x and pos.")
         result["format"] = template
+    elif kind == "format_str":
+        result["format"] = _normalize_percent_format(result["format"])
     elif kind == "fixed":
         if not isinstance(result["labels"], list) or not all(isinstance(item, str) for item in result["labels"]):
             raise ComponentValidationError("Fixed formatter labels must be strings.")
@@ -532,6 +620,7 @@ def build_formatter(value: Any) -> ticker.Formatter:
     factories = {
         "engineering": ticker.EngFormatter,
         "percent": ticker.PercentFormatter,
+        "format_str": ticker.FormatStrFormatter,
         "str_method": ticker.StrMethodFormatter,
         "fixed": ticker.FixedFormatter,
         "log": ticker.LogFormatter,
@@ -541,7 +630,7 @@ def build_formatter(value: Any) -> ticker.Formatter:
         "logit": ticker.LogitFormatter,
         "null": ticker.NullFormatter,
     }
-    if kind == "str_method":
+    if kind in {"format_str", "str_method"}:
         return factories[kind](params["format"])
     if kind == "fixed":
         return factories[kind](params["labels"])
@@ -552,6 +641,7 @@ _FORMATTER_CLASSES = {
     "scalar": ticker.ScalarFormatter,
     "engineering": ticker.EngFormatter,
     "percent": ticker.PercentFormatter,
+    "format_str": ticker.FormatStrFormatter,
     "str_method": ticker.StrMethodFormatter,
     "fixed": ticker.FixedFormatter,
     "log": ticker.LogFormatter,
@@ -576,6 +666,10 @@ def formatter_from_axis(formatter: ticker.Formatter, previous: Any, *, minor: bo
         return normalize_formatter(DEFAULT_MINOR_FORMATTER)
     if isinstance(formatter, ticker.FixedFormatter):
         return normalize_formatter({"kind": "fixed", "params": {"labels": list(formatter.seq)}})
+    if isinstance(formatter, ticker.FormatStrFormatter):
+        return normalize_formatter(
+            {"kind": "format_str", "params": {"format": str(formatter.fmt)}}
+        )
     if isinstance(formatter, ticker.StrMethodFormatter):
         return normalize_formatter({"kind": "str_method", "params": {"format": str(formatter.fmt)}})
     return normalize_formatter(DEFAULT_MINOR_FORMATTER if minor else DEFAULT_FORMATTER)

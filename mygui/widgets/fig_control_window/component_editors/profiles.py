@@ -29,6 +29,7 @@ from .sections import (
     AnnotationPropertySection,
     AnnotationTypographySection,
     AxesLayoutSection,
+    AxisTickSettingsSection,
     AxesLimitsSection,
     ColorbarSourceSection,
     DataReferenceSection,
@@ -330,6 +331,14 @@ def _axis_properties(controller, context, parent, *, keys=None):
         context=context,
         property_keys=keys,
         apply_properties=apply,
+        parent=parent,
+    )
+
+
+def _axis_ticks(controller, context, parent):
+    return AxisTickSettingsSection(
+        controller,
+        context=context,
         parent=parent,
     )
 
@@ -2088,6 +2097,13 @@ def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile
     core_keys = _controller_property_keys(kind, role, advanced=False)
     advanced_keys = _controller_property_keys(kind, role, advanced=True)
     if kind is ComponentKind.AXIS:
+        ticker_keys = (
+            "major_locator",
+            "major_formatter",
+            "minor_locator",
+            "minor_formatter",
+        )
+        core_keys = tuple(key for key in core_keys if key not in ticker_keys)
         core_factory = _axis_properties_for(core_keys)
         advanced_factory = _axis_properties_for(advanced_keys)
     elif kind in {
@@ -2108,6 +2124,15 @@ def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile
             property_keys=core_keys,
         )
     ]
+    if kind is ComponentKind.AXIS:
+        sections.append(
+            SectionSpec(
+                "ticks_labels",
+                "Ticks & Labels",
+                _axis_ticks,
+                property_keys=ticker_keys,
+            )
+        )
     if advanced_keys:
         sections.append(
             SectionSpec(

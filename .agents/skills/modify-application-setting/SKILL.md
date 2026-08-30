@@ -9,7 +9,7 @@ Read `.agents/architecture/application-settings.md` and
 `.agents/architecture/application-theme.md`. Preserve
 `CORE-APPLICATION-SETTINGS` and `CORE-THEME-OWNER`. Appearance keys also
 preserve `CORE-FONT-DIAGNOSTICS` and `CORE-MATPLOTLIB-BOUNDARY`. Do not
-weaken `CORE-PERSISTENCE-V21` or `CORE-PROJECT-HISTORY`.
+weaken `CORE-PERSISTENCE-V22` or `CORE-PROJECT-HISTORY`.
 
 This Skill is the only task flow for adding, modifying, renaming, or retiring
 an application setting.
@@ -33,7 +33,7 @@ Do not use this Skill for:
   `application-theme.md`, but do not invent a second preference store
 
 A setting-key change that also needs a new project field is two tasks. Keep
-the application setting out of schema v21.
+the application setting out of schema v22.
 
 ## Procedure
 
@@ -57,14 +57,14 @@ the application setting out of schema v21.
    `ChartCreationStager`, and `EditorContext` do not receive
    `ApplicationSettingsService`. Components and Axes Components keys are
    `NEXT_USE` inheritable values; they must not change Controller
-   `PropertySpec.default` or schema v21. A new Axes Inspector property must
+   `PropertySpec.default` or schema v22. A new Axes Inspector property must
    decide whether it also belongs on the Axes Components creation-defaults
    page. `_inherit_spec()` requires an explicit `page_id`.
 6. Color-library keys stay on the color dual-slot port. Reset-all application
    preferences must not delete that library.
 7. Update architecture pages in the same change. Update user Settings
    documentation when the Settings Center page exists; never add application
-   keys to `docs/component-properties-v21.md`.
+   keys to `docs/component-properties-v22.md`.
 
 Closed `SettingEffect` values are `LIVE_REVERSIBLE`, `NEXT_USE`, and
 `RESTART_REQUIRED`. Immediate commands stay out of Apply/OK patches and
@@ -73,7 +73,7 @@ require their own confirmation.
 ## Forbidden
 
 - Editable JSON as a production setting editor
-- Writing application preferences into schema v21, Undo/Redo, dirty
+- Writing application preferences into schema v22, Undo/Redo, dirty
   fingerprints, `ComponentState`, or Canvas materialization
 - Persisting TeX or MATLAB enablement, preamble, or connection
 - Deleting the color library from reset-all application preferences

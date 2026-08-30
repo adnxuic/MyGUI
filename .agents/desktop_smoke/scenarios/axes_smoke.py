@@ -10,13 +10,14 @@ Covers:
 - Twin Axes coupled manual geometry & alignment
 - Colorbar docking & follower scaling on manual axes, clean rebuild on grid return
 - Multi-Axes mixed geometry & layout engine neutrality (none, tight, constrained)
-- Schema v19 persistence save/restore visual roundtrip & pixel diffing
+- Schema v22 persistence save/restore visual roundtrip & pixel diffing
 - Undo/Redo validation across geometry operations
 """
 
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 from typing import Any, Callable
@@ -24,7 +25,7 @@ from typing import Any, Callable
 from PIL import Image, ImageChops
 
 from mygui.database import ColumnRef
-from mygui.figuremodify.axes_layout import AxesLayoutSpec
+from mygui.figuremodify.axes_layout import AxesLayoutSpec, ShareMode
 from mygui.figuremodify.components import ComponentKind, ComponentRole
 from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui.project_io import (
@@ -35,6 +36,10 @@ from mygui.project_io import (
 )
 from mygui.widgets.fig_control_window.component_editors.sections.axes import (
     AxesLayoutSection,
+)
+from mygui.widgets.fig_control_window.component_editors.sections.axis_ticks import (
+    AxisTickSettingsDialog,
+    AxisTickSettingsSection,
 )
 from tests.axes_helpers import create_regular_axes, create_twin_axes_pair
 
@@ -123,8 +128,15 @@ def run_axes_smoke_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
     results.append(
         _run_case(
             harness,
-            "axes_smoke.schema_v19_persistence_roundtrip",
-            lambda: _scenario_schema_v19_persistence_roundtrip(harness),
+            "axes_smoke.shared_tickers_v22_roundtrip",
+            lambda: _scenario_shared_tickers_v22_roundtrip(harness),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "axes_smoke.schema_v22_persistence_roundtrip",
+            lambda: _scenario_schema_v22_persistence_roundtrip(harness),
         )
     )
     results.append(
@@ -263,6 +275,33 @@ def _axes_layout_section(harness: SmokeHarness, axes_id: str) -> AxesLayoutSecti
     section = inspector.section("layout")
     if not isinstance(section, AxesLayoutSection):
         raise SmokeError(f"Layout section is not AxesLayoutSection for {axes_id!r}")
+    return section
+
+
+def _axis_tick_section(
+    harness: SmokeHarness,
+    canvas,
+    axis_id: str,
+) -> AxisTickSettingsSection:
+    """Retrieve the unified tick section for one selected Axis."""
+
+    harness.select_component(axis_id)
+    inspector_host = harness.window.fig_control_window.figure_inspector_host
+    figure_inspector = inspector_host.current_figure_inspector()
+    if figure_inspector is None:
+        raise SmokeError("Current figure inspector panel not found in host!")
+    axis = canvas.component_registry.get(axis_id)
+    panel = figure_inspector.axes_inspector(axis.state.parent_id)
+    if panel is None:
+        raise SmokeError(f"Axes inspector panel not found for Axis {axis_id!r}")
+    inspector = panel.semantic_panel.inspector(axis_id)
+    if inspector is None:
+        raise SmokeError(f"Axis inspector not found for {axis_id!r}")
+    section = inspector.section("ticks_labels")
+    if not isinstance(section, AxisTickSettingsSection):
+        raise SmokeError(
+            f"Ticks & Labels section is not AxisTickSettingsSection for {axis_id!r}"
+        )
     return section
 
 
@@ -519,6 +558,62 @@ def _scenario_x_axis_system(harness: SmokeHarness) -> None:
 
     harness.select_component(x_axis_ctrl.component_id)
     harness.grab_inspector("axes-xaxis-01-root-inspector")
+
+    # Exercise the native unified dialog: fixed-row preview, cancel, one Undo.
+    tick_section = _axis_tick_section(harness, canvas, x_axis_ctrl.component_id)
+    if not tick_section.configure_button.isEnabled():
+        raise SmokeError("Ticks & Labels entry is disabled for an ordinary X Axis.")
+    opening = canvas.axis_tick_settings_service.snapshot(x_axis_ctrl.component_id)
+    fixed_locator = {
+        "kind": "fixed",
+        "params": {"locations": [0.0, 1.0, 2.0, 3.0, 4.0], "nbins": None},
+    }
+    fixed_formatter = {
+        "kind": "fixed",
+        "params": {"labels": ["zero", "one", "two", "three", "four"]},
+    }
+    dialog = AxisTickSettingsDialog(
+        opening,
+        context=canvas.editor_context,
+        parent=tick_section,
+    )
+    dialog.major_page.locator_editor.set_value(fixed_locator, emit=True)
+    dialog.major_page.formatter_editor.set_value(fixed_formatter, emit=True)
+    dialog.show()
+    harness.pump(250)
+    harness.grab(dialog, "axes-xaxis-02-ticks-labels-fixed-preview")
+    dialog.reject()
+    dialog.deleteLater()
+    harness.pump(30)
+    if x_axis_ctrl.state != opening.expected_states[0]:
+        raise SmokeError("Cancelling Ticks & Labels changed authoritative state.")
+
+    undo_stack = harness.window.repository.undo_stack(canvas.project_id)
+    command_count = undo_stack.count()
+    dialog = AxisTickSettingsDialog(
+        opening,
+        context=canvas.editor_context,
+        parent=tick_section,
+    )
+    dialog.major_page.locator_editor.set_value(fixed_locator, emit=True)
+    dialog.major_page.formatter_editor.set_value(fixed_formatter, emit=True)
+    dialog._accept_settings()
+    harness.pump(80)
+    if undo_stack.count() != command_count + 1:
+        raise SmokeError("Unified tick confirmation did not create exactly one Undo.")
+    if x_axis_ctrl.state.properties["major_locator"] != fixed_locator:
+        raise SmokeError("Fixed Locator did not commit from the unified dialog.")
+    if x_axis_ctrl.state.properties["major_formatter"] != fixed_formatter:
+        raise SmokeError("Fixed Formatter did not commit from the unified dialog.")
+    undo_stack.undo()
+    harness.pump(50)
+    if x_axis_ctrl.state != opening.expected_states[0]:
+        raise SmokeError("Undo did not restore the opening tick snapshot.")
+    undo_stack.redo()
+    harness.pump(50)
+    if x_axis_ctrl.state.properties["major_formatter"] != fixed_formatter:
+        raise SmokeError("Redo did not restore the fixed tick labels.")
+    dialog.deleteLater()
 
     x_axis_ctrl.set_property("major_locator", {
         "kind": "multiple",
@@ -1120,9 +1215,9 @@ def _scenario_mixed_layout_engines(harness: SmokeHarness) -> None:
     )
 
 
-def _scenario_schema_v19_persistence_roundtrip(harness: SmokeHarness) -> None:
-    """Test Schema v19 project save, migration, and visual pixel-accurate restore."""
-    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Schema_v19_Persistence")
+def _scenario_schema_v22_persistence_roundtrip(harness: SmokeHarness) -> None:
+    """Test schema-v22 project save and visual pixel-accurate restore."""
+    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Schema_v22_Persistence")
 
     # Set manual geometry on axes
     geom_service = canvas.axes_geometry_service
@@ -1136,10 +1231,10 @@ def _scenario_schema_v19_persistence_roundtrip(harness: SmokeHarness) -> None:
     canvas.redraw()
     harness.pump(60)
 
-    harness.grab_canvas("axes-v19-01-pre-save")
+    harness.grab_canvas("axes-v22-01-pre-save")
 
     # Save project snapshot to temporary file
-    with tempfile.TemporaryDirectory(prefix="mygui-smoke-v19-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="mygui-smoke-v22-") as tmpdir:
         save_path = Path(tmpdir) / "project.mygui"
         save_project_snapshot(
             save_path,
@@ -1187,12 +1282,194 @@ def _scenario_schema_v19_persistence_roundtrip(harness: SmokeHarness) -> None:
         if restored_target.get_in_layout():
             raise SmokeError("Restored target get_in_layout() should be False!")
 
-        post_restore_p = harness.grab_canvas("axes-v19-02-post-restore")
+        post_restore_p = harness.grab_canvas("axes-v22-02-post-restore")
 
         # Verify that restored canvas screenshot exists and is valid
         img_post = Image.open(post_restore_p).convert("RGB")
         if img_post.size[0] < 10 or img_post.size[1] < 10:
             raise SmokeError("Restored canvas produced invalid empty image!")
+
+
+def _scenario_shared_tickers_v22_roundtrip(harness: SmokeHarness) -> None:
+    """Verify sharex/sharey ticker synchronization and schema-v22 restore."""
+
+    canvas = harness.create_project("Smoke_Shared_Tickers_v22")
+    axes_ids = canvas.create_axes_layout(
+        AxesLayoutSpec.grid(
+            2,
+            1,
+            share_x=ShareMode.ALL,
+            share_y=ShareMode.ALL,
+            cell_view=canvas.axes_layout_service.creation_view_defaults(),
+        )
+    )
+    if len(axes_ids) != 2:
+        raise SmokeError("Shared ticker smoke did not create two Axes.")
+
+    # IndexLocator intentionally relies on a finite data interval. Populate
+    # both shared Axes through the production chart path before selecting it.
+    subtable = harness.window.table.current_subtable()
+    sheet = subtable.get_table(0).table_model.sheet
+    sheet.set_block(0, 0, [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
+    y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
+    for axes_id in axes_ids:
+        if not canvas.select_component(axes_id):
+            raise SmokeError("Could not select a shared Axes for index data.")
+        result = canvas.add_plots(
+            x_ref,
+            (y_ref,),
+            style="-",
+            size=4.0,
+            linewidth=1.0,
+            preprocess=None,
+            color_selection=ColorSelection(color="#1f77b4"),
+            record_recent=False,
+        )
+        if len(result.component_ids) != 1:
+            raise SmokeError("Could not create index data on a shared Axes.")
+
+    axis_controllers = canvas.component_registry.query(kind=ComponentKind.AXIS)
+    x_by_parent = {
+        controller.state.parent_id: controller
+        for controller in axis_controllers
+        if controller.state.selector == {"axis": "x"}
+    }
+    y_by_parent = {
+        controller.state.parent_id: controller
+        for controller in axis_controllers
+        if controller.state.selector == {"axis": "y"}
+    }
+    first_x, second_x = (x_by_parent[axes_id] for axes_id in axes_ids)
+    first_y, second_y = (y_by_parent[axes_id] for axes_id in axes_ids)
+    service = canvas.axis_tick_settings_service
+
+    fixed_locator = {
+        "kind": "fixed",
+        "params": {"locations": [0.0, 1.0, 2.0], "nbins": None},
+    }
+    fixed_formatter = {
+        "kind": "fixed",
+        "params": {"labels": ["A", "B", "C"]},
+    }
+    x_opening = service.snapshot(first_x.component_id)
+    if x_opening.shared_axis_count != 2:
+        raise SmokeError("sharex group was not exposed by the unified service.")
+    x_candidate = replace(
+        x_opening,
+        major=replace(
+            x_opening.major,
+            locator=fixed_locator,
+            formatter=fixed_formatter,
+            tick_properties={**x_opening.major.tick_properties, "length": 9.0},
+        ),
+    )
+    x_result = service.apply(x_candidate)
+    if not x_result.committed:
+        raise SmokeError(f"Shared X ticker commit failed: {x_result.message}")
+    for controller in (first_x, second_x):
+        if controller.state.properties["major_locator"] != fixed_locator:
+            raise SmokeError("Fixed Locator did not synchronize across sharex.")
+        if controller.state.properties["major_formatter"] != fixed_formatter:
+            raise SmokeError("Fixed Formatter did not synchronize across sharex.")
+
+    major_x_ticks = [
+        controller
+        for controller in canvas.component_registry.query(
+            kind=ComponentKind.TICK_GROUP,
+            role=ComponentRole.MAJOR_TICK,
+        )
+        if controller.state.selector.get("axis") == "x"
+    ]
+    selected_tick = next(
+        controller
+        for controller in major_x_ticks
+        if controller.state.parent_id == first_x.component_id
+    )
+    peer_tick = next(
+        controller
+        for controller in major_x_ticks
+        if controller.state.parent_id == second_x.component_id
+    )
+    if selected_tick.state.properties["length"] != 9.0:
+        raise SmokeError("Selected Axes tick appearance was not applied.")
+    if peer_tick.state.properties["length"] == 9.0:
+        raise SmokeError("Tick appearance leaked to the shared peer Axes.")
+
+    index_locator = {
+        "kind": "index",
+        "params": {"base": 1.0, "offset": 0.0},
+    }
+    format_str = {"kind": "format_str", "params": {"format": "%.1f"}}
+    y_opening = service.snapshot(first_y.component_id)
+    if y_opening.shared_axis_count != 2:
+        raise SmokeError("sharey group was not exposed by the unified service.")
+    y_result = service.apply(
+        replace(
+            y_opening,
+            major=replace(
+                y_opening.major,
+                locator=index_locator,
+                formatter=format_str,
+            ),
+        )
+    )
+    if not y_result.committed:
+        raise SmokeError(f"Shared Y ticker commit failed: {y_result.message}")
+    for controller in (first_y, second_y):
+        if controller.state.properties["major_locator"] != index_locator:
+            raise SmokeError("Index Locator did not synchronize across sharey.")
+        if controller.state.properties["major_formatter"] != format_str:
+            raise SmokeError("FormatStr Formatter did not synchronize across sharey.")
+
+    canvas.redraw()
+    harness.pump(60)
+    harness.grab_canvas("axes-shared-tickers-v22-01-before-save")
+    with tempfile.TemporaryDirectory(prefix="mygui-smoke-shared-tickers-") as tmpdir:
+        save_path = Path(tmpdir) / "shared-tickers.mygui"
+        save_project_snapshot(
+            save_path,
+            figure_window=harness.window.figure_window,
+            canvas=canvas,
+        )
+        loaded = load_project_file(save_path)
+        if loaded.get("schema_version") != PROJECT_SCHEMA_VERSION:
+            raise SmokeError("Shared ticker project was not saved as schema v22.")
+
+        project_id = canvas.project_id
+        harness.window.figure_window.remove_project_by_id(project_id)
+        harness.window.table.remove_project_table(project_id)
+        restore_project_snapshot(
+            save_path,
+            table=harness.window.table,
+            figure_window=harness.window.figure_window,
+        )
+        harness.pump(80)
+
+    restored = harness.window.figure_window.current_canva
+    restored_axes = restored.component_registry.query(kind=ComponentKind.AXES)
+    if len(restored_axes) != 2:
+        raise SmokeError("Shared ticker restore did not recreate two Axes.")
+    restored_x = restored.component_registry.query(role=ComponentRole.X_AXIS)
+    restored_y = restored.component_registry.query(role=ComponentRole.Y_AXIS)
+    if any(c.state.properties["major_locator"] != fixed_locator for c in restored_x):
+        raise SmokeError("Restored sharex Fixed Locators diverged.")
+    if any(c.state.properties["major_formatter"] != fixed_formatter for c in restored_x):
+        raise SmokeError("Restored sharex Fixed Formatters diverged.")
+    if any(c.state.properties["major_locator"] != index_locator for c in restored_y):
+        raise SmokeError("Restored sharey Index Locators diverged.")
+    if any(c.state.properties["major_formatter"] != format_str for c in restored_y):
+        raise SmokeError("Restored sharey FormatStr Formatters diverged.")
+    first_axes, second_axes = (
+        controller.resolve_target() for controller in restored_axes
+    )
+    if not first_axes.get_shared_x_axes().joined(first_axes, second_axes):
+        raise SmokeError("Restored Axes lost sharex membership.")
+    if not first_axes.get_shared_y_axes().joined(first_axes, second_axes):
+        raise SmokeError("Restored Axes lost sharey membership.")
+    restored.redraw()
+    harness.pump(60)
+    harness.grab_canvas("axes-shared-tickers-v22-02-restored")
 
 
 def _scenario_undo_redo_validation(harness: SmokeHarness) -> None:

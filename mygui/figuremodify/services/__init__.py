@@ -2,6 +2,13 @@
 
 from .axes_command import AxesCommandService, AxesPaletteStatus
 from .axes_geometry import AxesGeometryService
+from .axis_ticks import (
+    AxisTickPreview,
+    AxisTickPreviewRenderer,
+    AxisTickSettingsDraft,
+    AxisTickSettingsService,
+    TickLevelSettings,
+)
 from .chart_data import (
     ChartDataService,
     FitService,
@@ -47,6 +54,10 @@ __all__ = [
     "AxesCommandService",
     "AxesGeometryService",
     "AxesPaletteStatus",
+    "AxisTickPreview",
+    "AxisTickPreviewRenderer",
+    "AxisTickSettingsDraft",
+    "AxisTickSettingsService",
     "ChartDataService",
     "ColorConsumptionLedger",
     "ColorCycleDeletionEffect",
@@ -78,6 +89,7 @@ __all__ = [
     "ReferenceMarksService",
     "ScatterColorbarSourceResolver",
     "TextRenderService",
+    "TickLevelSettings",
     "default_field_2d_properties",
     "field_2d_style_seed",
     "production_colorbar_source_resolvers",

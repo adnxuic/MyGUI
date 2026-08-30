@@ -76,6 +76,8 @@ from .inputs import (
 from .profiles import register_production_profiles
 from .sections import (
     AxesLayoutSection,
+    AxisTickSettingsDialog,
+    AxisTickSettingsSection,
     ColorbarSourceSection,
     DataReferenceSection,
     ImageInAxesSourceSection,
@@ -150,6 +152,8 @@ __all__ = [
     "ScatterMappingInput",
     "register_production_profiles",
     "AxesLayoutSection",
+    "AxisTickSettingsDialog",
+    "AxisTickSettingsSection",
     "ColorbarSourceSection",
     "DataReferenceSection",
     "ErrorBarDataSection",

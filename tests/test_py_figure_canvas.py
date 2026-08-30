@@ -15,6 +15,7 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
     ComponentState,
+    TickLabelGroupController,
 )
 from mygui.tex_config import TexRuntimeChange, TexRuntimeState
 from tests.axes_helpers import create_regular_axes
@@ -155,6 +156,46 @@ class PyFigureCanvasBranchTests(unittest.TestCase):
         create_regular_axes(self.canvas)
         sources = self.canvas.eligible_colorbar_sources()
         self.assertIsInstance(sources, tuple)
+
+    def test_canvas_replays_nonstandard_tick_styles_before_draw(self):
+        create_regular_axes(self.canvas)
+        labels = next(
+            controller
+            for controller in self.canvas.component_registry.query(
+                kind=ComponentKind.TICK_LABEL_GROUP
+            )
+            if isinstance(controller, TickLabelGroupController)
+            and controller.state.selector == {"axis": "x", "level": "major"}
+        )
+        bbox = {
+            "enabled": True,
+            "boxstyle": "round",
+            "facecolor": "#ffffff",
+            "edgecolor": "#000000",
+            "linewidth": 1.0,
+            "line_pattern": {"kind": "preset", "value": "-"},
+            "alpha": None,
+            "fill": True,
+            "hatch": None,
+            "pad": 0.3,
+        }
+        self.assertTrue(labels.set_property("fontweight", "bold").ok)
+        self.assertTrue(labels.set_property("bbox", bbox).ok)
+        axis = labels.resolve_target()
+
+        axis.reset_ticks()
+        recreated = axis.get_major_ticks()
+        self.assertTrue(recreated)
+        self.assertTrue(
+            all(tick.label1.get_bbox_patch() is None for tick in recreated)
+        )
+
+        self.canvas.canva.draw()
+
+        for tick in axis.get_major_ticks():
+            for label in (tick.label1, tick.label2):
+                self.assertEqual(label.get_fontweight(), "bold")
+                self.assertIsNotNone(label.get_bbox_patch())
 
     def test_export_figure_and_save(self):
         # 1. export_figure type check

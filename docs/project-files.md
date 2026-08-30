@@ -1,24 +1,25 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 21. One file contains one
+MyGUI project files use strict JSON schema version 22. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v21. Strict v20 input migrates directly to
-v21 (injecting the deterministic Error Bar extension defaults), strict v19
+The loader accepts exact integer v22. Strict v21 input is validated against
+the v21 ticker whitelist and then advances without content changes. Strict
+v20 input migrates to v21 (injecting deterministic Error Bar defaults), strict v19
 input migrates through v20, strict v18 input migrates through v19 (injecting
 default `geometry: {"mode": "grid"}` for Axes components), while v10–v17
 migrate through every intervening version. Schema v4–v9, non-integer values,
 and unknown versions are rejected before application state is published.
 
 Reusable chart templates are deliberately separate from project files. They
-use strict `mygui-template` schema version 5, do not contain a Table document,
-and never change project schema version 21. See [Chart Templates](chart-templates.md).
+use strict `mygui-template` schema version 6, do not contain a Table document,
+and never change project schema version 22. See [Chart Templates](chart-templates.md).
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 21,
+  "schema_version": 22,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -29,7 +30,7 @@ and never change project schema version 21. See [Chart Templates](chart-template
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `21`.
+- Newly saved `schema_version` is always the integer `22`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -115,7 +116,15 @@ Each `axes/axes` child stores:
 
 `properties.position` remains runtime-derived and non-persistent. Grid-mode position is derived from `data.subplot`; manual-mode position is projected only from `data.geometry.bounds`. Each X/Y Axis owns its tagged scale, locator, and formatter configuration. Ordered Axes limits are the sole inversion authority.
 
-Axes `in_layout` is also runtime-derived from geometry mode (`true` for Grid, `false` for Manual) and is not a schema-v21 property or an independent Inspector control.
+Axes `in_layout` is also runtime-derived from geometry mode (`true` for Grid, `false` for Manual) and is not a schema-v22 property or an independent Inspector control.
+
+Axis locator and formatter values are closed tagged objects. Schema v22 adds
+`{"kind":"index","params":{"base": positive-finite, "offset": finite}}`
+for regularly spaced index data and
+`{"kind":"format_str","params":{"format":"%1.2f"}}` for one safe percent
+conversion. `%%` is a literal percent sign; mapping keys, dynamic `*`
+width/precision, multiple conversions, functions, and expressions are
+rejected. A Fixed Formatter is valid only with an equal-length Fixed Locator.
 
 Each Tick Label Group persists `fontfamily` as one non-empty primary-family
 string. X/Y Label `position` values use normalized `Axes.transAxes`
@@ -145,7 +154,7 @@ component wire shape.
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v21)](component-properties-v21.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v22)](component-properties-v22.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -244,16 +253,17 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v21.
+snapshot only and does not change schema v22.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v21 save/open round trip. Strict v20 input is
-validated completely, deep-copied, and migrated in memory to v21 by injecting
+unchanged across every schema-v22 save/open round trip. Strict v21 input is
+validated completely, deep-copied, and migrated in memory to v22 by changing
+only the root version. Strict v20 input then migrates to v21 by injecting
 the deterministic Error Bar extension defaults. Strict v19 input migrates
 through v20 by advancing the version; strict v18 input migrates through v19
-(which initializes `data.geometry: {"mode": "grid"}` for all Axes) to v21;
+(which initializes `data.geometry: {"mode": "grid"}` for all Axes) to v22;
 older accepted
 inputs migrate through every intervening version. Tick Label
 `fontfamily` string values remain unchanged; non-empty string lists become only
@@ -318,15 +328,15 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v21.
+are not added to schema v22.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v21 project stays clean through those UI-only interactions, and a
+schema-v22 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export
 
-- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v21.
+- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v22.
 - 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
 - PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

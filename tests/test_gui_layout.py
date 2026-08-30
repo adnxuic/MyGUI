@@ -14,9 +14,8 @@ from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from mygui.figuremodify.components import ComponentRole
 from mygui.widgets.fig_control_window.component_editors import (
-    AxisFormatterEditor,
-    AxisLocatorEditor,
     AxisScaleEditor,
+    AxisTickSettingsSection,
     FontSpecEditor,
 )
 from mygui.widgets.fig_control_window.figure_inspector import (
@@ -222,21 +221,32 @@ class GuiLayoutTests(unittest.TestCase):
                 x_axis.component_id
             )
             section = inspector.section("properties")
+            tick_section = inspector.section("ticks_labels")
             scale = section.editor("scale")
-            major_locator = section.editor("major_locator")
-            major_formatter = section.editor("major_formatter")
             offset_font = section.editor("offset_font")
             self.assertIsInstance(scale, AxisScaleEditor)
-            self.assertIsInstance(major_locator, AxisLocatorEditor)
-            self.assertIsInstance(major_formatter, AxisFormatterEditor)
+            self.assertIsInstance(tick_section, AxisTickSettingsSection)
             self.assertIsInstance(offset_font, FontSpecEditor)
+            ticker_editors = [
+                tick_section.editor(key)
+                for key in (
+                    "major_locator",
+                    "major_formatter",
+                    "minor_locator",
+                    "minor_formatter",
+                )
+            ]
+            self.assertTrue(
+                all(editor is tick_section.configure_button for editor in ticker_editors)
+            )
+            self.assertEqual(scale.summary.text(), "Linear")
             self.assertEqual(
-                [
-                    scale.summary.text(),
-                    major_locator.summary.text(),
-                    major_formatter.summary.text(),
-                ],
-                ["Linear", "Auto", "Scalar"],
+                tick_section.summary_label.text(),
+                "Major: auto / scalar · Minor: null / null",
+            )
+            self.assertEqual(
+                tick_section.configure_button.text(),
+                "Configure Ticks & Labels…",
             )
 
             scale.set_value(

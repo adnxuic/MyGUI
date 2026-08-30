@@ -1106,7 +1106,7 @@ def main() -> int:
     result = task_result(
         f"full:{args.profile}", verification,
         architecture_impact="Shared Agent Engineering and application gates executed.",
-        persistence_impact="MyGUI schema-v21 behavior and predecessor migrations are verified.",
+        persistence_impact="MyGUI schema-v22 behavior and predecessor migrations are verified.",
     )
     return finish(result, args.json_out, f"full-{args.profile}")
 

@@ -351,7 +351,7 @@ class TemplateFeatureTests(unittest.TestCase):
                 comp["properties"]["in_layout"] = True
 
         migrated = parse_template_record(raw_v1)
-        self.assertEqual(template_to_dict(migrated)["schema_version"], 5)
+        self.assertEqual(template_to_dict(migrated)["schema_version"], 6)
         fit_v1 = next(
             c for c in migrated.figure["components"]
             if c.get("role") == "fit_curve"
@@ -372,7 +372,7 @@ class TemplateFeatureTests(unittest.TestCase):
                 comp["data"].pop("geometry", None)
                 comp["properties"]["in_layout"] = True
         migrated_v2 = parse_template_record(raw_v2)
-        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 5)
+        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 6)
         axes_v2 = next(
             c for c in migrated_v2.figure["components"]
             if c.get("kind") == "axes"
@@ -384,13 +384,32 @@ class TemplateFeatureTests(unittest.TestCase):
         raw_v3_direct = template_to_dict(template)
         raw_v3_direct["schema_version"] = 3
         migrated_v3 = parse_template_record(raw_v3_direct)
-        self.assertEqual(template_to_dict(migrated_v3)["schema_version"], 5)
+        self.assertEqual(template_to_dict(migrated_v3)["schema_version"], 6)
         self.assertEqual(migrated_v3.figure, template.figure)
         raw_v4_direct = template_to_dict(template)
         raw_v4_direct["schema_version"] = 4
         migrated_v4 = parse_template_record(raw_v4_direct)
-        self.assertEqual(template_to_dict(migrated_v4)["schema_version"], 5)
+        self.assertEqual(template_to_dict(migrated_v4)["schema_version"], 6)
         self.assertEqual(migrated_v4.figure, template.figure)
+
+        raw_v5 = template_to_dict(template)
+        raw_v5["schema_version"] = 5
+        migrated_v5 = parse_template_record(raw_v5)
+        self.assertEqual(template_to_dict(migrated_v5)["schema_version"], 6)
+        self.assertEqual(migrated_v5.figure, template.figure)
+
+        forbidden_v5 = deepcopy(raw_v5)
+        axis = next(
+            component
+            for component in forbidden_v5["figure"]["components"]
+            if component.get("role") == "x_axis"
+        )
+        axis["properties"]["major_locator"] = {
+            "kind": "index",
+            "params": {"base": 1.0, "offset": 0.0},
+        }
+        with self.assertRaisesRegex(ValueError, "not part of schema v21"):
+            parse_template_record(forbidden_v5)
 
         # Bounded fit input range in template
         fit_v3 = next(

@@ -90,6 +90,37 @@ class AgentEngineeringTests(unittest.TestCase):
         self.assertEqual(len(catalog_ids), 18)
         self.assertEqual(root_ids, catalog_ids)
 
+    def test_schema_v22_rule_replaces_only_the_versioned_persistence_id(self):
+        catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
+        ids = {
+            entry["id"] for entry in catalog["rules"]
+            if entry["id"].startswith("CORE-")
+        }
+        self.assertIn("CORE-PERSISTENCE-V22", ids)
+        self.assertNotIn("CORE-PERSISTENCE-V21", ids)
+        self.assertEqual(
+            ids - {"CORE-PERSISTENCE-V22"},
+            {
+                "CORE-APPLICATION-SETTINGS",
+                "CORE-AXES-GEOMETRY-OWNER",
+                "CORE-COLORBAR-AUXILIARY-AXES",
+                "CORE-COMPONENT-STATE",
+                "CORE-DELETION-COORDINATOR",
+                "CORE-EDITOR-PROFILES",
+                "CORE-FIGURE-LAYOUT-ENGINE-OWNER",
+                "CORE-FONT-DIAGNOSTICS",
+                "CORE-MATPLOTLIB-BOUNDARY",
+                "CORE-PROJECT-HISTORY",
+                "CORE-REGISTRATION-ATOMICITY",
+                "CORE-RESOURCE-BOUNDARY",
+                "CORE-SELECTION-AUTHORITY",
+                "CORE-TABLE-REPOSITORY",
+                "CORE-TEMPLATE-LIBRARY",
+                "CORE-TEX-OWNER",
+                "CORE-THEME-OWNER",
+            },
+        )
+
     def test_catalog_validation_is_bidirectional_and_checks_anchors_and_enforcement(self):
         catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
         agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")

@@ -362,9 +362,10 @@ class ProjectIoTests(unittest.TestCase):
         self.path.write_text(json.dumps(schema_v18), encoding="utf-8")
         self.assertEqual(load_project_file(self.path)["schema_version"], PROJECT_SCHEMA_VERSION)
         for version in (
-            3, 4, 5, 6, 7, 8, 9, 22, 10.0, 11.0, 12.0, 13.0, 14.0,
-            15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, "10", "11", "12", "13",
-            "14", "15", "16", "17", "18", "19", "20", "21", True, None,
+            3, 4, 5, 6, 7, 8, 9, 23, 10.0, 11.0, 12.0, 13.0, 14.0,
+            15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0,
+            "10", "11", "12", "13", "14", "15", "16", "17", "18",
+            "19", "20", "21", "22", True, None,
         ):
             with self.subTest(version=version):
                 candidate = dict(valid)

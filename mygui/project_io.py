@@ -1,4 +1,4 @@
-"""Validate, migrate, save, and load strict schema-v21 project snapshots."""
+"""Validate, migrate, save, and load strict schema-v22 project snapshots."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.components.serialization import (
-    normalize_v21_figure,
+    normalize_v22_figure,
     validate_v10_figure,
     validate_v11_figure,
     validate_v12_figure,
@@ -27,12 +27,14 @@ from mygui.figuremodify.components.serialization import (
     validate_v19_figure,
     validate_v20_figure,
     validate_v21_figure,
+    validate_v22_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 21
+PROJECT_SCHEMA_VERSION = 22
+SCHEMA_V21_VERSION = 21
 SCHEMA_V20_VERSION = 20
 SCHEMA_V19_VERSION = 19
 SCHEMA_V18_VERSION = 18
@@ -197,11 +199,21 @@ def _validate_project_snapshot_version(
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
-    """Validate one exact current schema-v21 project snapshot."""
+    """Validate one exact current schema-v22 project snapshot."""
 
     _validate_project_snapshot_version(
         snapshot,
         version=PROJECT_SCHEMA_VERSION,
+        figure_validator=validate_v22_figure,
+    )
+
+
+def validate_v21_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate one exact predecessor schema-v21 project snapshot."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=SCHEMA_V21_VERSION,
         figure_validator=validate_v21_figure,
     )
 
@@ -459,6 +471,16 @@ def migrate_v20_to_v21(snapshot: dict[str, Any]) -> dict[str, Any]:
         ):
             properties = component.setdefault("properties", {})
             properties.update(deepcopy(ERROR_BAR_V21_MIGRATION_DEFAULTS))
+    migrated["schema_version"] = SCHEMA_V21_VERSION
+    validate_v21_project_snapshot(migrated)
+    return migrated
+
+
+def migrate_v21_to_v22(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Promote a strictly valid schema-v21 project without changing content."""
+
+    validate_v21_project_snapshot(snapshot)
+    migrated = deepcopy(snapshot)
     migrated["schema_version"] = PROJECT_SCHEMA_VERSION
     validate_project_snapshot(migrated)
     return migrated
@@ -492,7 +514,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v21_figure(canvas.component_snapshot())
+    figure = normalize_v22_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -556,84 +578,28 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
             f"Unsupported project schema version {version!r}; schema versions "
             "must use exact integers."
         )
-    if version == SCHEMA_V10_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
-            migrate_v17_to_v18(
-                migrate_v16_to_v17(
-                    migrate_v15_to_v16(
-                        migrate_v14_to_v15(
-                            migrate_v13_to_v14(
-                                migrate_v12_to_v13(
-                                    migrate_v11_to_v12(migrate_v10_to_v11(snapshot))
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )))
-    if version == SCHEMA_V11_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
-            migrate_v17_to_v18(
-                migrate_v16_to_v17(
-                    migrate_v15_to_v16(
-                        migrate_v14_to_v15(
-                            migrate_v13_to_v14(
-                                migrate_v12_to_v13(migrate_v11_to_v12(snapshot))
-                            )
-                        )
-                    )
-                )
-            )
-        )))
-    if version == SCHEMA_V12_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
-            migrate_v17_to_v18(
-                migrate_v16_to_v17(
-                    migrate_v15_to_v16(
-                        migrate_v14_to_v15(
-                            migrate_v13_to_v14(migrate_v12_to_v13(snapshot))
-                        )
-                    )
-                )
-            )
-        )))
-    if version == SCHEMA_V13_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
-            migrate_v17_to_v18(
-                migrate_v16_to_v17(
-                    migrate_v15_to_v16(migrate_v14_to_v15(migrate_v13_to_v14(snapshot)))
-                )
-            )
-        )))
-    if version == SCHEMA_V14_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
-            migrate_v17_to_v18(
-                migrate_v16_to_v17(migrate_v15_to_v16(migrate_v14_to_v15(snapshot)))
-            )
-        )))
-    if version == SCHEMA_V15_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(
-            migrate_v17_to_v18(migrate_v16_to_v17(migrate_v15_to_v16(snapshot)))
-        )))
-    if version == SCHEMA_V16_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(migrate_v17_to_v18(migrate_v16_to_v17(snapshot)))))
-    if version == SCHEMA_V17_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(migrate_v17_to_v18(snapshot))))
-    if version == SCHEMA_V19_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(snapshot))
-    if version == SCHEMA_V20_VERSION:
-        return migrate_v20_to_v21(snapshot)
-    if version == SCHEMA_V18_VERSION:
-        return migrate_v20_to_v21(migrate_v19_to_v20(migrate_v18_to_v19(snapshot)))
+    migrations = {
+        SCHEMA_V10_VERSION: migrate_v10_to_v11,
+        SCHEMA_V11_VERSION: migrate_v11_to_v12,
+        SCHEMA_V12_VERSION: migrate_v12_to_v13,
+        SCHEMA_V13_VERSION: migrate_v13_to_v14,
+        SCHEMA_V14_VERSION: migrate_v14_to_v15,
+        SCHEMA_V15_VERSION: migrate_v15_to_v16,
+        SCHEMA_V16_VERSION: migrate_v16_to_v17,
+        SCHEMA_V17_VERSION: migrate_v17_to_v18,
+        SCHEMA_V18_VERSION: migrate_v18_to_v19,
+        SCHEMA_V19_VERSION: migrate_v19_to_v20,
+        SCHEMA_V20_VERSION: migrate_v20_to_v21,
+        SCHEMA_V21_VERSION: migrate_v21_to_v22,
+    }
+    while version in migrations:
+        snapshot = migrations[version](snapshot)
+        version = snapshot["schema_version"]
     if version != PROJECT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported project schema version {version!r}; only schema "
-            f"v{PROJECT_SCHEMA_VERSION}, strict v20 migration, strict v19 "
-            "migration, strict v18 migration, strict v17 migration, strict "
-            "v16 migration, strict v15 migration, strict v14 migration, "
-            "strict v13 migration, and chained strict v10-v12 migration are "
-            "supported."
+            f"v{PROJECT_SCHEMA_VERSION} and chained strict v10-v21 migrations "
+            "are supported."
         )
     validate_project_snapshot(snapshot)
     return snapshot
