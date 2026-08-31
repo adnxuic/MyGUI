@@ -199,7 +199,13 @@ def normalize_v21_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_v22_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the current schema-v22 Figure component tree."""
+    """Normalize the predecessor schema-v22 Figure component tree."""
+
+    return _normalize_figure(figure_snapshot)
+
+
+def normalize_v23_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the current schema-v23 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
 
@@ -461,6 +467,7 @@ def _validate_parent(
         ComponentKind.SPINE,
         ComponentKind.LEGEND,
         ComponentKind.ANNOTATION,
+        ComponentKind.SECONDARY_AXIS,
         ComponentKind.COLORBAR,
         ComponentKind.REFERENCE_MARKS,
         ComponentKind.REFERENCE_GUIDE,
@@ -546,6 +553,7 @@ def _validate_parent(
             ComponentKind.REFERENCE_MARKS,
             ComponentKind.REFERENCE_GUIDE,
             ComponentKind.ANNOTATION,
+            ComponentKind.SECONDARY_AXIS,
         }
         or state.role is ComponentRole.TEXT
     ) and selector.get("object_id") != state.id:
@@ -923,6 +931,14 @@ def _validate_figure(
                 f"Invalid project field {path}: Error Bar is not part "
                 f"of schema v{schema_version}."
             )
+        if (
+            schema_version < 23
+            and state.kind is ComponentKind.SECONDARY_AXIS
+        ):
+            raise ValueError(
+                f"Invalid project field {path}: Secondary Axis is not part "
+                f"of schema v{schema_version}."
+            )
         if state.id in by_id:
             raise ValueError(f"Duplicate component id at {path}: {state.id}")
         by_id[state.id] = state
@@ -1007,7 +1023,29 @@ def _validate_figure(
     if len(chart_orders) != len(set(chart_orders)):
         raise ValueError("Chart component order values must be unique.")
     colorbar_sources: set[str] = set()
+    secondary_axis_placements: set[tuple[str | None, ComponentRole, str, float]] = set()
     for state in states:
+        if state.kind is ComponentKind.SECONDARY_AXIS:
+            from .secondary_axis_values import secondary_axis_placement_key
+
+            orientation = (
+                "x" if state.role is ComponentRole.SECONDARY_X_AXIS else "y"
+            )
+            coordinate_system, value = secondary_axis_placement_key(
+                state.properties["placement"], orientation=orientation
+            )
+            placement_key = (
+                state.parent_id,
+                state.role,
+                coordinate_system,
+                value,
+            )
+            if placement_key in secondary_axis_placements:
+                raise ValueError(
+                    f"Invalid project field {paths[state.id]}: duplicate "
+                    "Secondary Axis placement for one parent and orientation."
+                )
+            secondary_axis_placements.add(placement_key)
         if state.kind is not ComponentKind.COLORBAR:
             continue
         path = paths[state.id]
@@ -1281,7 +1319,7 @@ def validate_v22_figure(
     project_id: str,
     project_name: str | None = None,
 ) -> None:
-    """Validate the current schema-v22 Figure component tree."""
+    """Validate the predecessor schema-v22 Figure component tree."""
 
     _validate_figure(
         figure_snapshot,
@@ -1289,4 +1327,21 @@ def validate_v22_figure(
         project_id,
         project_name,
         schema_version=22,
+    )
+
+
+def validate_v23_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current schema-v23 Figure component tree."""
+
+    _validate_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
+        schema_version=23,
     )

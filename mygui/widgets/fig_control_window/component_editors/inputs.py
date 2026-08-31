@@ -23,6 +23,7 @@ from .reference_inputs import (
     ReferenceLineInput,
     ReferenceMarksInput,
 )
+from .secondary_axis_input import SecondaryAxisInput
 
 __all__ = [
     "ColorbarInput",
@@ -38,4 +39,5 @@ __all__ = [
     "ReferenceLineInput",
     "ReferenceMarksInput",
     "ScatterMappingInput",
+    "SecondaryAxisInput",
 ]

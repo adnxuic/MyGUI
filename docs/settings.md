@@ -12,7 +12,7 @@ project is created. See [Style Creation Defaults](style-creation-defaults.md).
 
 Settings values never enter `.mygui.json`, Undo/Redo, project dirty
 fingerprints, Component state, or Canvas restore. Opening a project always
-uses the persisted schema-v17 tree.
+uses the persisted schema-v23 tree.
 
 Apply saves the current draft and keeps Settings open. OK saves and closes.
 Cancel, Esc, and the window close button discard an uncommitted draft,
@@ -59,7 +59,7 @@ not stored. Restore page defaults does not stage the hidden layout.
 These defaults apply to the Style creation window and to Figures created by
 a first-time text or Excel import. Precedence is this session's explicit
 input > application defaults > built-in defaults (`6.4` in × `4.8` in,
-`100` DPI). Opening a project uses the persisted schema-v17 Figure size and
+`100` DPI). Opening a project uses the persisted schema-v23 Figure size and
 document DPI and does not overwrite them.
 
 | Parameter | Control | Meaning | Values / default | Key |
@@ -93,7 +93,7 @@ matching, privacy, and application behavior.
 ## Components
 
 These defaults apply only to components created after Apply. They do not
-change existing Artists, the open project, Undo/Redo, or schema-v17 files.
+change existing Artists, the open project, Undo/Redo, or schema-v23 files.
 Opening a project restores persisted component properties and does not apply
 this page. Restore page defaults and Reset all restore every field to
 **inherit** (the last custom value is kept but unused until you uncheck
@@ -134,7 +134,7 @@ page.
 
 These defaults apply only to ordinary Axes created after Apply. They do not
 change existing Artists, Colorbar auxiliary Axes, In-Axes, project restore,
-Undo/Redo, or schema-v17 files. Opening a project restores persisted Axes
+Undo/Redo, or schema-v23 files. Opening a project restores persisted Axes
 properties and does not apply this page. Restore page defaults and Reset all
 restore every field to **inherit** (the last custom value is kept but unused
 until you uncheck inherit). Color editors on this page do not write the color

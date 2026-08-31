@@ -17,6 +17,7 @@ from mygui.figuremodify.components.serialization import (
     validate_v20_figure,
     validate_v21_figure,
     validate_v22_figure,
+    validate_v23_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
@@ -30,7 +31,8 @@ from .models import (
 
 
 TEMPLATE_SCHEMA_NAME = "mygui-template"
-TEMPLATE_SCHEMA_VERSION = 6
+TEMPLATE_SCHEMA_VERSION = 7
+TEMPLATE_SCHEMA_V6_VERSION = 6
 TEMPLATE_SCHEMA_V5_VERSION = 5
 TEMPLATE_SCHEMA_V2_VERSION = 2
 TEMPLATE_SCHEMA_V3_VERSION = 3
@@ -292,12 +294,12 @@ def _parse_template_payload(
 
 
 def parse_template(value: Any) -> ChartTemplate:
-    """Parse and strictly validate a schema-v6 template object."""
+    """Parse and strictly validate a schema-v7 template object."""
 
     return _parse_template_payload(
         value,
         version=TEMPLATE_SCHEMA_VERSION,
-        figure_validator=validate_v22_figure,
+        figure_validator=validate_v23_figure,
     )
 
 
@@ -481,22 +483,41 @@ def migrate_v5_template_to_v6(value: Any) -> ChartTemplate:
     )
     migrated = _template_to_dict_version(
         parsed,
+        version=TEMPLATE_SCHEMA_V6_VERSION,
+    )
+    return _parse_template_payload(
+        migrated,
+        version=TEMPLATE_SCHEMA_V6_VERSION,
+        figure_validator=validate_v22_figure,
+    )
+
+
+def migrate_v6_template_to_v7(value: Any) -> ChartTemplate:
+    """Promote a strict schema-v6 template without changing Figure content."""
+
+    parsed = _parse_template_payload(
+        value,
+        version=TEMPLATE_SCHEMA_V6_VERSION,
+        figure_validator=validate_v22_figure,
+    )
+    migrated = _template_to_dict_version(
+        parsed,
         version=TEMPLATE_SCHEMA_VERSION,
     )
     return parse_template(migrated)
 
 
 def _finish_v5_migration(template: ChartTemplate) -> ChartTemplate:
-    return migrate_v5_template_to_v6(
-        _template_to_dict_version(
-            template,
-            version=TEMPLATE_SCHEMA_V5_VERSION,
-        )
+    migrated_v6 = migrate_v5_template_to_v6(
+        _template_to_dict_version(template, version=TEMPLATE_SCHEMA_V5_VERSION)
+    )
+    return migrate_v6_template_to_v7(
+        _template_to_dict_version(migrated_v6, version=TEMPLATE_SCHEMA_V6_VERSION)
     )
 
 
 def parse_template_record(value: Any) -> ChartTemplate:
-    """Parse one stored record, migrating strict older templates to v6."""
+    """Parse one stored record, migrating strict older templates to v7."""
 
     if (
         isinstance(value, dict)
@@ -526,7 +547,14 @@ def parse_template_record(value: Any) -> ChartTemplate:
         if value["schema_version"] == TEMPLATE_SCHEMA_V4_VERSION:
             return _finish_v5_migration(migrate_v4_template_to_v5(value))
         if value["schema_version"] == TEMPLATE_SCHEMA_V5_VERSION:
-            return migrate_v5_template_to_v6(value)
+            migrated = migrate_v5_template_to_v6(value)
+            return migrate_v6_template_to_v7(
+                _template_to_dict_version(
+                    migrated, version=TEMPLATE_SCHEMA_V6_VERSION
+                )
+            )
+        if value["schema_version"] == TEMPLATE_SCHEMA_V6_VERSION:
+            return migrate_v6_template_to_v7(value)
     return parse_template(value)
 
 

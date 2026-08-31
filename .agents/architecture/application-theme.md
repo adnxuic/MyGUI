@@ -78,7 +78,7 @@ the application client area only; do not use private Windows DWM APIs to
 recolor native title bars.
 
 UI font size is 8–16 pt inclusive, default 9 pt. Changing appearance must not
-mutate Matplotlib Figure, Artists, rcParams, project colors, or schema v22.
+mutate Matplotlib Figure, Artists, rcParams, project colors, or schema v23.
 
 ## Density
 

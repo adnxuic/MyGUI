@@ -87,19 +87,24 @@ class AgentEngineeringTests(unittest.TestCase):
         root_ids = set(self.agent_core.CORE_RULE_PATTERN.findall(
             (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         ))
-        self.assertEqual(len(catalog_ids), 18)
+        self.assertEqual(len(catalog_ids), 19)
         self.assertEqual(root_ids, catalog_ids)
 
-    def test_schema_v22_rule_replaces_only_the_versioned_persistence_id(self):
+    def test_schema_v23_and_secondary_axis_rules_are_the_exact_authorized_delta(self):
         catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
         ids = {
             entry["id"] for entry in catalog["rules"]
             if entry["id"].startswith("CORE-")
         }
-        self.assertIn("CORE-PERSISTENCE-V22", ids)
+        self.assertIn("CORE-PERSISTENCE-V23", ids)
+        self.assertIn("CORE-SECONDARY-AXIS-BOUNDARY", ids)
+        self.assertNotIn("CORE-PERSISTENCE-V22", ids)
         self.assertNotIn("CORE-PERSISTENCE-V21", ids)
         self.assertEqual(
-            ids - {"CORE-PERSISTENCE-V22"},
+            ids - {
+                "CORE-PERSISTENCE-V23",
+                "CORE-SECONDARY-AXIS-BOUNDARY",
+            },
             {
                 "CORE-APPLICATION-SETTINGS",
                 "CORE-AXES-GEOMETRY-OWNER",
@@ -120,6 +125,32 @@ class AgentEngineeringTests(unittest.TestCase):
                 "CORE-THEME-OWNER",
             },
         )
+
+    def test_secondary_axis_rule_has_authoritative_enforcement_and_routes(self):
+        catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
+        entry = next(
+            item
+            for item in catalog["rules"]
+            if item["id"] == "CORE-SECONDARY-AXIS-BOUNDARY"
+        )
+        self.assertEqual(
+            entry["source"],
+            ".agents/architecture/component-system.md#secondary-axis-child-axes",
+        )
+        self.assertEqual(entry["enforcement"], ["tests.test_secondary_axis_component"])
+
+        task_map = self.runner.load_task_map(ROOT)
+        for task_id in (
+            "add_figure_component",
+            "modify_component_property",
+            "schema_migration",
+            "project_io_change",
+        ):
+            with self.subTest(task_id=task_id):
+                self.assertIn(
+                    "tests.test_secondary_axis_component",
+                    task_map["tasks"][task_id]["focused_tests"],
+                )
 
     def test_catalog_validation_is_bidirectional_and_checks_anchors_and_enforcement(self):
         catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")

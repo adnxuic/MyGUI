@@ -10,7 +10,7 @@ Covers:
 - Twin Axes coupled manual geometry & alignment
 - Colorbar docking & follower scaling on manual axes, clean rebuild on grid return
 - Multi-Axes mixed geometry & layout engine neutrality (none, tight, constrained)
-- Schema v22 persistence save/restore visual roundtrip & pixel diffing
+- Schema v23 persistence save/restore visual roundtrip & pixel diffing
 - Undo/Redo validation across geometry operations
 """
 
@@ -128,15 +128,15 @@ def run_axes_smoke_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
     results.append(
         _run_case(
             harness,
-            "axes_smoke.shared_tickers_v22_roundtrip",
-            lambda: _scenario_shared_tickers_v22_roundtrip(harness),
+            "axes_smoke.shared_tickers_v23_roundtrip",
+            lambda: _scenario_shared_tickers_v23_roundtrip(harness),
         )
     )
     results.append(
         _run_case(
             harness,
-            "axes_smoke.schema_v22_persistence_roundtrip",
-            lambda: _scenario_schema_v22_persistence_roundtrip(harness),
+            "axes_smoke.schema_v23_persistence_roundtrip",
+            lambda: _scenario_schema_v23_persistence_roundtrip(harness),
         )
     )
     results.append(
@@ -1215,9 +1215,9 @@ def _scenario_mixed_layout_engines(harness: SmokeHarness) -> None:
     )
 
 
-def _scenario_schema_v22_persistence_roundtrip(harness: SmokeHarness) -> None:
-    """Test schema-v22 project save and visual pixel-accurate restore."""
-    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Schema_v22_Persistence")
+def _scenario_schema_v23_persistence_roundtrip(harness: SmokeHarness) -> None:
+    """Test schema-v23 project save and visual pixel-accurate restore."""
+    canvas, axes_id, ax = _setup_test_project(harness, "Smoke_Schema_v23_Persistence")
 
     # Set manual geometry on axes
     geom_service = canvas.axes_geometry_service
@@ -1231,10 +1231,10 @@ def _scenario_schema_v22_persistence_roundtrip(harness: SmokeHarness) -> None:
     canvas.redraw()
     harness.pump(60)
 
-    harness.grab_canvas("axes-v22-01-pre-save")
+    harness.grab_canvas("axes-v23-01-pre-save")
 
     # Save project snapshot to temporary file
-    with tempfile.TemporaryDirectory(prefix="mygui-smoke-v22-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="mygui-smoke-v23-") as tmpdir:
         save_path = Path(tmpdir) / "project.mygui"
         save_project_snapshot(
             save_path,
@@ -1282,7 +1282,7 @@ def _scenario_schema_v22_persistence_roundtrip(harness: SmokeHarness) -> None:
         if restored_target.get_in_layout():
             raise SmokeError("Restored target get_in_layout() should be False!")
 
-        post_restore_p = harness.grab_canvas("axes-v22-02-post-restore")
+        post_restore_p = harness.grab_canvas("axes-v23-02-post-restore")
 
         # Verify that restored canvas screenshot exists and is valid
         img_post = Image.open(post_restore_p).convert("RGB")
@@ -1290,10 +1290,10 @@ def _scenario_schema_v22_persistence_roundtrip(harness: SmokeHarness) -> None:
             raise SmokeError("Restored canvas produced invalid empty image!")
 
 
-def _scenario_shared_tickers_v22_roundtrip(harness: SmokeHarness) -> None:
-    """Verify sharex/sharey ticker synchronization and schema-v22 restore."""
+def _scenario_shared_tickers_v23_roundtrip(harness: SmokeHarness) -> None:
+    """Verify sharex/sharey ticker synchronization and schema-v23 restore."""
 
-    canvas = harness.create_project("Smoke_Shared_Tickers_v22")
+    canvas = harness.create_project("Smoke_Shared_Tickers_v23")
     axes_ids = canvas.create_axes_layout(
         AxesLayoutSpec.grid(
             2,
@@ -1424,7 +1424,7 @@ def _scenario_shared_tickers_v22_roundtrip(harness: SmokeHarness) -> None:
 
     canvas.redraw()
     harness.pump(60)
-    harness.grab_canvas("axes-shared-tickers-v22-01-before-save")
+    harness.grab_canvas("axes-shared-tickers-v23-01-before-save")
     with tempfile.TemporaryDirectory(prefix="mygui-smoke-shared-tickers-") as tmpdir:
         save_path = Path(tmpdir) / "shared-tickers.mygui"
         save_project_snapshot(
@@ -1434,7 +1434,7 @@ def _scenario_shared_tickers_v22_roundtrip(harness: SmokeHarness) -> None:
         )
         loaded = load_project_file(save_path)
         if loaded.get("schema_version") != PROJECT_SCHEMA_VERSION:
-            raise SmokeError("Shared ticker project was not saved as schema v22.")
+            raise SmokeError("Shared ticker project was not saved as schema v23.")
 
         project_id = canvas.project_id
         harness.window.figure_window.remove_project_by_id(project_id)
@@ -1469,7 +1469,7 @@ def _scenario_shared_tickers_v22_roundtrip(harness: SmokeHarness) -> None:
         raise SmokeError("Restored Axes lost sharey membership.")
     restored.redraw()
     harness.pump(60)
-    harness.grab_canvas("axes-shared-tickers-v22-02-restored")
+    harness.grab_canvas("axes-shared-tickers-v23-02-restored")
 
 
 def _scenario_undo_redo_validation(harness: SmokeHarness) -> None:

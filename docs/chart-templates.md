@@ -4,9 +4,10 @@ Chart templates reproduce a complete Figure with new data from the same kind
 of instrument or workflow. A template keeps layout, Axes, charts, elements,
 styles, data bindings, preprocessing, and Fit configuration. Applying one
 always creates a new project; it never replaces the current project.
-Current files use strict `mygui-template` schema v6 with a schema-v22 Figure
-blueprint. Strict v5 files first validate their schema-v21 Figure and then
-advance without content changes. Strict v4 files migrate through v5 by
+Current files use strict `mygui-template` schema v7 with a schema-v23 Figure
+blueprint. Strict v6 files first validate their schema-v22 Figure and then
+advance without content changes. Strict v5 files validate their schema-v21
+Figure and advance through v6. Strict v4 files migrate through v5 by
 injecting deterministic Error Bar defaults; malformed predecessors are
 rejected before a project is staged.
 
@@ -96,13 +97,13 @@ to SciPy. Any failed Fit aborts the entire application.
 
 Axes dimensions saved with autoscale enabled recompute their limits from the
 newly materialized data before the tab is published. Dimensions with autoscale
-disabled keep the fixed template limits. Interpolation, FIELD_2D, Colorbar,
+disabled keep the fixed template limits. Interpolation, FIELD_2D, Colorbar, Secondary Axis,
 Reference Marks, Annotation, and other derived components continue through their normal
 materializers and services.
 
 All component, layout, shared-axis, Colorbar-source, Sheet, column, project,
 and data-reference IDs are regenerated. Dynamic text and Fit results (filtered with the saved `fit_input_range` specification) are
-inserted into a complete schema-v22 project snapshot, which is strictly
+inserted into a complete schema-v23 project snapshot, which is strictly
 validated before it reaches the shared Repository/Canvas restore transaction.
 On success the new project is selected, has no file path, has an empty Undo
 stack, and is dirty. On failure no project, tab, Inspector, tree entry, Fit
@@ -124,15 +125,15 @@ The independent root format is:
 ```json
 {
   "schema": "mygui-template",
-  "schema_version": 6,
+  "schema_version": 7,
   "metadata": {},
   "data_contract": {},
   "figure": {}
 }
 ```
 
-Only exact integer version 6 and closed fields are accepted for newly saved
-templates. Versions 1–5 migrate through every intervening version; v5→v6
+Only exact integer version 7 and closed fields are accepted for newly saved
+templates. Versions 1–6 migrate through every intervening version; v6→v7
 preserves the complete validated Figure blueprint. Unknown
 fields or versions, non-finite numbers, dangling components, invalid refs,
 unknown variables, oversized files/JSON/images, and invalid component trees

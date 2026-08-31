@@ -33,13 +33,13 @@ opening-snapshot restore, and current-scale defaults change only the temporary
 draft. Preview, Cancel, and an unchanged OK do not alter project state.
 
 Ticker specifications synchronize across the current `sharey` group;
-tick-line and label appearance remains local to the selected Axes. Schema v22
+tick-line and label appearance remains local to the selected Axes. Schema v23
 also supports Index Locator for index data and one-conversion Percent Format
 Formatter. Date/category ticker and executable formatter types are excluded.
 
 ## Project record
 
-Schema v22 persists the Y Axis as `kind: "axis"`, `role: "y_axis"`, with `selector: {"axis": "y"}` under its parent Axes.
+Schema v23 persists the Y Axis as `kind: "axis"`, `role: "y_axis"`, with `selector: {"axis": "y"}` under its parent Axes.
 
 ## Referenced Matplotlib 3.9.0 URLs
 

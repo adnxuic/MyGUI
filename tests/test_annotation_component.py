@@ -789,7 +789,7 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
             raw["schema_version"] = 16
             path.write_text(json.dumps(raw), encoding="utf-8")
             migrated = load_project_file(path)
-            self.assertEqual(migrated["schema_version"], 22)
+            self.assertEqual(migrated["schema_version"], 23)
 
     def test_schema_v17_annotation_contract_and_predecessor_rejection(self):
         self.canvas.add_annotation(

@@ -135,6 +135,11 @@ from .errorbar import (
 from .colorbar import (
     ColorbarController,
 )
+from .secondary_axis import (
+    SecondaryAxisController,
+    SecondaryAxisRemovalHandle,
+    SecondaryAxisRuntime,
+)
 
 from .registry_bridge import (
     CONTROLLER_TYPES,
@@ -244,6 +249,9 @@ __all__ = [
     "HeatmapController",
     "ContourController",
     "ColorbarController",
+    "SecondaryAxisController",
+    "SecondaryAxisRemovalHandle",
+    "SecondaryAxisRuntime",
     "CONTROLLER_TYPES",
     "validate_controller_contracts",
     "controller_type_for",

@@ -44,7 +44,7 @@ The public value types are:
   callbacks, and update subject used by reversible physical removal.
 - `DeletionRequest`, `DeletionPlan`, `PreparedDeletion`, and
   `DeletionOutcome`: runtime-only two-phase deletion values; they are never
-  serialized into `ComponentState` or schema v17.
+  serialized into `ComponentState` or schema v23.
 - `UpdateImpact`: composable `RELIM`, `AUTOSCALE`, `LEGEND`, and `REDRAW` flags.
 
 `ComponentController` exposes:
@@ -101,7 +101,7 @@ The first-party deletion policies are:
 
 | Policy | Components |
 | --- | --- |
-| `REMOVE` | Axes, every Line role, Scatter, Colorbar, free Text, Annotation |
+| `REMOVE` | Axes, every Line role, Scatter, Colorbar, Secondary Axis, free Text, Annotation |
 | `HIDE` | Axis, Spine, Tick, Tick Label, Grid, Title, axis labels, Legend |
 | `FORBID` | Figure and the default for a new Controller type |
 
@@ -138,10 +138,11 @@ subtree.
 | `ReferenceLineController` | Reference Line | finite constant value, vertical/horizontal orientation, Axes-fraction span, uniform line appearance, visibility, layering, and clipping |
 | `ReferenceBandController` | Reference Band | finite ordered bounds, vertical/horizontal orientation, Axes-fraction span, fill/border appearance, visibility, layering, and clipping |
 | `ColorbarController` | Colorbar | visibility/label, constructor-sensitive placement, extend/spacing/edges, tagged locator/formatter, minor ticks/tick side, fonts, and outline appearance |
+| `SecondaryAxisController` | Secondary X/Y Axis | reversible unit transform, parent-relative placement, label, ticker/tick/offset-text appearance, and spine appearance; no independent data, limits, or scale |
 | `ZoomInAxesController`, `ImageInAxesController` | Zoom/Image inset | child-Axes placement and frame plus zoom connectors/range or embedded-image data |
 
-The exact schema-v17 ownership matrix and tagged-value formats are maintained
-in [`component-properties-v15.md`](component-properties-v15.md). Colorbar
+The exact schema-v23 ownership matrix and tagged-value formats are maintained
+in [`component-properties-v23.md`](component-properties-v23.md). Colorbar
 controls and defaults are listed in
 [`colorbar-component.md`](colorbar-component.md).
 Axes do not persist scales, Axis does not persist inversion or side visibility,
@@ -160,6 +161,8 @@ Role data is validated by the Controller as well as by project IO:
   empty and duplicate values remain valid;
 - `reference_line` and `reference_band`: exactly empty `{}` data; constant
   geometry belongs to their closed property contracts;
+- `secondary_x_axis` and `secondary_y_axis`: exactly empty `{}` data; mapping
+  and placement belong to the closed property contract;
 - `interpolation`: references and preprocessing expressions, a registered
   method, integer `k` from 1 through 5, `samples` from 2 through 100000,
   Boolean `lam_auto`, and a non-negative finite optional `lam`;
@@ -181,6 +184,7 @@ boundaries:
 | `services/axes_command.py` | `AxesCommandService` |
 | `services/chart_data.py` | `FunctionCurveService`, `ChartDataService`, `InterpolationService`, `FitService` |
 | `services/colorbar.py` | `ColorbarService` |
+| `services/secondary_axis.py` | `SecondaryAxisService` |
 | `services/reference_marks.py` | `ReferenceMarksService`, `ReferenceGuideService` |
 | `services/text_render.py` | `TextRenderService` |
 | `services/annotation.py` | `AnnotationService` |
@@ -193,6 +197,9 @@ boundaries:
 - `ColorbarService`: source resolution, transactional creation/reconstruction,
   source refresh, and lifecycle coordination without copying Scatter mapping
   state;
+- `SecondaryAxisService`: parent-Axes validation, unique normalized placement,
+  reversible unit-transform creation/rebuild, scale-domain health refresh, and
+  lifecycle coordination without an independent Axes data store;
 - `ReferenceMarksService`: transactional one-collection creation, verified
   geometry/style edits, and complete ordered-position replacement;
 - `ReferenceGuideService`: ordinary-Axes validation, staged Line/Poly
@@ -297,7 +304,7 @@ Use `ColorChoiceWidget` with the application-injected `ColorLibrary` for visible
    must own the full subtree and declare palette effects explicitly.
 7. Create the `ComponentState` with a stable ID, valid parent, deterministic `order`, selector, default properties, and role data; register parents before children.
 8. Add a domain-service command only when work crosses Controller boundaries or needs repository/render integration. Do not introduce a second mutable record.
-9. Extend strict schema-v17 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
+9. Extend strict schema-v23 serialization and direct save/open round-trip coverage when the component is persistent. Any later persisted-field change requires a new schema version task.
 10. Register an exact `EditorProfile` with explicit placement,
    `TreePresentationSpec`, and unique `SectionSpec` keys. Add a new Section
    only for a genuinely new interaction, inject `EditorContext` and the

@@ -71,19 +71,13 @@ class MatplotlibExposureContractTests(unittest.TestCase):
             )
             self.assertTrue(all(contract.unsupported.values()))
 
-    def test_all_32_profiles_expose_exact_controller_contracts(self):
+    def test_all_34_profiles_expose_exact_controller_contracts(self):
         registry = EditorRegistry()
         register_production_profiles(registry)
         registry.freeze()
-        expected = {
-            (kind, role)
-            for kind, roles in ROLES_BY_KIND.items()
-            for role in roles
-        }
-        self.assertEqual(len(expected), 32)
-        self.assertTrue(
-            all(registry.profile_for(kind, role) for kind, role in expected)
-        )
+        expected = {(kind, role) for kind, roles in ROLES_BY_KIND.items() for role in roles}
+        self.assertEqual(len(expected), 34)
+        self.assertTrue(all(registry.profile_for(kind, role) for kind, role in expected))
 
     def test_no_generated_property_control_falls_back_to_json_text(self):
         for (kind, role), controller_type in CONTROLLER_TYPES.items():
@@ -118,9 +112,7 @@ class MatplotlibExposureContractTests(unittest.TestCase):
 class TaggedMatplotlibValueTests(unittest.TestCase):
     def test_scale_rejects_unknown_fields_and_nonfinite_values(self):
         with self.assertRaises(ComponentValidationError):
-            normalize_scale(
-                {"kind": "linear", "params": {"unexpected": 1}}
-            )
+            normalize_scale({"kind": "linear", "params": {"unexpected": 1}})
         with self.assertRaises(ComponentValidationError):
             normalize_scale(
                 {
@@ -134,9 +126,7 @@ class TaggedMatplotlibValueTests(unittest.TestCase):
             )
 
     def test_custom_line_pattern_is_closed_and_finite(self):
-        value = normalize_line_pattern(
-            {"kind": "custom", "offset": 1.5, "dashes": [3, 2, 1, 2]}
-        )
+        value = normalize_line_pattern({"kind": "custom", "offset": 1.5, "dashes": [3, 2, 1, 2]})
         self.assertEqual(value["dashes"], [3.0, 2.0, 1.0, 2.0])
         with self.assertRaises(ComponentValidationError):
             normalize_line_pattern(
@@ -174,9 +164,7 @@ class TaggedMatplotlibValueTests(unittest.TestCase):
             (0.1, 0.2, 0.7, 0.6),
         )
         with self.assertRaises(ComponentValidationError):
-            normalize_legend_anchor(
-                {"kind": "none", "unexpected": True}
-            )
+            normalize_legend_anchor({"kind": "none", "unexpected": True})
 
 
 if __name__ == "__main__":

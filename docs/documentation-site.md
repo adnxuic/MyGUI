@@ -10,9 +10,9 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
   Contour feature pages, Projects and
   Appearance includes Figure Export, Getting Started includes Application
   Settings, Developer Reference documents the
-  Controller/Service/Canvas package layout plus the current schema-v22
+  Controller/Service/Canvas package layout plus the current schema-v23
   property contract and legacy v21 through v10 migration references,
-  and Editing Components mirrors the full 32-profile runtime component
+  and Editing Components mirrors the full runtime component
   hierarchy.
 - Build output goes to `site/`, which is git-ignored and rebuilt by CI.
 
@@ -27,7 +27,7 @@ MyGUI's documentation site is built with MkDocs and the Material theme from the 
 
 ## Navigation hierarchy and component tree
 
-The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all 32 production Inspector profiles:
+The navigation structure under **Editing Components** strictly mirrors the runtime Components Tree and all production Inspector profiles:
 
 1. **Fixed Semantics (14 profiles)**:
    - `Figure` (`editing-components/fixed-semantics/figure.md`)
@@ -66,6 +66,10 @@ The navigation structure under **Editing Components** strictly mirrors the runti
    - `Reference Guides`:
      - `Reference Line` (`editing-components/elements/reference-line.md`)
      - `Reference Band` (`editing-components/elements/reference-band.md`)
+6. **Secondary Axes (2 profiles)**:
+   - Overview: `editing-components/elements/secondary-axis.md`.
+   - `Secondary X Axis`: `editing-components/elements/secondary-x-axis.md`.
+   - `Secondary Y Axis`: `editing-components/elements/secondary-y-axis.md`.
 
 Parent container nodes (`Figure`, `Axes`, `X Axis`, `Y Axis`, `Major Ticks`, `Minor Ticks`) utilize `navigation.indexes` so that clicking the container header directly navigates to its index page while simultaneously expanding the section.
 
@@ -81,7 +85,7 @@ Component documentation uses `pymdownx.snippets` to maintain single-source-of-tr
 
 ## Redirect policy
 
-Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular 32-profile component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
+Monolithic parameter pages from earlier documentation versions are retired and replaced by the granular component hierarchy. Backward compatibility for legacy URLs and bookmarks is guaranteed via `mkdocs-redirects` under `plugins`:
 
 - `chart-component-parameters.md` -> `editing-components/charts/line.md`
 - `axes-component-parameters.md` -> `editing-components/fixed-semantics/axes.md`

@@ -869,7 +869,7 @@ class ReferenceGuideRuntimeTests(unittest.TestCase):
             self.canvas.project_id,
             self.canvas.project_name,
         )
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 22)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 23)
 
 
 if __name__ == "__main__":

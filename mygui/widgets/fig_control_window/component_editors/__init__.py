@@ -14,7 +14,9 @@ from .inline_spec_editors import (
     NamedNumberEditor,
     NumberSequenceEditor,
     OptionalColorEditor,
+    SecondaryAxisPlacementEditor,
     StringListEditor,
+    UnitTransformEditor,
 )
 from .spec_editors import (
     AxisFormatterEditor,
@@ -72,6 +74,7 @@ from .inputs import (
     ReferenceLineInput,
     ReferenceMarksInput,
     ScatterMappingInput,
+    SecondaryAxisInput,
 )
 from .profiles import register_production_profiles
 from .sections import (
@@ -121,9 +124,11 @@ __all__ = [
     "GridEdgeSpecEditor",
     "NumberSequenceEditor",
     "OptionalColorEditor",
+    "SecondaryAxisPlacementEditor",
     "ScatterColorMapEditor",
     "ScatterSizeMapEditor",
     "StringListEditor",
+    "UnitTransformEditor",
     "StructuredValueEditor",
     "TextBoxEditor",
     "ZoomConnectorsEditor",
@@ -150,6 +155,7 @@ __all__ = [
     "ReferenceLineInput",
     "ReferenceMarksInput",
     "ScatterMappingInput",
+    "SecondaryAxisInput",
     "register_production_profiles",
     "AxesLayoutSection",
     "AxisTickSettingsDialog",

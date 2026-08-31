@@ -1,4 +1,4 @@
-"""Inline compound editors for the closed schema-v14 value contracts.
+"""Inline compound editors for the closed schema-v23 value contracts.
 
 Each editor keeps a complete, already normalized value and emits it as one
 ``valueChanged`` signal.  Domain validation stays in
@@ -25,6 +25,11 @@ from mygui.figuremodify.components.property_values import (
     normalize_legend_anchor,
     normalize_line_pattern,
     normalize_marker,
+)
+from mygui.figuremodify.components.secondary_axis_values import (
+    PRESET_UNIT_TRANSFORMS,
+    normalize_secondary_axis_placement,
+    normalize_unit_transform,
 )
 from mygui.figuremodify.matplotlib_adapter import available_marker_definitions
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
@@ -327,6 +332,218 @@ class MarkerSpecEditor(InlineValueEditor):
             editor.setVisible(polygon)
 
     def _symbol_changed(self, *_args) -> None:
+        self._update_visibility()
+        self._emit()
+
+
+class UnitTransformEditor(InlineValueEditor):
+    """Edit preset, affine, or bounded custom unit transforms."""
+
+    _PRESET_LABELS = {
+        "identity": "Identity",
+        "degrees_to_radians": "Degrees → radians",
+        "radians_to_degrees": "Radians → degrees",
+        "celsius_to_fahrenheit": "Celsius → Fahrenheit",
+        "fahrenheit_to_celsius": "Fahrenheit → Celsius",
+        "frequency_to_period": "Frequency ↔ period",
+    }
+
+    def __init__(self, value: Any = None, parent: QWidget | None = None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.kind_input = QComboBox(self)
+        self.kind_input.addItem("Preset", "preset")
+        self.kind_input.addItem("Affine", "affine")
+        self.kind_input.addItem("Custom", "custom")
+        self.preset_input = QComboBox(self)
+        for name in PRESET_UNIT_TRANSFORMS:
+            self.preset_input.addItem(self._PRESET_LABELS.get(name, name), name)
+        self.scale_input = FocusAwareDoubleSpinBox(self)
+        self.scale_input.setRange(-1e12, 1e12)
+        self.scale_input.setDecimals(9)
+        self.scale_input.setPrefix("Scale ")
+        self.offset_input = FocusAwareDoubleSpinBox(self)
+        self.offset_input.setRange(-1e12, 1e12)
+        self.offset_input.setDecimals(9)
+        self.offset_input.setPrefix("Offset ")
+        self.forward_input = QLineEdit(self)
+        self.forward_input.setPlaceholderText("Forward f(x)")
+        self.inverse_input = QLineEdit(self)
+        self.inverse_input.setPlaceholderText("Inverse f⁻¹(x)")
+        layout.addWidget(self.kind_input)
+        layout.addWidget(self.preset_input, 1)
+        layout.addWidget(self.scale_input, 1)
+        layout.addWidget(self.offset_input, 1)
+        layout.addWidget(self.forward_input, 1)
+        layout.addWidget(self.inverse_input, 1)
+        self.set_value(value or {"kind": "preset", "name": "identity"})
+        self.kind_input.currentIndexChanged.connect(self._kind_changed)
+        self.preset_input.currentIndexChanged.connect(self._emit)
+        self.scale_input.valueChanged.connect(self._emit)
+        self.offset_input.valueChanged.connect(self._emit)
+        self.forward_input.editingFinished.connect(self._emit)
+        self.inverse_input.editingFinished.connect(self._emit)
+
+    def _inputs(self) -> tuple[QWidget, ...]:
+        return (
+            self.kind_input, self.preset_input, self.scale_input,
+            self.offset_input, self.forward_input, self.inverse_input,
+        )
+
+    def _normalize(self, value: Any) -> dict[str, Any]:
+        return normalize_unit_transform(value)
+
+    def _read(self) -> dict[str, Any]:
+        kind = str(self.kind_input.currentData())
+        if kind == "preset":
+            return {"kind": kind, "name": str(self.preset_input.currentData())}
+        if kind == "affine":
+            return {
+                "kind": kind,
+                "scale": float(self.scale_input.value()),
+                "offset": float(self.offset_input.value()),
+            }
+        return {
+            "kind": kind,
+            "forward": self.forward_input.text().strip(),
+            "inverse": self.inverse_input.text().strip(),
+        }
+
+    def _write(self, value: dict[str, Any]) -> None:
+        self.kind_input.setCurrentIndex(
+            max(0, self.kind_input.findData(value["kind"]))
+        )
+        if value["kind"] == "preset":
+            self.preset_input.setCurrentIndex(
+                max(0, self.preset_input.findData(value["name"]))
+            )
+        elif value["kind"] == "affine":
+            self.scale_input.setValue(float(value["scale"]))
+            self.offset_input.setValue(float(value["offset"]))
+        else:
+            self.forward_input.setText(value["forward"])
+            self.inverse_input.setText(value["inverse"])
+        self._update_visibility()
+
+    def _update_visibility(self) -> None:
+        kind = self.kind_input.currentData()
+        self.preset_input.setVisible(kind == "preset")
+        self.scale_input.setVisible(kind == "affine")
+        self.offset_input.setVisible(kind == "affine")
+        self.forward_input.setVisible(kind == "custom")
+        self.inverse_input.setVisible(kind == "custom")
+
+    def _kind_changed(self, *_args) -> None:
+        kind = self.kind_input.currentData()
+        if kind == "affine" and self.scale_input.value() == 0.0:
+            self.scale_input.setValue(1.0)
+        if kind == "custom":
+            if not self.forward_input.text().strip():
+                self.forward_input.setText("x")
+            if not self.inverse_input.text().strip():
+                self.inverse_input.setText("x")
+        self._update_visibility()
+        self._emit()
+
+
+class SecondaryAxisPlacementEditor(InlineValueEditor):
+    """Edit edge, Axes-fraction, or data-coordinate placement."""
+
+    def __init__(self, value: Any = None, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._orientation: str | None = None
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.kind_input = QComboBox(self)
+        self.kind_input.addItem("Edge", "edge")
+        self.kind_input.addItem("Position", "position")
+        self.side_input = QComboBox(self)
+        for side in ("top", "bottom", "right", "left"):
+            self.side_input.addItem(side.title(), side)
+        self.coordinate_input = QComboBox(self)
+        self.coordinate_input.addItem("Axes fraction", "axes_fraction")
+        self.coordinate_input.addItem("Data coordinate", "data")
+        self.value_input = FocusAwareDoubleSpinBox(self)
+        self.value_input.setRange(-1e12, 1e12)
+        self.value_input.setDecimals(9)
+        layout.addWidget(self.kind_input)
+        layout.addWidget(self.side_input, 1)
+        layout.addWidget(self.coordinate_input, 1)
+        layout.addWidget(self.value_input, 1)
+        self.set_value(value or {"kind": "edge", "side": "top"})
+        self.kind_input.currentIndexChanged.connect(self._kind_changed)
+        self.side_input.currentIndexChanged.connect(self._emit)
+        self.coordinate_input.currentIndexChanged.connect(self._emit)
+        self.value_input.valueChanged.connect(self._emit)
+
+    def _inputs(self) -> tuple[QWidget, ...]:
+        return (
+            self.kind_input, self.side_input,
+            self.coordinate_input, self.value_input,
+        )
+
+    def _normalize(self, value: Any) -> dict[str, Any]:
+        return normalize_secondary_axis_placement(
+            value, orientation=self._orientation
+        )
+
+    def set_orientation(self, orientation: str) -> None:
+        """Restrict edge choices to one immutable Secondary Axis orientation."""
+
+        if orientation not in {"x", "y"}:
+            raise ValueError("Secondary Axis orientation must be x or y.")
+        current = self.value()
+        allowed = ("top", "bottom") if orientation == "x" else ("right", "left")
+        self._orientation = orientation
+        blocker = QSignalBlocker(self.side_input)
+        self.side_input.clear()
+        for side in allowed:
+            self.side_input.addItem(side.title(), side)
+        del blocker
+        if current["kind"] == "edge" and current["side"] not in allowed:
+            current = {"kind": "edge", "side": allowed[0]}
+        self.set_value(current)
+
+    def _read(self) -> dict[str, Any]:
+        kind = str(self.kind_input.currentData() or "edge")
+        if kind == "edge":
+            side = self.side_input.currentData()
+            if not side:
+                side = "top" if self._orientation == "x" else "right"
+            return {"kind": kind, "side": str(side)}
+        coordinate_system = self.coordinate_input.currentData() or "axes_fraction"
+        return {
+            "kind": kind,
+            "coordinate_system": str(coordinate_system),
+            "value": float(self.value_input.value()),
+        }
+
+    def _write(self, value: dict[str, Any]) -> None:
+        self.kind_input.setCurrentIndex(
+            max(0, self.kind_input.findData(value["kind"]))
+        )
+        if value["kind"] == "edge":
+            self.side_input.setCurrentIndex(
+                max(0, self.side_input.findData(value["side"]))
+            )
+        else:
+            self.coordinate_input.setCurrentIndex(
+                max(0, self.coordinate_input.findData(value["coordinate_system"]))
+            )
+            self.value_input.setValue(float(value["value"]))
+        self._update_visibility()
+
+    def _update_visibility(self) -> None:
+        edge = self.kind_input.currentData() == "edge"
+        self.side_input.setVisible(edge)
+        self.coordinate_input.setVisible(not edge)
+        self.value_input.setVisible(not edge)
+
+    def _kind_changed(self, *_args) -> None:
+        if self.kind_input.currentData() == "edge" and self.side_input.currentIndex() < 0:
+            allowed = ("top", "bottom") if self._orientation == "x" else ("right", "left")
+            self.side_input.setCurrentIndex(max(0, self.side_input.findData(allowed[0])))
         self._update_visibility()
         self._emit()
 
@@ -662,5 +879,7 @@ __all__ = [
     "NamedNumberEditor",
     "NumberSequenceEditor",
     "OptionalColorEditor",
+    "SecondaryAxisPlacementEditor",
     "StringListEditor",
+    "UnitTransformEditor",
 ]

@@ -88,6 +88,7 @@ nav:
       - Reference Guides: reference-guides-component.md
       - Reference Marks Component: reference-marks-component.md
       - Colorbar Component: colorbar-component.md
+      - Secondary Axis / Unit Transform: secondary-axis-component.md
       - Color Picker: color-picker.md
   - Editing Components:
       - Components Tree: components-tree.md
@@ -138,6 +139,10 @@ nav:
                   - Image Insets: editing-components/elements/in-axes-image.md
               - Colorbars & Reference Guides:
                   - Colorbars: editing-components/elements/colorbar.md
+                  - Secondary Axes:
+                      - Overview: editing-components/elements/secondary-axis.md
+                      - Secondary X Axis: editing-components/elements/secondary-x-axis.md
+                      - Secondary Y Axis: editing-components/elements/secondary-y-axis.md
                   - Reference Marks: editing-components/elements/reflection-positions.md
                   - Reference Guides:
                       - Reference Line: editing-components/elements/reference-line.md
@@ -154,7 +159,8 @@ nav:
       - Component Inspector Architecture: component-inspector.md
       - Atomic Component Deletion: component-deletion.md
       - Component Extension Template: component-extension-template.md
-      - Component Properties (schema v22): component-properties-v22.md
+      - Component Properties (schema v23): component-properties-v23.md
+      - Legacy schema v22 migration properties: component-properties-v22.md
       - Legacy schema v21 migration properties: component-properties-v21.md
       - Legacy schema v20 migration properties: component-properties-v20.md
       - Legacy schema v19 migration properties: component-properties-v19.md

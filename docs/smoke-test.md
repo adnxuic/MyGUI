@@ -7,7 +7,7 @@ Run these checks from the repository root after GUI-facing changes.
 A code-driven Windows walk opens the real MainWindow, clicks controls, and
 writes PNG evidence plus `summary.json`. Groups are selected with `--only`.
 The walk covers Settings Center (including Templates), NEXT_USE creation
-defaults, Chart Templates extract/apply, 1D charts including Error Bar, Field 2D, Elements, all 32
+defaults, Chart Templates extract/apply, 1D charts including Error Bar, Field 2D, Elements, all 34
 Inspector profiles, shared X/Y ticker synchronization, layout templates, XRD
 import, deletion/history, and project save/restore, export, and Canvas popout. Native file dialogs, drag and
 drop, multi-monitor DPI, and live TeX/MATLAB remain on the interactive checks
@@ -343,7 +343,7 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
 8. Duplicate, delete, Undo, and Redo. Confirm each user action adds exactly one
    command and restores stable IDs, next sibling order, Artist, Locator,
    Inspector, tree projection, and selection atomically.
-9. Save, close, and reopen the schema-v17 project. Confirm all text, coordinate,
+9. Save, close, and reopen the schema-v23 project. Confirm all text, coordinate,
    arrow, typography, box, TeX request, order, and stable-ID state returns.
    Extract and apply a template with dynamic Annotation text and verify the
    remapped Annotation appears in the new project.
@@ -375,11 +375,36 @@ See [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md) for the comp
    guide belongs to the selected Axes and uses that Axes' blended transform.
    Delete multiple Reference Lines together, then Undo/Redo; repeat by deleting
    their owning Axes and confirm the full subtree restores with stable IDs.
-7. Save, close, and reopen the schema-v17 project. Confirm orientation,
+7. Save, close, and reopen the schema-v23 project. Confirm orientation,
    position/bounds, spans, appearance, stable IDs, order, empty `data`, one
    runtime collection per guide, selection/Inspector behavior, and clean/dirty
    fingerprints survive the round trip. Close the project and confirm no
    project, tree, Inspector, callback, or history resource remains active.
+
+## Secondary Axis / Unit Transform
+
+1. Create one regular Axes and choose **Add Element → Secondary Axis**.
+2. Create an X Secondary Axis with **Celsius → Fahrenheit**, label `°F`, and
+   the top edge. Confirm the result appears under the Axes in the
+   **Secondary Axes** tree group and opens the complete eight-section Inspector.
+3. Confirm the child displays transformed ticks but does not appear as another
+   ordinary Axes and offers no chart-data, limits, scale, aspect, or layout editor.
+4. Add a Y Secondary Axis on the right edge. Then try another Y Axis at Axes
+   fraction `1`; confirm the duplicate normalized placement is rejected and no
+   child, tree node, history command, or message duplicate remains.
+5. Change the X mapping to the `frequency ↔ period` preset while the parent X
+   limits are positive. Pan across zero: confirm only the Secondary Axis hides
+   and one warning appears. Pan back to a positive interval and confirm it
+   reappears automatically without changing the parent limits.
+6. Exercise Axes-fraction and data-coordinate placement, custom ticker mode,
+   label/tick fonts, tick visibility, spine style/bounds, and Undo/Redo.
+7. Save while the reciprocal mapping is hidden, close, and reopen the schema-v23
+   project. Confirm the project opens with the child hidden, then recovers when
+   the parent domain becomes positive. Extract/apply a chart template and
+   confirm the stable role, remapped ID/selector, placement, mapping, and styles.
+8. Delete one Secondary Axis and confirm only its Matplotlib child disappears.
+   Delete the parent Axes and confirm all remaining Secondary Axes are removed
+   in the same subtree transaction.
 
 ## FullProf XRD Refinement Import
 

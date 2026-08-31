@@ -35,6 +35,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     ReferenceBandInput,
     ReferenceLineInput,
     ReferenceMarksInput,
+    SecondaryAxisInput,
 )
 
 from mygui.application_theme import bind_widget_qss
@@ -372,6 +373,48 @@ class PyColorbarDialog(QDialog):
         super().accept()
 
 
+class PySecondaryAxisDialog(QDialog):
+    """Collect and validate a parent-bound Secondary Axis request."""
+
+    ICON_PATH = icon_path("element_images/secondary_axis.svg")
+
+    def __init__(self, dialog_name=None, figure_window=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("secondary_axis_dialog")
+        bind_widget_qss(
+            self,
+            "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss",
+        )
+        self.setWindowTitle(dialog_name or "Secondary Axis")
+        self.setWindowIcon(QIcon(self.ICON_PATH))
+        self.figure_window: PyFigureWindow = figure_window
+        layout = QVBoxLayout(self)
+        self.input = SecondaryAxisInput(self)
+        layout.addWidget(self.input)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self):
+        canvas = getattr(self.figure_window, "current_canva", None)
+        if canvas is None or not canvas.has_current_axes:
+            status_messages.show_warning(
+                "Select an Axes before creating a Secondary Axis."
+            )
+            return
+        try:
+            canvas.add_secondary_axis(self.input.spec())
+        except Exception as exc:
+            status_messages.show_error(str(exc))
+            return
+        super().accept()
+
+
 class PyReferenceMarksDialog(QDialog):
     """Collect Controller-free values for Reflection Positions."""
 
@@ -536,6 +579,10 @@ element_action_specs = {
     "Colorbar": ElementActionSpec(
         PyColorbarDialog,
         PyColorbarDialog.ICON_PATH,
+    ),
+    "Secondary Axis": ElementActionSpec(
+        PySecondaryAxisDialog,
+        PySecondaryAxisDialog.ICON_PATH,
     ),
     "Reflection Positions": ElementActionSpec(
         PyReferenceMarksDialog,

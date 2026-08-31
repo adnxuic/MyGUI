@@ -21,6 +21,12 @@ enforcement. TaskResult v1 and ScannerResult v2 change only through an explicit
 contract migration. Codex owns requested repository edits and verification.
 Generated evidence stays under ignored `build/agent-results/`.
 
+The explicitly authorized schema-v23 migration retired only
+`CORE-PERSISTENCE-V22` in favor of `CORE-PERSISTENCE-V23` and allocated
+`CORE-SECONDARY-AXIS-BOUNDARY`. Contract tests pin that exact CORE-set delta,
+the new source anchor and enforcement, and every task route that can change the
+Secondary Axis persisted contract.
+
 The root entry deliberately retains the explicit Matplotlib process-global
 mutation prohibition. Do not move or weaken that clause without updating its
 contract tests in the same change.

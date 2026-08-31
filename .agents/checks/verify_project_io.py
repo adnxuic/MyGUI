@@ -32,8 +32,8 @@ def main() -> int:
             "project-io",
             verification,
             persistence_impact=(
-                "Schema-v22 behavior, strict content-preserving v21 migration, "
-                "and the chained v10-v20 migrations were verified."
+                "Schema-v23 behavior, strict content-preserving v22 migration, "
+                "and the chained v10-v21 migrations were verified."
             ),
         ),
         args.json_out,

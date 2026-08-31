@@ -11,6 +11,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
     FitEngine,
 )
+from mygui.figuremodify.component_services import SecondaryAxisCreateSpec
 from mygui.figuremodify.components.property_values import marker_value
 from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
@@ -55,6 +56,9 @@ class CanvasMaterializeHost(Protocol):
         ...
 
     def add_colorbar(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+    def add_secondary_axis(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
     def add_reference_marks(self, *args: Any, **kwargs: Any) -> Any:
@@ -384,6 +388,27 @@ def materialize_colorbar(host: CanvasMaterializeHost, state, _transaction) -> No
     )
 
 
+def materialize_secondary_axis(host: CanvasMaterializeHost, state, _transaction) -> None:
+    if state.kind is not ComponentKind.SECONDARY_AXIS:
+        raise ValueError("Secondary Axis materializer requires a Secondary Axis state.")
+    orientation = (
+        "x" if state.role is ComponentRole.SECONDARY_X_AXIS else "y"
+    )
+    host.add_secondary_axis(
+        SecondaryAxisCreateSpec(
+            orientation,
+            unit_transform=state.properties["unit_transform"],
+            placement=state.properties["placement"],
+            properties=state.properties,
+        ),
+        axes_id=state.parent_id,
+        object_id=state.id,
+        component_order=state.order,
+        announce=False,
+        allow_invalid_domain=True,
+    )
+
+
 def materialize_reference_marks(host: CanvasMaterializeHost, state, _transaction) -> None:
     if (
         state.kind is not ComponentKind.REFERENCE_MARKS
@@ -603,6 +628,20 @@ def register_canvas_materializers(host: CanvasMaterializeHost, expected_phases) 
             host._materialize_colorbar,
             expected_phases[
                 (ComponentKind.COLORBAR, ComponentRole.COLORBAR)
+            ],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_X_AXIS),
+            host._materialize_secondary_axis,
+            expected_phases[
+                (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_X_AXIS)
+            ],
+        ),
+        ComponentMaterializer(
+            (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_Y_AXIS),
+            host._materialize_secondary_axis,
+            expected_phases[
+                (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_Y_AXIS)
             ],
         ),
         ComponentMaterializer(

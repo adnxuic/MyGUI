@@ -6,7 +6,7 @@ commands, and table-data dependency cascades submit stable IDs through the same
 two-phase workflow. Request types and `ComponentDeletionService` live in
 `mygui/figuremodify/services/deletion.py` and remain imported through
 `mygui.figuremodify.component_services`. Deletion state is runtime-only and
-does not change schema v17.
+does not change schema v23.
 
 ## Runtime values
 
@@ -36,7 +36,7 @@ Preparation validates the deletion policy and exact `DeletionHandler`, rejects
 leaf handlers with registered children, computes the complete closure and
 survivor effects, prepares the fallback Inspector, and reversibly detaches Axes
 Panels. The Registry stages artist removal, survivor state, Locator unbinding,
-the complete Components-tree projection, and a schema-v17 snapshot. Only a
+the complete Components-tree projection, and a schema-v23 snapshot. Only a
 fully valid candidate publishes cleanup, one Registry event batch, one redraw,
 the prepared selection, and one Message Bar result.
 
@@ -67,6 +67,6 @@ parent palette cursor.
 User-initiated Figure deletion is recorded as one project Figure command after
 `DeletionCoordinator` commits. Undo rematerializes removable roots and their
 fixed semantic descendants with the same IDs, restores survivor order,
-palette bookkeeping, and selection, then validates the complete schema-v17
+palette bookkeeping, and selection, then validates the complete schema-v23
 tree. Table dependency cascades remain inside their originating Table command
 and are recording-suspended so they do not create a second Figure command.

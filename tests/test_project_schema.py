@@ -16,6 +16,7 @@ from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
     migrate_v21_to_v22,
+    migrate_v22_to_v23,
     project_snapshot,
     restore_project_snapshot,
     validate_project_snapshot,
@@ -24,6 +25,7 @@ from mygui.project_io import (
     validate_v17_project_snapshot,
     validate_v18_project_snapshot,
     validate_v21_project_snapshot,
+    validate_v22_project_snapshot,
 )
 from main import MainWindow
 from tests.schema_helpers import (
@@ -383,7 +385,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
             for version in (
                 4,
                 9,
-                23,
+                24,
                 True,
                 14.0,
                 15.0,
@@ -407,7 +409,7 @@ class ProjectSchemaV14Tests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "schema version"):
                         load_project_file(path)
 
-        self.assertEqual(PROJECT_SCHEMA_VERSION, 22)
+        self.assertEqual(PROJECT_SCHEMA_VERSION, 23)
 
     def test_schema_v21_strictly_rejects_v22_tickers_before_lossless_migration(self):
         current = self.snapshot()
@@ -433,6 +435,15 @@ class ProjectSchemaV14Tests(unittest.TestCase):
         forbidden["schema_version"] = 21
         with self.assertRaisesRegex(ValueError, "not part of schema v21"):
             validate_v21_project_snapshot(forbidden)
+
+    def test_schema_v22_to_v23_is_content_preserving(self):
+        predecessor = deepcopy(self.snapshot())
+        predecessor["schema_version"] = 22
+        validate_v22_project_snapshot(predecessor)
+        before = deepcopy(predecessor["figure"]["components"])
+        migrated = migrate_v22_to_v23(predecessor)
+        self.assertEqual(migrated["schema_version"], 23)
+        self.assertEqual(migrated["figure"]["components"], before)
 
     def test_schema_v15_axes_reserve_and_v14_migration_defaults(self):
         current = self.snapshot()

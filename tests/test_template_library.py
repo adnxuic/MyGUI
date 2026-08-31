@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication, QPlainTextEdit
 from main import MainWindow
 from mygui.database import ColumnRef, ColumnType, scipy_fit_adapter
 from mygui.excel_io import ExcelColumnSpec, ExcelSheetSpec
+from mygui.figuremodify.component_services import SecondaryAxisCreateSpec
 from mygui.figuremodify.components import ComponentKind
 from mygui.resource_limits import ResourceLimits
 from mygui.resources import REPOSITORY_ROOT
@@ -29,6 +30,8 @@ from mygui.template_library import (
     parse_template_record,
     template_to_dict,
     validate_template,
+    TEMPLATE_SCHEMA_V6_VERSION,
+    migrate_v6_template_to_v7,
 )
 from mygui.widgets.settings_center.templates_page import (
     TEMPLATES_EMPTY_DESCRIPTION,
@@ -74,12 +77,8 @@ class TemplateFeatureTests(unittest.TestCase):
         self.sheet.columns[0].name = "X"
         self.sheet.columns[1].name = "Y"
         self.sheet.set_block(0, 0, [[0, 1], [1, 3], [2, 5], [3, 7]])
-        self.x_ref = ColumnRef(
-            self.canvas.project_id, self.sheet.id, self.sheet.columns[0].id
-        )
-        self.y_ref = ColumnRef(
-            self.canvas.project_id, self.sheet.id, self.sheet.columns[1].id
-        )
+        self.x_ref = ColumnRef(self.canvas.project_id, self.sheet.id, self.sheet.columns[0].id)
+        self.y_ref = ColumnRef(self.canvas.project_id, self.sheet.id, self.sheet.columns[1].id)
         pair = self.window.repository.line_pair(self.x_ref, self.y_ref)
         self.canvas.add_plot(
             pair.x,
@@ -133,9 +132,7 @@ class TemplateFeatureTests(unittest.TestCase):
     def test_extract_uses_only_referenced_columns_and_fresh_local_ids(self):
         fit_result = self.add_fit()
         self.sheet.add_column("Unused", ColumnType.NUMBER, values=[100, 200])
-        source_ids = {
-            item["id"] for item in self.canvas.component_snapshot()["components"]
-        }
+        source_ids = {item["id"] for item in self.canvas.component_snapshot()["components"]}
         template = self.extractor.extract(self.canvas, name="Instrument Template")
 
         self.assertEqual(
@@ -143,9 +140,7 @@ class TemplateFeatureTests(unittest.TestCase):
             ["X", "Y"],
         )
         self.assertTrue(
-            source_ids.isdisjoint(
-                {item["id"] for item in template.figure["components"]}
-            )
+            source_ids.isdisjoint({item["id"] for item in template.figure["components"]})
         )
         encoded = json.dumps(template_to_dict(template))
         for source_id in source_ids:
@@ -155,10 +150,57 @@ class TemplateFeatureTests(unittest.TestCase):
         self.assertEqual(fit["data"]["expression"], "")
         self.assertIsNotNone(fit_result)
         root = next(
-            item for item in template.figure["components"]
+            item
+            for item in template.figure["components"]
             if item["id"] == template.figure["root_component_id"]
         )
         self.assertEqual(root["properties"]["name"], "{{project_name}}")
+
+    def test_secondary_axis_extract_prepare_and_publish_round_trip(self):
+        self.canvas.add_secondary_axis(
+            SecondaryAxisCreateSpec(
+                "x",
+                unit_transform={
+                    "kind": "preset",
+                    "name": "celsius_to_fahrenheit",
+                },
+                properties={"label": "°F"},
+            ),
+            object_id="secondary-template-source",
+            announce=False,
+        )
+        template = self.extractor.extract(self.canvas, name="Secondary Axis Template")
+        source = next(
+            item
+            for item in template.figure["components"]
+            if item["kind"] == ComponentKind.SECONDARY_AXIS.value
+        )
+        service = TemplateApplyService(self.window.repository)
+        plan = service.prepare(
+            template,
+            imported_specs(),
+            source_file="secondary.csv",
+            project_name="Secondary Applied",
+        )
+        remapped = next(
+            item
+            for item in plan.project_snapshot["figure"]["components"]
+            if item["kind"] == ComponentKind.SECONDARY_AXIS.value
+        )
+        self.assertNotEqual(remapped["id"], source["id"])
+        self.assertEqual(remapped["selector"], {"object_id": remapped["id"]})
+        self.assertNotEqual(remapped["parent_id"], source["parent_id"])
+
+        service.publish(
+            plan,
+            table=self.window.table,
+            figure_window=self.window.figure_window,
+        )
+        applied = self.window.figure_window.current_canva
+        controller = applied.component_registry.get(remapped["id"])
+        runtime = controller.resolve_target()
+        self.assertIn(runtime.axis, runtime.parent_axes.child_axes)
+        self.assertNotIn(runtime.axis, applied.fig.axes)
 
     def test_unconfigured_fit_blocks_extraction(self):
         pair = self.window.repository.line_pair(self.x_ref, self.y_ref)
@@ -204,7 +246,16 @@ class TemplateFeatureTests(unittest.TestCase):
         self.assertTrue(path.is_file())
         old_bytes = path.read_bytes()
         with self.assertRaisesRegex(ValueError, "already exists"):
-            self.library.save(replace(template, metadata=replace(template.metadata, id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name="instrument template")))
+            self.library.save(
+                replace(
+                    template,
+                    metadata=replace(
+                        template.metadata,
+                        id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                        name="instrument template",
+                    ),
+                )
+            )
         corrupt = self.library.root / "bad.mygui-template.json"
         corrupt.write_text("{broken", encoding="utf-8")
         entries = self.library.entries()
@@ -221,7 +272,10 @@ class TemplateFeatureTests(unittest.TestCase):
         template = self.template()
         self.library.save(template)
         renamed = self.library.rename(template.metadata.id, "Renamed")
-        self.assertEqual(self.library.path_for(template.metadata.id).name, f"{template.metadata.id}.mygui-template.json")
+        self.assertEqual(
+            self.library.path_for(template.metadata.id).name,
+            f"{template.metadata.id}.mygui-template.json",
+        )
         self.assertEqual(renamed.metadata.name, "Renamed")
         noted = self.library.save_notes(template.metadata.id, "new notes")
         self.assertEqual(noted.metadata.notes, "new notes")
@@ -271,9 +325,7 @@ class TemplateFeatureTests(unittest.TestCase):
         self.assertTrue(explicit.valid)
         wrong = deepcopy(specs)
         next(
-            column
-            for column in wrong[0].columns
-            if normalize_header(column.name) == "signal (v)"
+            column for column in wrong[0].columns if normalize_header(column.name) == "signal (v)"
         ).type = ColumnType.TEXT
         self.assertFalse(TemplateMatcher().match(template, wrong).valid)
         missing = deepcopy(specs)
@@ -296,13 +348,15 @@ class TemplateFeatureTests(unittest.TestCase):
         runtime_ids = {item["id"] for item in plan.project_snapshot["figure"]["components"]}
         self.assertTrue(source_ids.isdisjoint(runtime_ids))
         fitted = next(
-            item for item in plan.project_snapshot["figure"]["components"]
+            item
+            for item in plan.project_snapshot["figure"]["components"]
             if item["role"] == "fit_curve"
         )
         self.assertIsNotNone(fitted["data"]["fit_result"])
         self.assertTrue(fitted["data"]["expression"])
         applied_title = next(
-            item for item in plan.project_snapshot["figure"]["components"]
+            item
+            for item in plan.project_snapshot["figure"]["components"]
             if item["role"] == "title"
         )
         self.assertEqual(applied_title["properties"]["text"], "sample-02 — Applied Project")
@@ -351,16 +405,10 @@ class TemplateFeatureTests(unittest.TestCase):
                 comp["properties"]["in_layout"] = True
 
         migrated = parse_template_record(raw_v1)
-        self.assertEqual(template_to_dict(migrated)["schema_version"], 6)
-        fit_v1 = next(
-            c for c in migrated.figure["components"]
-            if c.get("role") == "fit_curve"
-        )
+        self.assertEqual(template_to_dict(migrated)["schema_version"], 7)
+        fit_v1 = next(c for c in migrated.figure["components"] if c.get("role") == "fit_curve")
         self.assertEqual(fit_v1["data"]["fit_input_range"], {"kind": "all"})
-        axes_v1 = next(
-            c for c in migrated.figure["components"]
-            if c.get("kind") == "axes"
-        )
+        axes_v1 = next(c for c in migrated.figure["components"] if c.get("kind") == "axes")
         self.assertEqual(axes_v1["data"]["geometry"], {"mode": "grid"})
         self.assertNotIn("in_layout", axes_v1["properties"])
 
@@ -372,11 +420,8 @@ class TemplateFeatureTests(unittest.TestCase):
                 comp["data"].pop("geometry", None)
                 comp["properties"]["in_layout"] = True
         migrated_v2 = parse_template_record(raw_v2)
-        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 6)
-        axes_v2 = next(
-            c for c in migrated_v2.figure["components"]
-            if c.get("kind") == "axes"
-        )
+        self.assertEqual(template_to_dict(migrated_v2)["schema_version"], 7)
+        axes_v2 = next(c for c in migrated_v2.figure["components"] if c.get("kind") == "axes")
         self.assertEqual(axes_v2["data"]["geometry"], {"mode": "grid"})
         self.assertNotIn("in_layout", axes_v2["properties"])
 
@@ -384,18 +429,18 @@ class TemplateFeatureTests(unittest.TestCase):
         raw_v3_direct = template_to_dict(template)
         raw_v3_direct["schema_version"] = 3
         migrated_v3 = parse_template_record(raw_v3_direct)
-        self.assertEqual(template_to_dict(migrated_v3)["schema_version"], 6)
+        self.assertEqual(template_to_dict(migrated_v3)["schema_version"], 7)
         self.assertEqual(migrated_v3.figure, template.figure)
         raw_v4_direct = template_to_dict(template)
         raw_v4_direct["schema_version"] = 4
         migrated_v4 = parse_template_record(raw_v4_direct)
-        self.assertEqual(template_to_dict(migrated_v4)["schema_version"], 6)
+        self.assertEqual(template_to_dict(migrated_v4)["schema_version"], 7)
         self.assertEqual(migrated_v4.figure, template.figure)
 
         raw_v5 = template_to_dict(template)
         raw_v5["schema_version"] = 5
         migrated_v5 = parse_template_record(raw_v5)
-        self.assertEqual(template_to_dict(migrated_v5)["schema_version"], 6)
+        self.assertEqual(template_to_dict(migrated_v5)["schema_version"], 7)
         self.assertEqual(migrated_v5.figure, template.figure)
 
         forbidden_v5 = deepcopy(raw_v5)
@@ -412,10 +457,7 @@ class TemplateFeatureTests(unittest.TestCase):
             parse_template_record(forbidden_v5)
 
         # Bounded fit input range in template
-        fit_v3 = next(
-            c for c in template.figure["components"]
-            if c.get("role") == "fit_curve"
-        )
+        fit_v3 = next(c for c in template.figure["components"] if c.get("role") == "fit_curve")
         fit_v3["data"]["fit_input_range"] = {
             "kind": "bounded",
             "minimum": 1.0,
@@ -434,7 +476,8 @@ class TemplateFeatureTests(unittest.TestCase):
             project_name="Bounded Applied",
         )
         applied_fit = next(
-            item for item in plan.project_snapshot["figure"]["components"]
+            item
+            for item in plan.project_snapshot["figure"]["components"]
             if item["role"] == "fit_curve"
         )
         self.assertEqual(
@@ -443,6 +486,14 @@ class TemplateFeatureTests(unittest.TestCase):
         )
         self.assertEqual(applied_fit["data"]["x_start"], 1.0)
         self.assertEqual(applied_fit["data"]["x_stop"], 3.0)
+
+    def test_template_v6_to_v7_is_content_preserving(self):
+        current = template_to_dict(self.template())
+        current["schema_version"] = TEMPLATE_SCHEMA_V6_VERSION
+        migrated = migrate_v6_template_to_v7(current)
+        result = template_to_dict(migrated)
+        self.assertEqual(result["schema_version"], 7)
+        self.assertEqual(result["figure"], current["figure"])
 
     def test_publish_is_dirty_empty_history_and_rolls_back_materialization_failure(self):
         template = self.template()
@@ -507,7 +558,9 @@ class TemplateFeatureTests(unittest.TestCase):
             source_file="fixed.csv",
             project_name="Fixed",
         )
-        service.publish(fixed_plan, table=self.window.table, figure_window=self.window.figure_window)
+        service.publish(
+            fixed_plan, table=self.window.table, figure_window=self.window.figure_window
+        )
         fixed_axes = self.window.figure_window.current_canva.component_registry.query(
             kind=ComponentKind.AXES
         )[0]
@@ -559,9 +612,7 @@ class TemplateFeatureTests(unittest.TestCase):
 
         host = Host()
         self.window.template_workflow.library = self.library
-        page = TemplatesSettingsPage(
-            self.library, self.window.template_workflow, host
-        )
+        page = TemplatesSettingsPage(self.library, self.window.template_workflow, host)
         try:
             self.assertEqual(page.list.count(), 2)
             valid_row = next(
@@ -595,9 +646,7 @@ class TemplateFeatureTests(unittest.TestCase):
         host = Host()
         empty_library = TemplateLibrary(Path(self.temp.name) / "empty_templates")
         self.window.template_workflow.library = empty_library
-        page = TemplatesSettingsPage(
-            empty_library, self.window.template_workflow, host
-        )
+        page = TemplatesSettingsPage(empty_library, self.window.template_workflow, host)
         try:
             # Empty library state
             self.assertEqual(page.list.count(), 0)
@@ -608,9 +657,7 @@ class TemplateFeatureTests(unittest.TestCase):
             self.assertFalse(page.delete_button.isEnabled())
             self.assertNotIn("below", page.empty_description.text().casefold())
             self.assertEqual(page.empty_description.text(), TEMPLATES_EMPTY_DESCRIPTION)
-            self.assertEqual(
-                page.empty_import_button.objectName(), "template_empty_import_button"
-            )
+            self.assertEqual(page.empty_import_button.objectName(), "template_empty_import_button")
 
             # Add a corrupt template
             corrupt_file = empty_library.ensure_directory() / "malformed.mygui-template.json"
@@ -650,9 +697,7 @@ class TemplateFeatureTests(unittest.TestCase):
         library.save(template)
 
         self.window.template_workflow.library = library
-        page = TemplatesSettingsPage(
-            library, self.window.template_workflow, host
-        )
+        page = TemplatesSettingsPage(library, self.window.template_workflow, host)
         try:
             self.assertEqual(page.list.count(), 1)
 
@@ -693,9 +738,7 @@ class TemplateFeatureTests(unittest.TestCase):
         host = Host()
         empty_library = TemplateLibrary(Path(self.temp.name) / "layout_empty_templates")
         self.window.template_workflow.library = empty_library
-        empty_page = TemplatesSettingsPage(
-            empty_library, self.window.template_workflow, host
-        )
+        empty_page = TemplatesSettingsPage(empty_library, self.window.template_workflow, host)
         try:
             empty_page.resize(640, 420)
             empty_page.show()

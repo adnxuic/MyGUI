@@ -1340,6 +1340,24 @@ class ComponentRegistry:
                 )
             colorbar_sources.add(source_id)
 
+        from .secondary_axis_values import secondary_axis_placement_key
+
+        secondary_placements: set[tuple[str | None, ComponentRole, str, float]] = set()
+        for controller in self.query(kind=ComponentKind.SECONDARY_AXIS):
+            state = controller.state
+            orientation = (
+                "x" if state.role is ComponentRole.SECONDARY_X_AXIS else "y"
+            )
+            coordinate_system, value = secondary_axis_placement_key(
+                state.properties["placement"], orientation=orientation
+            )
+            key = (state.parent_id, state.role, coordinate_system, value)
+            if key in secondary_placements:
+                raise ComponentValidationError(
+                    "Secondary Axis placements must be unique per parent and orientation."
+                )
+            secondary_placements.add(key)
+
         axes_states = [
             controller.state
             for controller in self._controllers.values()
@@ -1429,6 +1447,7 @@ class ComponentRegistry:
             ComponentKind.REFERENCE_MARKS,
             ComponentKind.REFERENCE_GUIDE,
             ComponentKind.ANNOTATION,
+            ComponentKind.SECONDARY_AXIS,
         }:
             valid = parent_kind is ComponentKind.AXES
         elif kind is ComponentKind.TICK_GROUP:
@@ -1581,6 +1600,13 @@ class ComponentRegistry:
                 raise ComponentValidationError(
                     f"Colorbar component {state.id!r} requires object_id "
                     "equal to its component id."
+                )
+            return
+        if state.kind is ComponentKind.SECONDARY_AXIS:
+            if selector != {"object_id": state.id}:
+                raise ComponentValidationError(
+                    f"Secondary Axis component {state.id!r} requires only "
+                    "object_id equal to its component id."
                 )
             return
         if state.kind is ComponentKind.REFERENCE_MARKS:

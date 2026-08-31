@@ -1,4 +1,4 @@
-"""Validate, migrate, save, and load strict schema-v22 project snapshots."""
+"""Validate, migrate, save, and load strict schema-v23 project snapshots."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.components.serialization import (
-    normalize_v22_figure,
+    normalize_v23_figure,
     validate_v10_figure,
     validate_v11_figure,
     validate_v12_figure,
@@ -28,12 +28,14 @@ from mygui.figuremodify.components.serialization import (
     validate_v20_figure,
     validate_v21_figure,
     validate_v22_figure,
+    validate_v23_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 22
+PROJECT_SCHEMA_VERSION = 23
+SCHEMA_V22_VERSION = 22
 SCHEMA_V21_VERSION = 21
 SCHEMA_V20_VERSION = 20
 SCHEMA_V19_VERSION = 19
@@ -199,11 +201,21 @@ def _validate_project_snapshot_version(
 
 
 def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
-    """Validate one exact current schema-v22 project snapshot."""
+    """Validate one exact current schema-v23 project snapshot."""
 
     _validate_project_snapshot_version(
         snapshot,
         version=PROJECT_SCHEMA_VERSION,
+        figure_validator=validate_v23_figure,
+    )
+
+
+def validate_v22_project_snapshot(snapshot: dict[str, Any]) -> None:
+    """Validate one exact predecessor schema-v22 project snapshot."""
+
+    _validate_project_snapshot_version(
+        snapshot,
+        version=SCHEMA_V22_VERSION,
         figure_validator=validate_v22_figure,
     )
 
@@ -481,6 +493,16 @@ def migrate_v21_to_v22(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     validate_v21_project_snapshot(snapshot)
     migrated = deepcopy(snapshot)
+    migrated["schema_version"] = SCHEMA_V22_VERSION
+    validate_v22_project_snapshot(migrated)
+    return migrated
+
+
+def migrate_v22_to_v23(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Promote a strictly valid schema-v22 project without changing content."""
+
+    validate_v22_project_snapshot(snapshot)
+    migrated = deepcopy(snapshot)
     migrated["schema_version"] = PROJECT_SCHEMA_VERSION
     validate_project_snapshot(migrated)
     return migrated
@@ -514,7 +536,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v22_figure(canvas.component_snapshot())
+    figure = normalize_v23_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -591,6 +613,7 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
         SCHEMA_V19_VERSION: migrate_v19_to_v20,
         SCHEMA_V20_VERSION: migrate_v20_to_v21,
         SCHEMA_V21_VERSION: migrate_v21_to_v22,
+        SCHEMA_V22_VERSION: migrate_v22_to_v23,
     }
     while version in migrations:
         snapshot = migrations[version](snapshot)
@@ -598,7 +621,7 @@ def load_project_file(filename: str | Path) -> dict[str, Any]:
     if version != PROJECT_SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported project schema version {version!r}; only schema "
-            f"v{PROJECT_SCHEMA_VERSION} and chained strict v10-v21 migrations "
+            f"v{PROJECT_SCHEMA_VERSION} and chained strict v10-v22 migrations "
             "are supported."
         )
     validate_project_snapshot(snapshot)

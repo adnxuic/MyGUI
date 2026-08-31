@@ -12,6 +12,7 @@ from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     PyReferenceBandDialog,
     PyReferenceLineDialog,
     PyReferenceMarksDialog,
+    PySecondaryAxisDialog,
     PyTextDialog,
 )
 
@@ -44,6 +45,13 @@ def run_elements_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
             harness,
             "elements.reference_guides",
             lambda: _scenario_reference_guides(harness),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "elements.secondary_axis",
+            lambda: _scenario_secondary_axis(harness),
         )
     )
     results.append(
@@ -226,6 +234,41 @@ def _scenario_in_axes(harness: SmokeHarness) -> None:
     harness.select_component(insets[0].component_id)
     harness.grab_canvas("elements-13-inaxes-canvas")
     harness.grab_inspector("elements-14-inaxes-inspector")
+
+
+def _scenario_secondary_axis(harness: SmokeHarness) -> None:
+    canvas = harness.create_project("Smoke_Elem_SecondaryAxis")
+    canvas.create_axes_layout(AxesLayoutSpec.grid(1, 1))
+    canvas.current_axes.set_xlim(0.0, 100.0)
+    harness.pump(50)
+
+    dialog = PySecondaryAxisDialog(
+        dialog_name="Secondary Axis",
+        figure_window=harness.window.figure_window,
+        parent=harness.window,
+    )
+    dialog.setModal(False)
+    dialog.show()
+    harness.pump(60)
+    preset = dialog.input.transform_input.preset_input
+    preset.setCurrentIndex(preset.findData("celsius_to_fahrenheit"))
+    dialog.input.label_input.setText("°F")
+    harness.grab(dialog, "elements-19-secondary-axis-dialog")
+
+    dialog.accept()
+    harness.pump(80)
+    components = canvas.component_registry.query(kind=ComponentKind.SECONDARY_AXIS)
+    if len(components) != 1:
+        raise SmokeError("Secondary Axis component was not created exactly once.")
+    runtime = components[0].resolve_target()
+    if runtime.axis not in runtime.parent_axes.child_axes:
+        raise SmokeError("Secondary Axis is not owned by parent.child_axes.")
+    if runtime.axis in canvas.fig.axes:
+        raise SmokeError("Secondary Axis was incorrectly registered as an ordinary Axes.")
+
+    harness.select_component(components[0].component_id)
+    harness.grab_canvas("elements-20-secondary-axis-canvas")
+    harness.grab_inspector("elements-21-secondary-axis-inspector")
 
 
 def _scenario_annotation(harness: SmokeHarness) -> None:

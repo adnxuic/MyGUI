@@ -22,6 +22,7 @@ from .inspector import (
     SectionSpec,
     TreePresentationSpec,
 )
+from .inline_spec_editors import SecondaryAxisPlacementEditor
 from .sections import (
     AnnotationArrowSection,
     AnnotationContentSection,
@@ -145,6 +146,51 @@ def _colorbar_source(controller, context, parent):
         context=context,
         parent=parent,
     )
+
+
+def _secondary_axis_properties(*keys: str):
+    def factory(controller, context, parent):
+        def apply_properties(properties):
+            key = next(iter(properties))
+            label = key.replace("_", " ").title()
+            return perform_editor_action(
+                context,
+                f"Change Secondary Axis {label}",
+                lambda: context.secondary_axes.apply_properties(
+                    controller, properties
+                ),
+                merge_key=("property", controller.component_id, key),
+            )
+
+        section = PropertySection(
+            controller,
+            context=context,
+            property_keys=keys,
+            apply_properties=apply_properties,
+            parent=parent,
+        )
+        if "placement" in keys:
+            editor = section.editor("placement")
+            if isinstance(editor, SecondaryAxisPlacementEditor):
+                orientation = (
+                    "x"
+                    if controller.state.role is ComponentRole.SECONDARY_X_AXIS
+                    else "y"
+                )
+                editor.set_orientation(orientation)
+        return section
+
+    return factory
+
+
+def _secondary_axis_preview(state) -> str:
+    label = str(state.properties.get("label", "")).strip()
+    if label:
+        return label
+    transform = state.properties.get("unit_transform", {})
+    if transform.get("kind") == "preset":
+        return str(transform.get("name", "identity")).replace("_", " ").title()
+    return str(transform.get("kind", "Unit transform")).title()
 
 
 def _reference_marks_properties(*keys: str):
@@ -1344,6 +1390,58 @@ COLORBAR_PROFILE = EditorProfile(
 )
 
 
+SECONDARY_AXIS_PROFILE = EditorProfile(
+    "secondary_axis",
+    "Secondary Axis",
+    (
+        SectionSpec("general", "General", _secondary_axis_properties("visible"), property_keys=("visible",)),
+        SectionSpec("unit_transform", "Unit Transform", _secondary_axis_properties("unit_transform"), property_keys=("unit_transform",)),
+        SectionSpec("placement", "Placement", _secondary_axis_properties("placement"), property_keys=("placement",)),
+        SectionSpec(
+            "label", "Label",
+            _secondary_axis_properties("label", "label_pad", "label_rotation", "label_font"),
+            property_keys=("label", "label_pad", "label_rotation", "label_font"),
+        ),
+        SectionSpec(
+            "scale_ticks", "Scale && Ticks",
+            _secondary_axis_properties("ticker_mode", "major_locator", "major_formatter", "minor_locator", "minor_formatter"),
+            property_keys=("ticker_mode", "major_locator", "major_formatter", "minor_locator", "minor_formatter"),
+        ),
+        SectionSpec(
+            "tick_appearance", "Tick Appearance",
+            _secondary_axis_properties(
+                "major_ticks_visible", "major_labels_visible", "minor_ticks_visible", "minor_labels_visible",
+                "tick_direction", "tick_length", "tick_width", "tick_color", "tick_pad", "tick_rotation",
+                "tick_font", "offset_visible", "offset_font", "remove_overlapping_locs",
+            ),
+            property_keys=(
+                "major_ticks_visible", "major_labels_visible", "minor_ticks_visible", "minor_labels_visible",
+                "tick_direction", "tick_length", "tick_width", "tick_color", "tick_pad", "tick_rotation",
+                "tick_font", "offset_visible", "offset_font", "remove_overlapping_locs",
+            ),
+        ),
+        SectionSpec(
+            "spine", "Spine",
+            _secondary_axis_properties("spine_visible", "spine_color", "spine_linewidth", "spine_linestyle", "spine_bounds", "spine_alpha"),
+            property_keys=("spine_visible", "spine_color", "spine_linewidth", "spine_linestyle", "spine_bounds", "spine_alpha"),
+        ),
+        SectionSpec("advanced", "Advanced", _secondary_axis_properties("zorder"), collapsed=True, property_keys=("zorder",)),
+    ),
+    placement=EditorPlacement.ELEMENT,
+    tree=TreePresentationSpec(
+        label=lambda state: "Secondary X Axis" if state.role is ComponentRole.SECONDARY_X_AXIS else "Secondary Y Axis",
+        group_title="Secondary Axes",
+        instance_prefix="Secondary Axis",
+        preview=_secondary_axis_preview,
+        sort_bucket=52,
+        group_key="secondary_axes",
+        group_order=52,
+        always_group=True,
+        delete_label="Secondary Axis",
+    ),
+)
+
+
 REFERENCE_MARKS_PROFILE = EditorProfile(
     "reflection_positions",
     "Reflection Positions",
@@ -2198,6 +2296,15 @@ def register_production_profiles(editor_registry) -> None:
         COLORBAR_PROFILE,
         role=ComponentRole.COLORBAR,
     )
+    for role in (
+        ComponentRole.SECONDARY_X_AXIS,
+        ComponentRole.SECONDARY_Y_AXIS,
+    ):
+        editor_registry.register_profile(
+            ComponentKind.SECONDARY_AXIS,
+            SECONDARY_AXIS_PROFILE,
+            role=role,
+        )
     editor_registry.register_profile(
         ComponentKind.REFERENCE_MARKS,
         REFERENCE_MARKS_PROFILE,

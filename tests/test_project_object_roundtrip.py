@@ -16,6 +16,7 @@ from matplotlib.collections import LineCollection
 
 from mygui.database import ColumnRef, ColumnType, DataPreprocessSpec
 from mygui.database.interpolate_func import interpolate_dict
+from mygui.figuremodify.component_services import SecondaryAxisCreateSpec
 from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
@@ -55,7 +56,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             canva_name="AxisState",
         )
         canvas = self.window.figure_window.current_canva
-        axes_id, = create_regular_axes(canvas)
+        (axes_id,) = create_regular_axes(canvas)
         x_axis = canvas.component_registry.find_one(
             parent_id=axes_id,
             kind=ComponentKind.AXIS,
@@ -69,9 +70,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             parent_id=x_axis.component_id,
             role=ComponentRole.X_LABEL,
         )
-        self.assertTrue(
-            tick_labels.set_property("fontfamily", ["DejaVu Sans"]).ok
-        )
+        self.assertTrue(tick_labels.set_property("fontfamily", ["DejaVu Sans"]).ok)
         self.assertTrue(x_label.set_property("position", (0.4, -0.12)).ok)
 
         save_project_snapshot(self.path, self.window.figure_window)
@@ -83,12 +82,8 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 loaded.figure_window,
             )
             restored = loaded.figure_window.current_canva
-            restored_ticks = restored.component_registry.get(
-                tick_labels.component_id
-            )
-            restored_label = restored.component_registry.get(
-                x_label.component_id
-            )
+            restored_ticks = restored.component_registry.get(tick_labels.component_id)
+            restored_label = restored.component_registry.get(x_label.component_id)
             target = restored_label.resolve_target()
             axes = restored.component_registry.resolve_target(axes_id)
 
@@ -97,8 +92,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 "DejaVu Sans",
             )
             self.assertEqual(
-                restored_ticks.resolve_target().get_major_ticks()[0]
-                .label1.get_fontfamily()[0],
+                restored_ticks.resolve_target().get_major_ticks()[0].label1.get_fontfamily()[0],
                 "DejaVu Sans",
             )
             self.assertEqual(target.get_position(), (0.4, -0.12))
@@ -203,8 +197,16 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             valid_pair.x, valid_pair.y, x_ref, y_ref, linear_method, samples=64, label="interpolate"
         )
         canvas.add_fit_curve(
-            valid_pair.x, valid_pair.y, "blue", "fit", x_ref, y_ref,
-            fit_type="poly2", expression="x**2", x_start=0, x_stop=3,
+            valid_pair.x,
+            valid_pair.y,
+            "blue",
+            "fit",
+            x_ref,
+            y_ref,
+            fit_type="poly2",
+            expression="x**2",
+            x_start=0,
+            x_stop=3,
             fit_result={"formula": "x**2", "coefficients": [], "goodness": {}},
         )
         canvas.add_text(0.25, 0.75, "axes text", "DejaVu Sans", 12)
@@ -275,6 +277,24 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
             preprocess=DataPreprocessSpec().to_dict(),
             object_id="roundtrip-errorbar",
         )
+        canvas.add_secondary_axis(
+            SecondaryAxisCreateSpec(
+                "x",
+                unit_transform={"kind": "affine", "scale": 2.0, "offset": 1.0},
+                properties={"label": "Converted X"},
+            ),
+            object_id="roundtrip-secondary-x",
+            announce=False,
+        )
+        canvas.add_secondary_axis(
+            SecondaryAxisCreateSpec(
+                "y",
+                unit_transform={"kind": "affine", "scale": 0.5, "offset": -1.0},
+                properties={"label": "Converted Y"},
+            ),
+            object_id="roundtrip-secondary-y",
+            announce=False,
+        )
 
         data_roles = {
             ComponentRole.DATA_PLOT,
@@ -303,9 +323,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 if controller.state.role in data_roles
             }
             self.assertEqual(restored_ids, object_ids)
-            reference = restored.component_registry.get(
-                "roundtrip-reference-marks"
-            )
+            reference = restored.component_registry.get("roundtrip-reference-marks")
             self.assertEqual(
                 reference.state.data["positions"],
                 [15.2, 15.2, 22.9],
@@ -327,8 +345,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 {
                     (controller.state.kind, controller.state.role)
                     for controller in restored.component_registry.query()
-                    if (controller.state.kind, controller.state.role)
-                    in expected_dynamic_keys
+                    if (controller.state.kind, controller.state.role) in expected_dynamic_keys
                 },
                 expected_dynamic_keys,
             )
@@ -342,14 +359,10 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                     )
             for role in data_roles:
                 self.assertEqual(
-                    len(
-                        restored.component_registry.query(role=role)
-                    ),
+                    len(restored.component_registry.query(role=role)),
                     1,
                 )
-            fit = restored.component_registry.query(
-                role=ComponentRole.FIT_CURVE
-            )[0]
+            fit = restored.component_registry.query(role=ComponentRole.FIT_CURVE)[0]
             self.assertEqual(
                 fit.state.properties["color"].casefold(),
                 "#0000ff",
@@ -367,11 +380,7 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 [0, 1, 2, 3, 4, 5, reference.state.order],
             )
             self.assertEqual(
-                len(
-                    restored.component_registry.query(
-                        role=ComponentRole.TEXT
-                    )
-                ),
+                len(restored.component_registry.query(role=ComponentRole.TEXT)),
                 2,
             )
         finally:
@@ -404,13 +413,9 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
                 announce=False,
             )
         source = canvas.component_registry.query(role=ComponentRole.TEXT)[0]
-        source_annotation = canvas.component_registry.get(
-            annotation_artist.get_gid()
-        )
+        source_annotation = canvas.component_registry.get(annotation_artist.get_gid())
         self.assertTrue(source.read_state().properties["usetex"])
-        self.assertTrue(
-            source_annotation.read_state().properties["usetex"]
-        )
+        self.assertTrue(source_annotation.read_state().properties["usetex"])
 
         tex_config.set_tex_enabled(False, notify=False)
         source.resolve_target().set_usetex(False)
@@ -422,14 +427,10 @@ class ProjectObjectRoundtripTests(unittest.TestCase):
         try:
             restore_project_snapshot(self.path, loaded.table, loaded.figure_window)
             restored = loaded.figure_window.current_canva
-            controller = restored.component_registry.query(
-                role=ComponentRole.TEXT
-            )[0]
+            controller = restored.component_registry.query(role=ComponentRole.TEXT)[0]
             self.assertTrue(controller.read_state().properties["usetex"])
             self.assertFalse(controller.resolve_target().get_usetex())
-            annotation = restored.component_registry.get(
-                "tex-roundtrip-annotation"
-            )
+            annotation = restored.component_registry.get("tex-roundtrip-annotation")
             self.assertTrue(annotation.read_state().properties["usetex"])
             self.assertFalse(annotation.resolve_target().get_usetex())
 

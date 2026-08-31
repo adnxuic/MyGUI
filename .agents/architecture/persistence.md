@@ -6,12 +6,12 @@ restart.
 
 ## Schema authority
 
-`CORE-PERSISTENCE-V22` defines the current persisted project contract.
+`CORE-PERSISTENCE-V23` defines the current persisted project contract.
 
-`CORE-PERSISTENCE-V22` defines the current persisted project contract.
+`CORE-PERSISTENCE-V23` defines the current persisted project contract.
 
-MyGUI saves and validates exact integer schema version 22. Component business
-state is the schema-v22 tree; profile selection, Section expansion, QWidget
+MyGUI saves and validates exact integer schema version 23. Component business
+state is the schema-v23 tree; profile selection, Section expansion, QWidget
 state, callbacks, typed tree projection keys, and other UI-only data are
 excluded. Schema v20 added the Error Bar component (`errorbar/error_bar`) with
 exactly the five data fields `x_ref`, `y_ref`, `xerr`, `yerr`, and
@@ -21,12 +21,16 @@ files migrate in memory to v21 by injecting those defaults into every Error
 Bar record. Schema v22 adds only the closed Axis ticker kinds `index` and
 `format_str`; strictly valid schema-v21 input is validated against the v21
 kind whitelist before an otherwise content-preserving v21-to-v22 version
-migration. Strictly valid schema-v19 files migrate through v20 by advancing
+migration. Schema v23 adds the closed `secondary_axis` leaf kind with
+`secondary_x_axis` and `secondary_y_axis` roles; strictly valid schema-v22
+input advances to v23 without changing Figure or Table content, and every
+predecessor rejects Secondary Axis records. Strictly valid schema-v19 files
+migrate through v20 by advancing
 the version only; v19 validation rejects Error Bar records, so the migrated
 v20 tree must contain none. Strictly valid schema-v18 files migrate through
 v19 (which injects default `geometry: {"mode": "grid"}` into each Axes
 component data while removing the redundant Axes `properties.in_layout`
-field) to v22; strictly valid schema-v17 files migrate through v18 to v22;
+field) to v23; strictly valid schema-v17 files migrate through v18 to v23;
 strictly
 valid schema-v15, schema-v14, schema-v13, schema-v12, schema-v11, and schema-v10 files migrate through every intervening version
 before any Table or Figure state is published; v4-v9 remain unsupported.
@@ -75,7 +79,7 @@ File opening and chart-template application enter the same
 builds a new `ProjectTableDocument`, remaps every template-local component,
 layout, sharing, source, Sheet, and column identity, resolves the closed text
 variables, executes all configured Fit tasks, and strictly validates a full
-schema-v22 snapshot. None of that state is registered or shown before the
+schema-v23 snapshot. None of that state is registered or shown before the
 plan succeeds. Automatic Axes limits are recomputed through
 `TemplateAxesAutoscaleService` after materialization and before Inspector/tab
 publication; dimensions with autoscale disabled retain the blueprint range.
@@ -90,12 +94,13 @@ ID remapping, dynamic text, fitting, and application planning exclusively to
 ID remapping, dynamic text, fitting, and application planning exclusively to
 `mygui.template_library`.
 
-`mygui.template_library` owns independent strict `mygui-template` schema v6.
+`mygui.template_library` owns independent strict `mygui-template` schema v7.
 Strict schema-v4 templates carry schema-v20 Figure blueprints and migrate to
 v5 by injecting the same deterministic Error Bar extension defaults before
 the schema-v21 blueprint is validated. Strict schema-v5 input then migrates
 without Figure content changes to a schema-v6 template with a schema-v22
-blueprint.
+blueprint. Strict schema-v6 input advances without Figure content changes to a
+schema-v7 template with a schema-v23 blueprint.
 Its files are UUID-named records below the repository-root `template/`
 directory, resolved independently of the process CWD, and are not project
 files or QSettings. The library is absent until an explicit save, import, or
@@ -103,7 +108,7 @@ Open Folder action. Writes use a sibling temporary file plus atomic
 replacement; corrupt records remain visible to management UI but are excluded
 from application choices.
 
-The template Figure is a schema-v22 component-tree blueprint with template-
+The template Figure is a schema-v23 component-tree blueprint with template-
 local identities and logical ColumnRefs. It stores component configuration,
 manual element values, and embedded images, but no `ProjectTableDocument`,
 source project/Sheet/column/component identities, or previous Fit result and
@@ -136,7 +141,7 @@ Replay is recording-suspended and uses Controllers, domain Services,
 `DeletionCoordinator`, `AxesLayoutService`, and the declared component
 materializers. Structural replay restores original IDs and dependency order.
 After coalesced Matplotlib updates flush, replay performs one authoritative
-reconciliation pass before validating the Registry tree and schema-v22
+reconciliation pass before validating the Registry tree and schema-v23
 snapshot. A replay failure compensates toward the previous proven state,
 emits one error, and clears the uncertain history cursor. Project restore,
 table-dependency refresh, and command replay must never create nested commands.
@@ -149,6 +154,6 @@ load/save fingerprint, so undoing exactly to that state becomes clean.
 ## Project documentation
 
 Persisted changes update `docs/project-files.md`, the relevant parameter page,
-and `docs/component-properties-v22.md` in the same change.
+and `docs/component-properties-v23.md` in the same change.
 Keep migration plans and future formats out of user documentation until they
 are current behavior.

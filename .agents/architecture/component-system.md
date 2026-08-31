@@ -40,6 +40,7 @@ Concrete Controllers live in `mygui/figuremodify/components/controllers/`:
 | `collections.py` | Scatter, Reference Marks, Reference Line/Band |
 | `field_2d.py` | Pseudocolor, Heatmap, Contour |
 | `colorbar.py` | `ColorbarController` |
+| `secondary_axis.py` | `SecondaryAxisController` and its parent-bound runtime target |
 | `registry_bridge.py` | `CONTROLLER_TYPES`, `controller_type_for`, `create_controller` |
 
 Domain Services live in `mygui/figuremodify/services/`:
@@ -51,6 +52,7 @@ Domain Services live in `mygui/figuremodify/services/`:
 | `colorbar.py` | `ColorbarService` and source resolvers |
 | `field_2d.py` | `Field2DService` |
 | `reference_marks.py` | `ReferenceMarksService`, `ReferenceGuideService` |
+| `secondary_axis.py` | `SecondaryAxisService` and closed creation value types |
 | `text_render.py` | `TextRenderService` |
 | `deletion.py` | deletion request/plan/handler types and `ComponentDeletionService` |
 | `dependency.py` | `ComponentDependencyService` |
@@ -150,6 +152,29 @@ It is never an ordinary `ComponentKind.AXES`, never receives the fixed Axes
 subtree, and enters creation, restore, refresh, and deletion through
 `ColorbarService` and its declared materializer/removal paths.
 
+## Secondary Axis child Axes
+
+`CORE-SECONDARY-AXIS-BOUNDARY` assigns each Secondary Axis to the ordinary
+Axes component named by its `parent_id`. Runtime creation uses only
+`Axes.secondary_xaxis()` or `Axes.secondary_yaxis()` with a validated
+reversible unit mapping. The resulting child remains in
+`parent_axes.child_axes`; it never enters `Figure.axes`, becomes an ordinary
+`ComponentKind.AXES`, or receives the fixed Axes semantic subtree.
+
+A Secondary Axis is a persisted leaf with `data == {}`. It may own its mapping,
+placement, label, ticker, tick/spine appearance, visibility, and z-order, but
+never independent data series, limits, scale, autoscale, aspect, layout, or
+navigation state. Creation, editing, restore, history replay, and removal enter
+through `SecondaryAxisController`, `SecondaryAxisService`, the declared
+materializer, and `DeletionCoordinator`; UI code does not mutate the child Axes
+directly.
+
+Mappings must be finite, monotonic, and round-trip over the active parent
+domain. If a later parent limit or scale change makes that domain invalid,
+hide only the Secondary Axis, warn once for that invalid transition, and
+recover automatically when the domain becomes valid. Normalized placement is
+unique per parent Axes and orientation.
+
 ## Figure layout engine ownership
 
 Figure layout engine configuration (`layout_engine` property with kinds `none`,
@@ -199,6 +224,6 @@ components additionally have a non-`None` `RESTORE_PHASE` and one exact
 `ComponentMaterializer`; fixed semantic components use `RESTORE_PHASE = None`.
 Removable components additionally have one deletion handler.
 
-Complete additions with schema-v22 round trips, empty-data coverage, data
+Complete additions with schema-v23 round trips, empty-data coverage, data
 refresh tests, lazy Inspector identity, failure rollback tests, component
 parameter documentation, and any applicable manual GUI smoke checks.

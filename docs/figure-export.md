@@ -4,7 +4,7 @@
 modal export window for the explicit Figure that requested it. The window is a
 one-shot export and application-preference feature: it does not change the
 Figure's physical size, document DPI, component state, Undo/Redo stack, project
-dirty fingerprint, or schema v17 project files.
+dirty fingerprint, or schema v23 project files.
 
 The File menu and toolbar both call `MenuBar.export_canvas(explicit_canvas)`, so
 a background tab or Canvas Window cannot export the currently selected Figure by

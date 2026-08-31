@@ -8,7 +8,8 @@ description: Add a persisted MyGUI Figure, chart, or in-Axes component with comp
 Read the architecture pages routed by `.agents/task-map.yaml`. Preserve
 `CORE-COMPONENT-STATE`, `CORE-EDITOR-PROFILES`,
 `CORE-REGISTRATION-ATOMICITY`, `CORE-DELETION-COORDINATOR`, and
-`CORE-PERSISTENCE-V22`.
+`CORE-PERSISTENCE-V23`. Components backed by child Axes also preserve
+`CORE-SECONDARY-AXIS-BOUNDARY`.
 
 Before coding, decide whether existing kind/role/schema contracts are enough;
 route any persisted shape change through `schema-migration`. Implement domain
@@ -28,6 +29,6 @@ Provider. Do not encode application defaults in `PropertySpec.default`.
 Verify creation, empty valid data, style/palette/Components precedence, data
 refresh,
 lazy Inspector reuse, deletion cohorts, failure rollback at every publication
-stage, and stable schema-v22 save/open. Update the routed parameter and feature
+stage, and stable schema-v23 save/open. Update the routed parameter and feature
 documentation. Do not finish while a required check or manual smoke item is not
 run.

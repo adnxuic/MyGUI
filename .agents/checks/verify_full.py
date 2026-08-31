@@ -70,6 +70,7 @@ APPLICATION_TEST_MODULES = {
     "test_axes_layout": (ISOLATION_GUI_MODULE, 27.8),
     "test_axes_geometry": (ISOLATION_GUI_MODULE, 6.0),
     "test_annotation_component": (ISOLATION_GUI_MODULE, 10.0),
+    "test_secondary_axis_component": (ISOLATION_GUI_MODULE, 10.0),
     "test_reference_guides": (ISOLATION_GUI_MODULE, 25.0),
     "test_gui_data_flow": (ISOLATION_GUI_MODULE, 24.2),
     "test_gui_layout": (ISOLATION_GUI_MODULE, 21.5),
@@ -1106,7 +1107,7 @@ def main() -> int:
     result = task_result(
         f"full:{args.profile}", verification,
         architecture_impact="Shared Agent Engineering and application gates executed.",
-        persistence_impact="MyGUI schema-v22 behavior and predecessor migrations are verified.",
+        persistence_impact="MyGUI schema-v23 behavior and predecessor migrations are verified.",
     )
     return finish(result, args.json_out, f"full-{args.profile}")
 

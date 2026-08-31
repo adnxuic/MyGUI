@@ -82,11 +82,11 @@ group under their owner Axes. The group is not a Component and is never saved.
 
 Closing a project releases its Registry and Canvas callbacks and discards its
 tree session. Selection, expansion, search text, and Explorer page state are
-not part of schema v17.
+not part of schema v23.
 
 When a project is first bound, the tree selects the current Axes when one
 exists, otherwise the Figure root. Creating an Axes, Chart, free Text,
-Reference Marks, Reference Guide, or Annotation component
+Reference Marks, Reference Guide, Annotation, or Secondary Axis component
 selects the new Component and opens its exact Inspector, but does not force
 the Explorer to change page or become visible.
 

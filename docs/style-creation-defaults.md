@@ -15,7 +15,7 @@ Precedence is:
 
 Inherit Line/Scatter color still uses the Axes palette cursor, not the first
 color from a style probe. Restore, Undo/Redo, and project open use persisted
-schema-v17 properties and do not read Components or Axes Components settings.
+schema-v23 properties and do not read Components or Axes Components settings.
 
 ## Resolved parameters
 
@@ -75,8 +75,8 @@ Selecting a style in the gallery opens the Style dialog, which creates a new pro
 
 | Parameter | Meaning | Default |
 | --- | --- | --- |
-| Width / Height | The Figure size in inches. | Application New Figure defaults (fresh install: 6.4 by 4.8). An explicit value in this dialog wins. Opening a project keeps the schema v17 size. |
-| DPI | The document resolution used for exports. | Application New Figure defaults (fresh install: 100). An explicit value in this dialog wins. Opening a project keeps the schema v17 DPI. |
+| Width / Height | The Figure size in inches. | Application New Figure defaults (fresh install: 6.4 by 4.8). An explicit value in this dialog wins. Opening a project keeps the schema v23 size. |
+| DPI | The document resolution used for exports. | Application New Figure defaults (fresh install: 100). An explicit value in this dialog wins. Opening a project keeps the schema v23 DPI. |
 | Figure name | The project name; non-empty and unique among open projects. | The style name |
 
 UI theme is not Matplotlib Figure style. Settings Appearance (theme, UI font
@@ -116,7 +116,7 @@ palette. A Figure style change alone does not recolor existing components.
 - Reference Lines and Reference Bands reuse those resolved Reference Marks
   defaults and do not consume the Axes chart-color cursor.
 
-These values use the existing schema-v17 component tree. Opening a project
+These values use the existing schema-v23 component tree. Opening a project
 restores existing components from their concrete properties; style resolution
 is used only for components created afterward.
 

@@ -24,6 +24,7 @@ from .axes_semantics import (
     YAxisController,
 )
 from .colorbar import ColorbarController
+from .secondary_axis import SecondaryAxisController
 from .collections import (
     ReferenceBandController,
     ReferenceLineController,
@@ -113,6 +114,8 @@ CONTROLLER_TYPES: dict[
         ComponentRole.REFERENCE_BAND,
     ): ReferenceBandController,
     (ComponentKind.COLORBAR, ComponentRole.COLORBAR): ColorbarController,
+    (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_X_AXIS): SecondaryAxisController,
+    (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_Y_AXIS): SecondaryAxisController,
     (
         ComponentKind.IN_AXES,
         ComponentRole.IN_AXES_ZOOM,

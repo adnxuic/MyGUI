@@ -142,7 +142,7 @@ readable value such as `Linear`, `Automatic`, `Scalar`, `sans-serif · 10 pt`,
 locator/formatter, scale, font, text box, marked points, Scatter color/size
 mapping, and Zoom connectors.
 
-Both control families validate through the same closed schema-v17 value
+Both control families validate through the same closed schema-v23 value
 normalizer and submit one complete value to one Controller/Service
 transaction. A cancelled dialog changes nothing, and a rejected change
 restores the prior summary, control state, and Controller value together with
@@ -164,7 +164,7 @@ table-dependency cascades all submit a `DeletionRequest` to the Canvas
 `DeletionCoordinator`. `ComponentDeletionService.prepare()` resolves stable
 IDs, collapses parent/child duplicates, validates `DeletionPolicy` and the
 exact `DeletionHandlerRegistry` entry, and produces a runtime-only
-`PreparedDeletion`. These request/plan/outcome objects never enter schema v17.
+`PreparedDeletion`. These request/plan/outcome objects never enter schema v23.
 
 The batch dialog uses the source tree's exact numbered instance labels and
 shows each stable ID. It lists the complete matching cohort regardless of the
@@ -174,7 +174,7 @@ all-or-none commit.
 
 Before mutation, the coordinator prepares the fallback Inspector and
 reversibly detaches any affected Axes Panel. The Registry then stages survivor
-state, artists, Locator bindings, a complete tree projection, and schema-v17
+state, artists, Locator bindings, a complete tree projection, and schema-v23
 validation. A failed transaction restores the same Controller, artist,
 Matplotlib order, Locator binding, Inspector, callbacks, pending updates,
 palette cursor, and selection; it publishes no cleanup or lifecycle event. A
@@ -221,7 +221,10 @@ methods:
 - `InterpolationOptionsInput`: method, sample count, order `k`, and automatic or explicit smoothing lambda.
 - `ColorbarInput`: eligible source, location, label, fraction, shrink, aspect,
   and pad. It contains no Controller and cannot create Matplotlib state.
+- `SecondaryAxisInput`: immutable X/Y orientation, safe reversible unit
+  transform, edge/fraction/data placement, and optional label. It contains no
+  Controller and cannot create Matplotlib state.
 
 Color inputs preview the current user `ColorCycleState`, or the Figure style's `axes.prop_cycle` when no user palette is active. The cycle and recent-color list are committed only after component creation succeeds.
 
-The project format uses schema v17. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, Reference Marks `positions` plus nullable `position_ref` and tagged `placement`, Axes `y_lower_reserve`, Reference Guide geometry, and Annotation target/text/arrow state are business state; profile and widget state remain UI-only.
+The project format uses schema v23. Inspector profiles, section expansion, and Qt widgets are never serialized. Legend `entry_scope`, Colorbar `source_component_id`, Reference Marks `positions` plus nullable `position_ref` and tagged `placement`, Axes `y_lower_reserve`, Reference Guide geometry, Annotation target/text/arrow state, and Secondary Axis unit mapping/placement are business state; profile and widget state remain UI-only.

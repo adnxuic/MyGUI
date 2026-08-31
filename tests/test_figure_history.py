@@ -1429,7 +1429,7 @@ class FigureHistoryIntegrationTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
             raw = load_project_file(path)
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 22)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 23)
             self.assertEqual(
                 set(raw["figure"]),
                 {"root_component_id", "components"},

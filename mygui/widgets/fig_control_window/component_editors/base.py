@@ -48,7 +48,9 @@ from .inline_spec_editors import (
     NamedNumberEditor,
     NumberSequenceEditor,
     OptionalColorEditor,
+    SecondaryAxisPlacementEditor,
     StringListEditor,
+    UnitTransformEditor,
 )
 from .spec_editors import (
     AxisFormatterEditor,
@@ -467,6 +469,8 @@ class ComponentEditorBase(QWidget):
             EditorKind.MARKER_SPEC: MarkerSpecEditor,
             EditorKind.LEGEND_ANCHOR: LegendAnchorEditor,
             EditorKind.AXES_ANCHOR: AxesAnchorEditor,
+            EditorKind.UNIT_TRANSFORM_SPEC: UnitTransformEditor,
+            EditorKind.SECONDARY_AXIS_PLACEMENT: SecondaryAxisPlacementEditor,
         }
         if kind in value_editor_types:
             editor = value_editor_types[kind](value, parent=self)

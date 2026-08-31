@@ -50,6 +50,8 @@ from mygui.figuremodify.component_services import (
     InterpolationService,
     ReferenceGuideService,
     ReferenceMarksService,
+    SecondaryAxisCreateSpec,
+    SecondaryAxisService,
     TextRenderService,
     resolve_errorbar_data,
 )
@@ -85,6 +87,7 @@ from mygui.widgets.figure_canvas.canvas_materialize_handlers import (
     materialize_reference_band,
     materialize_reference_line,
     materialize_reference_marks,
+    materialize_secondary_axis,
     materialize_scatter,
     materialize_annotation,
     materialize_text,
@@ -107,6 +110,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
     ComponentState,
     ColorbarController,
+    SecondaryAxisController,
     ContourController,
     FigureController,
     FitCurveController,
@@ -131,8 +135,8 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v22_figure,
-    validate_v22_figure,
+    normalize_v23_figure,
+    validate_v23_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_geometry import grid_geometry_record
@@ -312,6 +316,10 @@ class PyFigureCanvas(QWidget):
             self.component_registry,
             geometry_service=self.axes_geometry_service,
         )
+        self.secondary_axis_service = SecondaryAxisService(
+            self.component_registry,
+            warning_callback=status_messages.show_warning,
+        )
         self.field_2d_service = Field2DService(
             self.repository,
             self.component_registry,
@@ -390,6 +398,7 @@ class PyFigureCanvas(QWidget):
             fitting=self.fit_service,
             text_rendering=self.text_render_service,
             colorbars=self.colorbar_service,
+            secondary_axes=self.secondary_axis_service,
             field_2d=self.field_2d_service,
             reference_marks=self.reference_marks_service,
             reference_guides=self.reference_guide_service,
@@ -439,7 +448,7 @@ class PyFigureCanvas(QWidget):
 
         self.canva = _ControllerAwareFigureCanvas(
             self.fig,
-            before_draw=self.axis_tick_settings_service.reapply_runtime_styles,
+            before_draw=self._synchronize_before_draw,
         )
         size_inches = self.fig.get_size_inches()
         self.canva.setFixedSize(
@@ -1340,6 +1349,12 @@ class PyFigureCanvas(QWidget):
         """Schedule a coalesced canvas redraw."""
 
         self.fig.canvas.draw()
+
+    def _synchronize_before_draw(self) -> None:
+        """Replay dynamic primary and Secondary Axis runtime styles."""
+
+        self.axis_tick_settings_service.reapply_runtime_styles()
+        self.secondary_axis_service.reapply_runtime_styles()
 
     def cancel_pending_draw(self):
         """Cancel a queued redraw that has not reached the canvas yet."""
@@ -3529,6 +3544,70 @@ class PyFigureCanvas(QWidget):
             status_messages.show_success("Colorbar created.")
         return runtime
 
+    @_history_command("Create Secondary Axis")
+    def add_secondary_axis(
+        self,
+        spec: SecondaryAxisCreateSpec,
+        *,
+        axes_id: str | None = None,
+        object_id: str | None = None,
+        component_order: int | None = None,
+        announce: bool = True,
+        allow_invalid_domain: bool = False,
+    ):
+        """Create one reversible parent-bound Secondary Axis atomically."""
+
+        if not isinstance(spec, SecondaryAxisCreateSpec):
+            raise TypeError("add_secondary_axis requires SecondaryAxisCreateSpec.")
+        owner_axes_id = str(axes_id or self.current_axes_component_id or "")
+        owner_axes = self.component_registry.resolve_target(owner_axes_id)
+        if not isinstance(owner_axes, Axes):
+            raise ValueError("Select an Axes before creating a Secondary Axis.")
+        component_id = object_id or new_id()
+        controller = None
+        runtime = None
+        with self.component_registry.registration_transaction() as transaction:
+            with matplotlib_style_context(self.component_style):
+                runtime, normalized = self.secondary_axis_service.create_runtime(
+                    owner_axes_id,
+                    spec,
+                    allow_invalid_domain=allow_invalid_domain,
+                )
+            transaction.on_rollback(
+                lambda target=runtime: self.secondary_axis_service.destroy_runtime(target)
+            )
+            role = (
+                ComponentRole.SECONDARY_X_AXIS
+                if spec.orientation == "x"
+                else ComponentRole.SECONDARY_Y_AXIS
+            )
+            state = ComponentState(
+                id=component_id,
+                kind=ComponentKind.SECONDARY_AXIS,
+                role=role,
+                parent_id=owner_axes_id,
+                order=(
+                    self._next_child_order(owner_axes_id)
+                    if component_order is None
+                    else int(component_order)
+                ),
+                selector={"object_id": component_id},
+                properties=normalized,
+                data={},
+            )
+            controller = SecondaryAxisController(state, target=runtime)
+            controller.sync_from_target(strict=True)
+            self.component_registry.register(controller, target=runtime)
+            self._prepare_created_component(controller, transaction)
+            self.component_registry.request_update(owner_axes, UpdateImpact.REDRAW)
+            if self.fig.canvas is not None:
+                self.fig.canvas.draw()
+
+        self._finish_created_component(controller)
+        if announce and not self._restoring_component_tree_now:
+            status_messages.show_success("Secondary Axis created.")
+        return runtime
+
     @_history_command("Create Reflection Positions")
     def add_reference_marks(
         self,
@@ -3888,6 +3967,9 @@ class PyFigureCanvas(QWidget):
     def _materialize_colorbar(self, state, _transaction) -> None:
         materialize_colorbar(self, state, _transaction)
 
+    def _materialize_secondary_axis(self, state, _transaction) -> None:
+        materialize_secondary_axis(self, state, _transaction)
+
     def _materialize_reference_marks(self, state, _transaction) -> None:
         materialize_reference_marks(self, state, _transaction)
 
@@ -4137,7 +4219,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v22_figure(source)
+        source = normalize_v23_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -4178,7 +4260,7 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v22 component tree used by persistence."""
+        """Return the canonical schema-v23 component tree used by persistence."""
 
         components = []
         for controller in self.component_registry.query():
@@ -4198,10 +4280,10 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v22_figure(snapshot)
+        return normalize_v23_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
-        """Validate and return the current complete schema-v22 Figure tree."""
+        """Validate and return the current complete schema-v23 Figure tree."""
 
         snapshot = self.component_snapshot()
         project = self.repository.project(self.project_id)
@@ -4210,7 +4292,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v22_figure(
+        validate_v23_figure(
             snapshot,
             available_refs,
             self.project_id,

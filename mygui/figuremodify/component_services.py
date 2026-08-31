@@ -62,6 +62,12 @@ from .services.errorbar import (
 )
 from .services.field_2d import Field2DService, default_field_2d_properties
 from .services.reference_marks import ReferenceGuideService, ReferenceMarksService
+from .services.secondary_axis import (
+    SecondaryAxisCreateSpec,
+    SecondaryAxisPlacementSpec,
+    SecondaryAxisService,
+    UnitTransformSpec,
+)
 from .services.text_render import TextRenderService
 
 __all__ = [
@@ -102,6 +108,10 @@ __all__ = [
     "PreparedDeletion",
     "ReferenceGuideService",
     "ReferenceMarksService",
+    "SecondaryAxisCreateSpec",
+    "SecondaryAxisPlacementSpec",
+    "SecondaryAxisService",
+    "UnitTransformSpec",
     "ScatterColorbarSourceResolver",
     "TextRenderService",
     "TickLevelSettings",

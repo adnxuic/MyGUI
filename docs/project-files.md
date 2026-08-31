@@ -1,25 +1,26 @@
 # Project Files
 
-MyGUI project files use strict JSON schema version 22. One file contains one
+MyGUI project files use strict JSON schema version 23. One file contains one
 project, its typed Table document, and one Matplotlib Figure component tree.
-The loader accepts exact integer v22. Strict v21 input is validated against
-the v21 ticker whitelist and then advances without content changes. Strict
-v20 input migrates to v21 (injecting deterministic Error Bar defaults), strict v19
+The loader accepts exact integer v23. Strict v22 input is fully validated and
+then advances without content changes. Strict v21 input is validated against
+the v21 ticker whitelist and advances through v22. Strict v20 input migrates
+to v21 (injecting deterministic Error Bar defaults), strict v19
 input migrates through v20, strict v18 input migrates through v19 (injecting
 default `geometry: {"mode": "grid"}` for Axes components), while v10–v17
 migrate through every intervening version. Schema v4–v9, non-integer values,
 and unknown versions are rejected before application state is published.
 
 Reusable chart templates are deliberately separate from project files. They
-use strict `mygui-template` schema version 6, do not contain a Table document,
-and never change project schema version 22. See [Chart Templates](chart-templates.md).
+use strict `mygui-template` schema version 7, do not contain a Table document,
+and never change project schema version 23. See [Chart Templates](chart-templates.md).
 
 ## Root structure
 
 ```json
 {
   "schema": "mygui-project",
-  "schema_version": 22,
+  "schema_version": 23,
   "project": {"id": "project-id", "name": "Project name"},
   "table": {},
   "figure": {
@@ -30,7 +31,7 @@ and never change project schema version 22. See [Chart Templates](chart-template
 ```
 
 - `schema` is always `mygui-project`.
-- Newly saved `schema_version` is always the integer `22`.
+- Newly saved `schema_version` is always the integer `23`.
 - `project.id` is stable and must match `table.id`.
 - `project.name` is editable and must match `table.name`.
 - `table` is the typed table document.
@@ -99,6 +100,7 @@ The controlled kind/role combinations are:
 | `reference_guide` | `reference_line`, `reference_band` |
 | `colorbar` | `colorbar` |
 | `in_axes` | `in_axes_zoom`, `in_axes_image` |
+| `secondary_axis` | `secondary_x_axis`, `secondary_y_axis` |
 
 ## Figure hierarchy and fixed components
 
@@ -116,7 +118,7 @@ Each `axes/axes` child stores:
 
 `properties.position` remains runtime-derived and non-persistent. Grid-mode position is derived from `data.subplot`; manual-mode position is projected only from `data.geometry.bounds`. Each X/Y Axis owns its tagged scale, locator, and formatter configuration. Ordered Axes limits are the sole inversion authority.
 
-Axes `in_layout` is also runtime-derived from geometry mode (`true` for Grid, `false` for Manual) and is not a schema-v22 property or an independent Inspector control.
+Axes `in_layout` is also runtime-derived from geometry mode (`true` for Grid, `false` for Manual) and is not a schema-v23 property or an independent Inspector control.
 
 Axis locator and formatter values are closed tagged objects. Schema v22 adds
 `{"kind":"index","params":{"base": positive-finite, "offset": finite}}`
@@ -142,6 +144,13 @@ Every Axes contains fixed semantic children:
 
 Tick, Tick Label, Grid, and Legend targets may be recreated by Matplotlib. Their selectors identify the semantic group rather than a transient artist instance.
 
+A Secondary Axis is a removable leaf below one ordinary Axes. Its selector is
+exactly `{"object_id": component_id}` and its data is exactly `{}`. It owns a
+closed reversible `unit_transform`, parent-relative `placement`, label, ticker,
+tick, offset-text, and spine appearance. It never owns chart data, independent
+limits, scale, aspect, or layout. Normalized placement is unique for each
+parent/orientation. See [Secondary Axis / Unit Transform](secondary-axis-component.md).
+
 Minor visibility and the owning Axis locator are restored together. For
 schema-v13 files produced before this behavior was enforced, loading silently
 installs the scale-appropriate minor locator only when the file contains an
@@ -154,7 +163,7 @@ component wire shape.
 
 Line visual properties include tagged line/marker/markevery values, draw style, gap color, marker fill and alternate face color, cap/join/antialias controls, and safe advanced Artist fields.
 
-Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v22)](component-properties-v22.md) for the complete property ownership matrix and composite formats.
+Scatter visual properties include uniform face/edge appearance, tagged marker and line pattern, hatch/cap/join/antialias controls, and tagged color/size mapping specifications. FIELD_2D visual properties include a closed `ColorMapSpec` plus role-specific mesh, image, or contour fields. See [Component Properties (schema v23)](component-properties-v23.md) for the complete property ownership matrix and composite formats.
 
 Role-specific `data` fields are:
 
@@ -176,6 +185,7 @@ Role-specific `data` fields are:
 | `fit_curve` | `x_ref`, `y_ref`, `preprocess`, `engine`, `fit_type`, `fit_options`, `fit_result`, `expression`, `x_start`, `x_stop` |
 | `in_axes_zoom` | no persisted data; mirrors are derived at runtime |
 | `in_axes_image` | `filename`, detected `mime_type`, original `payload_base64` bytes |
+| `secondary_x_axis`, `secondary_y_axis` | exactly `{}`; the reversible mapping and placement are owned by `properties` |
 
 Free Text, Title, and Axis Label records share the safe Text typography, alignment, bbox, math/TeX, z-order, and export contract. Only Free Text persists a selectable data/axes/figure coordinate system.
 
@@ -253,17 +263,18 @@ The Axes Palette panel treats a `matplotlib-style` snapshot (or `null`) as
 `Style default`. Any other palette source is `User-selected`; the embedded
 palette name is displayed even when its application-level custom palette has
 later been renamed or deleted. Switching sources updates this existing
-snapshot only and does not change schema v22.
+snapshot only and does not change schema v23.
 
 ## Stable IDs and compatibility
 
 Component, project, Sheet, column, layout, and data-reference IDs are persisted
-unchanged across every schema-v22 save/open round trip. Strict v21 input is
-validated completely, deep-copied, and migrated in memory to v22 by changing
-only the root version. Strict v20 input then migrates to v21 by injecting
+unchanged across every schema-v23 save/open round trip. Strict v22 input is
+validated completely, deep-copied, and migrated in memory to v23 by changing
+only the root version. Strict v21 input migrates to v22 by changing only the
+root version. Strict v20 input then migrates to v21 by injecting
 the deterministic Error Bar extension defaults. Strict v19 input migrates
 through v20 by advancing the version; strict v18 input migrates through v19
-(which initializes `data.geometry: {"mode": "grid"}` for all Axes) to v22;
+(which initializes `data.geometry: {"mode": "grid"}` for all Axes) to v23;
 older accepted
 inputs migrate through every intervening version. Tick Label
 `fontfamily` string values remain unchanged; non-empty string lists become only
@@ -280,7 +291,8 @@ Matplotlib targets exist, `CanvasSnapshotApplier` applies the saved property
 tree. Restore materializes Figure, Axes/layout groups, fixed semantic
 children and source chart/Text artists first, then dynamic Annotation,
 Reference Marks, Reference Guides, `in_axes` Elements, and
-Colorbar after its source, with Legend restored from the component tree.
+Secondary Axes, plus Colorbar after its source, with Legend restored from the
+component tree.
 After those Matplotlib targets exist, the Canvas
 applies the saved property tree, restores per-Axes geometry projection modes
 and manual follower bounds, and publishes one final selection. Zoom
@@ -311,6 +323,9 @@ Before Table or Figure application state changes, the loader validates:
 - Annotation ownership by an ordinary Axes, exact object selector and empty
   data, complete property keys, finite coordinate pairs, closed coordinate,
   arrow, connection, color, and box values;
+- Secondary Axis ownership by an ordinary Axes, exact object selector and
+  empty data, complete transform/placement/property keys, valid orientation,
+  and normalized placement uniqueness per parent/orientation;
 - property/data JSON types, finite numbers, normalized colors, unique chart order values, and one non-empty string `fontfamily` for every Tick Label Group;
 - data references, compatible column types, preprocessing expressions,
   interpolation methods, and fitting engines.
@@ -328,15 +343,15 @@ target Canvas, so saving a background tab cannot serialize the current tab by
 mistake. A successful save returns the written snapshot, updates that Canvas
 path, and establishes its runtime clean fingerprint. Dirty fingerprints,
 selected tabs, Inspector state, and close-dialog choices are runtime-only and
-are not added to schema v22.
+are not added to schema v23.
 
 Component selection, Components-tree search/expansion, Inspector switching,
 and Inspector scroll position do not alter the project fingerprint. A clean
-schema-v22 project stays clean through those UI-only interactions, and a
+schema-v23 project stays clean through those UI-only interactions, and a
 save-open-save round trip preserves the same persisted snapshot.
 
 ## Figure and data export
 
-- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v22.
+- 导出当前图片... (File menu) and the canvas toolbar Save button open the same modal [Figure Export](figure-export.md) window for the explicit Canvas that requested it. PNG, JPEG, TIFF, WebP, PDF, and SVG are supported. The export does not change Figure size, document DPI, Undo/Redo, dirty state, or schema v23.
 - 导出数据... (File menu) writes the current project's table data as a pretty-printed JSON snapshot.
 - PyFigureCanvas.document_dpi is the project and default-export DPI. Qt's device pixel ratio may change the renderer DPI used for display, but it does not change document_dpi, project figure.dpi, figure size in inches, or default export dimensions. For example, a 6.4 x 4.8 inch figure at 100 document DPI exports to 640 x 480 pixels by default on 100%, 125%, 150%, and 200% displays. Passing an explicit DPI to save() overrides the default export DPI.

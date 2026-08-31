@@ -447,7 +447,7 @@ class Field2DComponentTests(unittest.TestCase):
             save_project_snapshot(path, self.window.figure_window)
             raw = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(raw["schema_version"], PROJECT_SCHEMA_VERSION)
-            self.assertEqual(PROJECT_SCHEMA_VERSION, 22)
+            self.assertEqual(PROJECT_SCHEMA_VERSION, 23)
             roles = {
                 component["role"]
                 for component in raw["figure"]["components"]

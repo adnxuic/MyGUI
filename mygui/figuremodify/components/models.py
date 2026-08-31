@@ -36,6 +36,7 @@ class ComponentKind(str, Enum):
     IN_AXES = "in_axes"
     REFERENCE_MARKS = "reference_marks"
     REFERENCE_GUIDE = "reference_guide"
+    SECONDARY_AXIS = "secondary_axis"
 
 
 class ComponentRole(str, Enum):
@@ -73,6 +74,8 @@ class ComponentRole(str, Enum):
     REFLECTION_POSITIONS = "reflection_positions"
     REFERENCE_LINE = "reference_line"
     REFERENCE_BAND = "reference_band"
+    SECONDARY_X_AXIS = "secondary_x_axis"
+    SECONDARY_Y_AXIS = "secondary_y_axis"
 
 
 class FitEngine(StrEnum):
@@ -161,6 +164,8 @@ class EditorKind(StrEnum):
     GRID_EDGE_SPEC = "grid_edge_spec"
     CONTOUR_LEVELS_SPEC = "contour_levels_spec"
     CONTOUR_LABEL_SPEC = "contour_label_spec"
+    UNIT_TRANSFORM_SPEC = "unit_transform_spec"
+    SECONDARY_AXIS_PLACEMENT = "secondary_axis_placement"
     JSON = "json"
 
     @classmethod
@@ -180,6 +185,7 @@ class RestorePhase(IntEnum):
     DYNAMIC = 10
     IN_AXES = 20
     COLORBAR = 30
+    SECONDARY_AXIS = 40
 
 
 ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
@@ -241,6 +247,12 @@ ROLES_BY_KIND: dict[ComponentKind, frozenset[ComponentRole]] = {
         {
             ComponentRole.REFERENCE_LINE,
             ComponentRole.REFERENCE_BAND,
+        }
+    ),
+    ComponentKind.SECONDARY_AXIS: frozenset(
+        {
+            ComponentRole.SECONDARY_X_AXIS,
+            ComponentRole.SECONDARY_Y_AXIS,
         }
     ),
 }

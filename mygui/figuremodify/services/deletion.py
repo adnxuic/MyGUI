@@ -316,6 +316,15 @@ def production_deletion_handlers() -> DeletionHandlerRegistry:
         ComponentRole.COLORBAR,
         DeletionHandler(),
     )
+    for role in (
+        ComponentRole.SECONDARY_X_AXIS,
+        ComponentRole.SECONDARY_Y_AXIS,
+    ):
+        handlers.register(
+            ComponentKind.SECONDARY_AXIS,
+            role,
+            DeletionHandler(),
+        )
     handlers.register(
         ComponentKind.TEXT,
         ComponentRole.TEXT,

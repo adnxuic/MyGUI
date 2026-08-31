@@ -46,15 +46,18 @@ ambiguous, stop and report it rather than inventing a substitute.
   owner.
 - **CORE-COLORBAR-AUXILIARY-AXES:** `Colorbar.ax` belongs to the Colorbar
   Component, is not an ordinary Axes component, and enters via `ColorbarService`.
+- **CORE-SECONDARY-AXIS-BOUNDARY:** A Secondary Axis is a reversible unit
+  mapping owned by its parent Axes. It stays out of `Figure.axes` and never
+  owns independent data, limits, scale, or an ordinary Axes subtree.
 - **CORE-TEX-OWNER:** `mygui.tex_config` is the sole writer of TeX rcParams;
   enable TeX only after validation and use `TextRenderService` for render edits.
 - **CORE-FONT-DIAGNOSTICS:** `mygui.font_diagnostics` solely bridges Matplotlib
   glyph and DirectWrite diagnostics; failed glyph edits roll back atomically.
 - **CORE-APPLICATION-SETTINGS:** Injected `mygui.application_settings` dual-slot
   storage is the only preference authority. Settings stay outside project
-  schema v22, Undo/Redo, dirty fingerprints, and component state.
+  schema v23, Undo/Redo, dirty fingerprints, and component state.
 - **CORE-TEMPLATE-LIBRARY:** `mygui.template_library` solely owns template
-  schema/storage/planning; templates remain independent of project schema v22.
+  schema/storage/planning; templates remain independent of project schema v23.
 - **CORE-THEME-OWNER:** `ThemeService` solely publishes application font,
   palette, bundled QSS, and density before widget creation; UI theme is not
   Matplotlib Figure style.
@@ -79,8 +82,8 @@ ambiguous, stop and report it rather than inventing a substitute.
 - **CORE-PROJECT-HISTORY:** Each project uses only the `QUndoStack` owned by its
   `TableRepository` entry; replay re-enters authoritative services and history
   remains runtime-only.
-- **CORE-PERSISTENCE-V22:** Persist Figure business state only through the
-  strict integer schema-v22 component tree and declared materializers. Project
+- **CORE-PERSISTENCE-V23:** Persist Figure business state only through the
+  strict integer schema-v23 component tree and declared materializers. Project
   create/restore publishes only after complete staged validation.
 
 ## Universal Change Rules
