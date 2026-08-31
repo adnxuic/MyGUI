@@ -179,7 +179,7 @@ def build_field_grid(
     skipped = 0
     points: list[tuple[float, float, float | None]] = []
     seen: set[tuple[float, float]] = set()
-    for x_raw, y_raw, z_raw in zip(xs, ys, zs):
+    for x_raw, y_raw, z_raw in zip(xs, ys, zs, strict=True):
         x_value = _as_float(x_raw)
         y_value = _as_float(y_raw)
         if x_value is None or y_value is None or not math.isfinite(x_value) or not math.isfinite(y_value):

@@ -426,7 +426,7 @@ class ColorPickerDialog(QDialog):
         self.hex_input.setText(self._selection.color)
         self._syncing_opacity = True
         for channel_input, value in zip(
-            self.rgba_inputs, (color.red(), color.green(), color.blue())
+            self.rgba_inputs, (color.red(), color.green(), color.blue()), strict=True
         ):
             channel_input.setValue(value)
         self.opacity_input.setValue(round(color.alphaF() * 100))

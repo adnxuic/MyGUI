@@ -23,7 +23,6 @@ from mygui.widgets.fig_control_window.component_editors import (
     DataReferenceInput,
     Field2DDataReferenceInput,
     InterpolationOptionsInput,
-    LineAppearanceInput,
     MultiSeriesDataReferenceInput,
     ScatterMappingInput,
     ScatterStyleEditor,
@@ -42,9 +41,6 @@ from mygui.figuremodify.matplotlib_adapter import (
     IMAGE_INTERPOLATION_CHOICES,
     PSEUDOCOLOR_SHADING_CHOICES,
 )
-from mygui.figuremodify.style_base.creation_defaults import (
-    resolve_component_creation_defaults,
-)
 from mygui.figuremodify.style_base.creation_preferences import (
     is_override,
     resolve_line_appearance,
@@ -53,6 +49,12 @@ from mygui.figuremodify.style_base.creation_preferences import (
 from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui import status_messages
 from mygui.resources import icon_path
+from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+    creation_defaults as _creation_defaults,
+    new_line_appearance_input as _new_line_appearance_input,
+    palette_selection as _palette_selection,
+    settings_snapshot as _settings_snapshot,
+)
 
 def _selected_ref(combo: QComboBox) -> ColumnRef | None:
     value = combo.currentData(Qt.UserRole)
@@ -122,27 +124,6 @@ def _new_color_input(
     )
 
 
-def _creation_defaults(figure_window: PyFigureWindow):
-    canvas = getattr(figure_window, "current_canva", None)
-    if canvas is None:
-        return resolve_component_creation_defaults("default")
-    return canvas.component_creation_defaults()
-
-
-def _settings_snapshot(figure_window: PyFigureWindow):
-    snapshot = getattr(figure_window, "snapshot_component_defaults", None)
-    if not callable(snapshot):
-        return None
-    return snapshot()
-
-
-def _palette_selection(figure_window: PyFigureWindow) -> ColorSelection:
-    selector = figure_window.get_current_canvas_axes_colorselector()
-    if selector is None:
-        return ColorSelection("#1F77B4")
-    return selector.peek()
-
-
 def _line_dialog_plan(figure_window: PyFigureWindow):
     """Freeze Components defaults when a creation dialog opens."""
 
@@ -196,20 +177,6 @@ def _new_multi_data_reference_input(
         figure_window.repository,
         canvas.project_id if canvas is not None else None,
         parent=parent,
-    )
-
-
-def _new_line_appearance_input(
-    figure_window: PyFigureWindow,
-    *,
-    parent=None,
-    **kwargs,
-) -> LineAppearanceInput:
-    return LineAppearanceInput(
-        colorselector=figure_window.get_current_canvas_axes_colorselector(),
-        color_library=figure_window.color_library,
-        parent=parent,
-        **kwargs,
     )
 
 
@@ -977,8 +944,6 @@ class PyContourDialog(_Field2DDialog):
         return properties
 
 
-# The Error Bar dialog reuses this module's frozen-plan helpers; import it
-# after they are defined so the package cycle stays one-directional at load.
 from mygui.widgets.title_bar.titlebar_dialog.py_errorbar_dialog import (
     PyErrorBarDialog,
 )

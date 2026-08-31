@@ -456,7 +456,7 @@ class InterpolationService:
             }
             # Validate configuration through a temporary state before doing
             # potentially expensive interpolation work.
-            controller._validate_controller_state(
+            controller.validate_candidate_state(
                 controller.state.clone(data=data)
             )
             if pair.x.size:

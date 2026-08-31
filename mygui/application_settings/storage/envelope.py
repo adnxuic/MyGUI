@@ -220,10 +220,10 @@ def _raw_text(raw: object) -> str:
         return raw
     try:
         as_bytes = bytes(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as exc:
         text = str(raw)
         if not text:
-            raise EnvelopeError("envelope is empty")
+            raise EnvelopeError("envelope is empty") from exc
         return text
     if as_bytes:
         try:

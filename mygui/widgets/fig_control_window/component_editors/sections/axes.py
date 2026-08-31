@@ -184,8 +184,8 @@ class AxesLayoutSection(QWidget, EditorSection):
             "Linked with twin peer: geometry changes apply to both Axes.",
             self,
         )
+        self.twin_label.setObjectName("axes_twin_hint")
         self.twin_label.setWordWrap(True)
-        self.twin_label.setStyleSheet("color: gray; font-style: italic;")
         layout.addWidget(self.twin_label)
 
         # --- Grid Mode Controls ---

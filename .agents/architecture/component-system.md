@@ -216,6 +216,15 @@ rule is `ARCH-AXES-GEOMETRY-BYPASS`.
 - Colorbars on manual Axes move and scale with the source Axes via affine transformation
   without shrinking the source Axes.
 
+Exact deletion rollback is a classified mechanical exception, not a second
+geometry policy owner. `MatplotlibRemovalAdapter` may pin and restore the
+Matplotlib 3.9.0 private Axes registries, CallbackRegistry tables, positions,
+and parent `child_axes` slot required to preserve object identity. It must not
+choose grid/manual mode or persisted bounds; those decisions remain on
+`AxesGeometryService`. Static enforcement rejects the same geometry calls from
+Canvas/UI helpers, and rollback tests pin the adapter exception. This is not a
+general private-API allowlist.
+
 ## Required declarations
 
 Every supported `(ComponentKind, ComponentRole)` has exactly one Controller

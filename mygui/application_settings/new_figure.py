@@ -1,7 +1,7 @@
 """Resolve New Figure size and document DPI for first-time creation.
 
 Style creation and first-time text/Excel import consume this adapter. Project
-restore and schema v17 open must not call it. Do not cache a settings snapshot
+restore and project open must not call it. Do not cache a settings snapshot
 here; callers read ``NewFigureDefaultsProvider.current()`` at use time.
 """
 

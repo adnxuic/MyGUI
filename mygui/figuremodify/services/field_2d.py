@@ -279,7 +279,7 @@ class Field2DService:
         mutation: ComponentMutation,
     ) -> ComponentChange:
         old = controller.resolve_target()
-        before = controller.state
+        controller_memento = controller.capture_runtime_memento()
         old_handle = controller.prepare_remove()
         controller.commit_remove(old_handle)
         try:
@@ -300,10 +300,10 @@ class Field2DService:
         except Exception:
             self.destroy_runtime(runtime)
             self.registry.locator.bind(controller.component_id, old)
-            controller._state = before.clone()
             controller.rollback_remove(old_handle)
+            controller.restore_runtime_memento(controller_memento)
             raise
-        controller._finalize_remove(old_handle)
+        controller.finalize_removal(old_handle)
         return change
 
     def set_refs(

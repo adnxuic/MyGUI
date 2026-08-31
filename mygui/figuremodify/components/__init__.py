@@ -1,6 +1,6 @@
 """Qt-independent controllers for Matplotlib Figure components."""
 
-from .base import ComponentController, RemovalHandle
+from .base import ComponentController, ControllerRuntimeMemento, RemovalHandle
 from .controllers import (
     CONTROLLER_TYPES,
     LINESTYLE_ALIASES,
@@ -10,6 +10,7 @@ from .controllers import (
     AxisLabelController,
     CollectionController,
     ColorbarController,
+    ColorbarRuntimeConfiguration,
     SecondaryAxisController,
     SecondaryAxisRemovalHandle,
     SecondaryAxisRuntime,
@@ -56,6 +57,7 @@ from .controllers import (
 )
 from .matplotlib_removal import (
     AxesSubtreeRemovalHandle,
+    ChildAxesRemovalHandle,
     ColorbarRemovalHandle,
     ErrorBarRemovalHandle,
     Field2DRemovalHandle,
@@ -121,6 +123,7 @@ __all__ = [
     "AnnotationConnectionStyle",
     "AxesController",
     "AxesSubtreeRemovalHandle",
+    "ChildAxesRemovalHandle",
     "AxisComponentController",
     "AxisController",
     "AxisLabelController",
@@ -128,12 +131,14 @@ __all__ = [
     "ComponentBatchChange",
     "CollectionController",
     "ColorbarController",
+    "ColorbarRuntimeConfiguration",
     "SecondaryAxisController",
     "SecondaryAxisRemovalHandle",
     "SecondaryAxisRuntime",
     "ColorbarRemovalHandle",
     "ComponentChange",
     "ComponentController",
+    "ControllerRuntimeMemento",
     "ComponentDeletedError",
     "CoordinateSystem",
     "DeletionPolicy",

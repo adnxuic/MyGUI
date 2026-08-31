@@ -69,7 +69,7 @@ class BatchChartCreationTests(unittest.TestCase):
         )
         for column, name in zip(
             self.sheet.columns[:4],
-            ("Shared X", "Y One", "Y Two", "Bad Y"),
+            ("Shared X", "Y One", "Y Two", "Bad Y"), strict=False,
         ):
             column.name = name
         self.x_ref = self._ref(0)
@@ -221,7 +221,7 @@ class BatchChartCreationTests(unittest.TestCase):
             self.assertEqual(len(event_batches), 1)
             redraw.assert_called_once_with()
             for component_id, artist in zip(
-                result.component_ids, result.artists
+                result.component_ids, result.artists, strict=False
             ):
                 self.assertIs(
                     self.canvas.component_registry.locator.bound_target(
@@ -279,6 +279,7 @@ class BatchChartCreationTests(unittest.TestCase):
         before_cycle = self.canvas.axes_commands.cycle_state(
             self.canvas.current_axes_component_id
         ).to_dict()
+        before_ledger = self.canvas.color_consumption_ledger.history_snapshot()
 
         result = self.canvas.add_scatters(
             self.x_ref,
@@ -307,6 +308,10 @@ class BatchChartCreationTests(unittest.TestCase):
                 self.canvas.current_axes_component_id
             ).to_dict(),
             before_cycle,
+        )
+        self.assertEqual(
+            self.canvas.color_consumption_ledger.history_snapshot(),
+            before_ledger,
         )
 
         with tempfile.TemporaryDirectory() as directory:

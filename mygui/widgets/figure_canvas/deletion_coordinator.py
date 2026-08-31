@@ -10,7 +10,7 @@ from mygui.figuremodify.component_services import (
     DeletionRequest,
 )
 from mygui.figuremodify.components import ComponentKind, DeletionPolicy
-from mygui.figuremodify.components.serialization import normalize_v15_figure
+from mygui.figuremodify.components.serialization import normalize_current_figure
 from mygui.widgets.component_tree.model import ComponentTreeModel
 from mygui.widgets.component_tree.presentation import TreePresentationResolver
 
@@ -207,7 +207,7 @@ class DeletionCoordinator:
                 canvas.component_registry,
                 canvas.editor_registry,
             )
-            normalize_v15_figure(canvas.validate_component_snapshot())
+            normalize_current_figure(canvas.validate_component_snapshot())
 
         try:
             outcome = prepared.execute(verifier=verify_candidate)
@@ -219,8 +219,6 @@ class DeletionCoordinator:
             )
         if not outcome.committed:
             ui_rollback_errors = rollback_ui()
-            canvas.current_component_id = previous_component_id
-            canvas.current_axes_component_id = previous_axes_id
             if ui_rollback_errors:
                 outcome = replace(
                     outcome,
@@ -271,16 +269,17 @@ class DeletionCoordinator:
                 )
             )
         fallback_axes_id = canvas._axes_ancestor_id(fallback_id)
-        canvas.current_axes_component_id = (
+        fallback_axes_id = (
             fallback_axes_id
             if fallback_axes_id is not None
             else previous_axes_id
             if previous_axes_id in canvas.component_registry
             else None
         )
-        canvas.current_component_id = fallback_id
-        if fallback_id != previous_component_id:
-            canvas.componentSelectionChanged.emit(fallback_id)
+        canvas.commit_prepared_selection(
+            fallback_id,
+            axes_component_id=fallback_axes_id,
+        )
         outcome = replace(
             outcome,
             selected_component_id=fallback_id,

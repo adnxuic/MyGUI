@@ -1,4 +1,4 @@
-"""Normalize and validate strict schema-v10 through v22 Figure trees."""
+"""Normalize and validate strict schema-v10 through v23 Figure trees."""
 
 from __future__ import annotations
 
@@ -19,6 +19,9 @@ from .controllers import (
 )
 from .errors import ComponentValidationError
 from .models import ComponentKind, ComponentRole, ComponentState
+
+
+CURRENT_FIGURE_SCHEMA_VERSION = 23
 
 
 _CHART_KINDS = frozenset(
@@ -208,6 +211,14 @@ def normalize_v23_figure(figure_snapshot: dict[str, Any]) -> dict[str, Any]:
     """Normalize the current schema-v23 Figure component tree."""
 
     return _normalize_figure(figure_snapshot)
+
+
+def normalize_current_figure(
+    figure_snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Normalize the current Figure component tree without version coupling."""
+
+    return normalize_v23_figure(figure_snapshot)
 
 
 def _validate_json_value(value: Any, path: str) -> None:
@@ -1344,4 +1355,20 @@ def validate_v23_figure(
         project_id,
         project_name,
         schema_version=23,
+    )
+
+
+def validate_current_figure(
+    figure_snapshot: Any,
+    available_refs: dict[ColumnRef, ColumnType],
+    project_id: str,
+    project_name: str | None = None,
+) -> None:
+    """Validate the current Figure component tree without version coupling."""
+
+    validate_v23_figure(
+        figure_snapshot,
+        available_refs,
+        project_id,
+        project_name,
     )

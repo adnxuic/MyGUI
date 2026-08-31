@@ -145,7 +145,7 @@ class InAxesInput(QFrame):
         self.bounds_inputs = []
         for label, value in zip(
             ("X", "Y", "Width", "Height"),
-            (0.60, 0.60, 0.35, 0.35),
+            (0.60, 0.60, 0.35, 0.35), strict=True,
         ):
             bounds_row.addWidget(QLabel(f"{label}:", self))
             editor = FocusAwareDoubleSpinBox(self)

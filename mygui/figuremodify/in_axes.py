@@ -329,7 +329,7 @@ class InAxesService:
         rectangle.set_fill(properties["region_fill"])
         rectangle.set_hatch(properties["region_hatch"])
         rectangle.set_zorder(properties["region_zorder"])
-        for connector, spec in zip(connectors, runtime.connector_specs):
+        for connector, spec in zip(connectors, runtime.connector_specs, strict=True):
             connector.set_edgecolor(spec["color"])
             apply_line_pattern(connector, spec["line_pattern"])
             connector.set_linewidth(spec["linewidth"])

@@ -1,4 +1,4 @@
-"""Structured dialog editors for the closed schema-v14 value contracts."""
+"""Structured dialog editors for the current closed value contracts."""
 
 from __future__ import annotations
 
@@ -1438,7 +1438,7 @@ class _ZoomConnectorsDialog(QDialog):
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget(self)
         self.pages: list[_ConnectorPage] = []
-        for label, spec in zip(CONNECTOR_LABELS, specs):
+        for label, spec in zip(CONNECTOR_LABELS, specs, strict=True):
             page = _ConnectorPage(spec, color_library, self.tabs)
             self.pages.append(page)
             self.tabs.addTab(page, label)

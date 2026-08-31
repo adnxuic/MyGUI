@@ -134,6 +134,7 @@ from .errorbar import (
 
 from .colorbar import (
     ColorbarController,
+    ColorbarRuntimeConfiguration,
 )
 from .secondary_axis import (
     SecondaryAxisController,
@@ -249,6 +250,7 @@ __all__ = [
     "HeatmapController",
     "ContourController",
     "ColorbarController",
+    "ColorbarRuntimeConfiguration",
     "SecondaryAxisController",
     "SecondaryAxisRemovalHandle",
     "SecondaryAxisRuntime",

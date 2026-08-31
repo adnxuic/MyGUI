@@ -239,7 +239,7 @@ class ChartCreationStager:
             for name in names
         }
         labels = []
-        for ref, name in zip(y_refs, names):
+        for ref, name in zip(y_refs, names, strict=True):
             if counts[name.casefold()] == 1:
                 labels.append(name)
                 continue
@@ -303,7 +303,7 @@ class ChartCreationStager:
         spec = DataPreprocessSpec.from_dict(preprocess)
         labels = self.batch_series_labels(normalized_y)
         resolved = []
-        for y_ref, label in zip(normalized_y, labels):
+        for y_ref, label in zip(normalized_y, labels, strict=True):
             try:
                 pair = resolve_preprocessed_pair(
                     host.repository,
@@ -341,7 +341,7 @@ class ChartCreationStager:
                 color=color,
                 excluded_count=pair.excluded_count,
             )
-            for (y_ref, label, pair), color in zip(resolved, colors)
+            for (y_ref, label, pair), color in zip(resolved, colors, strict=True)
         )
         return prepared, final_cycle, commit_cycle, transitions
 
@@ -581,16 +581,18 @@ class ChartCreationStager:
                     raise ValueError(
                         change.message or "Could not commit the chart color cycle."
                     )
-        for controller, (before, after) in zip(
-            controllers,
-            color_transitions,
-        ):
-            host.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                before,
-                after,
-            )
+        if color_transitions:
+            for controller, (before, after) in zip(
+                controllers,
+                color_transitions,
+                strict=True,
+            ):
+                host.color_consumption_ledger.record(
+                    axes_id,
+                    controller.component_id,
+                    before,
+                    after,
+                )
         host._select_created_component(controllers[-1])
         host.redraw()
         colors = tuple(series.color for series in prepared)

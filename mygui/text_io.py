@@ -443,7 +443,7 @@ class TextImportDialog(QDialog):
             if self.preview.column_include_checkbox(column).isChecked()
         ]
         full_columns = []
-        for source_column, schema in zip(selected_indices, preview_spec.columns):
+        for source_column, schema in zip(selected_indices, preview_spec.columns, strict=True):
             values = [
                 row[source_column] if source_column < len(row) else None
                 for row in full_sheet.rows[value_start:]

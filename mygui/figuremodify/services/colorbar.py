@@ -19,6 +19,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
     ComponentState,
     ComponentValidationError,
+    ControllerRuntimeMemento,
     ColorbarController,
     Field2DController,
     ScatterController,
@@ -185,7 +186,7 @@ class _ColorbarRuntimeRebuildItem:
     old_target: Colorbar
     removal_handle: Any
     new_target: Colorbar
-    controller_runtime: tuple[Any, ...]
+    controller_runtime: ControllerRuntimeMemento
     follower_runtime: dict[str, Any] | None
 
 
@@ -211,20 +212,16 @@ class ColorbarRuntimeRebuildBatch:
                     item.controller.component_id,
                     item.old_target,
                 )
-                (
-                    item.controller._constructor_properties,
-                    item.controller._label_font_value,
-                    item.controller._tick_font_value,
-                    item.controller._minor_ticks,
-                    item.controller._ticklocation,
-                ) = deepcopy(item.controller_runtime)
+                item.controller.rollback_remove(item.removal_handle)
+                item.controller.restore_runtime_memento(
+                    item.controller_runtime
+                )
                 geometry = self._service.geometry_service
                 if geometry is not None:
                     geometry.restore_colorbar_follower(
                         item.controller.component_id,
                         item.follower_runtime,
                     )
-                item.controller.rollback_remove(item.removal_handle)
             except BaseException as exc:
                 errors.append(exc)
         self._closed = True
@@ -237,7 +234,7 @@ class ColorbarRuntimeRebuildBatch:
         if self._closed:
             return
         for item in self._items:
-            item.controller._finalize_remove(item.removal_handle)
+            item.controller.finalize_removal(item.removal_handle)
         self._closed = True
 
 
@@ -523,18 +520,12 @@ class ColorbarService:
                     )
                 merged[key] = specs[key].normalize(value)
             candidate = before.clone(properties=merged)
-            controller._validate_replacement(candidate)
+            controller.validate_candidate_state(candidate)
             source = self.source_resolvers.resolve(
                 before.data["source_component_id"],
                 allow_empty=True,
             )
-            runtime_snapshot = (
-                deepcopy(controller._constructor_properties),
-                deepcopy(controller._label_font_value),
-                deepcopy(controller._tick_font_value),
-                controller._minor_ticks,
-                controller._ticklocation,
-            )
+            controller_memento = controller.capture_runtime_memento()
             follower_snapshot = None
             if self.geometry_service is not None:
                 follower_snapshot = (
@@ -563,10 +554,10 @@ class ColorbarService:
                 if not configured.ok:
                     raise ComponentValidationError(configured.message)
                 self.registry.locator.bind(controller.component_id, new)
-                controller._label_font_value = deepcopy(temporary._label_font_value)
-                controller._tick_font_value = deepcopy(temporary._tick_font_value)
-                controller._minor_ticks = temporary._minor_ticks
-                controller._ticklocation = temporary._ticklocation
+                controller.adopt_runtime_configuration(
+                    temporary.runtime_configuration(),
+                    include_constructor_properties=False,
+                )
 
                 def verify_new_render() -> None:
                     canvas = new.ax.figure.canvas
@@ -586,22 +577,15 @@ class ColorbarService:
                 if new is not None:
                     self.destroy_runtime(new)
                 self.registry.locator.bind(controller.component_id, old)
-                (
-                    controller._constructor_properties,
-                    controller._label_font_value,
-                    controller._tick_font_value,
-                    controller._minor_ticks,
-                    controller._ticklocation,
-                ) = runtime_snapshot
+                controller.rollback_remove(old_handle)
+                controller.restore_runtime_memento(controller_memento)
                 if self.geometry_service is not None:
                     self.geometry_service.restore_colorbar_follower(
                         controller.component_id,
                         follower_snapshot,
                     )
-                controller._state = before.clone()
-                controller.rollback_remove(old_handle)
                 raise
-            controller._finalize_remove(old_handle)
+            controller.finalize_removal(old_handle)
             return change
         except Exception as exc:
             return _rejected(controller, str(exc))
@@ -625,13 +609,7 @@ class ColorbarService:
                     allow_empty=True,
                 )
                 old = controller.resolve_target()
-                controller_runtime = (
-                    deepcopy(controller._constructor_properties),
-                    deepcopy(controller._label_font_value),
-                    deepcopy(controller._tick_font_value),
-                    controller._minor_ticks,
-                    controller._ticklocation,
-                )
+                controller_runtime = controller.capture_runtime_memento()
                 follower_runtime = None
                 if self.geometry_service is not None:
                     follower_runtime = (
@@ -664,34 +642,20 @@ class ColorbarService:
                     if not configured.ok:
                         raise ComponentValidationError(configured.message)
                     self.registry.locator.bind(controller.component_id, new)
-                    controller._constructor_properties = deepcopy(
-                        temporary._constructor_properties
+                    controller.adopt_runtime_configuration(
+                        temporary.runtime_configuration()
                     )
-                    controller._label_font_value = deepcopy(
-                        temporary._label_font_value
-                    )
-                    controller._tick_font_value = deepcopy(
-                        temporary._tick_font_value
-                    )
-                    controller._minor_ticks = temporary._minor_ticks
-                    controller._ticklocation = temporary._ticklocation
                 except Exception:
                     if new is not None:
                         self.destroy_runtime(new)
                     self.registry.locator.bind(controller.component_id, old)
-                    (
-                        controller._constructor_properties,
-                        controller._label_font_value,
-                        controller._tick_font_value,
-                        controller._minor_ticks,
-                        controller._ticklocation,
-                    ) = deepcopy(controller_runtime)
+                    controller.rollback_remove(removal_handle)
+                    controller.restore_runtime_memento(controller_runtime)
                     if self.geometry_service is not None:
                         self.geometry_service.restore_colorbar_follower(
                             controller.component_id,
                             follower_runtime,
                         )
-                    controller.rollback_remove(removal_handle)
                     raise
                 batch.append(
                     _ColorbarRuntimeRebuildItem(

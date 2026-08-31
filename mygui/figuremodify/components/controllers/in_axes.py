@@ -130,7 +130,7 @@ class InAxesController(ComponentController[Any]):
         y0, y1 = (float(value) for value in axes.get_ylim())
         rectangle.set_bounds(x0, y0, x1 - x0, y1 - y0)
         corners = ((x0, y0), (x0, y1), (x1, y0), (x1, y1))
-        for connector, corner in zip(connectors, corners):
+        for connector, corner in zip(connectors, corners, strict=True):
             connector.set_positions(connector.xy1, corner)
 
     def _validate_candidate(self, state: ComponentState) -> None:
@@ -298,7 +298,14 @@ class InAxesController(ComponentController[Any]):
             return
         if key == "connectors":
             runtime.connector_specs = deepcopy(tuple(value))
-            for connector, connector_spec in zip(runtime.connectors, value):
+            connectors = tuple(runtime.connectors)
+            if not connectors:
+                return
+            for connector, connector_spec in zip(
+                connectors,
+                value,
+                strict=True,
+            ):
                 connector.set_edgecolor(connector_spec["color"])
                 pattern = connector_spec["line_pattern"]
                 connector.set_linestyle(pattern["value"] if pattern["kind"] == "preset" else (pattern["offset"], pattern["dashes"]))

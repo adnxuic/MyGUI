@@ -100,7 +100,7 @@ class TextRenderService:
             # Text on the known-safe non-TeX renderer.  Restoring ``True``
             # after a failed disable would contradict the global capability.
             safe_values = [False] * len(targets)
-            for target, safe_value in zip(targets, safe_values):
+            for target, safe_value in zip(targets, safe_values, strict=True):
                 try:
                     target.set_usetex(safe_value)
                 except Exception:

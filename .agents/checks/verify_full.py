@@ -32,6 +32,17 @@ CRITICAL_FILES = [
     "mygui/application_settings/service.py",
     "mygui/application_theme/service.py",
 ]
+TRANSACTION_CRITICAL_FILES = [
+    "mygui/figuremodify/components/registry.py",
+    "mygui/figuremodify/components/serialization.py",
+    "mygui/figuremodify/components/matplotlib_removal.py",
+    "mygui/widgets/figure_canvas/deletion_coordinator.py",
+    "mygui/template_library/transform.py",
+    "mygui/figuremodify/components/controllers/secondary_axis.py",
+]
+GLOBAL_COVERAGE_MIN = 80
+CRITICAL_COVERAGE_MIN = 90
+TRANSACTION_COVERAGE_MIN = 85
 APPLICATION_TEST_TIMEOUT_SECONDS = 3600
 APPLICATION_BATCH_TIMEOUT_SECONDS = 1200
 MAX_TEST_WORKERS = 16
@@ -889,10 +900,19 @@ def _application_steps() -> list[dict]:
 
     coverage_commands = {
         "coverage_combine": f"{sys.executable} -m coverage combine",
-        "coverage_global": f"{sys.executable} -m coverage report --fail-under=74",
+        "coverage_global": (
+            f"{sys.executable} -m coverage report "
+            f"--fail-under={GLOBAL_COVERAGE_MIN}"
+        ),
         "coverage_critical": (
-            f"{sys.executable} -m coverage report --fail-under=80 "
+            f"{sys.executable} -m coverage report "
+            f"--fail-under={CRITICAL_COVERAGE_MIN} "
             + " ".join(CRITICAL_FILES)
+        ),
+        "coverage_transaction_critical": (
+            f"{sys.executable} -m coverage report "
+            f"--fail-under={TRANSACTION_COVERAGE_MIN} "
+            + " ".join(TRANSACTION_CRITICAL_FILES)
         ),
         "coverage_json": (
             f"{sys.executable} -m coverage json -o "
@@ -1052,14 +1072,23 @@ def _application_steps() -> list[dict]:
                             "coverage_global",
                             [
                                 sys.executable, "-m", "coverage", "report",
-                                "--fail-under=74",
+                                f"--fail-under={GLOBAL_COVERAGE_MIN}",
                             ],
                         ))
                         verification.append(run_step(
                             "coverage_critical",
                             [
                                 sys.executable, "-m", "coverage", "report",
-                                "--fail-under=80", *CRITICAL_FILES,
+                                f"--fail-under={CRITICAL_COVERAGE_MIN}",
+                                *CRITICAL_FILES,
+                            ],
+                        ))
+                        verification.append(run_step(
+                            "coverage_transaction_critical",
+                            [
+                                sys.executable, "-m", "coverage", "report",
+                                f"--fail-under={TRANSACTION_COVERAGE_MIN}",
+                                *TRANSACTION_CRITICAL_FILES,
                             ],
                         ))
                         verification.append(run_step(
@@ -1085,7 +1114,12 @@ def _agent_steps() -> list[dict]:
         run_step("agent_core", [sys.executable, ".agents/checks/verify_agent_core.py"]),
         run_step(
             "architecture_boundary_tests",
-            [sys.executable, ".agents/checks/verify_architecture.py"],
+            [
+                sys.executable,
+                ".agents/checks/verify_architecture.py",
+                "--skip-python",
+                "--fail-on-gray",
+            ],
             timeout=300,
         ),
     ]

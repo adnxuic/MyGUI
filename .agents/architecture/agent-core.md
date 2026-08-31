@@ -21,6 +21,12 @@ enforcement. TaskResult v1 and ScannerResult v2 change only through an explicit
 contract migration. Codex owns requested repository edits and verification.
 Generated evidence stays under ignored `build/agent-results/`.
 
+Authored scanners live under `.agents/scanners/`, publish one constant stable
+`SCANNER_ID`, and return ScannerResult v2 from `scan(root)`. The rule catalog
+declares scanner enforcement by that ID. `verify_architecture` discovers those
+producers, validates their complete coverage/result record, and fails verified
+violations; `--fail-on-gray` additionally fails unresolved gray boundaries.
+
 The explicitly authorized schema-v23 migration retired only
 `CORE-PERSISTENCE-V22` in favor of `CORE-PERSISTENCE-V23` and allocated
 `CORE-SECONDARY-AXIS-BOUNDARY`. Contract tests pin that exact CORE-set delta,

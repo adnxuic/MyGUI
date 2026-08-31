@@ -1,6 +1,6 @@
 """New Figure defaults for Style creation and first-time import.
 
-Project restore/open must keep schema-v15 figure size and document DPI.
+Project restore/open must keep the current schema-v23 Figure size and document DPI.
 """
 
 from __future__ import annotations

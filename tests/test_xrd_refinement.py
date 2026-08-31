@@ -781,7 +781,7 @@ class XrdRefinementFigureTests(XrdWindowTestCase):
                 label
                 for include, label in zip(
                     values[:3],
-                    ("Observed", "Calculated", "Reflection positions"),
+                    ("Observed", "Calculated", "Reflection positions"), strict=False,
                 )
                 if include
             ]

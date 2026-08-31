@@ -38,11 +38,11 @@ from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
-from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
-    _creation_defaults,
-    _new_line_appearance_input,
-    _palette_selection,
-    _settings_snapshot,
+from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+    creation_defaults as _creation_defaults,
+    new_line_appearance_input as _new_line_appearance_input,
+    palette_selection as _palette_selection,
+    settings_snapshot as _settings_snapshot,
 )
 
 

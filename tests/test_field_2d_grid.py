@@ -23,7 +23,7 @@ from mygui.resource_limits import load_resource_limits
 
 
 def _grid(rows, **kwargs):
-    xs, ys, zs = zip(*rows)
+    xs, ys, zs = zip(*rows, strict=False)
     return build_field_grid(xs, ys, zs, **kwargs)
 
 

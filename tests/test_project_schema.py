@@ -12,6 +12,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from mygui.database import ColumnRef
+from mygui.figuremodify.components.serialization import (
+    CURRENT_FIGURE_SCHEMA_VERSION,
+    normalize_current_figure,
+    normalize_v23_figure,
+)
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     load_project_file,
@@ -76,6 +81,14 @@ class ProjectSchemaV14Tests(unittest.TestCase):
             self.x_ref,
             self.y_ref,
             object_id="plot-object",
+        )
+
+    def test_current_figure_schema_alias_matches_project_contract(self):
+        snapshot = self.canvas.component_snapshot()
+        self.assertEqual(CURRENT_FIGURE_SCHEMA_VERSION, PROJECT_SCHEMA_VERSION)
+        self.assertEqual(
+            normalize_current_figure(snapshot),
+            normalize_v23_figure(snapshot),
         )
 
     def tearDown(self):

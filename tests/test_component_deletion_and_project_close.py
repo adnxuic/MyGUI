@@ -167,7 +167,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 expected["spec"],
             )
             for actual, original in zip(
-                bounds(controller), expected["bounds"]
+                bounds(controller), expected["bounds"], strict=False
             ):
                 self.assertAlmostEqual(actual, original, places=12)
             self.assertNotIn("position", controller.state.properties)
@@ -1127,7 +1127,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
             assert_unchanged()
 
             with mock.patch(
-                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_v15_figure",
+                "mygui.widgets.figure_canvas.deletion_coordinator.normalize_current_figure",
                 side_effect=RuntimeError("injected schema failure"),
             ):
                 self.assertFalse(self.canvas.delete_axes(target.component_id))
@@ -1248,14 +1248,14 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 surviving_subplots,
             )
             for controller, original_position in zip(
-                restored_axes, surviving_positions
+                restored_axes, surviving_positions, strict=False
             ):
                 restored_position = tuple(
                     float(value)
                     for value in controller.resolve_target().get_position().bounds
                 )
                 for actual, original in zip(
-                    restored_position, original_position
+                    restored_position, original_position, strict=False
                 ):
                     self.assertAlmostEqual(actual, original, places=12)
             self.assertEqual(

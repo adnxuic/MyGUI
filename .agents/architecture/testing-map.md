@@ -25,8 +25,11 @@ subprocesses through their current `sys.executable`. Qt tests run with
 
 `verify_fast` runs compileall, Ruff, and the route's focused modules.
 `verify_full --profile application` runs the complete suite once under branch
-coverage with a one-hour subprocess budget, then applies global 74% and
-critical-file 80% reports. A discovery subprocess collects exact unittest IDs;
+coverage with a one-hour subprocess budget, then applies global 80%, established
+critical-file 90%, and transaction-critical 85% reports. The transaction set
+is `registry`, `serialization`, `matplotlib_removal`, `DeletionCoordinator`,
+template transformation, and Secondary Axis runtime; its next hardening target
+is 90% without lowering another gate. A discovery subprocess collects exact unittest IDs;
 empty, failed, or duplicate collections reject the run.
 
 All application batches share one process pool. GUI-sensitive modules keep
@@ -62,7 +65,10 @@ durations, and completeness). Per-test and aggregated per-module timings remain
 available in `build/agent-results/application-test-timings.json`. Windows CI
 pins four pool workers and uploads both evidence locations. The
 agent-engineering profile validates routing/contracts and deterministic
-architecture boundary tests. Documentation uses `mkdocs build --strict`.
+architecture scanners without importing the Windows GUI runtime. Standalone
+`verify_architecture` executes the de-duplicated union of every CORE rule's
+Python and scanner enforcement; `--skip-python` is reserved for the Ubuntu
+Agent Core profile. Documentation uses `mkdocs build --strict`.
 
 ## Fault injection
 

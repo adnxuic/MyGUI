@@ -845,7 +845,7 @@ _ANNOTATION_BOX_STYLES = frozenset({"square", "rounded"})
 
 
 def normalize_annotation_box(value: Any) -> dict[str, Any]:
-    """Normalize the closed schema-v17 Annotation box composite value."""
+    """Normalize the current closed Annotation box composite value."""
 
     spec = _mapping(value, "Annotation box")
     expected = {
@@ -1051,7 +1051,7 @@ def normalize_norm(value: Any) -> dict[str, Any]:
         result["halfrange"] = None if result["halfrange"] is None else _positive(result["halfrange"], "Norm half range")
     elif kind == "boundary":
         result["boundaries"] = _finite_sequence(result["boundaries"], "Norm boundaries", minimum_length=2)
-        if any(right <= left for left, right in zip(result["boundaries"], result["boundaries"][1:])):
+        if any(right <= left for left, right in zip(result["boundaries"], result["boundaries"][1:], strict=False)):
             raise ComponentValidationError("Norm boundaries must increase.")
         result["ncolors"] = int(_positive(result["ncolors"], "Norm color count"))
         if result["extend"] not in {"neither", "both", "min", "max"}:
@@ -1177,7 +1177,7 @@ def normalize_contour_levels_spec(value: Any) -> dict[str, Any]:
     if kind == "values":
         _exact(spec, {"kind", "values"}, "Contour levels")
         values = _finite_sequence(spec["values"], "Contour levels", minimum_length=2)
-        if any(right <= left for left, right in zip(values, values[1:])):
+        if any(right <= left for left, right in zip(values, values[1:], strict=False)):
             raise ComponentValidationError(
                 "Explicit contour levels must be strictly increasing."
             )

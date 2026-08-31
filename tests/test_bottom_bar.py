@@ -28,7 +28,7 @@ class ThemeQssTests(unittest.TestCase):
             else ((value + 0.055) / 1.055) ** 2.4
             for value in channels
         ]
-        return sum(weight * value for weight, value in zip((0.2126, 0.7152, 0.0722), linear))
+        return sum(weight * value for weight, value in zip((0.2126, 0.7152, 0.0722), linear, strict=False))
 
     @classmethod
     def _contrast_ratio(cls, first, second):

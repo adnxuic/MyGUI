@@ -267,7 +267,7 @@ class ColorbarRuntimeTests(unittest.TestCase):
         self.assertIs(rejected.status, ChangeStatus.REJECTED)
         for actual, expected_value in zip(
             colorbar.resolve_target().ax.get_position().bounds,
-            old_cax_bounds,
+            old_cax_bounds, strict=False,
         ):
             self.assertAlmostEqual(actual, expected_value, places=6)
 
@@ -286,7 +286,7 @@ class ColorbarRuntimeTests(unittest.TestCase):
             old_cax_bounds[2] * scale_x,
             old_cax_bounds[3] * scale_y,
         )
-        for actual, expected_value in zip(new_cax_bounds, expected):
+        for actual, expected_value in zip(new_cax_bounds, expected, strict=False):
             self.assertAlmostEqual(actual, expected_value, places=6)
 
     def test_new_layout_after_colorbar_uses_semantic_axes_indexes(self):
@@ -520,6 +520,9 @@ class ColorbarRuntimeTests(unittest.TestCase):
             {"location": "left", "fraction": 0.2},
         )
         self.assertTrue(rebuilt.ok)
+        self.assertIs(rebuilt.status, ChangeStatus.APPLIED)
+        self.assertEqual(rebuilt.before.properties["location"], "right")
+        self.assertEqual(rebuilt.after.properties["location"], "left")
         replacement = controller.resolve_target()
         self.assertIsNot(replacement, old)
         self.assertEqual(controller.state.properties["location"], "left")

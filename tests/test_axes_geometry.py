@@ -393,7 +393,7 @@ class AxesGeometryServiceTests(unittest.TestCase):
                 )
                 self.assertIsNone(target.get_subplotspec())
                 self.assertFalse(target.get_in_layout())
-                for actual, expected in zip(target.get_position().bounds, bounds):
+                for actual, expected in zip(target.get_position().bounds, bounds, strict=False):
                     self.assertAlmostEqual(actual, expected, places=6)
             finally:
                 restored.close_without_prompt()

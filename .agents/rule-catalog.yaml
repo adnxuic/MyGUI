@@ -5,17 +5,17 @@ rules:
   - {id: CORE-MATPLOTLIB-BOUNDARY, source: .agents/architecture/ui-state-boundaries.md#matplotlib, enforcement: [tests.test_matplotlib_boundaries]}
   - {id: CORE-TEX-OWNER, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_matplotlib_boundaries]}
   - {id: CORE-FONT-DIAGNOSTICS, source: .agents/architecture/ui-state-boundaries.md#text-and-diagnostics, enforcement: [tests.test_font_diagnostics]}
-  - {id: CORE-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [tests.test_component_controllers]}
+  - {id: CORE-COMPONENT-STATE, source: .agents/architecture/component-system.md#state-and-mutation-path, enforcement: [tests.test_component_controllers, mygui.architecture-boundaries]}
   - {id: CORE-EDITOR-PROFILES, source: .agents/architecture/inspector.md#editor-contracts, enforcement: [tests.test_component_inspector, tests.test_matplotlib_property_contract]}
-  - {id: CORE-SELECTION-AUTHORITY, source: .agents/architecture/inspector.md#tree-and-selection, enforcement: [tests.test_component_tree]}
+  - {id: CORE-SELECTION-AUTHORITY, source: .agents/architecture/inspector.md#tree-and-selection, enforcement: [tests.test_component_tree, mygui.architecture-boundaries]}
   - {id: CORE-REGISTRATION-ATOMICITY, source: .agents/architecture/persistence.md#registration-and-restore, enforcement: [tests.test_component_services, tests.test_component_runtime_integration]}
   - {id: CORE-DELETION-COORDINATOR, source: .agents/architecture/deletion.md#atomic-deletion, enforcement: [tests.test_component_deletion_and_project_close]}
   - {id: CORE-PROJECT-HISTORY, source: .agents/architecture/persistence.md#project-history, enforcement: [tests.test_figure_history]}
-  - {id: CORE-PERSISTENCE-V23, source: .agents/architecture/persistence.md#schema-authority, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides, tests.test_field_2d_component, tests.test_annotation_component, tests.test_axes_geometry, tests.test_errorbar_component, tests.test_secondary_axis_component]}
+  - {id: CORE-PERSISTENCE-V23, source: .agents/architecture/persistence.md#schema-authority, enforcement: [tests.test_project_schema, tests.test_project_io, tests.test_reference_guides, tests.test_field_2d_component, tests.test_annotation_component, tests.test_axes_geometry, tests.test_errorbar_component, tests.test_secondary_axis_component, mygui.architecture-boundaries]}
   - {id: CORE-TEMPLATE-LIBRARY, source: .agents/architecture/persistence.md#chart-template-persistence, enforcement: [tests.test_template_library]}
   - {id: CORE-COLORBAR-AUXILIARY-AXES, source: .agents/architecture/component-system.md#colorbar-auxiliary-axes, enforcement: [tests.test_colorbar_component]}
   - {id: CORE-SECONDARY-AXIS-BOUNDARY, source: .agents/architecture/component-system.md#secondary-axis-child-axes, enforcement: [tests.test_secondary_axis_component]}
   - {id: CORE-APPLICATION-SETTINGS, source: .agents/architecture/application-settings.md#authority, enforcement: [tests.test_application_settings_contracts, tests.test_application_settings_components, tests.test_application_settings_component_creation]}
-  - {id: CORE-THEME-OWNER, source: .agents/architecture/application-theme.md#owner, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme]}
+  - {id: CORE-THEME-OWNER, source: .agents/architecture/application-theme.md#owner, enforcement: [tests.test_application_settings_contracts, tests.test_application_theme, mygui.architecture-boundaries]}
   - {id: CORE-FIGURE-LAYOUT-ENGINE-OWNER, source: .agents/architecture/component-system.md#figure-layout-engine-ownership, enforcement: [tests.test_axes_layout]}
   - {id: CORE-AXES-GEOMETRY-OWNER, source: .agents/architecture/component-system.md#individual-axes-geometry-ownership, enforcement: [tests.test_axes_geometry]}

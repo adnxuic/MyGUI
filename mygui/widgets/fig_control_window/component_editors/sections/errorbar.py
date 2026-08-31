@@ -87,10 +87,6 @@ class ErrorBarDataSection(QWidget, EditorSection):
         error = self.data_input.spec_error()
         self.apply_button.setEnabled(error is None)
         self.hint_label.setText(error or "")
-        if error is not None:
-            self.hint_label.setStyleSheet("color: #b3660a;")
-        else:
-            self.hint_label.setStyleSheet("")
 
     def apply_clicked(self) -> bool:
         """Commit the complete draft as one atomic data change."""

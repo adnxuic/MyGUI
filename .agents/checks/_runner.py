@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 from pathlib import Path
@@ -48,6 +49,52 @@ def load_task_map(root: Path = ROOT) -> dict[str, Any]:
     if not isinstance(data, dict) or not isinstance(data.get("tasks"), dict):
         raise ValueError("task-map.yaml must contain a tasks mapping")
     return data
+
+
+def discover_scanners(
+    root: Path = ROOT,
+) -> tuple[dict[str, Path], list[str]]:
+    """Discover authored ScannerResult-v2 producers by stable scanner ID."""
+
+    registry: dict[str, Path] = {}
+    errors: list[str] = []
+    scanner_root = root / ".agents" / "scanners"
+    if not scanner_root.is_dir():
+        return registry, errors
+    for path in sorted(scanner_root.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        relative = path.relative_to(root).as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+        except (OSError, SyntaxError, UnicodeError) as exc:
+            errors.append(f"Cannot inspect scanner {relative}: {exc}")
+            continue
+        scanner_id = None
+        for node in tree.body:
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if not any(
+                isinstance(target, ast.Name) and target.id == "SCANNER_ID"
+                for target in targets
+            ):
+                continue
+            value = node.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                scanner_id = value.value.strip()
+            break
+        if not scanner_id:
+            errors.append(f"Scanner {relative} has no constant SCANNER_ID")
+            continue
+        if scanner_id in registry:
+            errors.append(
+                f"Duplicate scanner ID {scanner_id!r}: "
+                f"{registry[scanner_id].relative_to(root).as_posix()} and {relative}"
+            )
+            continue
+        registry[scanner_id] = path
+    return registry, errors
 
 
 def runtime_errors(*, require_gui: bool) -> list[str]:

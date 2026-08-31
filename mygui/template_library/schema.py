@@ -17,7 +17,7 @@ from mygui.figuremodify.components.serialization import (
     validate_v20_figure,
     validate_v21_figure,
     validate_v22_figure,
-    validate_v23_figure,
+    validate_current_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
@@ -299,7 +299,7 @@ def parse_template(value: Any) -> ChartTemplate:
     return _parse_template_payload(
         value,
         version=TEMPLATE_SCHEMA_VERSION,
-        figure_validator=validate_v23_figure,
+        figure_validator=validate_current_figure,
     )
 
 

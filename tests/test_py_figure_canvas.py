@@ -379,7 +379,9 @@ class PyFigureCanvasBranchTests(unittest.TestCase):
 
     def test_selection_repair_to_axes_or_root(self):
         self.canvas._disposed = False
-        self.canvas.current_component_id = "non_existent_id"
+        with self.assertRaises(AttributeError):
+            self.canvas.current_component_id = "external-write"
+        self.canvas._current_component_id = "non_existent_id"
         self.canvas.current_axes_component_id = None
         self.canvas._repair_component_selection()
         self.assertEqual(self.canvas.current_component_id, self.canvas.root_component_id)

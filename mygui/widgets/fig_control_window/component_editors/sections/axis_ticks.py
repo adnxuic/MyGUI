@@ -179,8 +179,8 @@ class _TickLevelPage(QWidget):
             "Index Locator is intended for regularly spaced index data.",
             positions,
         )
+        self.index_hint.setObjectName("axis_tick_index_hint")
         self.index_hint.setWordWrap(True)
-        self.index_hint.setStyleSheet("color: gray; font-style: italic;")
         positions_layout.addWidget(self.index_hint)
         self.fixed_table = QTableWidget(0, 2, positions)
         self.fixed_table.setHorizontalHeaderLabels(("Position", "Label"))
@@ -493,8 +493,8 @@ class AxisTickSettingsDialog(QDialog):
         self.preview_label.setMinimumHeight(180)
         root.addWidget(self.preview_label)
         self.preview_status = QLabel(self)
+        self.preview_status.setObjectName("axis_tick_preview_status")
         self.preview_status.setWordWrap(True)
-        self.preview_status.setStyleSheet("color: #b26a00;")
         self.preview_status.hide()
         root.addWidget(self.preview_status)
 

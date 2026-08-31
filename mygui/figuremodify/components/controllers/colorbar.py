@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from matplotlib.colorbar import Colorbar
@@ -38,10 +39,22 @@ from ..property_values import (
     validate_fixed_ticker_pair,
 )
 from ._helpers import (
+    _DEFAULT_FONT_SPEC,
     _normalize_color,
     _read_color,
-    _DEFAULT_FONT_SPEC,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ColorbarRuntimeConfiguration:
+    """Controller-owned non-Artist configuration for a rebuilt Colorbar."""
+
+    constructor_properties: dict[str, Any]
+    label_font: dict[str, Any]
+    tick_font: dict[str, Any]
+    minor_ticks: bool
+    ticklocation: str
+
 
 class ColorbarController(ComponentController[Colorbar]):
     """Control one Colorbar without duplicating its source mapping state."""
@@ -207,6 +220,41 @@ class ColorbarController(ComponentController[Colorbar]):
         self._minor_ticks = bool(state.properties.get("minor_ticks", False))
         self._ticklocation = str(state.properties.get("ticklocation", "auto"))
         super().__init__(state, **kwargs)
+
+    def runtime_configuration(self) -> ColorbarRuntimeConfiguration:
+        """Return an immutable copy of Controller-owned runtime configuration."""
+
+        return ColorbarRuntimeConfiguration(
+            deepcopy(self._constructor_properties),
+            deepcopy(self._label_font_value),
+            deepcopy(self._tick_font_value),
+            self._minor_ticks,
+            self._ticklocation,
+        )
+
+    def adopt_runtime_configuration(
+        self,
+        configuration: ColorbarRuntimeConfiguration,
+        *,
+        include_constructor_properties: bool = True,
+    ) -> None:
+        """Adopt validated configuration from a temporary Controller.
+
+        A constructor-sensitive property edit defers the authoritative
+        constructor mapping until the Registry mutation is committed. Source-
+        driven runtime rebuilds may adopt the complete mapping immediately.
+        """
+
+        if not isinstance(configuration, ColorbarRuntimeConfiguration):
+            raise TypeError("Colorbar runtime configuration is invalid.")
+        if include_constructor_properties:
+            self._constructor_properties = deepcopy(
+                configuration.constructor_properties
+            )
+        self._label_font_value = deepcopy(configuration.label_font)
+        self._tick_font_value = deepcopy(configuration.tick_font)
+        self._minor_ticks = bool(configuration.minor_ticks)
+        self._ticklocation = str(configuration.ticklocation)
 
     @staticmethod
     def _orientation(location: str) -> str:

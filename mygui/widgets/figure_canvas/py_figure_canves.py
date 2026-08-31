@@ -135,8 +135,8 @@ from mygui.figuremodify.components import (
 from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
-    normalize_v23_figure,
-    validate_v23_figure,
+    normalize_current_figure,
+    validate_current_figure,
 )
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_geometry import grid_geometry_record
@@ -439,7 +439,7 @@ class PyFigureCanvas(QWidget):
         self.figure_inspector: Optional[FigureInspectorPanel] = None
 
         self.current_axes_component_id: str | None = None
-        self.current_component_id: str | None = None
+        self._current_component_id: str | None = None
         self._selection_unsubscribe = self.component_registry.subscribe(
             self._component_selection_event,
             kinds=(ComponentEventKind.REMOVED,),
@@ -1232,6 +1232,38 @@ class PyFigureCanvas(QWidget):
         self.figure_inspector = figure_inspector
         self.select_component(self.root_component_id)
 
+    @property
+    def current_component_id(self) -> str | None:
+        """Return the sole authoritative component selection."""
+
+        return self._current_component_id
+
+    def commit_prepared_selection(
+        self,
+        component_id: str,
+        *,
+        axes_component_id: str | None,
+    ) -> None:
+        """Commit an Inspector-prepared selection through the Canvas owner."""
+
+        component_id = str(component_id)
+        if component_id not in self.component_registry:
+            raise ValueError(
+                f"Component selection {component_id!r} is unavailable."
+            )
+        if (
+            axes_component_id is not None
+            and axes_component_id not in self.component_registry
+        ):
+            raise ValueError(
+                f"Axes selection {axes_component_id!r} is unavailable."
+            )
+        previous_component_id = self._current_component_id
+        self.current_axes_component_id = axes_component_id
+        self._current_component_id = component_id
+        if component_id != previous_component_id:
+            self.componentSelectionChanged.emit(component_id)
+
     def select_component(self, component_id: str) -> bool:
         """Select one Component and show exactly its own Inspector."""
 
@@ -1253,8 +1285,6 @@ class PyFigureCanvas(QWidget):
                     f"Inspector for component {component_id!r} is unavailable."
                 )
         except Exception as exc:
-            self.current_component_id = previous_component_id
-            self.current_axes_component_id = previous_axes_id
             if self.figure_inspector is not None:
                 if not inspector_existed:
                     self.figure_inspector.remove_component_inspector(
@@ -1273,11 +1303,12 @@ class PyFigureCanvas(QWidget):
             status_messages.show_error(str(exc))
             return False
         axes_id = self._axes_ancestor_id(component_id)
-        if axes_id is not None:
-            self.current_axes_component_id = axes_id
-        self.current_component_id = component_id
-        if component_id != previous_component_id:
-            self.componentSelectionChanged.emit(component_id)
+        self.commit_prepared_selection(
+            component_id,
+            axes_component_id=(
+                axes_id if axes_id is not None else previous_axes_id
+            ),
+        )
         return True
 
     def _axes_ancestor_id(self, component_id: str) -> str | None:
@@ -1290,7 +1321,7 @@ class PyFigureCanvas(QWidget):
     def _component_selection_event(self, event: ComponentEvent) -> None:
         if event.component_id != self.current_component_id:
             return
-        self.current_component_id = None
+        self._current_component_id = None
         if self._selection_repair_pending:
             return
         self._selection_repair_pending = True
@@ -4186,7 +4217,7 @@ class PyFigureCanvas(QWidget):
         self,
         component_tree: dict[str, Any] | None = None,
     ) -> None:
-        """Materialize and apply a validated schema-v17 component tree."""
+        """Materialize and apply a validated current component tree."""
 
         self._restoring_component_tree_now = True
         try:
@@ -4219,7 +4250,7 @@ class PyFigureCanvas(QWidget):
         source = component_tree or self._restore_component_tree
         if not isinstance(source, dict):
             return
-        source = normalize_v23_figure(source)
+        source = normalize_current_figure(source)
         states = [
             ComponentState.from_dict(raw_state)
             for raw_state in source["components"]
@@ -4251,7 +4282,7 @@ class PyFigureCanvas(QWidget):
     def apply_component_tree(
         self, component_tree: dict[str, Any] | None
     ) -> None:
-        """Apply all schema-v14 states after their Matplotlib targets exist."""
+        """Apply all current states after their Matplotlib targets exist."""
 
         self._snapshot_applier.apply_component_tree(component_tree)
 
@@ -4280,7 +4311,7 @@ class PyFigureCanvas(QWidget):
             "root_component_id": self.root_component_id,
             "components": components,
         }
-        return normalize_v23_figure(snapshot)
+        return normalize_current_figure(snapshot)
 
     def validate_component_snapshot(self) -> dict[str, Any]:
         """Validate and return the current complete schema-v23 Figure tree."""
@@ -4292,7 +4323,7 @@ class PyFigureCanvas(QWidget):
             for sheet in project.sheets.values()
             for column in sheet.columns
         }
-        validate_v23_figure(
+        validate_current_figure(
             snapshot,
             available_refs,
             self.project_id,

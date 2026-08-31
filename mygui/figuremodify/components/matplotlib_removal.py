@@ -79,6 +79,17 @@ class InAxesRemovalHandle:
 
 
 @dataclass(slots=True)
+class ChildAxesRemovalHandle:
+    """Pinned parent child-Axes slot for exact identity rollback."""
+
+    target: Axes
+    owner: list[Axes]
+    index: int
+    subject: Axes
+    detached: bool = False
+
+
+@dataclass(slots=True)
 class ColorbarRemovalHandle:
     """Pinned Colorbar, auxiliary-Axes, callback, and owner-layout state."""
 
@@ -284,6 +295,22 @@ class MatplotlibRemovalAdapter:
             target_stale=child.stale,
             runtime=runtime,
             auxiliary_handles=tuple(auxiliary),
+        )
+
+    @staticmethod
+    def prepare_child_axes(target: Axes, parent: Axes) -> ChildAxesRemovalHandle:
+        """Capture a Matplotlib child Axes without promoting it to Figure.axes."""
+
+        owner = parent.child_axes
+        if target not in owner:
+            raise ComponentValidationError(
+                "Child Axes is detached from its registered parent Axes."
+            )
+        return ChildAxesRemovalHandle(
+            target=target,
+            owner=owner,
+            index=owner.index(target),
+            subject=parent,
         )
 
     @staticmethod
@@ -509,6 +536,7 @@ class MatplotlibRemovalAdapter:
                     handle.restore_subplotspecs,
                     handle.restore_positions,
                     handle.restore_anchors,
+                    strict=True,
                 ):
                     if restore_spec is not None:
                         parent.set_subplotspec(restore_spec)
@@ -529,6 +557,8 @@ class MatplotlibRemovalAdapter:
                 for auxiliary in handle.auxiliary_handles:
                     auxiliary.owner.remove(auxiliary.target)
                 handle.owner.remove(handle.target)
+            elif isinstance(handle, ChildAxesRemovalHandle):
+                handle.owner.pop(handle.index)
             else:
                 handle.owner.remove(handle.target)
         except (KeyError, ValueError) as exc:
@@ -568,6 +598,14 @@ class MatplotlibRemovalAdapter:
                 MatplotlibRemovalAdapter.force_restore(colorbar_handle)
             handle.detached = False
             return
+        if isinstance(handle, ChildAxesRemovalHandle):
+            if handle.target not in handle.owner:
+                handle.owner.insert(
+                    min(handle.index, len(handle.owner)),
+                    handle.target,
+                )
+            handle.detached = False
+            return
         if isinstance(handle, ColorbarRemovalHandle):
             MatplotlibRemovalAdapter.force_restore(handle.axes_handle)
             cax = handle.target.ax
@@ -582,6 +620,7 @@ class MatplotlibRemovalAdapter:
                 handle.parent_subplotspecs,
                 handle.parent_positions,
                 handle.parent_anchors,
+                strict=True,
             ):
                 if subplotspec is not None:
                     parent.set_subplotspec(subplotspec)
@@ -701,6 +740,18 @@ class MatplotlibRemovalAdapter:
                     handle.target,
                 )
             handle.target.remove()
+            return
+        if isinstance(handle, ChildAxesRemovalHandle):
+            if handle.target not in handle.owner:
+                handle.owner.insert(
+                    min(handle.index, len(handle.owner)),
+                    handle.target,
+                )
+            try:
+                handle.target.remove()
+            finally:
+                if handle.target in handle.owner:
+                    handle.owner.remove(handle.target)
             return
         target = handle.target
         if handle.axes is not None:

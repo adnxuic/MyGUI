@@ -529,7 +529,7 @@ class NumericTupleEditor(QWidget):
         )
         if self.use_value_input is not None:
             self.use_value_input.setChecked(enabled)
-        for editor, item in zip(self.inputs, values):
+        for editor, item in zip(self.inputs, values, strict=True):
             editor.setValue(item)
             editor.setEnabled(enabled)
         del blockers, use_blocker

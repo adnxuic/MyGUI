@@ -186,10 +186,10 @@ class AnnotationControllerUnitTests(unittest.TestCase):
         self.assertEqual(artist.get_position(), state.properties["xytext"])
         for before, after in zip(
             target_before,
-            controller._display_target(artist),
+            controller._display_target(artist), strict=False,
         ):
             self.assertAlmostEqual(before, after, places=6)
-        for before, after in zip(text_before, controller._display_text(artist)):
+        for before, after in zip(text_before, controller._display_text(artist), strict=False):
             self.assertAlmostEqual(before, after, places=6)
 
     def test_explicit_coordinate_pairs_win_and_failed_pair_rolls_back(self):

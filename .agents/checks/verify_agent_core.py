@@ -10,7 +10,14 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from _runner import ROOT, finish, load_task_map, load_yaml, task_result
+from _runner import (
+    ROOT,
+    discover_scanners,
+    finish,
+    load_task_map,
+    load_yaml,
+    task_result,
+)
 
 
 REQUIRED_TASKS = {
@@ -40,7 +47,8 @@ def _agent_source_files(agents: Path):
 
 
 def _scanner_ids(root: Path) -> set[str]:
-    return set()
+    registry, _errors = discover_scanners(root)
+    return set(registry)
 
 
 def _module_path(root: Path, module: str) -> Path:
@@ -159,6 +167,9 @@ def validate_agent_core(root: Path = ROOT) -> list[str]:
         catalog = load_yaml(agents / "rule-catalog.yaml")
     except Exception as exc:
         return [str(exc)]
+
+    _scanner_registry, scanner_errors = discover_scanners(root)
+    errors.extend(scanner_errors)
 
     for schema_path in sorted((agents / "contracts").glob("*.schema.json")):
         try:

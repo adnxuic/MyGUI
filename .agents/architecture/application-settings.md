@@ -32,7 +32,7 @@ These values never enter:
 - `ComponentState`
 - Canvas materialization, snapshot apply, or restore
 
-Opening a project always uses the persisted v15 tree. New-Figure application
+Opening a project always uses the persisted schema-v23 tree. New-Figure application
 defaults never overwrite an opened Figure.
 
 ## Dual-slot storage

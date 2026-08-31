@@ -282,7 +282,7 @@ def parse_fullprof_prf_text(
     two_theta, yobs, ycal, prf_difference, background = (
         tuple(row[column] for row in columns) for column in range(5)
     )
-    residual = tuple(observed - calculated for observed, calculated in zip(yobs, ycal))
+    residual = tuple(observed - calculated for observed, calculated in zip(yobs, ycal, strict=True))
 
     reflection_start = profile_end
     if declared_reflections is None:

@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from mygui.database import ColumnRef, scipy_fit_adapter
 from mygui.figuremodify.axes_layout import AxesLayoutSpec
+from mygui.figuremodify.component_services import SecondaryAxisCreateSpec
 from mygui.figuremodify.components import ComponentKind, ComponentRole, ROLES_BY_KIND
 from mygui.figuremodify.components.property_values import DEFAULT_COLOR_MAP
 from mygui.figuremodify.style_base.color_models import ColorSelection
@@ -197,6 +198,24 @@ def _scenario_walk_all_profiles(harness: SmokeHarness) -> None:
     )
     canvas.add_in_axes(harness.zoom_in_axes_spec(canvas))
     canvas.add_in_axes(harness.image_in_axes_spec(canvas))
+    canvas.add_secondary_axis(
+        SecondaryAxisCreateSpec(
+            "x",
+            unit_transform={"kind": "affine", "scale": 2.0, "offset": 1.0},
+            properties={"label": "Inspector Secondary X"},
+        ),
+        object_id="inspector-secondary-x",
+        announce=False,
+    )
+    canvas.add_secondary_axis(
+        SecondaryAxisCreateSpec(
+            "y",
+            unit_transform={"kind": "affine", "scale": 0.5, "offset": -1.0},
+            properties={"label": "Inspector Secondary Y"},
+        ),
+        object_id="inspector-secondary-y",
+        announce=False,
+    )
     canvas.axes_commands.ensure_legend(axes_id)
 
     harness.pump(80)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import copy
 import importlib.util
 import json
@@ -8,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -46,6 +48,11 @@ class AgentEngineeringTests(unittest.TestCase):
         sys.path.insert(0, str(CHECKS))
         cls.runner = _load("_runner")
         cls.agent_core = _load("verify_agent_core")
+        cls.architecture = _load("verify_architecture")
+        cls.architecture_scanner = cls.architecture._load_scanner(
+            ROOT / ".agents/scanners/architecture_boundaries.py",
+            "mygui.architecture-boundaries",
+        )
         cls.coverage_batch = _load("_coverage_batch")
         cls.verify_full = _load("verify_full")
 
@@ -58,6 +65,184 @@ class AgentEngineeringTests(unittest.TestCase):
 
     def test_current_agent_core_is_consistent(self):
         self.assertEqual(self.agent_core.validate_agent_core(ROOT), [])
+
+    def test_architecture_catalog_enforcement_is_complete_and_deduplicated(self):
+        modules, scanners = self.architecture.catalog_enforcement(ROOT)
+        catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
+        expected_modules = {
+            target
+            for entry in catalog["rules"]
+            if entry["id"].startswith("CORE-")
+            for target in entry["enforcement"]
+            if target.startswith("tests.")
+        }
+        expected_scanners = {
+            target
+            for entry in catalog["rules"]
+            if entry["id"].startswith("CORE-")
+            for target in entry["enforcement"]
+            if not target.startswith("tests.")
+        }
+        self.assertEqual(modules, tuple(sorted(expected_modules)))
+        self.assertEqual(scanners, tuple(sorted(expected_scanners)))
+        self.assertIn("tests.test_component_deletion_and_project_close", modules)
+        self.assertEqual(scanners, ("mygui.architecture-boundaries",))
+
+    def test_fail_on_gray_changes_a_valid_scanner_step_to_failed(self):
+        scanner_id = "mygui.injected-gray"
+        result = {
+            "contractVersion": 2,
+            "scanner": {"id": scanner_id, "version": "1.0.0"},
+            "status": "completed",
+            "verdict": "gray_boundary",
+            "scope": {
+                "workspace": str(ROOT),
+                "include": [],
+                "exclude": [],
+                "changedFiles": [],
+            },
+            "startedAt": "2026-08-31T00:00:00Z",
+            "durationMs": 1,
+            "findings": [],
+            "grayBoundaries": [{
+                "id": "gray",
+                "scannerId": scanner_id,
+                "category": "test",
+                "confidence": 1.0,
+                "file": "mygui/example.py",
+                "line": 1,
+                "evidence": "fixture",
+                "whyNotViolation": "classification is pending",
+                "evolutionCandidate": "classify the fixture",
+                "fingerprint": "gray-fixture",
+            }],
+            "coverage": {
+                "filesVisited": ["mygui/example.py"],
+                "filesSkipped": [],
+                "limitations": [],
+            },
+            "errors": [],
+            "diagnostics": [],
+            "summary": {
+                "findings": 0,
+                "grayBoundaries": 1,
+                "errors": 0,
+                "bySeverity": {},
+            },
+        }
+        module = SimpleNamespace(SCANNER_ID=scanner_id, scan=lambda _root: result)
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            self.architecture,
+            "discover_scanners",
+            return_value=({scanner_id: Path(directory) / "scanner.py"}, []),
+        ), patch.object(
+            self.architecture,
+            "_load_scanner",
+            return_value=module,
+        ), patch.object(
+            self.architecture,
+            "RESULT_DIR",
+            Path(directory),
+        ):
+            permissive, _ = self.architecture.scanner_step(
+                scanner_id,
+                root=ROOT,
+                fail_on_gray=False,
+            )
+            strict, _ = self.architecture.scanner_step(
+                scanner_id,
+                root=ROOT,
+                fail_on_gray=True,
+            )
+        self.assertEqual(permissive["status"], "passed")
+        self.assertEqual(strict["status"], "failed")
+
+    def test_agent_profile_runs_architecture_without_gui_runtime(self):
+        with patch.object(
+            self.verify_full,
+            "run_step",
+            side_effect=lambda step_id, command, **_kwargs: {
+                "id": step_id,
+                "command": " ".join(command),
+                "status": "passed",
+                "required": True,
+                "durationMs": 0,
+                "evidence": "fixture",
+            },
+        ):
+            steps = self.verify_full._agent_steps()
+        architecture = next(
+            step for step in steps if step["id"] == "architecture_boundary_tests"
+        )
+        self.assertIn("--skip-python", architecture["command"])
+        self.assertIn("--fail-on-gray", architecture["command"])
+
+    def test_architecture_scanner_has_negative_boundary_fixtures(self):
+        fixtures = {
+            "mygui/widgets/figure_canvas/helper.py": (
+                "canvas.current_component_id = 'x'\naxes.set_position((0, 0, 1, 1))",
+                {"CORE-SELECTION-AUTHORITY", "CORE-AXES-GEOMETRY-OWNER"},
+            ),
+            "mygui/widgets/panel.py": (
+                "label.setStyleSheet('color: #fff')",
+                {"CORE-THEME-OWNER"},
+            ),
+            "mygui/figuremodify/services/example.py": (
+                "controller._state = state\n"
+                "controller._finalize_remove(handle)\n"
+                "controller._validate_replacement(state)",
+                {"CORE-COMPONENT-STATE"},
+            ),
+            "mygui/template_library/example.py": (
+                "from mygui.figuremodify.components.serialization import "
+                "normalize_v22_figure",
+                {"CORE-PERSISTENCE-V23"},
+            ),
+        }
+        for path, (source, expected) in fixtures.items():
+            with self.subTest(path=path):
+                findings = self.architecture_scanner._scan_tree(
+                    path,
+                    __import__("ast").parse(source),
+                )
+                self.assertEqual(
+                    {item["ruleId"] for item in findings},
+                    expected,
+                )
+
+    def test_errorbar_dialog_does_not_reintroduce_the_chart_dialog_cycle(self):
+        source = (
+            ROOT
+            / "mygui/widgets/title_bar/titlebar_dialog/py_errorbar_dialog.py"
+        ).read_text(encoding="utf-8")
+        imports = {
+            node.module
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+        }
+        self.assertFalse(any(
+            module is not None and module.endswith("py_chart_dialog")
+            for module in imports
+        ))
+
+    def test_current_runtime_paths_do_not_describe_predecessor_schema_as_current(self):
+        runtime_paths = (
+            ROOT / "README.md",
+            ROOT / "mygui/application_settings/__init__.py",
+            ROOT / "mygui/widgets/figure_canvas/py_figure_canves.py",
+            ROOT / "mygui/figuremodify/components/serialization.py",
+        )
+        for path in runtime_paths:
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn("current schema v17", text.lower())
+                self.assertNotIn("current schema-v17", text.lower())
+                self.assertNotIn("current schema v15", text.lower())
+                self.assertNotIn("current schema-v15", text.lower())
+        self.assertIn(
+            "schema v23",
+            (ROOT / "README.md").read_text(encoding="utf-8"),
+        )
 
     def test_agents_size_normalizes_line_endings_and_has_only_an_upper_bound(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -232,6 +417,17 @@ class AgentEngineeringTests(unittest.TestCase):
         self.assertGreaterEqual(
             self.verify_full.APPLICATION_BATCH_TIMEOUT_SECONDS,
             60,
+        )
+        self.assertEqual(self.verify_full.GLOBAL_COVERAGE_MIN, 80)
+        self.assertEqual(self.verify_full.CRITICAL_COVERAGE_MIN, 90)
+        self.assertEqual(self.verify_full.TRANSACTION_COVERAGE_MIN, 85)
+        self.assertIn(
+            "mygui/figuremodify/components/matplotlib_removal.py",
+            self.verify_full.TRANSACTION_CRITICAL_FILES,
+        )
+        self.assertIn(
+            "mygui/widgets/figure_canvas/deletion_coordinator.py",
+            self.verify_full.TRANSACTION_CRITICAL_FILES,
         )
 
     def test_application_discovery_returns_unique_exact_test_ids(self):

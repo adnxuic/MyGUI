@@ -247,6 +247,24 @@ class SecondaryAxisRuntimeTests(unittest.TestCase):
         owner.set_xlim(-3.0, 3.0)
         self.assertEqual(len(warnings), 2)
 
+    def test_parent_scale_transition_revalidates_before_draw(self):
+        owner = self.canvas.current_axes
+        owner.set_xlim(1.0, 100.0)
+        controller = self.add_secondary(object_id="scale-transition")
+        runtime = controller.resolve_target()
+        original_axis = runtime.axis
+
+        owner.set_xscale("log")
+        self.canvas.canva.draw()
+        self.assertTrue(runtime.domain_valid)
+        self.assertTrue(runtime.axis.get_visible())
+        self.assertIs(runtime.axis, original_axis)
+
+        owner.set_xscale("linear")
+        self.canvas.canva.draw()
+        self.assertTrue(runtime.domain_valid)
+        self.assertTrue(runtime.axis.get_visible())
+
     def test_failed_rebuild_removes_replacement_and_restores_original(self):
         controller = self.add_secondary()
         runtime = controller.resolve_target()

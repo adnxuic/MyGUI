@@ -230,7 +230,7 @@ class AxesCommandService:
             merged = deepcopy(state.properties)
             merged.update(patch)
             candidate = state.clone(properties=merged)
-            controller._validate_replacement(candidate)
+            controller.validate_candidate_state(candidate)
             axes = old.axes
             handles, labels = axes.get_legend_handles_labels()
             peer = getattr(axes, "_mygui_merged_legend_peer", None)

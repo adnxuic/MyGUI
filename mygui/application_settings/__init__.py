@@ -1,4 +1,4 @@
-"""Application-level preferences. Not ComponentState and not schema v17.
+"""Application-level preferences. Not ComponentState or project schema state.
 
 Public business API lives here. Dual-slot storage types
 (``DocumentLoadResult``, ``StorageCommitResult``, ``DocumentHealth``) stay in
@@ -149,7 +149,6 @@ from .runtime import (
 from .service import ApplicationSettingsService
 from .session import SettingsSession
 from .document import export_settings_to_patch
-from .export import bind_export_preferences_port
 from .workspace import bind_workspace_layout_port, commit_succeeded
 
 __all__ = [
@@ -279,7 +278,6 @@ __all__ = [
     "WorkspaceLayoutPayload",
     "WorkspaceLayoutPort",
     "WorkspaceSettings",
-    "bind_export_preferences_port",
     "bind_workspace_layout_port",
     "commit_succeeded",
     "export_settings_to_patch",

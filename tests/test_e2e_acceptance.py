@@ -411,7 +411,7 @@ class Tier1FeatureCoverageTests(_E2EBaseTestCase):
         initial_lw = line_controller.state.properties["linewidth"]
 
         # Selection authority check
-        canvas.current_component_id = "editable-line"
+        self.assertTrue(canvas.select_component("editable-line"))
         self.assertEqual(canvas.current_component_id, "editable-line")
 
         # Mutate properties through undoable editor_context
@@ -453,7 +453,7 @@ class Tier1FeatureCoverageTests(_E2EBaseTestCase):
         x_pts = np.linspace(-3.0, 3.0, 15)
         y_pts = 2.5 * x_pts**2 - 1.2 * x_pts + 0.8
 
-        sheet.set_block(0, 0, [[float(xi), float(yi)] for xi, yi in zip(x_pts, y_pts)])
+        sheet.set_block(0, 0, [[float(xi), float(yi)] for xi, yi in zip(x_pts, y_pts, strict=False)])
         x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
         y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
         valid_pair = self.window.repository.valid_pair(x_ref, y_ref)
@@ -577,7 +577,7 @@ class Tier2BoundaryAndCornerCaseTests(_E2EBaseTestCase):
         # Case D: Tabular data block (15 points)
         large_x = np.linspace(0, 10, 15)
         large_y = np.sin(large_x)
-        sheet.set_block(0, 0, [[float(xi), float(yi)] for xi, yi in zip(large_x, large_y)])
+        sheet.set_block(0, 0, [[float(xi), float(yi)] for xi, yi in zip(large_x, large_y, strict=False)])
         large_pair = self.window.repository.line_pair(x_ref, y_ref)
         self.assertEqual(len(large_pair.x), 15)
         self.assertAlmostEqual(large_pair.x[0], 0.0)
@@ -944,7 +944,7 @@ class Tier4RealWorldScenarioTests(_E2EBaseTestCase):
         peak3 = 300.0 * np.exp(-((two_theta - 56.12) / 1.5) ** 2)
         intensity = background + peak1 + peak2 + peak3
 
-        sheet.set_block(0, 0, [[float(t), float(y)] for t, y in zip(two_theta, intensity)])
+        sheet.set_block(0, 0, [[float(t), float(y)] for t, y in zip(two_theta, intensity, strict=False)])
         x_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[0].id)
         y_ref = ColumnRef(canvas.project_id, sheet.id, sheet.columns[1].id)
         pair = self.window.repository.line_pair(x_ref, y_ref)
@@ -1056,7 +1056,7 @@ class Tier4RealWorldScenarioTests(_E2EBaseTestCase):
         time_pts = np.linspace(0.0, 60.0, 15)
         k_rate = 0.05
         conc_pts = 100.0 * np.exp(-k_rate * time_pts)
-        sheet1.set_block(0, 0, [[float(t), float(c)] for t, c in zip(time_pts, conc_pts)])
+        sheet1.set_block(0, 0, [[float(t), float(c)] for t, c in zip(time_pts, conc_pts, strict=False)])
 
         # Sheet 2: Reaction Temperature
         sheet2_view = subtable.add_new_sheet("EnvironmentalSensors")
@@ -1064,7 +1064,7 @@ class Tier4RealWorldScenarioTests(_E2EBaseTestCase):
         sheet2.columns[0].name = "Time_min"
         sheet2.columns[1].name = "Temp_C"
         temp_pts = 25.0 + 5.0 * np.sin(time_pts / 10.0)
-        sheet2.set_block(0, 0, [[float(t), float(tp)] for t, tp in zip(time_pts, temp_pts)])
+        sheet2.set_block(0, 0, [[float(t), float(tp)] for t, tp in zip(time_pts, temp_pts, strict=False)])
 
         x_ref = ColumnRef(canvas.project_id, sheet1.id, sheet1.columns[0].id)
         y_ref = ColumnRef(canvas.project_id, sheet1.id, sheet1.columns[1].id)

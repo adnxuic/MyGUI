@@ -14,7 +14,8 @@ from typing import Any
 from mygui.database import ColumnRef, ColumnType, ProjectTableDocument, TableRepository, validate_component_name
 from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.components.serialization import (
-    normalize_v23_figure,
+    CURRENT_FIGURE_SCHEMA_VERSION,
+    normalize_current_figure,
     validate_v10_figure,
     validate_v11_figure,
     validate_v12_figure,
@@ -28,13 +29,13 @@ from mygui.figuremodify.components.serialization import (
     validate_v20_figure,
     validate_v21_figure,
     validate_v22_figure,
-    validate_v23_figure,
+    validate_current_figure,
 )
 from mygui.resource_limits import load_resource_limits, validate_json_budget
 
 
 PROJECT_SCHEMA_NAME = "mygui-project"
-PROJECT_SCHEMA_VERSION = 23
+PROJECT_SCHEMA_VERSION = CURRENT_FIGURE_SCHEMA_VERSION
 SCHEMA_V22_VERSION = 22
 SCHEMA_V21_VERSION = 21
 SCHEMA_V20_VERSION = 20
@@ -206,7 +207,7 @@ def validate_project_snapshot(snapshot: dict[str, Any]) -> None:
     _validate_project_snapshot_version(
         snapshot,
         version=PROJECT_SCHEMA_VERSION,
-        figure_validator=validate_v23_figure,
+        figure_validator=validate_current_figure,
     )
 
 
@@ -536,7 +537,7 @@ def project_snapshot(figure_window=None, *, canvas=None) -> dict[str, Any]:
     if canvas is None:
         raise ValueError("No current project canvas to save.")
     project = figure_window.repository.project(canvas.project_id)
-    figure = normalize_v23_figure(canvas.component_snapshot())
+    figure = normalize_current_figure(canvas.component_snapshot())
     snapshot = {
         "schema": PROJECT_SCHEMA_NAME,
         "schema_version": PROJECT_SCHEMA_VERSION,

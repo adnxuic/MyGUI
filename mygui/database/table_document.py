@@ -601,7 +601,7 @@ class SheetDocument:
         """Replace block."""
 
         if types is not None:
-            for column_id, column_type in zip(column_ids, types):
+            for column_id, column_type in zip(column_ids, types, strict=True):
                 schema = self.column(column_id)
                 schema.type = column_type
                 self.frame[column_id] = self.frame[column_id].astype(

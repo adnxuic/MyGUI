@@ -560,7 +560,7 @@ class ComponentInspectorTests(unittest.TestCase):
         inspectors = []
         try:
             for index, (controller, line) in enumerate(
-                zip(controllers, lines)
+                zip(controllers, lines, strict=False)
             ):
                 inspector = ComponentInspector(
                     controller,

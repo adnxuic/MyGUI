@@ -69,6 +69,17 @@ QLabel#export_hint_label
     color: {{COLOR_TEXT_MUTED}};
 }
 
+QLabel#axis_tick_index_hint
+{
+    color: {{COLOR_TEXT_MUTED}};
+    font-style: italic;
+}
+
+QLabel#axis_tick_preview_status
+{
+    color: {{COLOR_TEXT_DANGER}};
+}
+
 QLabel#import_summary_label[level="error"]
 {
     color: {{COLOR_TEXT_DANGER}};

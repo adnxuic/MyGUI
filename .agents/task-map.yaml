@@ -8,7 +8,7 @@ tasks:
       - .agents/architecture/persistence.md
       - .agents/architecture/deletion.md
     checks: [verify_fast, verify_component_contracts, verify_project_io, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_errorbar_component
       - tests.test_component_controllers
@@ -31,7 +31,7 @@ tasks:
       - .agents/architecture/inspector.md
       - .agents/architecture/persistence.md
     checks: [verify_fast, verify_component_contracts, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_errorbar_component
       - tests.test_component_controllers
@@ -51,7 +51,7 @@ tasks:
       - .agents/architecture/component-system.md
       - .agents/architecture/testing-map.md
     checks: [verify_fast, verify_component_contracts, verify_project_io, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_errorbar_component
       - tests.test_project_schema
@@ -76,7 +76,7 @@ tasks:
       - .agents/architecture/component-system.md
       - .agents/architecture/testing-map.md
     checks: [verify_fast, verify_project_io, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_errorbar_component
       - tests.test_project_io
@@ -95,7 +95,7 @@ tasks:
       - .agents/architecture/inspector.md
       - .agents/architecture/testing-map.md
     checks: [verify_fast, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_gui_layout
       - tests.test_component_tree
@@ -112,7 +112,7 @@ tasks:
       - .agents/architecture/persistence.md
       - .agents/architecture/deletion.md
     checks: [verify_agent_core, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_matplotlib_boundaries
       - tests.test_package_boundary
@@ -126,7 +126,7 @@ tasks:
       - .agents/architecture/ui-state-boundaries.md
       - .agents/architecture/testing-map.md
     checks: [verify_agent_core, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests: []
     documentation: []
     manual_smoke: false
@@ -134,7 +134,7 @@ tasks:
     skill: .agents/skills/fix-ci/SKILL.md
     architecture: [.agents/architecture/testing-map.md]
     checks: [verify_agent_core, verify_full]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests: []
     documentation: []
     manual_smoke: false
@@ -144,7 +144,7 @@ tasks:
       - .agents/architecture/application-settings.md
       - .agents/architecture/application-theme.md
     checks: [verify_fast, verify_application_settings, verify_architecture]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_application_settings_contracts
       - tests.test_application_settings_storage
@@ -184,7 +184,7 @@ tasks:
       - .agents/architecture/rule-evolution.md
       - .agents/architecture/testing-map.md
     checks: [verify_fast, verify_agent_core, verify_architecture, verify_full]
-    scanners: []
+    scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_agent_engineering
     documentation: []

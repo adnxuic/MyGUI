@@ -24,7 +24,7 @@ are one complete table: added, removed, or unclassified modules fail planning.
 Contract v3 plan/summary JSON records `maxWorkers`, `isolationMode`,
 `launchOrder`, batch durations, and completeness. Coverage still combines only
 after every batch is complete; do not move the full gate to nightly or lower
-the 74%/80% thresholds.
+the 80% global, 90% established-critical, or 85% transaction-critical thresholds.
 
 Run the originally failing check and its containing full profile. Report every
 required check as passed, failed, or not run; never mark completion from a

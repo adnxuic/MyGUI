@@ -341,7 +341,7 @@ class NewFigurePageTests(SettingsPagesCase):
         self.assertIn("text or Excel", copy_text)
         self.assertIn(NEW_FIGURE_PRECEDENCE.split(":")[0], copy_text)
         self.assertIn("explicit input", copy_text)
-        self.assertIn("schema v17", copy_text)
+        self.assertIn("schema-v23", copy_text)
         self.assertIn("do not overwrite", copy_text.lower())
         self.assertIn("built-in defaults", copy_text)
 

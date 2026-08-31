@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from matplotlib.axes import Axes
@@ -35,6 +36,14 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class ControllerRuntimeMemento:
+    """Opaque Controller-owned state for one short-lived runtime transaction."""
+
+    component_id: str
+    payload: Any
 
 
 def _values_equal(left: Any, right: Any) -> bool:
@@ -287,6 +296,38 @@ class ComponentController(Generic[T]):
                 if strict:
                     raise
         return self._state.clone(properties=properties)
+
+    def capture_runtime_memento(self) -> ControllerRuntimeMemento:
+        """Capture exact persistent/runtime state for cross-Service rollback."""
+
+        return ControllerRuntimeMemento(
+            self.component_id,
+            self._transaction_snapshot(),
+        )
+
+    def restore_runtime_memento(
+        self,
+        memento: ControllerRuntimeMemento,
+    ) -> None:
+        """Restore a memento without publishing an intermediate change."""
+
+        if not isinstance(memento, ControllerRuntimeMemento):
+            raise TypeError("Controller runtime memento is invalid.")
+        if memento.component_id != self.component_id:
+            raise ComponentValidationError(
+                "Controller runtime memento belongs to another component."
+            )
+        self._restore_transaction_snapshot(memento.payload)
+
+    def validate_candidate_state(self, state: ComponentState) -> None:
+        """Validate a complete replacement without mutating live state."""
+
+        self._validate_replacement(state)
+
+    def finalize_removal(self, handle: RemovalHandle) -> None:
+        """Finalize a previously committed removal after publication succeeds."""
+
+        self._finalize_remove(handle)
 
     def snapshot(self) -> ComponentState:
         """Return a serializable snapshot of the current state."""

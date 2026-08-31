@@ -178,7 +178,7 @@ def replace_coefficients(expression: str, coefficient_names, coefficient_values_
 
     result = expression
     pairs = sorted(
-        ((str(name), value) for name, value in zip(coefficient_names, coefficient_values_)),
+        ((str(name), value) for name, value in zip(coefficient_names, coefficient_values_, strict=True)),
         key=lambda item: len(item[0]),
         reverse=True,
     )

@@ -13,6 +13,10 @@ from matplotlib.text import Text
 
 from ..base import ComponentController
 from ..errors import ComponentValidationError
+from ..matplotlib_removal import (
+    MATPLOTLIB_REMOVAL,
+    ChildAxesRemovalHandle,
+)
 from ..models import (
     ComponentKind,
     ComponentRole,
@@ -107,10 +111,15 @@ def _font_from_text(text: Text, fallback: dict[str, Any]) -> dict[str, Any]:
 @dataclass(slots=True)
 class SecondaryAxisRemovalHandle:
     runtime: "SecondaryAxisRuntime"
-    target: Any
-    owner: list[Any]
-    index: int
-    detached: bool = False
+    matplotlib_handle: ChildAxesRemovalHandle
+
+    @property
+    def target(self) -> Axes:
+        return self.matplotlib_handle.target
+
+    @property
+    def detached(self) -> bool:
+        return self.matplotlib_handle.detached
 
     @property
     def subject(self) -> Axes:
@@ -272,32 +281,24 @@ class SecondaryAxisRuntime:
         old_axis.remove()
 
     def prepare_remove(self) -> SecondaryAxisRemovalHandle:
-        owner = self.parent_axes.child_axes
-        if self.axis not in owner:
-            raise ComponentValidationError("Secondary Axis is detached from its parent Axes.")
-        return SecondaryAxisRemovalHandle(self, self.axis, owner, owner.index(self.axis))
+        return SecondaryAxisRemovalHandle(
+            self,
+            MATPLOTLIB_REMOVAL.prepare_child_axes(
+                self.axis,
+                self.parent_axes,
+            ),
+        )
 
     def commit_remove(self, handle: SecondaryAxisRemovalHandle) -> None:
-        if handle.detached:
-            return
-        handle.owner.pop(handle.index)
-        handle.detached = True
+        MATPLOTLIB_REMOVAL.commit(handle.matplotlib_handle)
 
     def rollback_remove(self, handle: SecondaryAxisRemovalHandle) -> None:
-        if not handle.detached:
-            return
-        handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
-        handle.detached = False
+        MATPLOTLIB_REMOVAL.rollback(handle.matplotlib_handle)
 
     def finalize_remove(self, handle: SecondaryAxisRemovalHandle) -> None:
-        if not handle.detached:
-            return
-        handle.owner.insert(min(handle.index, len(handle.owner)), handle.target)
         try:
-            handle.target.remove()
+            MATPLOTLIB_REMOVAL.finalize(handle.matplotlib_handle)
         finally:
-            if handle.target in handle.owner:
-                handle.owner.remove(handle.target)
             self.dispose()
 
     def dispose(self) -> None:
@@ -627,24 +628,34 @@ class SecondaryAxisController(ComponentController[SecondaryAxisRuntime]):
         placement = runtime.placement
         first_side = placement["kind"] == "edge" and placement["side"] in {"bottom", "left"}
         if key.startswith("major_"):
-            stem = "tick" if key == "major_ticks_visible" else "label"
+            prefix = "" if key == "major_ticks_visible" else "label"
+            first, second = (
+                ("bottom", "top")
+                if self.orientation == "x"
+                else ("left", "right")
+            )
             secondary.tick_params(
                 axis=self.orientation,
                 which="major",
                 **{
-                    f"{stem}1On": bool(value) if first_side else False,
-                    f"{stem}2On": False if first_side else bool(value),
+                    f"{prefix}{first}": bool(value) if first_side else False,
+                    f"{prefix}{second}": False if first_side else bool(value),
                 },
             )
             return
         if key.startswith("minor_"):
-            stem = "tick" if key == "minor_ticks_visible" else "label"
+            prefix = "" if key == "minor_ticks_visible" else "label"
+            first, second = (
+                ("bottom", "top")
+                if self.orientation == "x"
+                else ("left", "right")
+            )
             secondary.tick_params(
                 axis=self.orientation,
                 which="minor",
                 **{
-                    f"{stem}1On": bool(value) if first_side else False,
-                    f"{stem}2On": False if first_side else bool(value),
+                    f"{prefix}{first}": bool(value) if first_side else False,
+                    f"{prefix}{second}": False if first_side else bool(value),
                 },
             )
             return

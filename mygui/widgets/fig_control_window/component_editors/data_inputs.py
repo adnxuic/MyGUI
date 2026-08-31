@@ -346,7 +346,7 @@ class ScatterMappingInput(QFrame):
         )
         for combo, selected in zip(
             (self.color_ref_input, self.size_ref_input),
-            current,
+            current, strict=True,
         ):
             blocker = QSignalBlocker(combo)
             combo.clear()
