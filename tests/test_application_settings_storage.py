@@ -196,6 +196,179 @@ class EnvelopeCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvelopeError, "sha256 mismatch"):
             codec.decode(broken, expected_schema=SCHEMA_APPLICATION_SETTINGS)
 
+    def test_encode_and_decode_reject_illegal_inputs_and_storage_shapes(self):
+        codec = EnvelopeCodec()
+        with self.assertRaisesRegex(EnvelopeError, "non-empty string"):
+            codec.encode(schema="", payload={"a": 1}, revision=1)
+        with self.assertRaisesRegex(EnvelopeError, "schema_version"):
+            codec.encode(
+                schema=SCHEMA_APPLICATION_SETTINGS,
+                payload={"a": 1},
+                revision=1,
+                schema_version=0,
+            )
+        with self.assertRaisesRegex(EnvelopeError, "payload must be a JSON object"):
+            codec.encode(
+                schema=SCHEMA_APPLICATION_SETTINGS,
+                payload=["not", "an", "object"],
+                revision=1,
+            )
+        with self.assertRaisesRegex(EnvelopeError, "payload is not JSON-serializable"):
+            codec.encode(
+                schema=SCHEMA_APPLICATION_SETTINGS,
+                payload={"bad": object()},
+                revision=1,
+            )
+        with self.assertRaisesRegex(EnvelopeError, "empty"):
+            codec.decode(None, expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        with self.assertRaisesRegex(EnvelopeError, "empty"):
+            codec.decode("", expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        with self.assertRaisesRegex(EnvelopeError, "not UTF-8"):
+            codec.decode(b"\xff\xfe", expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        with self.assertRaisesRegex(EnvelopeError, "not valid JSON"):
+            codec.decode("{", expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        with self.assertRaisesRegex(EnvelopeError, "duplicate JSON key"):
+            codec.decode(
+                '{"schema":"x","schema":"y"}',
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        with self.assertRaisesRegex(EnvelopeError, "JSON object"):
+            codec.decode("[]", expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        encoded = codec.encode(
+            schema=SCHEMA_APPLICATION_SETTINGS,
+            payload={"ok": True},
+            revision=1,
+        )
+        with self.assertRaisesRegex(EnvelopeError, "does not match"):
+            codec.decode(encoded, expected_schema=SCHEMA_COLOR_LIBRARY_SETTINGS)
+        decoded = codec.decode(bytearray(encoded.encode("utf-8")), expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        self.assertEqual(decoded.payload, {"ok": True})
+        self.assertFalse(decoded.is_future)
+        self.assertEqual(decoded.encoded_bytes, encoded.encode("utf-8"))
+
+        data = json.loads(encoded)
+        data["sha256"] = "zzzz" + ("a" * 60)
+        with self.assertRaisesRegex(EnvelopeError, "64-character hex"):
+            codec.decode(
+                json.dumps(data, sort_keys=True, separators=(",", ":")),
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        data["sha256"] = "ab" * 32
+        data["extra"] = True
+        body = {key: data[key] for key in data if key != "sha256"}
+        data["sha256"] = envelope_sha256(body)
+        with self.assertRaisesRegex(EnvelopeError, "unknown fields"):
+            codec.decode(
+                json.dumps(data, sort_keys=True, separators=(",", ":")),
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        data["schema_version"] = CURRENT_SCHEMA_VERSION + 1
+        body = {key: data[key] for key in data if key != "sha256"}
+        data["sha256"] = envelope_sha256(body)
+        future = codec.decode(
+            json.dumps(data, sort_keys=True, separators=(",", ":")),
+            expected_schema=SCHEMA_APPLICATION_SETTINGS,
+        )
+        self.assertTrue(future.is_future)
+
+        with self.assertRaisesRegex(EnvelopeError, "non-finite"):
+            codec.decode("Infinity", expected_schema=SCHEMA_APPLICATION_SETTINGS)
+        with self.assertRaisesRegex(EnvelopeError, "must be an integer"):
+            codec.encode(
+                schema=SCHEMA_APPLICATION_SETTINGS,
+                payload={"a": 1},
+                revision=True,
+            )
+        encoded = codec.encode(
+            schema=SCHEMA_APPLICATION_SETTINGS,
+            payload={"ok": True},
+            revision=1,
+        )
+        parsed = json.loads(encoded)
+        parsed["schema_version"] = 0
+        body = {key: parsed[key] for key in parsed if key != "sha256"}
+        parsed["sha256"] = envelope_sha256(body)
+        with self.assertRaisesRegex(EnvelopeError, "schema_version must be >= 1"):
+            codec.decode(
+                json.dumps(parsed, sort_keys=True, separators=(",", ":")),
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        parsed = json.loads(encoded)
+        parsed["revision"] = MAX_REVISION + 1
+        body = {key: parsed[key] for key in parsed if key != "sha256"}
+        parsed["sha256"] = envelope_sha256(body)
+        with self.assertRaisesRegex(EnvelopeError, "revision must be in"):
+            codec.decode(
+                json.dumps(parsed, sort_keys=True, separators=(",", ":")),
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        parsed = json.loads(encoded)
+        parsed["payload"] = []
+        body = {key: parsed[key] for key in parsed if key != "sha256"}
+        parsed["sha256"] = envelope_sha256(body)
+        with self.assertRaisesRegex(EnvelopeError, "payload must be a JSON object"):
+            codec.decode(
+                json.dumps(parsed, sort_keys=True, separators=(",", ":")),
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        parsed = json.loads(encoded)
+        parsed["sha256"] = 12
+        with self.assertRaisesRegex(EnvelopeError, "64-character hex"):
+            codec.decode(
+                json.dumps(parsed, sort_keys=True, separators=(",", ":")),
+                expected_schema=SCHEMA_APPLICATION_SETTINGS,
+            )
+        with patch(
+            "mygui.application_settings.storage.envelope.MAX_ENVELOPE_BYTES",
+            8,
+        ):
+            with self.assertRaisesRegex(EnvelopeError, "1 MiB"):
+                codec.decode(encoded, expected_schema=SCHEMA_APPLICATION_SETTINGS)
+
+        class _AsBytes:
+            def __bytes__(self):
+                return encoded.encode("utf-8")
+
+        decoded_bytes_obj = codec.decode(
+            _AsBytes(),
+            expected_schema=SCHEMA_APPLICATION_SETTINGS,
+        )
+        self.assertEqual(decoded_bytes_obj.payload, {"ok": True})
+
+        class _AsText:
+            def __bytes__(self):
+                raise TypeError("no bytes")
+
+            def __str__(self):
+                return encoded
+
+        decoded_text_obj = codec.decode(
+            _AsText(),
+            expected_schema=SCHEMA_APPLICATION_SETTINGS,
+        )
+        self.assertEqual(decoded_text_obj.payload, {"ok": True})
+
+        class _BadUtf8:
+            def __bytes__(self):
+                return b"\xff\xfe"
+
+        with self.assertRaisesRegex(EnvelopeError, "not UTF-8"):
+            codec.decode(_BadUtf8(), expected_schema=SCHEMA_APPLICATION_SETTINGS)
+
+        class _EmptyBoth:
+            def __bytes__(self):
+                return b""
+
+            def __str__(self):
+                return ""
+
+        with self.assertRaisesRegex(EnvelopeError, "empty"):
+            codec.decode(_EmptyBoth(), expected_schema=SCHEMA_APPLICATION_SETTINGS)
+
+    def test_canonical_json_rejects_non_serializable_values(self):
+        with self.assertRaises(EnvelopeError):
+            canonical_json_bytes({"x": {1, 2}})
+
 
 class DualSlotStorageTests(unittest.TestCase):
     @classmethod

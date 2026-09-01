@@ -2625,6 +2625,8 @@ class PyFigureCanvas(QWidget):
             except ValueError:
                 status_messages.show_error("Saved fit expression could not be restored; showing source data.")
                 expression = ""
+                line_x = x_array
+                line_y = y_array
 
         plot_kwargs, resolved_color, commit_selection, preview_cycle = (
             self._user_line_plot_plan(

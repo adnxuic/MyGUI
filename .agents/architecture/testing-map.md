@@ -25,11 +25,15 @@ subprocesses through their current `sys.executable`. Qt tests run with
 
 `verify_fast` runs compileall, Ruff, and the route's focused modules.
 `verify_full --profile application` runs the complete suite once under branch
-coverage with a one-hour subprocess budget, then applies global 80%, established
-critical-file 90%, and transaction-critical 85% reports. The transaction set
-is `registry`, `serialization`, `matplotlib_removal`, `DeletionCoordinator`,
+coverage with a one-hour subprocess budget, writes coverage JSON, then compares
+each required file against its floor. Global coverage remains 80%. Each
+established critical file must reach 90%, and each transaction-critical file
+must reach 85%; a high group total cannot hide one weak file. The transaction
+set is `registry`, `serialization`, `matplotlib_removal`, `DeletionCoordinator`,
 template transformation, and Secondary Axis runtime; its next hardening target
-is 90% without lowering another gate. A discovery subprocess collects exact unittest IDs;
+is 90% without lowering another gate. Summary `coverage report` output is kept
+for humans. Additional per-file floors cover the Figure toolbar (90%), Settings
+envelope (85%), and template application/storage (80%). A discovery subprocess collects exact unittest IDs;
 empty, failed, or duplicate collections reject the run.
 
 All application batches share one process pool. GUI-sensitive modules keep

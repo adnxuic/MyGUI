@@ -2,7 +2,7 @@
 
 ## Project and component state
 
-- Project files save exact integer schema v22. Strict v10-v21 inputs migrate
+- Project files save exact integer schema v23. Strict v10-v22 inputs migrate
   through every intervening version in memory. Versions v4-v9 remain
   unsupported.
 - The Components tree does not provide drag reparenting or ordering, inline

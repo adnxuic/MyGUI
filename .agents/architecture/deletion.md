@@ -3,9 +3,6 @@
 `CORE-DELETION-COORDINATOR` requires every production component deletion to
 enter through `DeletionCoordinator` with a `DeletionRequest`.
 
-`CORE-DELETION-COORDINATOR` requires every production component deletion to
-enter through `DeletionCoordinator` with a `DeletionRequest`.
-
 Use this page whenever an operation removes, hides, cascades, or restores a
 Figure component or Axes.
 

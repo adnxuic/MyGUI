@@ -17,6 +17,8 @@ from mygui.figuremodify.component_services import (
     InterpolationService,
 )
 from mygui.figuremodify.components import (
+    ChangeStatus,
+    ComponentChange,
     ComponentEventKind,
     ComponentKind,
     ComponentMutation,
@@ -509,6 +511,319 @@ class ComponentServiceTests(unittest.TestCase):
             [change.component_id for change in deleted],
             [axes.component_id],
         )
+
+    def test_delete_transaction_reports_prepare_cycle_and_replacement_errors(self):
+        first_line, = self.axes.plot([0, 1], [1, 2])
+        second_line, = self.axes.plot([0, 1], [2, 3])
+        leaf_line, = self.axes.plot([0, 1], [3, 4])
+        first = self._line_controller(
+            "cycle-a",
+            ComponentRole.DATA_PLOT,
+            first_line,
+        )
+        second = self._line_controller(
+            "cycle-b",
+            ComponentRole.DATA_PLOT,
+            second_line,
+        )
+        leaf = self._line_controller(
+            "cycle-leaf",
+            ComponentRole.DATA_PLOT,
+            leaf_line,
+        )
+        first._state = first.state.clone(parent_id=second.component_id)
+        second._state = second.state.clone(parent_id=first.component_id)
+        leaf._state = leaf.state.clone(parent_id=first.component_id)
+        result = self.registry.delete_transaction((leaf.component_id,))
+        self.assertFalse(result.ok)
+        self.assertIn("cycle", result.message.casefold())
+
+        line, = self.axes.plot([0, 1], [4, 5])
+        controller = self._line_controller(
+            "collect-cycle",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        self.registry._children[controller.component_id].add(controller.component_id)
+        result = self.registry.delete_transaction((controller.component_id,))
+        self.assertFalse(result.ok)
+        self.registry._children[controller.component_id].discard(
+            controller.component_id
+        )
+
+        result = self.registry.delete_transaction(
+            (),
+            state_replacements=("not-a-state",),
+        )
+        self.assertFalse(result.ok)
+        self.assertIn("ComponentState", result.message)
+
+        survivor = self._line_controller(
+            "survivor",
+            ComponentRole.DATA_PLOT,
+            self.axes.plot([0, 1], [5, 6])[0],
+        )
+        result = self.registry.delete_transaction(
+            (),
+            state_replacements=(survivor.state, survivor.state.clone()),
+        )
+        self.assertFalse(result.ok)
+        self.assertIn("Duplicate", result.message)
+
+        doomed = self._line_controller(
+            "doomed",
+            ComponentRole.DATA_PLOT,
+            self.axes.plot([0, 1], [6, 7])[0],
+        )
+        result = self.registry.delete_transaction(
+            (doomed.component_id,),
+            state_replacements=(doomed.state.clone(),),
+        )
+        self.assertFalse(result.ok)
+        self.assertIn("replace removed", result.message.casefold())
+
+    def test_delete_transaction_force_restores_artist_state_and_locator(self):
+        from mygui.figuremodify.components.matplotlib_removal import (
+            MATPLOTLIB_REMOVAL,
+        )
+
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "force-restore",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        self.registry.locator.bind(controller.component_id, line)
+
+        def fail_rollback(_handle):
+            raise RuntimeError("synthetic artist rollback failure")
+
+        with patch.object(controller, "rollback_remove", fail_rollback):
+            with patch.object(
+                MATPLOTLIB_REMOVAL,
+                "force_restore",
+                side_effect=RuntimeError("synthetic force restore failure"),
+            ):
+                result = self.registry.delete_transaction(
+                    (controller.component_id,),
+                    verifier=lambda: (_ for _ in ()).throw(
+                        RuntimeError("synthetic verifier failure")
+                    ),
+                )
+        self.assertFalse(result.ok)
+        self.assertFalse(result.rollback_complete)
+        self.assertIn("forced artist restoration failed", result.message)
+
+        line, = self.axes.plot([0, 1], [2, 3])
+        controller = self._line_controller(
+            "force-state",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+
+        def fail_state_restore(_snapshot):
+            raise RuntimeError("synthetic state rollback failure")
+
+        with patch.object(
+            controller,
+            "_restore_transaction_snapshot",
+            fail_state_restore,
+        ):
+            with patch.object(
+                type(controller),
+                "_restore_transaction_snapshot",
+                side_effect=RuntimeError("synthetic forced state failure"),
+            ):
+                result = self.registry.delete_transaction(
+                    (),
+                    state_replacements=(controller.state.clone(),),
+                    verifier=lambda: (_ for _ in ()).throw(
+                        RuntimeError("synthetic verifier failure")
+                    ),
+                )
+        self.assertFalse(result.ok)
+        self.assertIn("forced state restoration failed", result.message)
+
+        line, = self.axes.plot([0, 1], [3, 4])
+        controller = self._line_controller(
+            "force-locator",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        self.registry.locator.bind(controller.component_id, line)
+        original_unbind = self.registry.locator.unbind
+
+        def unbind_then_fail(component_id):
+            original_unbind(component_id)
+            raise RuntimeError("synthetic unbind failure")
+
+        with patch.object(self.registry.locator, "unbind", unbind_then_fail):
+            with patch.object(
+                self.registry.locator,
+                "bind",
+                side_effect=RuntimeError("synthetic bind failure"),
+            ):
+                result = self.registry.delete_transaction(
+                    (controller.component_id,),
+                )
+        self.assertFalse(result.ok)
+        self.assertIn("Locator rollback failed", result.message)
+        self.assertIs(self.registry.get(controller.component_id), controller)
+
+    def test_delete_transaction_observer_failure_does_not_block_commit(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "observer-delete",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        failures = []
+        self.registry.set_observer_failure_handler(failures.extend)
+
+        def broken_observer(_event):
+            raise RuntimeError("injected delete observer failure")
+
+        self.registry.subscribe(broken_observer)
+        result = self.registry.delete_transaction((controller.component_id,))
+        self.assertTrue(result.ok)
+        self.assertNotIn(controller.component_id, self.registry)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("broken_observer", failures[0].source)
+
+    def test_delete_transaction_replacement_apply_failure_rolls_back(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "replace-fail",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        replacement = controller.state.clone(
+            properties={**controller.state.properties, "color": "#ff0000"}
+        )
+        with patch.object(
+            controller,
+            "apply_state",
+            side_effect=RuntimeError("synthetic replacement failure"),
+        ):
+            result = self.registry.delete_transaction(
+                (),
+                state_replacements=(replacement,),
+            )
+        self.assertFalse(result.ok)
+        self.assertIs(self.registry.get(controller.component_id), controller)
+
+    def test_delete_transaction_rejected_replacement_shared_child_and_finalize(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "replace-rejected",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        replacement = controller.state.clone(
+            properties={**controller.state.properties, "color": "#00ff00"}
+        )
+
+        def reject_state(_state):
+            return ComponentChange(
+                controller.component_id,
+                None,
+                controller.state,
+                replacement,
+                ChangeStatus.REJECTED,
+                message="replacement rejected",
+            )
+
+        with patch.object(controller, "apply_state", reject_state):
+            result = self.registry.delete_transaction(
+                (),
+                state_replacements=(replacement,),
+            )
+        self.assertFalse(result.ok)
+        self.assertIn("replacement rejected", result.message)
+
+        first_line, = self.axes.plot([0, 1], [2, 3])
+        second_line, = self.axes.plot([0, 1], [3, 4])
+        shared_line, = self.axes.plot([0, 1], [4, 5])
+        first = self._line_controller("share-a", ComponentRole.DATA_PLOT, first_line)
+        second = self._line_controller("share-b", ComponentRole.DATA_PLOT, second_line)
+        shared = self._line_controller("share-child", ComponentRole.DATA_PLOT, shared_line)
+        self.registry._children[first.component_id].add(shared.component_id)
+        self.registry._children[second.component_id].add(shared.component_id)
+        shared._state = shared.state.clone(parent_id=first.component_id)
+        result = self.registry.delete_transaction(
+            (first.component_id, second.component_id)
+        )
+        self.assertTrue(result.ok)
+        self.assertNotIn(shared.component_id, self.registry)
+
+        line, = self.axes.plot([0, 1], [5, 6])
+        controller = self._line_controller(
+            "finalize-warning",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        with patch.object(
+            controller,
+            "_finalize_remove",
+            side_effect=RuntimeError("synthetic finalize failure"),
+        ):
+            result = self.registry.delete_transaction((controller.component_id,))
+        self.assertTrue(result.ok)
+        self.assertTrue(
+            any("Matplotlib cleanup" in notice.message for notice in result.notices)
+        )
+
+        production = register_figure_components(self.figure)
+        axes_controller = next(
+            item
+            for item in production
+            if item.state.kind is ComponentKind.AXES
+        )
+        extra, = self.axes.plot([0, 1], [6, 7])
+        extra_controller = DataPlotController(
+            ComponentState(
+                id="axes-replace-line",
+                kind=ComponentKind.LINE,
+                role=ComponentRole.DATA_PLOT,
+                parent_id=axes_controller.component_id,
+                order=len(production),
+                selector={"object_id": "axes-replace-line"},
+                properties={"label": "axes-replace-line"},
+                data={
+                    "x_ref": self.x_ref.to_dict(),
+                    "y_ref": self.y_ref.to_dict(),
+                    "preprocess": DataPreprocessSpec().to_dict(),
+                },
+            )
+        )
+        production.register(extra_controller, target=extra)
+        result = production.delete_transaction(
+            (extra_controller.component_id,),
+            state_replacements=(axes_controller.state.clone(),),
+        )
+        self.assertTrue(result.ok)
+
+    def test_cleanup_and_listener_unsubscribe_are_idempotent(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "cleanup",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+        with self.assertRaises(TypeError):
+            self.registry.add_cleanup_callback(controller.component_id, "nope")
+        unsubscribe = self.registry.add_cleanup_callback(
+            controller.component_id,
+            lambda _state: None,
+        )
+        unsubscribe()
+        unsubscribe()
+        listener = self.registry.add_remove_listener(lambda _state: None)
+        listener()
+        listener()
+        subscriber = self.registry.subscribe(lambda _event: None)
+        subscriber()
+        subscriber()
 
     def test_empty_axes_can_select_palette_for_future_charts(self):
         registry = register_figure_components(self.figure)

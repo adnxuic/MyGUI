@@ -243,6 +243,11 @@ class AgentEngineeringTests(unittest.TestCase):
             "schema v23",
             (ROOT / "README.md").read_text(encoding="utf-8"),
         )
+        limitations = (ROOT / "codex_handoff" / "current-limitations.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("schema v23", limitations.lower())
+        self.assertNotIn("save exact integer schema v22", limitations.lower())
 
     def test_agents_size_normalizes_line_endings_and_has_only_an_upper_bound(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -429,6 +434,116 @@ class AgentEngineeringTests(unittest.TestCase):
             "mygui/widgets/figure_canvas/deletion_coordinator.py",
             self.verify_full.TRANSACTION_CRITICAL_FILES,
         )
+        self.assertEqual(
+            self.verify_full.ADDITIONAL_FILE_COVERAGE_MIN[
+                "mygui/widgets/figure_canvas/canvas_toolbar.py"
+            ],
+            90,
+        )
+        self.assertEqual(
+            self.verify_full.ADDITIONAL_FILE_COVERAGE_MIN[
+                "mygui/application_settings/storage/envelope.py"
+            ],
+            85,
+        )
+
+    def _synthetic_coverage_files(self, percents: dict[str, float]) -> dict:
+        files = {}
+        for path, percent in percents.items():
+            files[path] = {
+                "summary": {
+                    "percent_covered": percent,
+                    "num_statements": 100,
+                    "covered_lines": int(percent),
+                }
+            }
+        return {"files": files, "totals": {"percent_covered": 91.0}}
+
+    def test_file_coverage_thresholds_reject_one_weak_file_when_totals_pass(self):
+        required = self.verify_full.file_coverage_thresholds()
+        percents = {path: 100.0 for path in required}
+        weak = "mygui/widgets/figure_canvas/py_figure_canves.py"
+        percents[weak] = 89.0
+        ok, evidence = self.verify_full.evaluate_file_coverage_thresholds(
+            self._synthetic_coverage_files(percents)
+        )
+        self.assertFalse(ok)
+        self.assertIn(weak, evidence)
+        self.assertIn("89.00% < 90%", evidence)
+
+    def test_file_coverage_thresholds_pass_when_every_required_file_meets_floor(self):
+        required = self.verify_full.file_coverage_thresholds()
+        percents = {path: float(minimum) for path, minimum in required.items()}
+        ok, evidence = self.verify_full.evaluate_file_coverage_thresholds(
+            self._synthetic_coverage_files(percents)
+        )
+        self.assertTrue(ok)
+        self.assertNotIn("Per-file coverage failures", evidence)
+
+    def test_file_coverage_thresholds_reject_missing_required_file(self):
+        required = self.verify_full.file_coverage_thresholds()
+        percents = {path: 100.0 for path in required}
+        percents.pop("mygui/figuremodify/components/registry.py")
+        ok, evidence = self.verify_full.evaluate_file_coverage_thresholds(
+            self._synthetic_coverage_files(percents)
+        )
+        self.assertFalse(ok)
+        self.assertIn("registry.py: missing from coverage JSON", evidence)
+
+    def test_file_coverage_thresholds_match_windows_and_absolute_json_keys(self):
+        required = self.verify_full.file_coverage_thresholds()
+        files = {}
+        for path, minimum in required.items():
+            windows_key = path.replace("/", "\\")
+            files[windows_key] = {
+                "summary": {"percent_covered": float(minimum)}
+            }
+        absolute = str(ROOT / "mygui" / "project_io.py")
+        files[absolute] = {"summary": {"percent_covered": 90.0}}
+        ok, _evidence = self.verify_full.evaluate_file_coverage_thresholds(
+            {"files": files}
+        )
+        self.assertTrue(ok)
+
+    def test_coverage_json_is_evaluated_before_summary_reports(self):
+        source = (
+            ROOT / ".agents" / "checks" / "verify_full.py"
+        ).read_text(encoding="utf-8")
+        complete_block = source.split("if coverage_complete:", 1)[1]
+        json_call = complete_block.index('"-m", "coverage", "json"')
+        threshold_call = complete_block.index("_file_coverage_threshold_step")
+        global_report = complete_block.index('"coverage_global"')
+        self.assertLess(json_call, threshold_call)
+        self.assertLess(threshold_call, global_report)
+
+    def test_current_limitations_describe_schema_v23(self):
+        text = (ROOT / "codex_handoff" / "current-limitations.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(text, r"save exact integer schema v23")
+        self.assertNotRegex(text, r"save exact integer schema v22")
+
+    def test_architecture_catalog_source_anchors_survive_duplicate_prose_removal(self):
+        catalog = self.runner.load_yaml(ROOT / ".agents" / "rule-catalog.yaml")
+        catalog_ids = {
+            entry["id"] for entry in catalog["rules"]
+            if entry["id"].startswith("CORE-")
+        }
+        mentioned = set()
+        for entry in catalog["rules"]:
+            source_ref = entry["source"]
+            source, _separator, anchor = source_ref.partition("#")
+            source_text = (ROOT / source).read_text(encoding="utf-8")
+            self.assertIn(
+                anchor,
+                self.agent_core._markdown_anchors(source_text),
+                msg=f"{entry['id']} missing #{anchor}",
+            )
+            self.assertIn(entry["id"], source_text)
+            mentioned.update(
+                self.agent_core.CORE_RULE_PATTERN.findall(source_text)
+            )
+        self.assertTrue(catalog_ids <= mentioned)
 
     def test_application_discovery_returns_unique_exact_test_ids(self):
         test_ids = self.coverage_batch.collect_test_ids()

@@ -15,6 +15,7 @@ from mygui.figuremodify.components import (
     ComponentKind,
     ComponentRole,
     ComponentState,
+    ObserverFailure,
     TickLabelGroupController,
 )
 from mygui.tex_config import TexRuntimeChange, TexRuntimeState
@@ -385,6 +386,254 @@ class PyFigureCanvasBranchTests(unittest.TestCase):
         self.canvas.current_axes_component_id = None
         self.canvas._repair_component_selection()
         self.assertEqual(self.canvas.current_component_id, self.canvas.root_component_id)
+
+    def test_component_snapshot_falls_back_to_cached_state(self):
+        create_regular_axes(self.canvas)
+        controller = next(iter(self.canvas.component_registry.query()))
+        with mock.patch.object(
+            controller,
+            "read_state",
+            side_effect=RuntimeError("synthetic snapshot read failure"),
+        ):
+            snapshot = self.canvas.component_snapshot()
+        self.assertEqual(snapshot["root_component_id"], self.canvas.root_component_id)
+        self.assertTrue(snapshot["components"])
+
+    def test_add_component_line_and_curve_publish_color_commit(self):
+        create_regular_axes(self.canvas)
+        restored = self.canvas.add_component_line(
+            [0, 1],
+            [0, 1],
+            "-",
+            "black",
+            "Restored line",
+        )
+        self.assertIsNotNone(restored)
+        curve = self.canvas.add_curve("x", 0.0, 1.0, "-", "red", "Curve")
+        self.assertIsNotNone(curve)
+        self.canvas.current_axes_component_id = None
+        with self.assertRaisesRegex(ValueError, "Select an axes"):
+            self.canvas.add_in_axes(object())
+
+    def test_constructor_selection_and_deletion_fallback_error_branches(self):
+        from mygui.figuremodify.component_services import DeletionRequest
+        from mygui.widgets.figure_canvas.py_figure_canves import PyFigureCanvas
+
+        with self.assertRaisesRegex(ValueError, "repository and project id"):
+            PyFigureCanvas()
+        with self.assertRaisesRegex(ValueError, "project metadata"):
+            PyFigureCanvas(
+                repository=self.window.repository,
+                project_id=self.project_id,
+            )
+        with self.assertRaisesRegex(ValueError, "ColorLibrary"):
+            PyFigureCanvas(
+                repository=self.window.repository,
+                project_id=self.project_id,
+                project_metadata=self.canvas.project_metadata,
+            )
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            self.canvas.commit_prepared_selection(
+                "missing-component",
+                axes_component_id=None,
+            )
+        was_disposed = self.canvas._disposed
+        self.canvas._disposed = True
+        self.canvas.dispose()
+        self.canvas._disposed = was_disposed
+        create_regular_axes(self.canvas)
+        with self.assertRaisesRegex(ValueError, "Axes selection"):
+            self.canvas.commit_prepared_selection(
+                self.canvas.root_component_id,
+                axes_component_id="missing-axes",
+            )
+        self.assertFalse(self.canvas.select_component("missing-component"))
+        previous = self.canvas.current_component_id
+        with mock.patch.object(
+            self.canvas.figure_inspector,
+            "show_component",
+            return_value=False,
+        ):
+            self.assertFalse(
+                self.canvas.select_component(self.canvas.root_component_id)
+            )
+        self.assertEqual(self.canvas.current_component_id, previous)
+
+        returned = SimpleNamespace(canvas_returned=True)
+        self.canvas._restore_canvas_from_popout(returned)
+        unknown = mock.Mock()
+        unknown.canvas_returned = False
+        unknown.release_content.return_value = object()
+        with self.assertRaisesRegex(RuntimeError, "unknown content"):
+            self.canvas._restore_canvas_from_popout(unknown)
+        focus_window = mock.Mock()
+        focus_window.canvas_returned = False
+        focus_window.release_content.return_value = None
+        focus_target = mock.Mock()
+        focus_target.setFocus.side_effect = RuntimeError("widget gone")
+        self.canvas._canvas_popout_window = focus_window
+        self.canvas._canvas_focus_return = focus_target
+        self.canvas._restore_canvas_from_popout(focus_window)
+        self.assertIsNone(self.canvas._canvas_popout_window)
+        self.assertIsNone(self.canvas._canvas_focus_return)
+
+        had_draw_pending = hasattr(self.canvas.canva, "_draw_pending")
+        if had_draw_pending:
+            delattr(self.canvas.canva, "_draw_pending")
+        self.canvas.cancel_pending_draw()
+        if had_draw_pending:
+            self.canvas.canva._draw_pending = False
+
+        failure = ObserverFailure(
+            "registry",
+            "publish",
+            RuntimeError("observer boom"),
+            "cid",
+        )
+        self.canvas._queue_observer_failures((failure,))
+        self.canvas._queue_observer_failures((failure,))
+        self.canvas._flush_observer_failures()
+        self.canvas._flush_observer_failures()
+        self.canvas._observer_failures.append(failure)
+        self.canvas._disposed = True
+        self.canvas._flush_observer_failures()
+        self.canvas._disposed = False
+        self.canvas._observer_failures.clear()
+        self.canvas._focus_annotation_editor("missing-annotation")
+        with self.assertRaises(TypeError):
+            self.canvas.export_figure(object())
+
+        first = self.canvas.add_curve("x", 0.0, 1.0, "-", "red", "one")
+        second = self.canvas.add_curve("x", 0.0, 1.0, "-", "blue", "two")
+        del first, second
+        curve_ids = [
+            controller.component_id
+            for controller in self.canvas.component_registry.query()
+            if controller.state.role is ComponentRole.FUNCTION_CURVE
+        ]
+        first_id, second_id = curve_ids[0], curve_ids[1]
+        coordinator = self.canvas.deletion_coordinator
+        self.canvas._current_component_id = None
+        fallback = coordinator._fallback_id(
+            DeletionRequest((first_id,)),
+            {first_id},
+        )
+        self.assertTrue(fallback)
+        self.assertFalse(
+            coordinator.delete(
+                DeletionRequest((first_id,)),
+                fallback_id=first_id,
+                present_result=False,
+            )
+        )
+        self.assertIsNotNone(coordinator.last_outcome)
+        self.assertIn("unavailable", coordinator.last_outcome.message)
+        self.assertIn(first_id, self.canvas.component_registry)
+        self.assertIn(second_id, self.canvas.component_registry)
+
+        def fail_then_restore(component_id):
+            if component_id == self.canvas.root_component_id:
+                raise RuntimeError("show failed")
+            raise RuntimeError("restore failed")
+
+        self.canvas.select_component(first_id)
+        with mock.patch.object(
+            self.canvas.figure_inspector,
+            "show_component",
+            side_effect=fail_then_restore,
+        ):
+            self.assertFalse(
+                self.canvas.select_component(self.canvas.root_component_id)
+            )
+
+        with mock.patch.object(
+            self.canvas.figure_inspector,
+            "show_component",
+            return_value=False,
+        ):
+            self.assertFalse(
+                coordinator.delete(
+                    DeletionRequest((second_id,)),
+                    fallback_id=self.canvas.root_component_id,
+                    present_result=False,
+                )
+            )
+        self.assertIn(second_id, self.canvas.component_registry)
+
+        with mock.patch.object(
+            self.canvas.figure_inspector,
+            "restore_component_inspector",
+            side_effect=RuntimeError("restore handle failed"),
+        ), mock.patch(
+            "mygui.figuremodify.services.deletion.PreparedDeletion.execute",
+            side_effect=RuntimeError("execute exploded"),
+        ):
+            self.assertFalse(
+                coordinator.delete(
+                    DeletionRequest((second_id,)),
+                    fallback_id=self.canvas.root_component_id,
+                    present_result=False,
+                )
+            )
+        self.assertIn("unexpectedly", coordinator.last_outcome.message)
+        self.assertIn(second_id, self.canvas.component_registry)
+
+        _sheet, num_col_1, _text_col, _date_col, num_col_2 = self._setup_sheet_columns()
+        with self.assertRaisesRegex(ValueError, "Unsupported fitting engine"):
+            self.canvas.add_fit_curve(
+                [0.0, 1.0],
+                [0.0, 1.0],
+                "red",
+                "fit",
+                num_col_1,
+                num_col_2,
+                engine="not-an-engine",
+            )
+        restored = self.canvas.add_fit_curve(
+            [0.0, 1.0],
+            [0.0, 1.0],
+            "red",
+            "fit",
+            num_col_1,
+            num_col_2,
+            engine="Python",
+            expression="this is not a valid fit expression !!!",
+            x_start=0.0,
+            x_stop=1.0,
+        )
+        self.assertIsNotNone(restored)
+        self.assertIsNone(
+            self.canvas.add_interpolate_curve(
+                [0.0],
+                [0.0],
+                num_col_1,
+                num_col_2,
+                method="not-a-method",
+            )
+        )
+
+        axes_id = self.canvas.current_axes_component_id
+        with mock.patch.object(
+            self.canvas.figure_inspector,
+            "finalize_axes_inspector_removal",
+            side_effect=RuntimeError("axes finalize boom"),
+        ), mock.patch.object(
+            self.canvas.figure_inspector,
+            "finalize_component_inspector_removal",
+            side_effect=RuntimeError("component finalize boom"),
+        ), mock.patch.object(
+            self.canvas.axes_layout_service,
+            "restore_runtime_relationships",
+            side_effect=RuntimeError("layout refresh boom"),
+        ):
+            self.assertTrue(
+                coordinator.delete(
+                    DeletionRequest((axes_id,)),
+                    role_label="axes",
+                    present_result=False,
+                )
+            )
+        self.assertTrue(coordinator.last_outcome.notices)
 
 
 if __name__ == "__main__":

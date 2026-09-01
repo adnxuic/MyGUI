@@ -391,6 +391,142 @@ class TemplateFeatureTests(unittest.TestCase):
             )
         self.assertEqual(set(self.window.repository.projects), before)
 
+    def test_extract_and_library_reject_illegal_input_and_storage_failures(self):
+        extractor = TemplateExtractor(self.window.repository)
+        with self.assertRaisesRegex(ValueError, "Select a Figure"):
+            extractor.extract(None, name="Missing")
+        with self.assertRaisesRegex(ValueError, "UUID"):
+            self.library.path_for("not-a-uuid")
+        template = self.template()
+        mismatched = (
+            self.library.root
+            / "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.mygui-template.json"
+        )
+        self.library.root.mkdir(parents=True, exist_ok=True)
+        mismatched.write_text(
+            json.dumps(template_to_dict(template)),
+            encoding="utf-8",
+        )
+        entries = self.library.entries()
+        self.assertTrue(any(not entry.valid for entry in entries))
+        with mock.patch(
+            "mygui.template_library.storage.os.replace",
+            side_effect=OSError("synthetic template write failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "synthetic template write failure"):
+                self.library.save(
+                    replace(
+                        template,
+                        metadata=replace(
+                            template.metadata,
+                            id="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                            name="Write Failure Template",
+                        ),
+                    )
+                )
+        updated = extractor.update(template, self.canvas)
+        self.assertEqual(updated.metadata.id, template.metadata.id)
+        self.assertEqual(updated.metadata.name, template.metadata.name)
+        figure_id = self.canvas.component_snapshot()["root_component_id"]
+        with self.assertRaisesRegex(ValueError, "no longer exists"):
+            extractor.extract(
+                self.canvas,
+                name="Bad Dynamic",
+                dynamic_text_overrides={(figure_id, "missing_property"): "x"},
+            )
+        self.sheet.columns[0].type = ColumnType.AUTO
+        with self.assertRaisesRegex(ValueError, "resolved type"):
+            extractor.extract(self.canvas, name="Auto Column")
+
+        self.library.save(
+            replace(
+                template,
+                metadata=replace(template.metadata, name="Storage Unique Template"),
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            self.library.save(
+                replace(
+                    template,
+                    metadata=replace(
+                        template.metadata,
+                        id="ffffffff-ffff-4fff-8fff-ffffffffffff",
+                        name="Storage Unique Template",
+                    ),
+                )
+            )
+        blocked_id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        self.library.path_for(blocked_id).write_text("{", encoding="utf-8")
+        with self.assertRaises(FileExistsError):
+            self.library.save(
+                replace(
+                    template,
+                    metadata=replace(
+                        template.metadata,
+                        id=blocked_id,
+                        name="Blocked Path Template",
+                    ),
+                )
+            )
+        imported_name = self.library.unique_imported_name("Storage Unique Template")
+        self.assertIn("Imported", imported_name)
+        self.library.save(
+            replace(
+                template,
+                metadata=replace(
+                    template.metadata,
+                    id="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                    name=imported_name,
+                ),
+            )
+        )
+        again = self.library.unique_imported_name("Storage Unique Template")
+        self.assertIn("Imported 1", again)
+
+        service = TemplateApplyService(self.window.repository)
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            service.prepare(
+                template,
+                imported_specs(),
+                source_file="data.csv",
+                project_name="Source Project",
+            )
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            service.prepare(
+                template,
+                [],
+                source_file="data.csv",
+                project_name="Missing Sheets Project",
+            )
+        service.fit_executor.execute_all = lambda *args, **kwargs: ()
+        with self.assertRaisesRegex(RuntimeError, "cancelled"):
+            service.prepare(
+                template,
+                imported_specs(),
+                source_file="data.csv",
+                project_name="Late Cancel Project",
+                cancelled=lambda: True,
+            )
+        plan = TemplateApplyService(self.window.repository).prepare(
+            template,
+            imported_specs(),
+            source_file="data.csv",
+            project_name="Publish Mismatch Project",
+        )
+        fake_window = mock.Mock()
+        fake_window.current_canva = self.canvas
+        fake_window.repository.undo_stack.return_value = mock.Mock()
+        with mock.patch(
+            "mygui.template_library.application.restore_project_payload",
+            return_value="restored",
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not select"):
+                TemplateApplyService(self.window.repository).publish(
+                    plan,
+                    table=self.window.table,
+                    figure_window=fake_window,
+                )
+
     def test_template_v1_migration_and_custom_fit_range(self):
         template = self.template(fit=True)
         raw_v3 = template_to_dict(template)

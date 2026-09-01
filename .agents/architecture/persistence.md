@@ -8,8 +8,6 @@ restart.
 
 `CORE-PERSISTENCE-V23` defines the current persisted project contract.
 
-`CORE-PERSISTENCE-V23` defines the current persisted project contract.
-
 MyGUI saves and validates exact integer schema version 23. Component business
 state is the schema-v23 tree; profile selection, Section expansion, QWidget
 state, callbacks, typed tree projection keys, and other UI-only data are
@@ -43,9 +41,6 @@ input/output, validation, failure rollback, stable-ID rules, empty-component
 behavior, and save/open round trips before production code changes.
 
 ## Registration and restore
-
-`CORE-REGISTRATION-ATOMICITY` requires component creation, restore, and visible
-publication to commit as one registration transaction.
 
 `CORE-REGISTRATION-ATOMICITY` requires component creation, restore, and visible
 publication to commit as one registration transaction.
@@ -90,10 +85,6 @@ publication; dimensions with autoscale disabled retain the blueprint range.
 ID remapping, dynamic text, fitting, and application planning exclusively to
 `mygui.template_library`.
 
-`CORE-TEMPLATE-LIBRARY` assigns template schema, storage, extraction, matching,
-ID remapping, dynamic text, fitting, and application planning exclusively to
-`mygui.template_library`.
-
 `mygui.template_library` owns independent strict `mygui-template` schema v7.
 Strict schema-v4 templates carry schema-v20 Figure blueprints and migrate to
 v5 by injecting the same deterministic Error Bar extension defaults before
@@ -116,9 +107,6 @@ expression. Changing template fields never enters project Undo/Redo or dirty
 fingerprints.
 
 ## Project history
-
-`CORE-PROJECT-HISTORY` requires one `QUndoStack`, owned by the project's
-`TableRepository` entry, for chronological Table and Figure history.
 
 `CORE-PROJECT-HISTORY` requires one `QUndoStack`, owned by the project's
 `TableRepository` entry, for chronological Table and Figure history.

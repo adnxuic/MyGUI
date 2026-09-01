@@ -11,12 +11,6 @@ contexts and catalogs. Presentation/UI code must not mutate Matplotlib
 process-global configuration or rcParams directly; those changes use the
 declared configuration owners.
 
-`CORE-MATPLOTLIB-BOUNDARY` makes
-`mygui.figuremodify.matplotlib_adapter` the sole boundary for global style
-contexts and catalogs. Presentation/UI code must not mutate Matplotlib
-process-global configuration or rcParams directly; those changes use the
-declared configuration owners.
-
 Presentation code under `mygui/widgets/fig_control_window/`, `title_bar/`,
 `component_tree/`, and `bottom_bar/` must use Controllers, Services, Canvas
 capability queries, and immutable adapter catalogs. It must not import

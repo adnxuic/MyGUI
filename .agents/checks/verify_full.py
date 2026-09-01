@@ -40,9 +40,16 @@ TRANSACTION_CRITICAL_FILES = [
     "mygui/template_library/transform.py",
     "mygui/figuremodify/components/controllers/secondary_axis.py",
 ]
+ADDITIONAL_FILE_COVERAGE_MIN = {
+    "mygui/widgets/figure_canvas/canvas_toolbar.py": 90,
+    "mygui/application_settings/storage/envelope.py": 85,
+    "mygui/template_library/application.py": 80,
+    "mygui/template_library/storage.py": 80,
+}
 GLOBAL_COVERAGE_MIN = 80
 CRITICAL_COVERAGE_MIN = 90
 TRANSACTION_COVERAGE_MIN = 85
+COVERAGE_JSON_PATH = "build/agent-results/coverage.json"
 APPLICATION_TEST_TIMEOUT_SECONDS = 3600
 APPLICATION_BATCH_TIMEOUT_SECONDS = 1200
 MAX_TEST_WORKERS = 16
@@ -90,6 +97,7 @@ APPLICATION_TEST_MODULES = {
     "test_project_object_roundtrip": (ISOLATION_GUI_MODULE, 10.0),
     "test_in_axes": (ISOLATION_GUI_MODULE, 9.3),
     "test_canvas_popout": (ISOLATION_GUI_MODULE, 8.0),
+    "test_canvas_toolbar": (ISOLATION_GUI_MODULE, 8.0),
     "test_reference_marks_table": (ISOLATION_GUI_MODULE, 8.0),
     "test_figure_dpi": (ISOLATION_GUI_MODULE, 6.9),
     "test_figure_export": (ISOLATION_GUI_MODULE, 12.0),
@@ -153,6 +161,7 @@ APPLICATION_TEST_MODULES = {
     "test_project_metadata": (ISOLATION_GUI_MODULE, 0.5),
     "test_template_library": (ISOLATION_GUI_MODULE, 15.0),
     "test_errorbar_component": (ISOLATION_GUI_MODULE, 40.0),
+    "test_matplotlib_removal": (ISOLATION_CORE, 2.0),
 }
 
 GUI_SENSITIVE_TEST_MODULES = frozenset(
@@ -164,6 +173,128 @@ TEST_MODULE_SECONDS = {
     module: seconds
     for module, (_isolation, seconds) in APPLICATION_TEST_MODULES.items()
 }
+
+
+def file_coverage_thresholds() -> dict[str, int]:
+    """Return the per-file coverage floors enforced after coverage JSON export."""
+
+    thresholds: dict[str, int] = {}
+    for path in CRITICAL_FILES:
+        thresholds[path] = CRITICAL_COVERAGE_MIN
+    for path in TRANSACTION_CRITICAL_FILES:
+        thresholds[path] = max(
+            thresholds.get(path, 0),
+            TRANSACTION_COVERAGE_MIN,
+        )
+    for path, minimum in ADDITIONAL_FILE_COVERAGE_MIN.items():
+        thresholds[path] = max(thresholds.get(path, 0), int(minimum))
+    return thresholds
+
+
+def _normalize_coverage_path(path: str) -> str:
+    return Path(str(path).replace("\\", "/")).as_posix().lstrip("./")
+
+
+def _lookup_coverage_file(files: dict, relative_path: str) -> dict | None:
+    wanted = _normalize_coverage_path(relative_path)
+    for key, payload in files.items():
+        normalized = _normalize_coverage_path(key)
+        if normalized == wanted or normalized.endswith("/" + wanted):
+            return payload if isinstance(payload, dict) else None
+    return None
+
+
+def _coverage_percent(entry: dict | None) -> float | None:
+    if not isinstance(entry, dict):
+        return None
+    summary = entry.get("summary")
+    if not isinstance(summary, dict):
+        return None
+    percent = summary.get("percent_covered")
+    if percent is None:
+        covered = summary.get("covered_lines")
+        statements = summary.get("num_statements")
+        if isinstance(covered, int) and isinstance(statements, int):
+            if statements == 0:
+                return 100.0
+            return 100.0 * covered / statements
+        return None
+    try:
+        return float(percent)
+    except (TypeError, ValueError):
+        return None
+
+
+def evaluate_file_coverage_thresholds(
+    coverage_data: dict,
+    *,
+    thresholds: dict[str, int] | None = None,
+) -> tuple[bool, str]:
+    """Compare each required file against its coverage floor.
+
+    Group totals can pass while one required file is below its floor; this
+    evaluator rejects that case. Missing files count as failures.
+    """
+
+    required = dict(thresholds or file_coverage_thresholds())
+    files = coverage_data.get("files") if isinstance(coverage_data, dict) else None
+    if not isinstance(files, dict):
+        return False, "coverage JSON is missing a files object"
+    failures: list[str] = []
+    lines: list[str] = []
+    for relative_path, minimum in required.items():
+        percent = _coverage_percent(_lookup_coverage_file(files, relative_path))
+        if percent is None:
+            failures.append(f"{relative_path}: missing from coverage JSON")
+            lines.append(f"{relative_path}: missing (required {minimum}%)")
+            continue
+        lines.append(f"{relative_path}: {percent:.2f}% (required {minimum}%)")
+        if percent + 1e-9 < float(minimum):
+            failures.append(
+                f"{relative_path}: {percent:.2f}% < {minimum}%"
+            )
+    evidence = "\n".join(lines)
+    if failures:
+        return False, (
+            "Per-file coverage failures:\n"
+            + "\n".join(failures)
+            + "\n\n"
+            + evidence
+        )
+    return True, evidence
+
+
+def _file_coverage_threshold_step(json_path: Path) -> dict:
+    command = (
+        "evaluate per-file coverage thresholds from "
+        + json_path.as_posix()
+    )
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+        ok, evidence = evaluate_file_coverage_thresholds(data)
+        return {
+            "id": "coverage_file_thresholds",
+            "command": command,
+            "status": "passed" if ok else "failed",
+            "required": True,
+            "durationMs": 0,
+            "evidence": evidence,
+        }
+    except (
+        OSError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+        KeyError,
+    ) as exc:
+        return {
+            "id": "coverage_file_thresholds",
+            "command": command,
+            "status": "failed",
+            "required": True,
+            "durationMs": 0,
+            "evidence": str(exc),
+        }
 
 # Build the shared Matplotlib font cache once before parallel shards start so
 # concurrent first-touch rebuilds cannot race on the same cache directory.
@@ -900,6 +1031,14 @@ def _application_steps() -> list[dict]:
 
     coverage_commands = {
         "coverage_combine": f"{sys.executable} -m coverage combine",
+        "coverage_json": (
+            f"{sys.executable} -m coverage json -o "
+            f"{COVERAGE_JSON_PATH}"
+        ),
+        "coverage_file_thresholds": (
+            "evaluate per-file coverage thresholds from "
+            f"{COVERAGE_JSON_PATH}"
+        ),
         "coverage_global": (
             f"{sys.executable} -m coverage report "
             f"--fail-under={GLOBAL_COVERAGE_MIN}"
@@ -913,10 +1052,6 @@ def _application_steps() -> list[dict]:
             f"{sys.executable} -m coverage report "
             f"--fail-under={TRANSACTION_COVERAGE_MIN} "
             + " ".join(TRANSACTION_CRITICAL_FILES)
-        ),
-        "coverage_json": (
-            f"{sys.executable} -m coverage json -o "
-            "build/agent-results/coverage.json"
         ),
     }
 
@@ -1068,6 +1203,25 @@ def _application_steps() -> list[dict]:
                             "coverage_combine",
                             [sys.executable, "-m", "coverage", "combine"],
                         ))
+                        json_step = run_step(
+                            "coverage_json",
+                            [
+                                sys.executable, "-m", "coverage", "json", "-o",
+                                COVERAGE_JSON_PATH,
+                            ],
+                        )
+                        verification.append(json_step)
+                        json_path = ROOT / COVERAGE_JSON_PATH
+                        if json_step["status"] == "passed" and json_path.is_file():
+                            verification.append(
+                                _file_coverage_threshold_step(json_path)
+                            )
+                        else:
+                            verification.append(not_run_step(
+                                "coverage_file_thresholds",
+                                coverage_commands["coverage_file_thresholds"],
+                                "coverage JSON was not produced.",
+                            ))
                         verification.append(run_step(
                             "coverage_global",
                             [
@@ -1089,13 +1243,6 @@ def _application_steps() -> list[dict]:
                                 sys.executable, "-m", "coverage", "report",
                                 f"--fail-under={TRANSACTION_COVERAGE_MIN}",
                                 *TRANSACTION_CRITICAL_FILES,
-                            ],
-                        ))
-                        verification.append(run_step(
-                            "coverage_json",
-                            [
-                                sys.executable, "-m", "coverage", "json", "-o",
-                                "build/agent-results/coverage.json",
                             ],
                         ))
                     else:

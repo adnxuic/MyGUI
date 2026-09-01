@@ -9,10 +9,6 @@ selection, containers, property editors, and UI lifecycle.
 supported `(ComponentKind, ComponentRole)` and forbids silent generic
 fallbacks.
 
-`CORE-EDITOR-PROFILES` requires one exact production `EditorProfile` for every
-supported `(ComponentKind, ComponentRole)` and forbids silent generic
-fallbacks.
-
 Production editing uses one `ComponentInspector` per component and one exact
 `EditorProfile` per `EditorKey = (ComponentKind, ComponentRole)`. Profiles have
 explicit placement, a complete `TreePresentationSpec`, and non-empty unique
@@ -83,9 +79,6 @@ no compatibility aliases. Historical Canvas spellings are changed only in a
 dedicated naming task.
 
 ## Tree and selection
-
-`CORE-SELECTION-AUTHORITY` makes
-`PyFigureCanvas.current_component_id` the only component selection authority.
 
 `CORE-SELECTION-AUTHORITY` makes
 `PyFigureCanvas.current_component_id` the only component selection authority.

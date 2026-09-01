@@ -7,9 +7,11 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QApplication
+from unittest.mock import patch
+
+from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtGui import QFont, QPalette
+from PySide6.QtWidgets import QApplication, QWidget
 
 from mygui.application_theme import (
     APPLY_STEPS,
@@ -23,6 +25,7 @@ from mygui.application_theme import (
     ThemeMode,
     ThemeRollbackError,
     ThemeService,
+    ThemeValidationError,
 )
 from mygui.application_theme.ports import NullThemeIconProvider
 
@@ -266,6 +269,66 @@ class ThemeTransactionTests(unittest.TestCase):
         self.assertTrue(theme.ensure_committed(prefs))
         self.assertEqual(len(self.events), 1)
         self.assertEqual(theme.snapshot().scheme, EffectiveScheme.DARK)
+
+    def test_guard_paths_preview_exceptions_and_event_filter(self) -> None:
+        with self.assertRaisesRegex(ThemeValidationError, "QApplication"):
+            ThemeService(None, parent=self.app)
+        theme = self._service()
+        unsub = theme.subscribe(lambda *_args: None)
+        unsub()
+        unsub()
+        with self.assertRaises(ThemeValidationError):
+            theme._prepare(object())
+        prepared = theme._prepare(self._prefs())
+        with self.assertRaisesRegex(ThemeApplyError, "Unknown theme apply step"):
+            theme._run_apply_step("not-a-step", prepared)
+        from mygui.application_theme.service import _ChromeMemento
+
+        with self.assertRaisesRegex(ThemeApplyError, "Unknown theme restore step"):
+            theme._restore_step(
+                "not-a-step",
+                _ChromeMemento(font=QFont(), palette=QPalette(), stylesheet=""),
+            )
+        theme._health = ThemeHealth.UNCERTAIN
+        self.assertFalse(theme.ensure_committed(self._prefs()))
+        theme._in_transaction = True
+        theme._on_system_scheme_changed()
+        theme._in_transaction = False
+        theme._health = ThemeHealth.OK
+
+        entering = self._service()
+        with patch.object(
+            entering,
+            "_apply_prepared",
+            side_effect=RuntimeError("preview boom"),
+        ):
+            with self.assertRaises(ThemeApplyError):
+                entering.preview(self._prefs())
+        self.assertFalse(entering._in_preview)
+
+        rolling = self._service()
+        with patch.object(
+            rolling,
+            "_apply_prepared",
+            side_effect=ThemeRollbackError((RuntimeError("preview rollback"),)),
+        ):
+            with self.assertRaises(ThemeRollbackError):
+                rolling.preview(self._prefs())
+        self.assertFalse(rolling._in_preview)
+
+        from mygui.application_theme.service import _SkipHiddenFontFilter
+
+        filt = _SkipHiddenFontFilter(self.app)
+        other = QEvent(QEvent.Type.MouseMove)
+        self.assertFalse(filt.eventFilter(self.app, other))
+        font_event = QEvent(QEvent.Type.FontChange)
+        self.assertFalse(filt.eventFilter(QObject(), font_event))
+        hidden = QWidget()
+        hidden.hide()
+        self.assertTrue(filt.eventFilter(hidden, font_event))
+        with patch.object(hidden, "isVisible", side_effect=RuntimeError("deleted")):
+            self.assertTrue(filt.eventFilter(hidden, font_event))
+        hidden.deleteLater()
 
 
 if __name__ == "__main__":

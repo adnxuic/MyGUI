@@ -30,6 +30,7 @@ from mygui.application_settings import (
     SettingEditorKind,
     SettingsHealth,
     SettingsRuntimeApplier,
+    SettingsValidationError,
     ThemeMode,
     WORKSPACE_REMEMBER_LAYOUT,
     WorkspaceExplorerMode,
@@ -39,6 +40,7 @@ from mygui.application_settings import (
 )
 from mygui.application_settings.document import snapshot_to_payload
 from mygui.application_settings.keys import PERSISTENT_KEYS
+from mygui.application_settings.service import default_effect_for_key
 from mygui.application_settings.values import (
     METADATA_KEYS,
     normalize_export_metadata,
@@ -321,6 +323,168 @@ class ApplicationSettingsServiceModuleTests(unittest.TestCase):
         self.assertEqual(service.snapshot().appearance.theme_mode, ThemeMode.SYSTEM)
         self.assertEqual(service.snapshot().export.format, ExportFormatPreference.PNG)
         self.assertEqual(service.snapshot().new_figure.width_in, 6.4)
+
+    def test_load_exception_and_illegal_revision_degrade_without_writing(self):
+        class _RaisingDocument:
+            def load(self):
+                raise OSError("synthetic settings load failure")
+
+            def commit(self, payload):
+                raise AssertionError("commit must not run after load failure")
+
+        service = ApplicationSettingsService(document=_RaisingDocument())
+        self.assertEqual(service.health(), SettingsHealth.DEGRADED)
+        self.assertIn("synthetic settings load failure", service._load_warning)
+        self.assertTrue(service.writable())
+        session = service.begin_session()
+        refused = service.commit_patch(session, {APPEARANCE_THEME_MODE: "not-a-theme"})
+        self.assertFalse(refused.success)
+
+        class _BrokenRevision:
+            def load(self):
+                return type(
+                    "Loaded",
+                    (),
+                    {
+                        "payload": {},
+                        "missing": False,
+                        "revision": "not-an-int",
+                        "warning": None,
+                        "diagnostics": ("note",),
+                        "error": None,
+                        "recovered": True,
+                        "migrated_from_legacy": False,
+                        "health": "degraded",
+                    },
+                )()
+
+            def commit(self, payload):
+                return type("Stored", (), {"success": True, "error": None, "warning": None})()
+
+        recovered = ApplicationSettingsService(document=_BrokenRevision())
+        self.assertEqual(recovered.health(), SettingsHealth.DEGRADED)
+        empty = recovered.commit_patch(recovered.begin_session(), {})
+        self.assertTrue(empty.success)
+
+    def test_load_health_branches_commit_edges_and_unknown_keys(self):
+        def loaded(**overrides):
+            payload = {
+                "payload": {},
+                "missing": False,
+                "revision": 1,
+                "warning": None,
+                "diagnostics": (),
+                "error": None,
+                "recovered": False,
+                "migrated_from_legacy": False,
+                "health": SettingsHealth.OK,
+            }
+            payload.update(overrides)
+            return type("Loaded", (), payload)()
+
+        class _NegativeRevision:
+            def load(self):
+                return loaded(revision=-4)
+
+        negative = ApplicationSettingsService(document=_NegativeRevision())
+        self.assertEqual(negative.snapshot().revision, 0)
+
+        class _ErrorDocument:
+            def load(self):
+                return loaded(error="disk error")
+
+        errored = ApplicationSettingsService(document=_ErrorDocument())
+        self.assertEqual(errored.health(), SettingsHealth.DEGRADED)
+        self.assertIn("disk error", errored._load_warning)
+
+        class _UncertainDocument:
+            def load(self):
+                return loaded(health="write_uncertain")
+
+        self.assertEqual(
+            ApplicationSettingsService(document=_UncertainDocument()).health(),
+            SettingsHealth.UNCERTAIN,
+        )
+
+        class _FutureDocument:
+            def load(self):
+                return loaded(health="read_only_future")
+
+        self.assertEqual(
+            ApplicationSettingsService(document=_FutureDocument()).health(),
+            SettingsHealth.READ_ONLY_FUTURE,
+        )
+
+        class _RecoveryDocument:
+            def load(self):
+                return loaded(health="recovery_required")
+
+        self.assertEqual(
+            ApplicationSettingsService(document=_RecoveryDocument()).health(),
+            SettingsHealth.RECOVERY_REQUIRED,
+        )
+
+        class _BareHealth:
+            def load(self):
+                return loaded(health=None)
+
+        self.assertEqual(
+            ApplicationSettingsService(document=_BareHealth()).health(),
+            SettingsHealth.OK,
+        )
+
+        service = _service()
+        self.assertIsNotNone(service.component_defaults())
+        self.assertIsNotNone(service.export_preferences())
+        with self.assertRaisesRegex(SettingsValidationError, "Unknown settings page"):
+            service.reset_section(service.begin_session(), "not-a-page")
+        with self.assertRaisesRegex(SettingsValidationError, "Unknown setting"):
+            default_effect_for_key("not.a.key")
+        with self.assertRaisesRegex(SettingsValidationError, "does not belong"):
+            other = _service()
+            service.reset_section(other.begin_session(), PAGE_EXPORT)
+
+        class _NullCommit:
+            def load(self):
+                return loaded()
+
+            def commit(self, payload):
+                return None
+
+        null_commit = ApplicationSettingsService(document=_NullCommit())
+        refused = null_commit.commit_patch(
+            null_commit.begin_session(),
+            {EXPORT_FORMAT: "svg"},
+        )
+        self.assertFalse(refused.success)
+        self.assertIn("storage commit failed", refused.error)
+
+        binder = RecordingRuntimeBinder("live", fail_confirm=True)
+        confirming = _service(runtime_applier=SettingsRuntimeApplier([binder]))
+        confirmed = confirming.commit_patch(
+            confirming.begin_session(),
+            {APPEARANCE_THEME_MODE: ThemeMode.DARK},
+        )
+        self.assertTrue(confirmed.success)
+        self.assertEqual(confirming.health(), SettingsHealth.UNCERTAIN)
+
+        exploding = RecordingRuntimeBinder("first", fail_rollback=True)
+        failing = RecordingRuntimeBinder("second", fail_apply=True)
+        rolling = _service(runtime_applier=SettingsRuntimeApplier([exploding, failing]))
+        preview_failed = rolling.commit_patch(
+            rolling.begin_session(),
+            {APPEARANCE_THEME_MODE: ThemeMode.DARK},
+        )
+        self.assertFalse(preview_failed.success)
+        self.assertEqual(rolling.health(), SettingsHealth.UNCERTAIN)
+
+        listening = _service()
+        listening.subscribe(lambda _snapshot: (_ for _ in ()).throw(RuntimeError("listener")))
+        emitted = listening.commit_patch(
+            listening.begin_session(),
+            {EXPORT_FORMAT: "svg"},
+        )
+        self.assertTrue(emitted.success)
 
 
 class WorkspaceLayoutPortTests(unittest.TestCase):
