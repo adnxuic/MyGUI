@@ -44,9 +44,13 @@ rejection restores the control and emits one red result.
 
 Every `PropertySpec` declares an explicit `EditorKind`; `AUTO` is valid only
 when value type or choices uniquely determine the control. `EditorKind.JSON`
-is tests/tooling only. Figure-root Inspectors may be prepared during Figure
-setup; every other Inspector is created on first selection and cached.
-Lookup-only APIs never create an Inspector as a side effect.
+is tests/tooling only. Widget construction uses the closed
+`EditorKind → EditorFactory` table in `editor_factories.py`. Unknown,
+duplicate, or missing factories fail at import; `AUTO` is resolved to a
+concrete kind before lookup and has no generic/JSON fallback. Figure-root
+Inspectors may be prepared during Figure setup; every other Inspector is
+created on first selection and cached. Lookup-only APIs never create an
+Inspector as a side effect.
 
 `EditorRegistry.validate_production_profiles()` classifies every persistent
 property exactly once as exposed or intentionally hidden, verifies data/proxy

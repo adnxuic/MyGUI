@@ -263,6 +263,9 @@ class EditorRegistry:
                     )
                 )
             raise ValueError("Invalid production Editor profiles: " + "; ".join(details))
+        from .editor_factories import validate_editor_factories
+
+        validate_editor_factories()
         for key in sorted(
             expected,
             key=lambda item: (item[0].value, item[1].value),

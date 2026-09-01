@@ -36,6 +36,7 @@ tasks:
       - tests.test_errorbar_component
       - tests.test_component_controllers
       - tests.test_component_editors
+      - tests.test_architecture_rule_evolution
       - tests.test_component_inspector
       - tests.test_matplotlib_property_contract
       - tests.test_secondary_axis_component
@@ -127,7 +128,8 @@ tasks:
       - .agents/architecture/testing-map.md
     checks: [verify_agent_core, verify_architecture]
     scanners: [mygui.architecture-boundaries]
-    focused_tests: []
+    focused_tests:
+      - tests.test_architecture_rule_evolution
     documentation: []
     manual_smoke: false
   fix_ci:
@@ -187,5 +189,6 @@ tasks:
     scanners: [mygui.architecture-boundaries]
     focused_tests:
       - tests.test_agent_engineering
+      - tests.test_architecture_rule_evolution
     documentation: []
     manual_smoke: false

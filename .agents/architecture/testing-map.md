@@ -23,6 +23,16 @@ subprocesses through their current `sys.executable`. Qt tests run with
 | Application theme / QSS / chrome | `test_application_theme`, `test_application_theme_transactions`, `test_application_theme_chrome`, `test_application_theme_qss` |
 | MkDocs component contract | `test_component_documentation` |
 
+Refactored dispatch stays table-driven: `ComponentEditorBase._create_editor`
+and the Legend, In-Axes, and Secondary Axis `_read_property` /
+`_write_property` functions keep McCabe complexity at most 5.
+`create_editor_widget` has the same cap. `PyFigureCanvas` methods with
+McCabe greater than 10 stay at most 15; public `add_*` wrappers stay at
+McCabe 2 because remaining length is signature forwarding into creation
+requests. New hotspot functions added by the compatibility hardening keep
+the ceilings in `tests.test_architecture_rule_evolution` and must not
+worsen. These caps are not a repository-wide complexity rule.
+
 `verify_fast` runs compileall, Ruff, and the route's focused modules.
 `verify_full --profile application` runs the complete suite once under branch
 coverage with a one-hour subprocess budget, writes coverage JSON, then compares

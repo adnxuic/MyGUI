@@ -717,3 +717,59 @@ def _level(state: ComponentState) -> str:
             "Tick/grid selector requires level='major' or level='minor'."
         )
     return value
+
+
+def bind_closed_property_handlers(
+    *,
+    specs: tuple[PropertySpec, ...],
+    readers: dict[str, Any],
+    writers: dict[str, Any],
+    owner: str,
+) -> None:
+    """Fail closed unless every PropertySpec has exactly one read and write handler."""
+
+    keys = {spec.key for spec in specs}
+    read_keys = set(readers)
+    write_keys = set(writers)
+    if read_keys != keys or write_keys != keys:
+        raise RuntimeError(
+            f"{owner} property handlers must cover every PropertySpec exactly; "
+            f"missing_read={sorted(keys - read_keys)} "
+            f"extra_read={sorted(read_keys - keys)} "
+            f"missing_write={sorted(keys - write_keys)} "
+            f"extra_write={sorted(write_keys - keys)}."
+        )
+
+
+def lookup_property_handler(
+    table: dict[str, Any],
+    spec: PropertySpec,
+    *,
+    owner: str,
+    action: str,
+) -> Any:
+    """Return one registered handler or fail closed for an unknown property."""
+
+    try:
+        return table[spec.key]
+    except KeyError as exc:
+        raise ComponentValidationError(
+            f"{owner} has no {action} handler for {spec.key!r}."
+        ) from exc
+
+
+def closed_handler_subset(
+    table: dict[str, Any],
+    specs: tuple[PropertySpec, ...],
+    *,
+    owner: str,
+) -> dict[str, Any]:
+    """Return the handler subset required by ``specs``, failing if any key is missing."""
+
+    keys = {spec.key for spec in specs}
+    missing = keys - set(table)
+    if missing:
+        raise RuntimeError(
+            f"{owner} handler table is missing {sorted(missing)}."
+        )
+    return {key: table[key] for key in keys}

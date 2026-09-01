@@ -37,6 +37,8 @@ from ._helpers import (
     _normalize_color,
     _read_color,
     _DEFAULT_FONT_SPEC,
+    bind_closed_property_handlers,
+    lookup_property_handler,
 )
 
 class LegendController(ComponentController[Legend]):
@@ -237,55 +239,24 @@ class LegendController(ComponentController[Legend]):
         return super().apply_state(state)
 
     def _read_property(self, target: Legend, spec: PropertySpec) -> Any:
-        if spec.key == "entry_scope":
-            return self._entry_scope
-        if spec.key in self.REBUILD_KEYS and spec.key not in {
-            "location", "ncols", "frameon", "alignment", "bbox_to_anchor"
-        }:
-            return deepcopy(self._constructor_properties[spec.key])
-        if spec.key == "location":
-            return deepcopy(self._constructor_properties[spec.key])
-        if spec.key == "ncols":
-            return int(getattr(target, "_ncols", 1))
-        if spec.key == "facecolor":
-            return self._frame_color(target, "facecolor")
-        if spec.key == "edgecolor":
-            return self._frame_color(target, "edgecolor")
-        if spec.key == "framealpha":
-            return target.get_frame().get_alpha()
-        if spec.key == "title":
-            return target.get_title().get_text()
-        if spec.key == "bbox_to_anchor":
-            return deepcopy(self._constructor_properties[spec.key])
-        if spec.key == "alignment":
-            return str(target.get_alignment())
-        if spec.key in {"label_font", "title_font"}:
-            text = target.get_title() if spec.key == "title_font" else (target.get_texts()[0] if target.get_texts() else None)
-            if text is None:
-                return deepcopy(
-                    self._title_font_value
-                    if spec.key == "title_font"
-                    else self._label_font_value
-                )
-            return normalize_font({
-                "family": list(text.get_fontfamily()), "size": float(text.get_fontsize()),
-                "weight": text.get_fontweight(), "style": text.get_fontstyle(),
-                "stretch": text.get_fontproperties().get_stretch(),
-                "variant": text.get_fontproperties().get_variant(),
-                "color": _read_color(text.get_color()),
-            })
-        frame = target.get_frame()
-        if spec.key == "frame_linewidth":
-            return float(frame.get_linewidth())
-        if spec.key == "frame_linestyle":
-            return deepcopy(self._state.properties[spec.key])
-        if spec.key == "frame_hatch":
-            return frame.get_hatch()
-        if spec.key == "draggable":
-            return target.get_draggable()
-        if spec.key == "draggable_update":
-            return str(self._state.properties[spec.key])
-        return super()._read_property(target, spec)
+        handler = lookup_property_handler(
+            _LEGEND_READERS,
+            spec,
+            owner="Legend",
+            action="read",
+        )
+        return handler(self, target, spec)
+
+    def _write_property(
+        self, target: Legend, spec: PropertySpec, value: Any
+    ) -> None:
+        handler = lookup_property_handler(
+            _LEGEND_WRITERS,
+            spec,
+            owner="Legend",
+            action="write",
+        )
+        handler(self, target, spec, value)
 
     def _frame_color(self, target: Legend, key: str) -> str:
         frame = target.get_frame()
@@ -311,71 +282,267 @@ class LegendController(ComponentController[Legend]):
                 return _normalize_color(saved)
         return mcolors.to_hex(actual_rgba, keep_alpha=False)
 
-    def _write_property(
-        self, target: Legend, spec: PropertySpec, value: Any
-    ) -> None:
-        if spec.key == "entry_scope":
-            self._entry_scope = str(value)
-            return
-        if spec.key in self.REBUILD_KEYS:
-            self._constructor_properties[spec.key] = deepcopy(value)
-            if spec.key == "alignment":
-                target.set_alignment(value)
-            elif spec.key == "bbox_to_anchor":
-                target.set_bbox_to_anchor(legend_anchor_value(value))
-            elif spec.key == "frameon":
-                target.set_frame_on(value)
-            elif spec.key == "location":
-                target.set_loc(legend_location_value(value))
-            elif spec.key == "ncols":
-                target.set_ncols(value)
-            return
-        if spec.key == "location":
-            target.set_loc(value)
-            return
-        if spec.key == "ncols":
-            target.set_ncols(value)
-            return
-        if spec.key == "facecolor":
-            target.get_frame().set_facecolor(value)
-            return
-        if spec.key == "edgecolor":
-            target.get_frame().set_edgecolor(value)
-            return
-        if spec.key == "framealpha":
-            target.get_frame().set_alpha(value)
-            return
-        if spec.key == "title":
-            target.set_title(value)
-            return
-        if spec.key in {"label_font", "title_font"}:
-            if spec.key == "title_font":
-                self._title_font_value = normalize_font(value)
-            else:
-                self._label_font_value = normalize_font(value)
-            texts = [target.get_title()] if spec.key == "title_font" else target.get_texts()
-            for text in texts:
-                text.set_fontfamily(value["family"])
-                text.set_fontsize(value["size"])
-                text.set_fontweight(value["weight"])
-                text.set_fontstyle(value["style"])
-                text.set_fontstretch(value["stretch"])
-                text.set_fontvariant(value["variant"])
-                text.set_color(value["color"])
-            return
-        if spec.key == "draggable":
-            target.set_draggable(bool(value), update=self._state.properties.get("draggable_update", "loc"))
-            return
-        if spec.key == "draggable_update":
-            target.set_draggable(bool(self._state.properties.get("draggable", False)), update=value)
-            return
-        if spec.key == "frame_linewidth":
-            target.get_frame().set_linewidth(value)
-            return
-        if spec.key == "frame_linestyle":
-            apply_line_pattern(target.get_frame(), value)
-            return
-        if spec.key == "frame_hatch":
-            target.get_frame().set_hatch(value)
-            return
-        super()._write_property(target, spec, value)
+
+def _legend_read_entry_scope(controller, target, spec):
+    del target, spec
+    return controller._entry_scope
+
+
+def _legend_read_constructor(controller, target, spec):
+    del target
+    return deepcopy(controller._constructor_properties[spec.key])
+
+
+def _legend_read_ncols(controller, target, spec):
+    del controller, spec
+    return int(getattr(target, "_ncols", 1))
+
+
+def _legend_read_frame_color(controller, target, spec):
+    return controller._frame_color(target, spec.key)
+
+
+def _legend_read_framealpha(controller, target, spec):
+    del controller, spec
+    return target.get_frame().get_alpha()
+
+
+def _legend_read_title(controller, target, spec):
+    del controller, spec
+    return target.get_title().get_text()
+
+
+def _legend_read_alignment(controller, target, spec):
+    del controller, spec
+    return str(target.get_alignment())
+
+
+def _legend_read_font(controller, target, spec):
+    text = (
+        target.get_title()
+        if spec.key == "title_font"
+        else (target.get_texts()[0] if target.get_texts() else None)
+    )
+    if text is None:
+        return deepcopy(
+            controller._title_font_value
+            if spec.key == "title_font"
+            else controller._label_font_value
+        )
+    return normalize_font(
+        {
+            "family": list(text.get_fontfamily()),
+            "size": float(text.get_fontsize()),
+            "weight": text.get_fontweight(),
+            "style": text.get_fontstyle(),
+            "stretch": text.get_fontproperties().get_stretch(),
+            "variant": text.get_fontproperties().get_variant(),
+            "color": _read_color(text.get_color()),
+        }
+    )
+
+
+def _legend_read_frame_linewidth(controller, target, spec):
+    del controller, spec
+    return float(target.get_frame().get_linewidth())
+
+
+def _legend_read_cached(controller, target, spec):
+    del target
+    return deepcopy(controller._state.properties[spec.key])
+
+
+def _legend_read_frame_hatch(controller, target, spec):
+    del controller, spec
+    return target.get_frame().get_hatch()
+
+
+def _legend_read_draggable(controller, target, spec):
+    del controller, spec
+    return target.get_draggable()
+
+
+def _legend_read_draggable_update(controller, target, spec):
+    del target
+    return str(controller._state.properties[spec.key])
+
+
+def _legend_read_via_base(controller, target, spec):
+    return ComponentController._read_property(controller, target, spec)
+
+
+def _legend_write_entry_scope(controller, target, spec, value):
+    del target, spec
+    controller._entry_scope = str(value)
+
+
+def _legend_write_rebuild(controller, target, spec, value):
+    controller._constructor_properties[spec.key] = deepcopy(value)
+    if spec.key == "alignment":
+        target.set_alignment(value)
+    elif spec.key == "bbox_to_anchor":
+        target.set_bbox_to_anchor(legend_anchor_value(value))
+    elif spec.key == "frameon":
+        target.set_frame_on(value)
+    elif spec.key == "location":
+        target.set_loc(legend_location_value(value))
+    elif spec.key == "ncols":
+        target.set_ncols(value)
+
+
+def _legend_write_facecolor(controller, target, spec, value):
+    del controller, spec
+    target.get_frame().set_facecolor(value)
+
+
+def _legend_write_edgecolor(controller, target, spec, value):
+    del controller, spec
+    target.get_frame().set_edgecolor(value)
+
+
+def _legend_write_framealpha(controller, target, spec, value):
+    del controller, spec
+    target.get_frame().set_alpha(value)
+
+
+def _legend_write_title(controller, target, spec, value):
+    del controller, spec
+    target.set_title(value)
+
+
+def _legend_write_font(controller, target, spec, value):
+    if spec.key == "title_font":
+        controller._title_font_value = normalize_font(value)
+        texts = [target.get_title()]
+    else:
+        controller._label_font_value = normalize_font(value)
+        texts = target.get_texts()
+    for text in texts:
+        text.set_fontfamily(value["family"])
+        text.set_fontsize(value["size"])
+        text.set_fontweight(value["weight"])
+        text.set_fontstyle(value["style"])
+        text.set_fontstretch(value["stretch"])
+        text.set_fontvariant(value["variant"])
+        text.set_color(value["color"])
+
+
+def _legend_write_draggable(controller, target, spec, value):
+    del spec
+    target.set_draggable(
+        bool(value),
+        update=controller._state.properties.get("draggable_update", "loc"),
+    )
+
+
+def _legend_write_draggable_update(controller, target, spec, value):
+    del spec
+    target.set_draggable(
+        bool(controller._state.properties.get("draggable", False)),
+        update=value,
+    )
+
+
+def _legend_write_frame_linewidth(controller, target, spec, value):
+    del controller, spec
+    target.get_frame().set_linewidth(value)
+
+
+def _legend_write_frame_linestyle(controller, target, spec, value):
+    del controller, spec
+    apply_line_pattern(target.get_frame(), value)
+
+
+def _legend_write_frame_hatch(controller, target, spec, value):
+    del controller, spec
+    target.get_frame().set_hatch(value)
+
+
+def _legend_write_via_base(controller, target, spec, value):
+    ComponentController._write_property(controller, target, spec, value)
+
+
+_LEGEND_CONSTRUCTOR_READ_KEYS = LegendController.REBUILD_KEYS - {
+    "ncols",
+    "frameon",
+    "alignment",
+}
+_LEGEND_READERS: dict[str, Any] = {
+    "entry_scope": _legend_read_entry_scope,
+    "ncols": _legend_read_ncols,
+    "facecolor": _legend_read_frame_color,
+    "edgecolor": _legend_read_frame_color,
+    "framealpha": _legend_read_framealpha,
+    "title": _legend_read_title,
+    "alignment": _legend_read_alignment,
+    "label_font": _legend_read_font,
+    "title_font": _legend_read_font,
+    "frame_linewidth": _legend_read_frame_linewidth,
+    "frame_linestyle": _legend_read_cached,
+    "frame_hatch": _legend_read_frame_hatch,
+    "draggable": _legend_read_draggable,
+    "draggable_update": _legend_read_draggable_update,
+}
+_LEGEND_READERS.update(
+    {key: _legend_read_constructor for key in _LEGEND_CONSTRUCTOR_READ_KEYS}
+)
+_LEGEND_READERS.update(
+    {
+        key: _legend_read_via_base
+        for key in (
+            "visible",
+            "frameon",
+            "zorder",
+            "alpha",
+            "label",
+            "clip_on",
+            "gid",
+            "in_layout",
+            "rasterized",
+            "sketch_params",
+            "snap",
+            "url",
+        )
+    }
+)
+_LEGEND_WRITERS: dict[str, Any] = {
+    "entry_scope": _legend_write_entry_scope,
+    "facecolor": _legend_write_facecolor,
+    "edgecolor": _legend_write_edgecolor,
+    "framealpha": _legend_write_framealpha,
+    "title": _legend_write_title,
+    "label_font": _legend_write_font,
+    "title_font": _legend_write_font,
+    "draggable": _legend_write_draggable,
+    "draggable_update": _legend_write_draggable_update,
+    "frame_linewidth": _legend_write_frame_linewidth,
+    "frame_linestyle": _legend_write_frame_linestyle,
+    "frame_hatch": _legend_write_frame_hatch,
+}
+_LEGEND_WRITERS.update(
+    {key: _legend_write_rebuild for key in LegendController.REBUILD_KEYS}
+)
+_LEGEND_WRITERS.update(
+    {
+        key: _legend_write_via_base
+        for key in (
+            "visible",
+            "zorder",
+            "alpha",
+            "label",
+            "clip_on",
+            "gid",
+            "in_layout",
+            "rasterized",
+            "sketch_params",
+            "snap",
+            "url",
+        )
+    }
+)
+bind_closed_property_handlers(
+    specs=LegendController.PROPERTY_SPECS,
+    readers=_LEGEND_READERS,
+    writers=_LEGEND_WRITERS,
+    owner="LegendController",
+)

@@ -43,6 +43,10 @@ Concrete Controllers live in `mygui/figuremodify/components/controllers/`:
 | `secondary_axis.py` | `SecondaryAxisController` and its parent-bound runtime target |
 | `registry_bridge.py` | `CONTROLLER_TYPES`, `controller_type_for`, `create_controller` |
 
+Legend, In-Axes, and Secondary Axis property reads and writes use closed
+handler tables keyed by `PropertySpec.key`. Each persisted property still has
+exactly one Controller and one `PropertySpec`.
+
 Domain Services live in `mygui/figuremodify/services/`:
 
 | Module | Public types |

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 from PySide6.QtCore import QSignalBlocker, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QDoubleSpinBox,
-    QFontComboBox,
     QFormLayout,
     QLineEdit,
     QWidget,
@@ -24,12 +20,9 @@ from mygui.figuremodify.components import (
     EditorKind,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
-from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 
 from .common import (
     DebouncedTextBinding,
-    FocusAwareDoubleSpinBox,
-    FocusAwareSpinBox,
     NullableDoubleEditor,
     NumericTupleEditor,
     SpinePositionEditor,
@@ -37,46 +30,10 @@ from .common import (
     modification_status,
     modification_succeeded,
 )
-from .inline_spec_editors import (
-    FONT_STRETCH_NAMES,
-    FONT_WEIGHT_NAMES,
-    AxesAnchorEditor,
-    InlineValueEditor,
-    LegendAnchorEditor,
-    LinePatternEditor,
-    MarkerSpecEditor,
-    NamedNumberEditor,
-    NumberSequenceEditor,
-    OptionalColorEditor,
-    SecondaryAxisPlacementEditor,
-    StringListEditor,
-    UnitTransformEditor,
-)
-from .spec_editors import (
-    AxisFormatterEditor,
-    AxisLocatorEditor,
-    AxisScaleEditor,
-    ColorMapSpecEditor,
-    ContourLabelSpecEditor,
-    ContourLevelsSpecEditor,
-    FigureLayoutEditor,
-    FontSpecEditor,
-    GridEdgeSpecEditor,
-    ErrorEveryEditor,
-    MarkEveryEditor,
-    ScatterColorMapEditor,
-    ScatterSizeMapEditor,
-    StructuredValueEditor,
-    AnnotationBoxEditor,
-    TextBoxEditor,
-    ZoomConnectorsEditor,
-)
+from .editor_factories import create_editor_widget
+from .inline_spec_editors import InlineValueEditor
+from .spec_editors import StructuredValueEditor
 
-
-_NAMED_NUMBER_CHOICES = {
-    "fontweight": FONT_WEIGHT_NAMES,
-    "fontstretch": FONT_STRETCH_NAMES,
-}
 
 _VALUE_EDITORS = (
     InlineValueEditor,
@@ -286,285 +243,7 @@ class ComponentEditorBase(QWidget):
         )
 
     def _create_editor(self, key: str, spec: Any, value: Any) -> QWidget:
-        kind = self._editor_kind(spec, value, key=key)
-        allow_none = bool(_metadata(spec, "allow_none", default=False))
-        if kind is EditorKind.BOOL:
-            editor = QCheckBox(self)
-            editor.setChecked(bool(value))
-            editor.toggled.connect(lambda candidate, k=key: self.apply_property(k, candidate))
-            return editor
-        if kind is EditorKind.INT:
-            editor = FocusAwareSpinBox(self)
-            minimum, maximum = self._bounds(spec, integer=True)
-            editor.setRange(int(minimum), int(maximum))
-            editor.setSingleStep(int(_metadata_default(spec, "step", "single_step", default=1)))
-            editor.setValue(int(value or 0))
-            editor.valueChanged.connect(lambda candidate, k=key: self.apply_property(k, candidate))
-            return editor
-        if kind in {EditorKind.NUMBER, EditorKind.ROTATION}:
-            minimum, maximum = self._bounds(spec, integer=False)
-            if allow_none:
-                fallback = _metadata(spec, "default", default=None)
-                if fallback is None:
-                    fallback = 1.0
-                editor = NullableDoubleEditor(
-                    value,
-                    fallback=float(fallback),
-                    bounds=(minimum, maximum),
-                    decimals=int(_metadata_default(spec, "decimals", default=6)),
-                    step=float(
-                        _metadata_default(spec, "step", "single_step", default=0.1)
-                    ),
-                    parent=self,
-                )
-                editor.valueChanged.connect(
-                    lambda candidate, k=key: self.apply_property(k, candidate)
-                )
-                self._nullable_number_editors[key] = editor
-                return editor
-            editor = FocusAwareDoubleSpinBox(self)
-            editor.setRange(minimum, maximum)
-            editor.setDecimals(int(_metadata_default(spec, "decimals", default=6)))
-            editor.setSingleStep(float(_metadata_default(spec, "step", "single_step", default=0.1)))
-            editor.setValue(float(value or 0.0))
-            editor.valueChanged.connect(lambda candidate, k=key: self.apply_property(k, candidate))
-            return editor
-        if kind in {
-            EditorKind.ENUM,
-            EditorKind.LINE_STYLE,
-            EditorKind.MARKER,
-            EditorKind.FONT_WEIGHT,
-            EditorKind.LEGEND_POSITION,
-        }:
-            editor = QComboBox(self)
-            choices = _metadata(
-                spec, "choices", "options", "values", default=()
-            ) or ()
-            if not choices and kind is EditorKind.LINE_STYLE:
-                choices = {
-                    "Solid": "-",
-                    "Dashed": "--",
-                    "Dash-dot": "-.",
-                    "Dotted": ":",
-                    "None": "None",
-                }
-            elif not choices and kind is EditorKind.MARKER:
-                choices = (
-                    "None",
-                    "o",
-                    "s",
-                    "D",
-                    "^",
-                    "v",
-                    "<",
-                    ">",
-                    "x",
-                    "+",
-                    "*",
-                    "P",
-                    "X",
-                )
-            elif not choices and kind is EditorKind.FONT_WEIGHT:
-                choices = ("normal", "light", "medium", "semibold", "bold", "heavy")
-            elif not choices and kind is EditorKind.LEGEND_POSITION:
-                choices = (
-                    "best",
-                    "upper right",
-                    "upper left",
-                    "lower left",
-                    "lower right",
-                    "right",
-                    "center left",
-                    "center right",
-                    "lower center",
-                    "upper center",
-                    "center",
-                )
-            iterable = choices.items() if isinstance(choices, Mapping) else ((item, item) for item in choices)
-            for label, choice in iterable:
-                editor.addItem(str(label), choice)
-            index = editor.findData(value)
-            if index < 0:
-                index = editor.findData(_enum_text(value))
-            editor.setCurrentIndex(max(0, index))
-            editor.currentIndexChanged.connect(
-                lambda _index, combo=editor, k=key: self.apply_property(k, combo.currentData())
-            )
-            return editor
-        if kind is EditorKind.COLOR:
-            self._require_color_library(key)
-            initial_color = value
-            if initial_color is None:
-                initial_color = _metadata(spec, "default", default=None)
-            if initial_color is None:
-                initial_color = "#000000"
-            editor = ColorChoiceWidget(
-                initial_color,
-                color_library=self.color_library,
-                parent=self,
-            )
-            editor.colorChanged.connect(lambda candidate, k=key: self.apply_property(k, candidate))
-            return editor
-        if kind is EditorKind.FONT:
-            editor = QFontComboBox(self)
-            if value:
-                editor.setCurrentFont(QFont(str(value)))
-            editor.currentFontChanged.connect(
-                lambda font, k=key: self.apply_property(k, font.family())
-            )
-            return editor
-        if kind in {
-            EditorKind.POSITION,
-            EditorKind.SIZE,
-            EditorKind.RANGE,
-            EditorKind.TRIPLET,
-            EditorKind.RECTANGLE,
-        }:
-            length = {
-                EditorKind.TRIPLET: 3,
-                EditorKind.RECTANGLE: 4,
-            }.get(kind, 2)
-            editor = NumericTupleEditor(
-                value,
-                length=length,
-                nullable=allow_none,
-                fallback=self._tuple_fallback(spec, length),
-                decimals=int(_metadata_default(spec, "decimals", default=6)),
-                step=float(_metadata_default(spec, "step", default=0.1)),
-                parent=self,
-            )
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            self._tuple_editors[key] = editor
-            if length == 2:
-                self._position_inputs[key] = tuple(editor.inputs)
-            return editor
-        if kind is EditorKind.SPINE_POSITION:
-            editor = SpinePositionEditor(value, parent=self)
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            self._spine_position_editors[key] = editor
-            return editor
-        if kind is EditorKind.ASPECT:
-            return self._create_text_editor(
-                key,
-                spec,
-                value,
-                parser=self._parse_aspect,
-                formatter=lambda candidate: str(candidate),
-            )
-
-        value_editor_types = {
-            EditorKind.SCALE_SPEC: AxisScaleEditor,
-            EditorKind.LOCATOR_SPEC: AxisLocatorEditor,
-            EditorKind.FORMATTER_SPEC: AxisFormatterEditor,
-            EditorKind.LAYOUT_SPEC: FigureLayoutEditor,
-            EditorKind.MARKEVERY: MarkEveryEditor,
-            EditorKind.ERROR_EVERY: ErrorEveryEditor,
-            EditorKind.SCATTER_SIZE_MAP: ScatterSizeMapEditor,
-            EditorKind.CONTOUR_LEVELS_SPEC: ContourLevelsSpecEditor,
-            EditorKind.LINE_PATTERN: LinePatternEditor,
-            EditorKind.MARKER_SPEC: MarkerSpecEditor,
-            EditorKind.LEGEND_ANCHOR: LegendAnchorEditor,
-            EditorKind.AXES_ANCHOR: AxesAnchorEditor,
-            EditorKind.UNIT_TRANSFORM_SPEC: UnitTransformEditor,
-            EditorKind.SECONDARY_AXIS_PLACEMENT: SecondaryAxisPlacementEditor,
-        }
-        if kind in value_editor_types:
-            editor = value_editor_types[kind](value, parent=self)
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            return editor
-        color_editor_types = {
-            EditorKind.FONT_SPEC: FontSpecEditor,
-            EditorKind.TEXT_BOX: TextBoxEditor,
-            EditorKind.ANNOTATION_BOX: AnnotationBoxEditor,
-            EditorKind.SCATTER_COLOR_MAP: ScatterColorMapEditor,
-            EditorKind.COLOR_MAP_SPEC: ColorMapSpecEditor,
-            EditorKind.GRID_EDGE_SPEC: GridEdgeSpecEditor,
-            EditorKind.CONTOUR_LABEL_SPEC: ContourLabelSpecEditor,
-            EditorKind.CONNECTORS: ZoomConnectorsEditor,
-        }
-        if kind in color_editor_types:
-            editor = color_editor_types[kind](
-                value,
-                color_library=self._require_color_library(key),
-                parent=self,
-            )
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            return editor
-        if kind is EditorKind.OPTIONAL_COLOR:
-            editor = OptionalColorEditor(
-                value,
-                color_library=self._require_color_library(key),
-                unset_value=None if allow_none else "none",
-                parent=self,
-            )
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            return editor
-        if kind is EditorKind.NAMED_NUMBER:
-            editor = NamedNumberEditor(
-                value,
-                names=_NAMED_NUMBER_CHOICES.get(key, FONT_WEIGHT_NAMES),
-                parent=self,
-            )
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            return editor
-        if kind is EditorKind.NUMBER_SEQUENCE:
-            editor = NumberSequenceEditor(value, parent=self)
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            return editor
-        if kind is EditorKind.STRING_LIST:
-            editor = StringListEditor(value, parent=self)
-            editor.valueChanged.connect(
-                lambda candidate, k=key: self.apply_property(k, candidate)
-            )
-            return editor
-
-        if kind is EditorKind.JSON:
-            return self._create_text_editor(
-                key,
-                spec,
-                value,
-                parser=lambda candidate, nullable=allow_none: (
-                    None
-                    if nullable and not candidate.strip()
-                    else json.loads(candidate)
-                ),
-                formatter=lambda candidate: (
-                    ""
-                    if candidate is None
-                    else json.dumps(
-                        candidate,
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    )
-                ),
-            )
-        if kind is EditorKind.TEXT:
-            return self._create_text_editor(
-                key,
-                spec,
-                value,
-                parser=lambda candidate, nullable=allow_none: (
-                    None if nullable and not candidate else candidate
-                ),
-                formatter=lambda candidate: "" if candidate is None else str(candidate),
-            )
-        raise ComponentValidationError(
-            f"Property {key!r} declares unsupported editor {kind.value!r}."
-        )
+        return create_editor_widget(self, key, spec, value)
 
     @staticmethod
     def _parse_aspect(candidate: str):

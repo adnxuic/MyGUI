@@ -39,6 +39,7 @@ from mygui.figuremodify.components import (
     ComponentRegistry,
     ComponentRole,
     ComponentState,
+    ComponentValidationError,
     DataPlotController,
     FunctionCurveController,
     PropertySpec,
@@ -510,6 +511,50 @@ class ComponentEditorTests(unittest.TestCase):
     def test_color_property_requires_injected_library(self):
         with self.assertRaisesRegex(ValueError, "ColorLibrary"):
             ComponentEditorBase(_FakeController())
+
+    def test_editor_factories_cover_every_editor_kind_exactly(self):
+        from mygui.figuremodify.components.models import EditorKind
+        from mygui.widgets.fig_control_window.component_editors.editor_factories import (
+            EDITOR_FACTORIES,
+            create_editor_widget,
+            register_editor_factory,
+            validate_editor_factories,
+        )
+
+        self.assertEqual(set(EDITOR_FACTORIES), set(EditorKind))
+        validate_editor_factories()
+        table = dict(EDITOR_FACTORIES)
+        with self.assertRaises(RuntimeError):
+            register_editor_factory(
+                EditorKind.BOOL,
+                table[EditorKind.BOOL],
+                table,
+            )
+        with self.assertRaises(RuntimeError):
+            validate_editor_factories({})
+        broken = dict(EDITOR_FACTORIES)
+        broken[EditorKind.BOOL] = object()
+        with self.assertRaises(RuntimeError):
+            validate_editor_factories(broken)
+        with self.assertRaises(RuntimeError):
+            EDITOR_FACTORIES[EditorKind.AUTO](object(), "visible", {}, True)
+
+        controller = _FakeController()
+        editor = ComponentEditorBase(controller, color_library=ColorLibrary())
+        try:
+            with patch.dict(EDITOR_FACTORIES, {}, clear=True):
+                with self.assertRaisesRegex(
+                    ComponentValidationError,
+                    "unsupported editor",
+                ):
+                    create_editor_widget(
+                        editor,
+                        "label",
+                        {"editor": "text"},
+                        "value",
+                    )
+        finally:
+            editor.close()
 
     def test_editor_registry_generic_entry_uses_explicit_kind_registration(self):
         class CustomEditor(ComponentEditorBase):

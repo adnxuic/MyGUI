@@ -53,6 +53,8 @@ from ._helpers import (
     _normalize_color,
     _read_color,
     _set_spine_bounds,
+    bind_closed_property_handlers,
+    lookup_property_handler,
 )
 
 
@@ -490,121 +492,24 @@ class SecondaryAxisController(ComponentController[SecondaryAxisRuntime]):
                 self._write_property(runtime, spec, self._state.properties[spec.key])
 
     def _read_property(self, runtime: SecondaryAxisRuntime, spec: PropertySpec) -> Any:
-        key = spec.key
-        axis = self._axis_object(runtime)
-        secondary = runtime.axis
-        if key == "unit_transform":
-            return deepcopy(runtime.unit_transform)
-        if key == "placement":
-            return deepcopy(runtime.placement)
-        if key == "visible":
-            return bool(runtime.requested_visible)
-        if key == "label":
-            return str(axis.label.get_text())
-        if key == "label_pad":
-            return float(axis.labelpad)
-        if key == "label_rotation":
-            return float(axis.label.get_rotation())
-        if key == "label_font":
-            return _font_from_text(axis.label, self._state.properties[key])
-        if key == "tick_font":
-            labels = [*axis.get_ticklabels(minor=False), *axis.get_ticklabels(minor=True)]
-            return (
-                _font_from_text(labels[0], self._state.properties[key])
-                if labels
-                else deepcopy(self._state.properties[key])
-            )
-        if key == "offset_visible":
-            return bool(axis.get_offset_text().get_visible())
-        if key == "offset_font":
-            return _font_from_text(axis.get_offset_text(), self._state.properties[key])
-        if key == "remove_overlapping_locs":
-            return bool(axis.remove_overlapping_locs)
-        if key == "spine_visible":
-            return bool(self._spine(runtime).get_visible())
-        if key == "spine_color":
-            return _read_color(self._spine(runtime).get_edgecolor())
-        if key == "spine_linewidth":
-            return float(self._spine(runtime).get_linewidth())
-        if key == "spine_linestyle":
-            return str(self._state.properties[key])
-        if key == "spine_bounds":
-            bounds = self._spine(runtime).get_bounds()
-            return None if bounds is None or None in bounds else bounds
-        if key == "spine_alpha":
-            return self._spine(runtime).get_alpha()
-        if key == "zorder":
-            return float(secondary.get_zorder())
-        return deepcopy(self._state.properties[key])
+        handler = lookup_property_handler(
+            _SECONDARY_AXIS_READERS,
+            spec,
+            owner="Secondary Axis",
+            action="read",
+        )
+        return handler(self, runtime, spec)
 
     def _write_property(
         self, runtime: SecondaryAxisRuntime, spec: PropertySpec, value: Any
     ) -> None:
-        key = spec.key
-        if key == "unit_transform":
-            runtime.rebuild(unit_transform=value)
-            return
-        if key == "placement":
-            runtime.rebuild(
-                placement=normalize_secondary_axis_placement(value, orientation=self.orientation)
-            )
-            return
-        secondary = runtime.axis
-        axis = self._axis_object(runtime)
-        if key == "visible":
-            runtime.requested_visible = bool(value)
-            secondary.set_visible(runtime.requested_visible and runtime.domain_valid)
-        elif key == "label":
-            (secondary.set_xlabel if self.orientation == "x" else secondary.set_ylabel)(str(value))
-        elif key == "label_pad":
-            axis.labelpad = float(value)
-        elif key == "label_rotation":
-            axis.label.set_rotation(float(value))
-        elif key == "label_font":
-            _apply_font([axis.label], value)
-        elif key == "ticker_mode":
-            if value == "custom":
-                self._apply_custom_tickers(axis)
-            elif self._state.properties.get("ticker_mode") == "custom":
-                runtime.rebuild(reapply=self._apply_non_ticker_properties)
-        elif key in {"major_locator", "major_formatter", "minor_locator", "minor_formatter"}:
-            if self._state.properties.get("ticker_mode") == "custom":
-                self._apply_custom_tickers(axis, override=(key, value))
-        elif key in {
-            "major_ticks_visible",
-            "major_labels_visible",
-            "minor_ticks_visible",
-            "minor_labels_visible",
-            "tick_direction",
-            "tick_length",
-            "tick_width",
-            "tick_color",
-            "tick_pad",
-            "tick_rotation",
-        }:
-            self._apply_tick_params(runtime, key, value)
-        elif key == "tick_font":
-            _apply_font([*axis.get_ticklabels(False), *axis.get_ticklabels(True)], value)
-        elif key == "offset_visible":
-            axis.get_offset_text().set_visible(bool(value))
-        elif key == "offset_font":
-            _apply_font([axis.get_offset_text()], value)
-        elif key == "remove_overlapping_locs":
-            axis.remove_overlapping_locs = bool(value)
-        elif key == "spine_visible":
-            self._spine(runtime).set_visible(bool(value))
-        elif key == "spine_color":
-            self._spine(runtime).set_edgecolor(value)
-        elif key == "spine_linewidth":
-            self._spine(runtime).set_linewidth(float(value))
-        elif key == "spine_linestyle":
-            self._spine(runtime).set_linestyle(value)
-        elif key == "spine_bounds":
-            _set_spine_bounds(self._spine(runtime), value)
-        elif key == "spine_alpha":
-            self._spine(runtime).set_alpha(value)
-        elif key == "zorder":
-            secondary.set_zorder(float(value))
+        handler = lookup_property_handler(
+            _SECONDARY_AXIS_WRITERS,
+            spec,
+            owner="Secondary Axis",
+            action="write",
+        )
+        handler(self, runtime, spec, value)
 
     def _apply_custom_tickers(self, axis, override: tuple[str, Any] | None = None) -> None:
         values = deepcopy(self._state.properties)
@@ -689,3 +594,328 @@ class SecondaryAxisController(ComponentController[SecondaryAxisRuntime]):
 
     def _finalize_remove(self, handle: SecondaryAxisRemovalHandle) -> None:
         handle.runtime.finalize_remove(handle)
+
+
+def _secondary_read_unit_transform(controller, runtime, spec):
+    del controller, spec
+    return deepcopy(runtime.unit_transform)
+
+
+def _secondary_read_placement(controller, runtime, spec):
+    del controller, spec
+    return deepcopy(runtime.placement)
+
+
+def _secondary_read_visible(controller, runtime, spec):
+    del controller, spec
+    return bool(runtime.requested_visible)
+
+
+def _secondary_read_label(controller, runtime, spec):
+    del spec
+    return str(controller._axis_object(runtime).label.get_text())
+
+
+def _secondary_read_label_pad(controller, runtime, spec):
+    del spec
+    return float(controller._axis_object(runtime).labelpad)
+
+
+def _secondary_read_label_rotation(controller, runtime, spec):
+    del spec
+    return float(controller._axis_object(runtime).label.get_rotation())
+
+
+def _secondary_read_label_font(controller, runtime, spec):
+    axis = controller._axis_object(runtime)
+    return _font_from_text(axis.label, controller._state.properties[spec.key])
+
+
+def _secondary_read_tick_font(controller, runtime, spec):
+    axis = controller._axis_object(runtime)
+    labels = [*axis.get_ticklabels(minor=False), *axis.get_ticklabels(minor=True)]
+    if labels:
+        return _font_from_text(labels[0], controller._state.properties[spec.key])
+    return deepcopy(controller._state.properties[spec.key])
+
+
+def _secondary_read_offset_visible(controller, runtime, spec):
+    del spec
+    return bool(controller._axis_object(runtime).get_offset_text().get_visible())
+
+
+def _secondary_read_offset_font(controller, runtime, spec):
+    axis = controller._axis_object(runtime)
+    return _font_from_text(
+        axis.get_offset_text(),
+        controller._state.properties[spec.key],
+    )
+
+
+def _secondary_read_remove_overlapping_locs(controller, runtime, spec):
+    del spec
+    return bool(controller._axis_object(runtime).remove_overlapping_locs)
+
+
+def _secondary_read_spine_visible(controller, runtime, spec):
+    del spec
+    return bool(controller._spine(runtime).get_visible())
+
+
+def _secondary_read_spine_color(controller, runtime, spec):
+    del spec
+    return _read_color(controller._spine(runtime).get_edgecolor())
+
+
+def _secondary_read_spine_linewidth(controller, runtime, spec):
+    del spec
+    return float(controller._spine(runtime).get_linewidth())
+
+
+def _secondary_read_spine_linestyle(controller, runtime, spec):
+    del runtime
+    return str(controller._state.properties[spec.key])
+
+
+def _secondary_read_spine_bounds(controller, runtime, spec):
+    del spec
+    bounds = controller._spine(runtime).get_bounds()
+    return None if bounds is None or None in bounds else bounds
+
+
+def _secondary_read_spine_alpha(controller, runtime, spec):
+    del spec
+    return controller._spine(runtime).get_alpha()
+
+
+def _secondary_read_zorder(controller, runtime, spec):
+    del controller, spec
+    return float(runtime.axis.get_zorder())
+
+
+def _secondary_read_cached(controller, runtime, spec):
+    del runtime
+    return deepcopy(controller._state.properties[spec.key])
+
+
+def _secondary_write_unit_transform(controller, runtime, spec, value):
+    del controller, spec
+    runtime.rebuild(unit_transform=value)
+
+
+def _secondary_write_placement(controller, runtime, spec, value):
+    del spec
+    runtime.rebuild(
+        placement=normalize_secondary_axis_placement(
+            value,
+            orientation=controller.orientation,
+        )
+    )
+
+
+def _secondary_write_visible(controller, runtime, spec, value):
+    del spec
+    runtime.requested_visible = bool(value)
+    runtime.axis.set_visible(runtime.requested_visible and runtime.domain_valid)
+
+
+def _secondary_write_label(controller, runtime, spec, value):
+    del spec
+    setter = (
+        runtime.axis.set_xlabel
+        if controller.orientation == "x"
+        else runtime.axis.set_ylabel
+    )
+    setter(str(value))
+
+
+def _secondary_write_label_pad(controller, runtime, spec, value):
+    del spec
+    controller._axis_object(runtime).labelpad = float(value)
+
+
+def _secondary_write_label_rotation(controller, runtime, spec, value):
+    del spec
+    controller._axis_object(runtime).label.set_rotation(float(value))
+
+
+def _secondary_write_label_font(controller, runtime, spec, value):
+    del spec
+    _apply_font([controller._axis_object(runtime).label], value)
+
+
+def _secondary_write_ticker_mode(controller, runtime, spec, value):
+    del spec
+    axis = controller._axis_object(runtime)
+    if value == "custom":
+        controller._apply_custom_tickers(axis)
+    elif controller._state.properties.get("ticker_mode") == "custom":
+        runtime.rebuild(reapply=controller._apply_non_ticker_properties)
+
+
+def _secondary_write_ticker(controller, runtime, spec, value):
+    if controller._state.properties.get("ticker_mode") == "custom":
+        controller._apply_custom_tickers(
+            controller._axis_object(runtime),
+            override=(spec.key, value),
+        )
+
+
+def _secondary_write_tick_params(controller, runtime, spec, value):
+    controller._apply_tick_params(runtime, spec.key, value)
+
+
+def _secondary_write_tick_font(controller, runtime, spec, value):
+    del spec
+    axis = controller._axis_object(runtime)
+    _apply_font([*axis.get_ticklabels(False), *axis.get_ticklabels(True)], value)
+
+
+def _secondary_write_offset_visible(controller, runtime, spec, value):
+    del spec
+    controller._axis_object(runtime).get_offset_text().set_visible(bool(value))
+
+
+def _secondary_write_offset_font(controller, runtime, spec, value):
+    del spec
+    _apply_font([controller._axis_object(runtime).get_offset_text()], value)
+
+
+def _secondary_write_remove_overlapping_locs(controller, runtime, spec, value):
+    del spec
+    controller._axis_object(runtime).remove_overlapping_locs = bool(value)
+
+
+def _secondary_write_spine_visible(controller, runtime, spec, value):
+    del spec
+    controller._spine(runtime).set_visible(bool(value))
+
+
+def _secondary_write_spine_color(controller, runtime, spec, value):
+    del spec
+    controller._spine(runtime).set_edgecolor(value)
+
+
+def _secondary_write_spine_linewidth(controller, runtime, spec, value):
+    del spec
+    controller._spine(runtime).set_linewidth(float(value))
+
+
+def _secondary_write_spine_linestyle(controller, runtime, spec, value):
+    del spec
+    controller._spine(runtime).set_linestyle(value)
+
+
+def _secondary_write_spine_bounds(controller, runtime, spec, value):
+    del spec
+    _set_spine_bounds(controller._spine(runtime), value)
+
+
+def _secondary_write_spine_alpha(controller, runtime, spec, value):
+    del spec
+    controller._spine(runtime).set_alpha(value)
+
+
+def _secondary_write_zorder(controller, runtime, spec, value):
+    del controller, spec
+    runtime.axis.set_zorder(float(value))
+
+
+_SECONDARY_AXIS_READERS: dict[str, Any] = {
+    "unit_transform": _secondary_read_unit_transform,
+    "placement": _secondary_read_placement,
+    "visible": _secondary_read_visible,
+    "label": _secondary_read_label,
+    "label_pad": _secondary_read_label_pad,
+    "label_rotation": _secondary_read_label_rotation,
+    "label_font": _secondary_read_label_font,
+    "tick_font": _secondary_read_tick_font,
+    "offset_visible": _secondary_read_offset_visible,
+    "offset_font": _secondary_read_offset_font,
+    "remove_overlapping_locs": _secondary_read_remove_overlapping_locs,
+    "spine_visible": _secondary_read_spine_visible,
+    "spine_color": _secondary_read_spine_color,
+    "spine_linewidth": _secondary_read_spine_linewidth,
+    "spine_linestyle": _secondary_read_spine_linestyle,
+    "spine_bounds": _secondary_read_spine_bounds,
+    "spine_alpha": _secondary_read_spine_alpha,
+    "zorder": _secondary_read_zorder,
+}
+_SECONDARY_AXIS_READERS.update(
+    {
+        key: _secondary_read_cached
+        for key in (
+            "ticker_mode",
+            "major_locator",
+            "major_formatter",
+            "minor_locator",
+            "minor_formatter",
+            "major_ticks_visible",
+            "major_labels_visible",
+            "minor_ticks_visible",
+            "minor_labels_visible",
+            "tick_direction",
+            "tick_length",
+            "tick_width",
+            "tick_color",
+            "tick_pad",
+            "tick_rotation",
+        )
+    }
+)
+_SECONDARY_AXIS_WRITERS: dict[str, Any] = {
+    "unit_transform": _secondary_write_unit_transform,
+    "placement": _secondary_write_placement,
+    "visible": _secondary_write_visible,
+    "label": _secondary_write_label,
+    "label_pad": _secondary_write_label_pad,
+    "label_rotation": _secondary_write_label_rotation,
+    "label_font": _secondary_write_label_font,
+    "ticker_mode": _secondary_write_ticker_mode,
+    "tick_font": _secondary_write_tick_font,
+    "offset_visible": _secondary_write_offset_visible,
+    "offset_font": _secondary_write_offset_font,
+    "remove_overlapping_locs": _secondary_write_remove_overlapping_locs,
+    "spine_visible": _secondary_write_spine_visible,
+    "spine_color": _secondary_write_spine_color,
+    "spine_linewidth": _secondary_write_spine_linewidth,
+    "spine_linestyle": _secondary_write_spine_linestyle,
+    "spine_bounds": _secondary_write_spine_bounds,
+    "spine_alpha": _secondary_write_spine_alpha,
+    "zorder": _secondary_write_zorder,
+}
+_SECONDARY_AXIS_WRITERS.update(
+    {
+        key: _secondary_write_ticker
+        for key in (
+            "major_locator",
+            "major_formatter",
+            "minor_locator",
+            "minor_formatter",
+        )
+    }
+)
+_SECONDARY_AXIS_WRITERS.update(
+    {
+        key: _secondary_write_tick_params
+        for key in (
+            "major_ticks_visible",
+            "major_labels_visible",
+            "minor_ticks_visible",
+            "minor_labels_visible",
+            "tick_direction",
+            "tick_length",
+            "tick_width",
+            "tick_color",
+            "tick_pad",
+            "tick_rotation",
+        )
+    }
+)
+bind_closed_property_handlers(
+    specs=SecondaryAxisController.PROPERTY_SPECS,
+    readers=_SECONDARY_AXIS_READERS,
+    writers=_SECONDARY_AXIS_WRITERS,
+    owner="SecondaryAxisController",
+)
+
