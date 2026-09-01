@@ -12,6 +12,7 @@ from mygui.database import ColumnRef, ColumnType, DataPreprocessSpec
 from mygui.figuremodify.style_base.color_models import normalize_color
 
 from .controllers import (
+    CONTROLLER_TYPES,
     ERROR_BAR_V20_PROPERTY_KEYS,
     ERROR_BAR_V21_DEFAULTS,
     controller_type_for,
@@ -458,117 +459,237 @@ def _validate_controller_contract(
         raise ValueError(f"Invalid project field {path}: {exc}") from exc
 
 
+_FIGURE_PARENT = None
+_AXES_PARENT = frozenset({ComponentKind.AXES})
+_FIGURE_KIND_PARENT = frozenset({ComponentKind.FIGURE})
+_AXIS_PARENT = frozenset({ComponentKind.AXIS})
+_TICK_GROUP_PARENT = frozenset({ComponentKind.TICK_GROUP})
+_FIGURE_OR_AXES_PARENT = frozenset({ComponentKind.FIGURE, ComponentKind.AXES})
+
+_PARENT_KINDS: dict[
+    tuple[ComponentKind, ComponentRole],
+    frozenset[ComponentKind] | None,
+] = {
+    (ComponentKind.FIGURE, ComponentRole.FIGURE): _FIGURE_PARENT,
+    (ComponentKind.AXES, ComponentRole.AXES): _FIGURE_KIND_PARENT,
+    (ComponentKind.AXIS, ComponentRole.X_AXIS): _AXES_PARENT,
+    (ComponentKind.AXIS, ComponentRole.Y_AXIS): _AXES_PARENT,
+    (ComponentKind.SPINE, ComponentRole.SPINE): _AXES_PARENT,
+    (ComponentKind.TICK_GROUP, ComponentRole.MAJOR_TICK): _AXIS_PARENT,
+    (ComponentKind.TICK_GROUP, ComponentRole.MINOR_TICK): _AXIS_PARENT,
+    (ComponentKind.TICK_LABEL_GROUP, ComponentRole.MAJOR_TICK_LABEL): _TICK_GROUP_PARENT,
+    (ComponentKind.TICK_LABEL_GROUP, ComponentRole.MINOR_TICK_LABEL): _TICK_GROUP_PARENT,
+    (ComponentKind.GRID, ComponentRole.GRID): _AXIS_PARENT,
+    (ComponentKind.TEXT, ComponentRole.TITLE): _AXES_PARENT,
+    (ComponentKind.TEXT, ComponentRole.X_LABEL): _AXIS_PARENT,
+    (ComponentKind.TEXT, ComponentRole.Y_LABEL): _AXIS_PARENT,
+    (ComponentKind.TEXT, ComponentRole.TEXT): _FIGURE_OR_AXES_PARENT,
+    (ComponentKind.ANNOTATION, ComponentRole.ANNOTATION): _AXES_PARENT,
+    (ComponentKind.LEGEND, ComponentRole.LEGEND): _AXES_PARENT,
+    (ComponentKind.LINE, ComponentRole.LINE): _AXES_PARENT,
+    (ComponentKind.LINE, ComponentRole.FUNCTION_CURVE): _AXES_PARENT,
+    (ComponentKind.LINE, ComponentRole.DATA_PLOT): _AXES_PARENT,
+    (ComponentKind.LINE, ComponentRole.FIT_CURVE): _AXES_PARENT,
+    (ComponentKind.LINE, ComponentRole.INTERPOLATION): _AXES_PARENT,
+    (ComponentKind.SCATTER, ComponentRole.SCATTER): _AXES_PARENT,
+    (ComponentKind.ERRORBAR, ComponentRole.ERROR_BAR): _AXES_PARENT,
+    (ComponentKind.FIELD_2D, ComponentRole.PSEUDOCOLOR): _AXES_PARENT,
+    (ComponentKind.FIELD_2D, ComponentRole.HEATMAP): _AXES_PARENT,
+    (ComponentKind.FIELD_2D, ComponentRole.CONTOUR): _AXES_PARENT,
+    (ComponentKind.REFERENCE_MARKS, ComponentRole.REFLECTION_POSITIONS): _AXES_PARENT,
+    (ComponentKind.REFERENCE_GUIDE, ComponentRole.REFERENCE_LINE): _AXES_PARENT,
+    (ComponentKind.REFERENCE_GUIDE, ComponentRole.REFERENCE_BAND): _AXES_PARENT,
+    (ComponentKind.COLORBAR, ComponentRole.COLORBAR): _AXES_PARENT,
+    (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_X_AXIS): _AXES_PARENT,
+    (ComponentKind.SECONDARY_AXIS, ComponentRole.SECONDARY_Y_AXIS): _AXES_PARENT,
+    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_ZOOM): _AXES_PARENT,
+    (ComponentKind.IN_AXES, ComponentRole.IN_AXES_IMAGE): _AXES_PARENT,
+}
+
+
+def _validate_no_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    return None
+
+
+def _validate_axes_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    index = state.selector.get("index")
+    if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+        raise ValueError(f"Invalid Axes selector at {path}.selector.")
+
+
+def _validate_axis_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    expected = "x" if state.role is ComponentRole.X_AXIS else "y"
+    if state.selector.get("axis") != expected:
+        raise ValueError(f"Invalid Axis selector at {path}.selector.")
+
+
+def _validate_tick_or_grid_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    selector = state.selector
+    axis_name = selector.get("axis")
+    level = selector.get("level")
+    if axis_name not in {"x", "y"} or level not in _LEVELS:
+        raise ValueError(f"Invalid tick/grid selector at {path}.selector.")
+    if parent.selector.get("axis") != axis_name:
+        raise ValueError(f"Mismatched Axis selector at {path}.selector.")
+    if state.kind is ComponentKind.TICK_LABEL_GROUP:
+        if parent.selector.get("level") != level:
+            raise ValueError(f"Mismatched tick level at {path}.selector.")
+        expected_role = (
+            ComponentRole.MAJOR_TICK_LABEL
+            if level == "major"
+            else ComponentRole.MINOR_TICK_LABEL
+        )
+        if state.role is not expected_role:
+            raise ValueError(f"Mismatched tick-label role at {path}.role.")
+    if state.kind is ComponentKind.TICK_GROUP:
+        expected_role = (
+            ComponentRole.MAJOR_TICK
+            if level == "major"
+            else ComponentRole.MINOR_TICK
+        )
+        if state.role is not expected_role:
+            raise ValueError(f"Mismatched tick role at {path}.role.")
+
+
+def _validate_axis_label_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    expected = "x" if state.role is ComponentRole.X_LABEL else "y"
+    if state.selector.get("axis") != expected or parent.selector.get("axis") != expected:
+        raise ValueError(f"Mismatched Axis label selector at {path}.selector.")
+
+
+def _validate_spine_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    if state.selector.get("name") not in _SPINE_NAMES:
+        raise ValueError(f"Invalid Spine selector at {path}.selector.")
+
+
+def _validate_object_id_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    if state.selector.get("object_id") != state.id:
+        raise ValueError(f"Invalid object selector at {path}.selector.object_id.")
+
+
+def _validate_annotation_selector(
+    state: ComponentState,
+    parent: ComponentState,
+    path: str,
+) -> None:
+    if set(state.selector) != {"object_id"}:
+        raise ValueError(
+            f"Invalid Annotation selector at {path}.selector: expected only "
+            "object_id."
+        )
+    _validate_object_id_selector(state, parent, path)
+
+
+_SELECTOR_VALIDATORS: dict[
+    tuple[ComponentKind, ComponentRole],
+    Any,
+] = {
+    key: _validate_no_selector for key in CONTROLLER_TYPES
+}
+_SELECTOR_VALIDATORS[(ComponentKind.AXES, ComponentRole.AXES)] = _validate_axes_selector
+_SELECTOR_VALIDATORS[(ComponentKind.AXIS, ComponentRole.X_AXIS)] = _validate_axis_selector
+_SELECTOR_VALIDATORS[(ComponentKind.AXIS, ComponentRole.Y_AXIS)] = _validate_axis_selector
+_SELECTOR_VALIDATORS[(ComponentKind.SPINE, ComponentRole.SPINE)] = _validate_spine_selector
+_SELECTOR_VALIDATORS[(ComponentKind.TICK_GROUP, ComponentRole.MAJOR_TICK)] = (
+    _validate_tick_or_grid_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.TICK_GROUP, ComponentRole.MINOR_TICK)] = (
+    _validate_tick_or_grid_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.TICK_LABEL_GROUP, ComponentRole.MAJOR_TICK_LABEL)] = (
+    _validate_tick_or_grid_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.TICK_LABEL_GROUP, ComponentRole.MINOR_TICK_LABEL)] = (
+    _validate_tick_or_grid_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.GRID, ComponentRole.GRID)] = (
+    _validate_tick_or_grid_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.TEXT, ComponentRole.X_LABEL)] = (
+    _validate_axis_label_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.TEXT, ComponentRole.Y_LABEL)] = (
+    _validate_axis_label_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.TEXT, ComponentRole.TEXT)] = (
+    _validate_object_id_selector
+)
+_SELECTOR_VALIDATORS[(ComponentKind.ANNOTATION, ComponentRole.ANNOTATION)] = (
+    _validate_annotation_selector
+)
+for _kind, _role in CONTROLLER_TYPES:
+    if _kind in _CHART_KINDS | {
+        ComponentKind.IN_AXES,
+        ComponentKind.COLORBAR,
+        ComponentKind.REFERENCE_MARKS,
+        ComponentKind.REFERENCE_GUIDE,
+        ComponentKind.SECONDARY_AXIS,
+    }:
+        _SELECTOR_VALIDATORS[(_kind, _role)] = _validate_object_id_selector
+
+if set(_PARENT_KINDS) != set(CONTROLLER_TYPES):
+    raise RuntimeError(
+        "Schema parent validators must cover every Controller kind/role exactly."
+    )
+if set(_SELECTOR_VALIDATORS) != set(CONTROLLER_TYPES):
+    raise RuntimeError(
+        "Schema selector validators must cover every Controller kind/role exactly."
+    )
+
+
 def _validate_parent(
     state: ComponentState,
     parent: ComponentState | None,
     path: str,
 ) -> None:
-    if state.kind is ComponentKind.FIGURE:
+    key = (state.kind, state.role)
+    try:
+        expected = _PARENT_KINDS[key]
+    except KeyError as exc:
+        raise ValueError(
+            f"Invalid parent kind {getattr(parent, 'kind', None)!r} for "
+            f"{state.kind.value}/{state.role.value} at {path}."
+        ) from exc
+    if expected is None:
         if parent is not None or state.selector != {"scope": "figure"}:
             raise ValueError(f"Invalid Figure root at {path}.")
         return
     if parent is None:
         raise ValueError(f"Missing parent component at {path}.parent_id.")
-
-    parent_kind = parent.kind
-    if state.kind is ComponentKind.AXES:
-        valid = parent_kind is ComponentKind.FIGURE
-    elif state.kind in {
-        ComponentKind.AXIS,
-        ComponentKind.SPINE,
-        ComponentKind.LEGEND,
-        ComponentKind.ANNOTATION,
-        ComponentKind.SECONDARY_AXIS,
-        ComponentKind.COLORBAR,
-        ComponentKind.REFERENCE_MARKS,
-        ComponentKind.REFERENCE_GUIDE,
-    }:
-        valid = parent_kind is ComponentKind.AXES
-    elif state.kind is ComponentKind.TICK_GROUP:
-        valid = parent_kind is ComponentKind.AXIS
-    elif state.kind is ComponentKind.TICK_LABEL_GROUP:
-        valid = parent_kind is ComponentKind.TICK_GROUP
-    elif state.kind is ComponentKind.GRID:
-        valid = parent_kind is ComponentKind.AXIS
-    elif state.kind in _CHART_KINDS | {ComponentKind.IN_AXES}:
-        valid = parent_kind is ComponentKind.AXES
-    elif state.role is ComponentRole.TITLE:
-        valid = parent_kind is ComponentKind.AXES
-    elif state.role in {ComponentRole.X_LABEL, ComponentRole.Y_LABEL}:
-        valid = parent_kind is ComponentKind.AXIS
-    else:
-        valid = parent_kind in {ComponentKind.FIGURE, ComponentKind.AXES}
-    if not valid:
+    if parent.kind not in expected:
         raise ValueError(
-            f"Invalid parent kind {parent_kind.value!r} for "
+            f"Invalid parent kind {parent.kind.value!r} for "
             f"{state.kind.value}/{state.role.value} at {path}."
         )
-
-    selector = state.selector
-    if state.kind is ComponentKind.AXES:
-        index = selector.get("index")
-        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
-            raise ValueError(f"Invalid Axes selector at {path}.selector.")
-    if state.kind is ComponentKind.AXIS:
-        expected = "x" if state.role is ComponentRole.X_AXIS else "y"
-        if selector.get("axis") != expected:
-            raise ValueError(f"Invalid Axis selector at {path}.selector.")
-    if state.kind in {
-        ComponentKind.TICK_GROUP,
-        ComponentKind.TICK_LABEL_GROUP,
-        ComponentKind.GRID,
-    }:
-        axis_name = selector.get("axis")
-        level = selector.get("level")
-        if axis_name not in {"x", "y"} or level not in _LEVELS:
-            raise ValueError(f"Invalid tick/grid selector at {path}.selector.")
-        if parent.selector.get("axis") != axis_name:
-            raise ValueError(f"Mismatched Axis selector at {path}.selector.")
-        if state.kind is ComponentKind.TICK_LABEL_GROUP:
-            if parent.selector.get("level") != level:
-                raise ValueError(f"Mismatched tick level at {path}.selector.")
-        if state.kind is ComponentKind.TICK_GROUP:
-            expected_role = (
-                ComponentRole.MAJOR_TICK
-                if level == "major"
-                else ComponentRole.MINOR_TICK
-            )
-            if state.role is not expected_role:
-                raise ValueError(f"Mismatched tick role at {path}.role.")
-        if state.kind is ComponentKind.TICK_LABEL_GROUP:
-            expected_role = (
-                ComponentRole.MAJOR_TICK_LABEL
-                if level == "major"
-                else ComponentRole.MINOR_TICK_LABEL
-            )
-            if state.role is not expected_role:
-                raise ValueError(f"Mismatched tick-label role at {path}.role.")
-    if state.role in {ComponentRole.X_LABEL, ComponentRole.Y_LABEL}:
-        expected = "x" if state.role is ComponentRole.X_LABEL else "y"
-        if selector.get("axis") != expected or parent.selector.get("axis") != expected:
-            raise ValueError(f"Mismatched Axis label selector at {path}.selector.")
-    if state.kind is ComponentKind.SPINE:
-        if selector.get("name") not in _SPINE_NAMES:
-            raise ValueError(f"Invalid Spine selector at {path}.selector.")
-    if state.kind is ComponentKind.ANNOTATION and set(selector) != {"object_id"}:
-        raise ValueError(
-            f"Invalid Annotation selector at {path}.selector: expected only "
-            "object_id."
-        )
-    if (
-        state.kind
-        in _CHART_KINDS
-        | {
-            ComponentKind.IN_AXES,
-            ComponentKind.COLORBAR,
-            ComponentKind.REFERENCE_MARKS,
-            ComponentKind.REFERENCE_GUIDE,
-            ComponentKind.ANNOTATION,
-            ComponentKind.SECONDARY_AXIS,
-        }
-        or state.role is ComponentRole.TEXT
-    ) and selector.get("object_id") != state.id:
-        raise ValueError(f"Invalid object selector at {path}.selector.object_id.")
+    _SELECTOR_VALIDATORS[key](state, parent, path)
 
 
 def _validate_reference(

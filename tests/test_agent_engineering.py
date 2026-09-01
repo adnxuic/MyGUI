@@ -431,6 +431,10 @@ class AgentEngineeringTests(unittest.TestCase):
             self.verify_full.TRANSACTION_CRITICAL_FILES,
         )
         self.assertIn(
+            "mygui/figuremodify/components/_delete_transaction.py",
+            self.verify_full.TRANSACTION_CRITICAL_FILES,
+        )
+        self.assertIn(
             "mygui/widgets/figure_canvas/deletion_coordinator.py",
             self.verify_full.TRANSACTION_CRITICAL_FILES,
         )

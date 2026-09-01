@@ -21,6 +21,11 @@
   line-separated text. Fixed tick positions and labels now have a row editor;
   other sequences have no per-item row editor, and the Inspector has no visual
   dash, marker, or box-style preview.
+- Non-strict `read_state()` keeps cached properties when a live Artist is
+  missing or a property getter fails. A hidden Legend without a Matplotlib
+  artist is valid semantic state. Toolbar pan/zoom is project view history,
+  not a second ComponentState store. This fallback is unchanged; evidence is
+  not yet enough to promote a new CORE rule.
 
 ## Table and import boundaries
 

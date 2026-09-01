@@ -34,6 +34,7 @@ CRITICAL_FILES = [
 ]
 TRANSACTION_CRITICAL_FILES = [
     "mygui/figuremodify/components/registry.py",
+    "mygui/figuremodify/components/_delete_transaction.py",
     "mygui/figuremodify/components/serialization.py",
     "mygui/figuremodify/components/matplotlib_removal.py",
     "mygui/widgets/figure_canvas/deletion_coordinator.py",
@@ -144,6 +145,7 @@ APPLICATION_TEST_MODULES = {
     "test_safe_expression": (ISOLATION_CORE, 0.1),
     "test_data_preprocessing": (ISOLATION_CORE, 0.1),
     "test_agent_engineering": (ISOLATION_CORE, 0.1),
+    "test_architecture_rule_evolution": (ISOLATION_CORE, 0.5),
     "test_matplotlib_property_contract": (ISOLATION_GUI_MODULE, 0.1),
     "test_bottom_bar": (ISOLATION_GUI_MODULE, 0.0),
     "test_resource_limits": (ISOLATION_CORE, 0.0),

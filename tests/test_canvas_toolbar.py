@@ -177,6 +177,19 @@ class ProjectNavigationToolbarTests(unittest.TestCase):
             self.toolbar.press_pan(event)
         self.assertIn(("cancel",), self.history.calls)
 
+    def test_pan_zoom_history_is_not_a_second_component_state_store(self):
+        self.assertFalse(hasattr(self.toolbar, "current_component_id"))
+        event = object()
+
+        def start_pan(toolbar, _event):
+            toolbar._pan_info = object()
+            return "started"
+
+        with mock.patch.object(NavigationToolbar, "press_pan", start_pan):
+            self.toolbar.press_pan(event)
+        self.assertIn(("begin", "Pan Figure View"), self.history.calls)
+        self.assertNotIn("apply_state", [call[0] for call in self.history.calls])
+
     def test_press_zoom_commits_release_and_cancels_when_inactive(self):
         event = object()
 

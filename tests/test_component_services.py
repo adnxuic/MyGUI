@@ -22,10 +22,12 @@ from mygui.figuremodify.components import (
     ComponentEventKind,
     ComponentKind,
     ComponentMutation,
+    ComponentNotFoundError,
     ComponentRegistry,
     ComponentRegistrationError,
     ComponentRole,
     ComponentState,
+    ComponentValidationError,
     DataPlotController,
     DeletionPolicy,
     FitCurveController,
@@ -36,6 +38,8 @@ from mygui.figuremodify.components import (
     ScatterController,
     TextController,
     TitleController,
+    UpdateImpact,
+    create_controller,
     register_figure_components,
 )
 from mygui.figuremodify.style_base.color_models import PaletteDefinition
@@ -812,6 +816,19 @@ class ComponentServiceTests(unittest.TestCase):
         )
         with self.assertRaises(TypeError):
             self.registry.add_cleanup_callback(controller.component_id, "nope")
+        with self.assertRaises(TypeError):
+            self.registry.add_remove_listener("nope")
+        with self.assertRaises(TypeError):
+            self.registry.subscribe("nope")
+        try:
+            with self.registry.registration_transaction() as transaction:
+                with self.assertRaises(TypeError):
+                    transaction.on_rollback("nope")
+                with self.assertRaises(TypeError):
+                    transaction.on_rollback_after_restore("nope")
+                raise RuntimeError("abort registration without a Figure root")
+        except RuntimeError:
+            pass
         unsubscribe = self.registry.add_cleanup_callback(
             controller.component_id,
             lambda _state: None,
@@ -824,6 +841,80 @@ class ComponentServiceTests(unittest.TestCase):
         subscriber = self.registry.subscribe(lambda _event: None)
         subscriber()
         subscriber()
+
+    def test_observer_without_handler_logs_and_restore_rejection_rolls_back(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "observer-log",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+
+        def broken_observer(_event):
+            raise RuntimeError("injected observer without handler")
+
+        self.registry.subscribe(broken_observer)
+        result = self.registry.delete_transaction((controller.component_id,))
+        self.assertTrue(result.ok)
+
+        line2, = self.axes.plot([0, 1], [2, 3])
+        surviving = self._line_controller(
+            "restore-rollback",
+            ComponentRole.DATA_PLOT,
+            line2,
+        )
+        original = surviving.snapshot()
+        rejected = ComponentChange(
+            surviving.component_id,
+            None,
+            original,
+            original,
+            ChangeStatus.REJECTED,
+            message="synthetic restore rejection",
+        )
+        restored = ComponentChange(
+            surviving.component_id,
+            None,
+            original,
+            original,
+            ChangeStatus.APPLIED,
+        )
+        with patch.object(
+            surviving,
+            "restore",
+            side_effect=[rejected, restored],
+        ):
+            changes = self.registry.restore({surviving.component_id: original})
+        self.assertEqual(changes[0].status, ChangeStatus.REJECTED)
+        with self.assertRaises(ComponentNotFoundError):
+            self.registry.find_one(kind=ComponentKind.LEGEND)
+        line3, = self.axes.plot([0, 1], [3, 4])
+        self._line_controller(
+            "second-line",
+            ComponentRole.DATA_PLOT,
+            line3,
+        )
+        with self.assertRaises(ComponentValidationError):
+            self.registry.find_one(kind=ComponentKind.LINE)
+
+    def test_observer_failure_handler_exception_is_logged(self):
+        line, = self.axes.plot([0, 1], [1, 2])
+        controller = self._line_controller(
+            "observer-handler-boom",
+            ComponentRole.DATA_PLOT,
+            line,
+        )
+
+        def broken_observer(_event):
+            raise RuntimeError("injected observer")
+
+        def boom(_failures):
+            raise RuntimeError("handler boom")
+
+        self.registry.subscribe(broken_observer)
+        self.registry.set_observer_failure_handler(boom)
+        result = self.registry.delete_transaction((controller.component_id,))
+        self.assertTrue(result.ok)
 
     def test_empty_axes_can_select_palette_for_future_charts(self):
         registry = register_figure_components(self.figure)
@@ -1275,6 +1366,528 @@ class ComponentServiceTests(unittest.TestCase):
         self.assertFalse(service.has_dependents("non_existent_source"))
         self.assertEqual(service.dependents("non_existent_source"), ())
         self.assertEqual(service.eligible_sources("non_existent_axes"), ())
+
+
+class RegistryFaultInjectionTests(unittest.TestCase):
+    def _tree(self, *, include_artists=True):
+        figure = Figure()
+        axes = figure.subplots()
+        if include_artists:
+            axes.plot([0.0, 1.0], [1.0, 2.0])
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=include_artists,
+        )
+        return figure, axes, registry
+
+    def _replace_state(self, registry, component_id, **changes):
+        controller = registry.get(component_id)
+        controller._state = controller.state.clone(**changes)
+        return controller
+
+    def _reparent(self, registry, component_id, new_parent_id):
+        controller = registry.get(component_id)
+        old_parent = controller.state.parent_id
+        registry._children[old_parent].discard(component_id)
+        registry._children[new_parent_id].add(component_id)
+        controller._state = controller.state.clone(parent_id=new_parent_id)
+        return controller
+
+    def test_query_snapshot_ancestor_and_empty_transaction_helpers(self):
+        figure, axes, registry = self._tree()
+        axes_id = "figure/axes/0"
+        line_id = "figure/axes/0/line/0"
+        self.assertGreater(len(registry), 0)
+        self.assertIn("figure", registry)
+        self.assertTrue(any(item.component_id == "figure" for item in registry))
+        self.assertTrue(registry.states())
+        self.assertEqual(
+            registry.find_one(
+                kind=ComponentKind.AXES,
+                selector={"index": 0},
+            ).component_id,
+            axes_id,
+        )
+        self.assertEqual(
+            registry.query(kind="line", capabilities="color")[0].component_id,
+            line_id,
+        )
+        self.assertEqual(
+            registry.query(
+                parent_id="figure",
+                recursive=True,
+                kind=ComponentKind.LINE,
+            )[0].component_id,
+            line_id,
+        )
+        self.assertEqual(
+            registry.ancestor(line_id, kind="axes").component_id,
+            axes_id,
+        )
+        self.assertEqual(
+            registry.ancestor(
+                line_id,
+                kind=ComponentKind.LINE,
+                include_self=True,
+            ).component_id,
+            line_id,
+        )
+        self.assertIsNone(
+            registry.ancestor("figure", kind=ComponentKind.AXES)
+        )
+        self.assertTrue(registry.apply_transaction(()).ok)
+        self.assertIn(line_id, registry.snapshot([line_id]))
+        changes = registry.set_properties([(line_id, "color", "#abcdef")])
+        self.assertTrue(changes[0].ok)
+        registry.request_update(None, UpdateImpact.REDRAW)
+        registry.request_update(axes, UpdateImpact.NONE)
+        registry.request_update(axes, UpdateImpact.REDRAW)
+        registry.request_update(axes, UpdateImpact.RELIM | UpdateImpact.AUTOSCALE)
+        registry._forget_subtree("missing-component")
+        registry._children[axes_id].add("stale-child")
+        child_ids = [item.component_id for item in registry.children(axes_id)]
+        self.assertNotIn("stale-child", child_ids)
+        with self.assertRaises(ComponentNotFoundError):
+            registry.descendants("missing-component")
+        with self.assertRaises(ComponentNotFoundError):
+            registry.get("missing-component")
+        self.assertIsNone(registry.resolve_target("missing-component"))
+        line = registry.get(line_id)
+        line._deleted = True
+        self.assertIsNone(registry.resolve_target(line_id))
+        with self.assertRaises(TypeError):
+            registry.set_observer_failure_handler("nope")
+        with self.assertRaises(TypeError):
+            registry.subscribe_batches("nope")
+
+    def test_event_filters_clear_and_registration_invariants(self):
+        figure, axes, registry = self._tree()
+        line_id = "figure/axes/0/line/0"
+        filtered = []
+        skipped_batches = []
+
+        def boom_cleanup(_state):
+            raise RuntimeError("cleanup boom")
+
+        class AnonymousObserver:
+            def __call__(self, _event):
+                raise RuntimeError("anonymous observer")
+
+        registry.subscribe(filtered.append, kinds=[ComponentEventKind.REMOVED])
+        registry.subscribe(AnonymousObserver())
+        registry.subscribe_batches(
+            skipped_batches.append,
+            kinds=[ComponentEventKind.REMOVED],
+        )
+
+        def boom_batch(_events):
+            raise RuntimeError("batch boom")
+
+        unsubscribe_batch = registry.subscribe_batches(boom_batch)
+        result = registry.apply_transaction(
+            (
+                ComponentMutation(
+                    line_id,
+                    properties={"color": "#112233"},
+                ),
+            ),
+            verifier=lambda: (_ for _ in ()).throw(RuntimeError("verifier")),
+        )
+        self.assertFalse(result.ok)
+        self.assertEqual(filtered, [])
+        self.assertEqual(skipped_batches, [])
+        unsubscribe_batch()
+        unsubscribe_batch()
+        registry.add_cleanup_callback(line_id, boom_cleanup)
+        deleted = registry.delete_transaction((line_id,))
+        self.assertTrue(deleted.ok)
+        registry.clear()
+        self.assertEqual(len(registry), 0)
+
+    def test_register_rejects_duplicates_and_missing_parents(self):
+        _figure, axes, registry = self._tree()
+        line = registry.get("figure/axes/0/line/0")
+        with self.assertRaises(ComponentValidationError):
+            registry.register(line, target=line.resolve_target())
+        orphan = create_controller(
+            line.state.clone(
+                id="orphan-line",
+                parent_id="missing-parent",
+                selector={"object_id": "orphan-line"},
+            ),
+            target=axes.lines[0],
+        )
+        with self.assertRaises(ComponentValidationError):
+            registry.register(orphan, target=axes.lines[0])
+        registry._registration_active = True
+        registry._active_registration_transaction = None
+        with self.assertRaisesRegex(RuntimeError, "inconsistent"):
+            with registry.registration_transaction():
+                pass
+        registry._registration_active = False
+        with self.assertRaisesRegex(RuntimeError, "abort after duplicate watch"):
+            with registry.registration_transaction() as transaction:
+                transaction.watch_existing(line.component_id)
+                transaction.watch_existing(line.component_id)
+                raise RuntimeError("abort after duplicate watch")
+
+    def test_validate_tree_reports_structural_faults(self):
+        _figure, _axes, registry = self._tree()
+        figure = registry.get("figure")
+        figure._state = figure.state.clone(selector={"scope": "project"})
+        with self.assertRaisesRegex(ComponentValidationError, "scope='figure'"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        self._replace_state(
+            registry,
+            "figure/axes/0/line/0",
+            parent_id="missing-parent",
+        )
+        with self.assertRaisesRegex(ComponentValidationError, "unknown parent"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        line_id = "figure/axes/0/line/0"
+        registry._children["figure"].add(line_id)
+        registry._children["figure/axes/0"].discard(line_id)
+        with self.assertRaisesRegex(ComponentValidationError, "out of sync"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        registry._children["figure"].add("ghost-node")
+        with self.assertRaisesRegex(ComponentValidationError, "unknown component"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        extra = registry.get("figure/axes/0/line/0")
+        extra._state = extra.state.clone(
+            id="disconnected-line",
+            selector={"object_id": "disconnected-line"},
+        )
+        registry._controllers["disconnected-line"] = extra
+        registry._controllers.pop("figure/axes/0/line/0")
+        registry._children["figure/axes/0"].discard("figure/axes/0/line/0")
+        with self.assertRaisesRegex(ComponentValidationError, "disconnected"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        line = registry.get("figure/axes/0/line/0")
+        line._state.selector["bad"] = {1, 2}
+        with self.assertRaisesRegex(ComponentValidationError, "JSON-compatible"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        self._replace_state(
+            registry,
+            "figure/axes/0/line/0",
+            kind=ComponentKind.FIGURE,
+            role=ComponentRole.FIGURE,
+        )
+        with self.assertRaisesRegex(ComponentValidationError, "cannot have parent kind"):
+            registry.validate_tree()
+
+        _figure, _axes, registry = self._tree()
+        self._reparent(
+            registry,
+            "figure/axes/0/title",
+            "figure/axes/0/axis/x/grid/major",
+        )
+        with self.assertRaisesRegex(ComponentValidationError, "cannot have parent kind"):
+            registry.validate_tree()
+
+    def test_validate_tree_reports_selector_and_axes_semantic_faults(self):
+        cases = (
+            ("figure/axes/0", {"selector": {"index": True}}, "non-negative"),
+            ("figure/axes/0/axis/x", {"selector": {"axis": "y"}}, "axis='x'"),
+            (
+                "figure/axes/0/spine/left",
+                {"selector": {"name": "diagonal"}},
+                "standard spine",
+            ),
+            (
+                "figure/axes/0/axis/x/tick/major",
+                {"selector": {"axis": "z", "level": "major"}},
+                "axis=x|y",
+            ),
+            (
+                "figure/axes/0/axis/x/tick/major",
+                {"selector": {"axis": "y", "level": "major"}},
+                "does not match its parent",
+            ),
+            (
+                "figure/axes/0/axis/x/tick/major/label",
+                {"selector": {"axis": "x", "level": "minor"}},
+                "level does not match",
+            ),
+            (
+                "figure/axes/0/axis/x/tick/major",
+                {"role": ComponentRole.MINOR_TICK},
+                "role does not match",
+            ),
+            (
+                "figure/axes/0/axis/x/tick/major/label",
+                {"role": ComponentRole.MINOR_TICK_LABEL},
+                "role does not match",
+            ),
+            (
+                "figure/axes/0/axis/x/label",
+                {"selector": {"axis": "y"}},
+                "axis='x'",
+            ),
+            (
+                "figure/axes/0/line/0",
+                {"selector": {"object_id": "other"}},
+                "object_id equal to its component id",
+            ),
+            (
+                "figure/axes/0/line/0",
+                {
+                    "kind": ComponentKind.SECONDARY_AXIS,
+                    "role": ComponentRole.SECONDARY_X_AXIS,
+                    "selector": {"object_id": "other"},
+                },
+                "only object_id",
+            ),
+            (
+                "figure/axes/0/line/0",
+                {
+                    "kind": ComponentKind.REFERENCE_MARKS,
+                    "role": ComponentRole.REFLECTION_POSITIONS,
+                    "selector": {"object_id": "other"},
+                },
+                "only object_id",
+            ),
+            (
+                "figure/axes/0/line/0",
+                {
+                    "kind": ComponentKind.REFERENCE_GUIDE,
+                    "role": ComponentRole.REFERENCE_LINE,
+                    "selector": {"object_id": "other"},
+                },
+                "only object_id",
+            ),
+            (
+                "figure/axes/0/line/0",
+                {
+                    "kind": ComponentKind.ANNOTATION,
+                    "role": ComponentRole.ANNOTATION,
+                    "selector": {"object_id": "other"},
+                },
+                "only object_id",
+            ),
+            (
+                "figure/axes/0/line/0",
+                {
+                    "kind": ComponentKind.IN_AXES,
+                    "role": ComponentRole.IN_AXES_ZOOM,
+                    "selector": {"object_id": "other"},
+                },
+                "object_id equal to its component id",
+            ),
+            (
+                "figure/axes/0/title",
+                {
+                    "role": ComponentRole.TEXT,
+                    "selector": {
+                        "object_id": "figure/axes/0/title",
+                        "scope": "figure",
+                    },
+                },
+                "scope does not match",
+            ),
+        )
+        for component_id, changes, pattern in cases:
+            with self.subTest(component_id=component_id, pattern=pattern):
+                _figure, _axes, registry = self._tree()
+                self._replace_state(registry, component_id, **changes)
+                with self.assertRaisesRegex(ComponentValidationError, pattern):
+                    registry.validate_tree()
+
+        missing = (
+            ("figure/axes/0/title", "exactly one Title"),
+            ("figure/axes/0/spine/left", "standard Spine"),
+            ("figure/axes/0/axis/x", "exactly one x and one"),
+            ("figure/axes/0/axis/x/label", "exactly one label"),
+            ("figure/axes/0/axis/x/tick/major", "major and minor Tick"),
+            ("figure/axes/0/axis/x/grid/major", "major and minor Grid"),
+            (
+                "figure/axes/0/axis/x/tick/major/label",
+                "exactly one Tick Label",
+            ),
+        )
+        for component_id, pattern in missing:
+            with self.subTest(missing=component_id):
+                _figure, _axes, registry = self._tree()
+                registry._forget_subtree(component_id)
+                with self.assertRaisesRegex(ComponentValidationError, pattern):
+                    registry.validate_tree()
+
+    def test_validate_axes_targets_and_ancestor_cycle(self):
+        empty = ComponentRegistry()
+        with self.assertRaisesRegex(ComponentValidationError, "exactly one Figure"):
+            empty.validate_axes_targets()
+        with self.assertRaisesRegex(ComponentValidationError, "exactly one Figure"):
+            empty.validate_tree()
+
+        figure, axes, registry = self._tree()
+        figure_controller = registry.get("figure")
+        with patch.object(
+            figure_controller,
+            "resolve_target",
+            return_value=object(),
+        ):
+            with self.assertRaisesRegex(ComponentValidationError, "unavailable"):
+                registry.validate_axes_targets()
+
+        with patch.object(
+            registry.get("figure/axes/0"),
+            "resolve_target",
+            return_value=None,
+        ):
+            with self.assertRaisesRegex(ComponentValidationError, "no Axes target"):
+                registry.validate_axes_targets()
+
+        two = Figure()
+        left, right = two.subplots(1, 2)
+        two_registry = register_figure_components(
+            two,
+            id_factory=lambda path: path,
+            include_artists=False,
+        )
+        left_axes = two_registry.get("figure/axes/0")
+        right_axes = two_registry.get("figure/axes/1")
+        with patch.object(
+            right_axes,
+            "resolve_target",
+            return_value=left_axes.resolve_target(),
+        ):
+            with self.assertRaisesRegex(ComponentValidationError, "same artist"):
+                two_registry.validate_axes_targets()
+
+        figure, axes, registry = self._tree()
+        axes.remove()
+        with self.assertRaisesRegex(ComponentValidationError, "detached"):
+            registry.validate_axes_targets()
+
+        figure, axes, registry = self._tree()
+        line_id = "figure/axes/0/line/0"
+        axes_id = "figure/axes/0"
+        self._replace_state(registry, line_id, parent_id=axes_id)
+        self._replace_state(registry, axes_id, parent_id=line_id)
+        with self.assertRaisesRegex(ComponentValidationError, "ancestor cycle"):
+            registry.ancestor(
+                line_id,
+                kind=ComponentKind.FIGURE,
+                include_self=False,
+            )
+
+        self._replace_state(registry, line_id, parent_id="ghost-parent")
+        self.assertIsNone(registry.ancestor(line_id, include_self=False))
+
+    def test_delete_transaction_rebinds_locator_after_typeerror(self):
+        figure, axes, registry = self._tree()
+        line_id = "figure/axes/0/line/0"
+        original_unbind = registry.locator.unbind
+
+        def fail_unbind(component_id):
+            original_unbind(component_id)
+            raise RuntimeError("injected unbind failure")
+
+        with patch.object(registry.locator, "unbind", side_effect=fail_unbind):
+            with patch.object(
+                registry.locator,
+                "bind",
+                side_effect=TypeError("injected bind type error"),
+            ):
+                result = registry.delete_transaction((line_id,))
+        self.assertFalse(result.ok)
+        self.assertIn(line_id, registry)
+        self.assertIn("Locator rollback", result.message)
+
+    def test_colorbar_and_secondary_axis_tree_checks(self):
+        figure, axes, registry = self._tree()
+        line = registry.get("figure/axes/0/line/0")
+        colorbar_state = ComponentState(
+            id="fake-colorbar",
+            kind=ComponentKind.COLORBAR,
+            role=ComponentRole.COLORBAR,
+            parent_id="figure/axes/0",
+            order=line.state.order + 10,
+            selector={"object_id": "fake-colorbar"},
+            data={"source_component_id": line.component_id},
+        )
+        registry.register(
+            create_controller(colorbar_state, target=None),
+            target=None,
+            require_parent=True,
+        )
+        with self.assertRaisesRegex(ComponentValidationError, "Scatter or FIELD_2D"):
+            registry.validate_tree()
+
+        figure, axes, registry = self._tree()
+        self._replace_state(
+            registry,
+            "figure/axes/0/line/0",
+            kind=ComponentKind.COLORBAR,
+            role=ComponentRole.COLORBAR,
+            selector={"object_id": "other-colorbar"},
+            data={"source_component_id": "missing-source"},
+        )
+        with self.assertRaisesRegex(ComponentValidationError, "object_id equal"):
+            registry.validate_tree()
+
+        figure = Figure()
+        left, right = figure.subplots(1, 2)
+        left.scatter([0.0], [1.0])
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=True,
+        )
+        scatter = registry.query(kind=ComponentKind.SCATTER)[0]
+        mismatch = ComponentState(
+            id="cb-mismatch",
+            kind=ComponentKind.COLORBAR,
+            role=ComponentRole.COLORBAR,
+            parent_id="figure/axes/1",
+            order=scatter.state.order + 20,
+            selector={"object_id": "cb-mismatch"},
+            data={"source_component_id": scatter.component_id},
+        )
+        registry.register(
+            create_controller(mismatch, target=None),
+            target=None,
+        )
+        with self.assertRaisesRegex(ComponentValidationError, "same owner Axes"):
+            registry.validate_tree()
+
+        figure = Figure()
+        axes = figure.subplots()
+        axes.scatter([0.0], [1.0])
+        registry = register_figure_components(
+            figure,
+            id_factory=lambda path: path,
+            include_artists=True,
+        )
+        scatter = registry.query(kind=ComponentKind.SCATTER)[0]
+        for suffix in ("a", "b"):
+            state = ComponentState(
+                id=f"cb-dup-{suffix}",
+                kind=ComponentKind.COLORBAR,
+                role=ComponentRole.COLORBAR,
+                parent_id="figure/axes/0",
+                order=scatter.state.order + 30 + ord(suffix),
+                selector={"object_id": f"cb-dup-{suffix}"},
+                data={"source_component_id": scatter.component_id},
+            )
+            registry.register(
+                create_controller(state, target=None),
+                target=None,
+            )
+        with self.assertRaisesRegex(ComponentValidationError, "more than one Colorbar"):
+            registry.validate_tree()
 
 
 if __name__ == "__main__":

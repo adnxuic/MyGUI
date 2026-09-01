@@ -27,6 +27,13 @@ pending data state. Failure restores the exact identities and publishes no
 intermediate events or success message. Commit publishes one batch lifecycle,
 one final refresh/draw, one selection, and at most one Message Bar result.
 
+`ComponentRegistry.delete_transaction()` remains the only Registry deletion
+entry. Internally it runs prepare, apply, verify, rollback, and publish on an
+ephemeral memento that records object identity, order, Locator bindings, and
+compensation diagnostics. Compensation paths record every failed restore;
+they do not swallow exceptions with an empty handler. This helper is not a
+second deletion or state authority.
+
 Colorbar removal uses `ColorbarRemovalHandle`, not ordinary Artist-list
 removal. It pins the Colorbar, auxiliary Axes, Figure Axes ordering, owner Axes
 layout/anchor, source callback registry, and source binding. Owner Axes removal

@@ -34,6 +34,9 @@ valid schema-v15, schema-v14, schema-v13, schema-v12, schema-v11, and schema-v10
 before any Table or Figure state is published; v4-v9 remain unsupported.
 Closed composite contracts reject unknown keys, non-finite values, invalid
 kind/parameter combinations, callables, Matplotlib objects, and runtime state.
+Schema-v23 parent and selector checks are a closed `(ComponentKind,
+ComponentRole)` validator table covering every Controller key exactly. The
+version, migration order, error types, and serialized bytes stay the same.
 
 Any later persisted field, renamed key, kind/role, selector, or wire-shape
 change requires a dedicated schema migration task. That task defines migration
