@@ -222,7 +222,8 @@ These services do not maintain parallel project records. `ComponentRegistry` and
 
 The Canvas host package is `mygui/widgets/figure_canvas/`. Public `add_*` and
 `restore_component_tree` stay on `PyFigureCanvas` in the historical filename
-`py_figure_canves.py`. Batch staging (`ChartCreationStager`), restore handlers
+`py_figure_canves.py`. Batch staging (`ChartCreationStager`), Element staging
+(`ElementCreationStager`), restore handlers
 (`canvas_materialize_handlers.py`), snapshot apply (`CanvasSnapshotApplier`),
 the Canvas Window (`canvas_popout.py`), and the project navigation toolbar
 (`canvas_toolbar.py`) hold only a host reference and must not cache

@@ -67,6 +67,7 @@ state.
 | Module | Role |
 | --- | --- |
 | `chart_creation.py` | `ChartCreationStager` and batch records |
+| `element_creation.py` | `ElementCreationStager` for chart-adjacent Element publication |
 | `canvas_materialize_handlers.py` | Canvas restore handlers; bind with `register_canvas_materializers()` |
 | `canvas_snapshot.py` | `CanvasSnapshotApplier` after Matplotlib targets exist |
 | `canvas_popout.py` | `CanvasPopoutWindow` for the live canvas viewport |
@@ -123,7 +124,9 @@ through the Canvas.
   `ChartCreationStager` inside one `registration_transaction()`, then
   commits the Axes color cycle and ledger only after that transaction
   succeeds. Public `add_plot` / `add_plots` (and scatter/interpolation
-  equivalents) stay on `PyFigureCanvas`. The stager must not receive
+  equivalents) stay on `PyFigureCanvas`. Annotation, In-Axes, Colorbar,
+  Secondary Axis, Field 2D, Text, and Reference publication stage through
+  `ElementCreationStager` the same way. The stagers must not receive
   `ApplicationSettingsService`.
 
 ## Data semantics

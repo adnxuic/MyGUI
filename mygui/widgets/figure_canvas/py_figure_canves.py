@@ -1,16 +1,13 @@
 """Host Matplotlib figures and register their editable components."""
 
 from contextlib import contextmanager
-import math
 from copy import deepcopy
 from functools import partial
 from typing import Any, Optional
 from PySide6.QtCore import QTimer, Qt, Signal
-from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
-    QMenu,
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
@@ -44,7 +41,6 @@ from mygui.figuremodify.component_services import (
     DeletionRequest,
     ErrorBarDataService,
     Field2DService,
-    default_field_2d_properties,
     FitService,
     FunctionCurveService,
     InterpolationService,
@@ -53,7 +49,6 @@ from mygui.figuremodify.component_services import (
     SecondaryAxisCreateSpec,
     SecondaryAxisService,
     TextRenderService,
-    resolve_errorbar_data,
 )
 from mygui.figuremodify.history import FigureHistoryService
 from mygui.widgets.figure_canvas.deletion_coordinator import DeletionCoordinator
@@ -73,6 +68,27 @@ from mygui.widgets.figure_canvas.chart_creation import (
     ChartCreationStager,
     PreparedChartSeries,
     PreparedErrorBarSeries,
+)
+from mygui.widgets.figure_canvas.element_creation import ElementCreationStager
+from mygui.widgets.figure_canvas.creation_requests import (
+    AnnotationCreateRequest,
+    ColorbarCreateRequest,
+    CurveCreateRequest,
+    ErrorBarCreateRequest,
+    Field2DCreateRequest,
+    FitCurveCreateRequest,
+    InAxesElementCreateRequest,
+    InterpolationBatchCreateRequest,
+    InterpolationCreateRequest,
+    LineCreateRequest,
+    PlotBatchCreateRequest,
+    PlotCreateRequest,
+    ReferenceGuideCreateRequest,
+    ReferenceMarksCreateRequest,
+    ScatterBatchCreateRequest,
+    ScatterCreateRequest,
+    SecondaryAxisElementRequest,
+    TextCreateRequest,
 )
 from mygui.widgets.figure_canvas.canvas_materialize_handlers import (
     materialize_colorbar,
@@ -101,7 +117,6 @@ from mygui.widgets.figure_canvas.canvas_snapshot import (
     json_component_value,
 )
 from mygui.figuremodify.components import (
-    AnnotationController,
     AxesController,
     ComponentEvent,
     ComponentEventKind,
@@ -109,30 +124,14 @@ from mygui.figuremodify.components import (
     ComponentRegistry,
     ComponentRole,
     ComponentState,
-    ColorbarController,
-    SecondaryAxisController,
-    ContourController,
     FigureController,
-    FitCurveController,
     FitEngine,
-    FunctionCurveController,
-    HeatmapController,
-    ImageInAxesController,
-    LineController,
     ObserverFailure,
-    PseudocolorController,
-    ReferenceBandController,
-    ReferenceLineController,
-    ReferenceMarksController,
-    ScatterController,
     TextController,
     UpdateImpact,
-    ZoomInAxesController,
     create_semantic_children,
-    decode_in_axes_image,
     validate_controller_contracts,
 )
-from mygui.figuremodify.services.annotation import annotation_artist_kwargs
 from mygui.figuremodify.components.serialization import (
     deterministic_component_id,
     normalize_current_figure,
@@ -142,10 +141,8 @@ from mygui.figuremodify.axes_layout import AxesLayoutSpec
 from mygui.figuremodify.axes_geometry import grid_geometry_record
 from mygui.figuremodify.axes_layout_service import AxesLayoutService
 from mygui.figuremodify.in_axes import (
-    ImageInAxesCreateSpec,
     InAxesCreateSpec,
     InAxesService,
-    ZoomInAxesCreateSpec,
 )
 
 from mygui import tex_config
@@ -162,24 +159,16 @@ from mygui.database import (
     FitInputRangeSpec,
     TableChangeSet,
     TableRepository,
-    resolve_preprocessed_pair,
-    select_fit_input_pair,
     validate_component_name,
 )
 from mygui.database.table_document import new_id
 from mygui.database.interpolate_func import (
     DEFAULT_INTERPOLATION_SAMPLES,
-    interpolate_curve,
-)
-from mygui.database.safe_expression import (
-    GENERATED_FIT_EXPRESSION_LIMITS,
-    evaluate_curve_expression,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.figuremodify.style_base.color_models import (
     ColorCycleState,
     ColorSelection,
-    normalize_color,
 )
 from mygui.figuremodify.style_base.creation_defaults import (
     ComponentCreationDefaults,
@@ -202,7 +191,6 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
-import numpy as np
 
 
 class _ControllerAwareFigureCanvas(FigureCanvasQTAgg):
@@ -363,6 +351,7 @@ class PyFigureCanvas(QWidget):
         )
         self.color_consumption_ledger = ColorConsumptionLedger()
         self._chart_stager = ChartCreationStager(self)
+        self._element_stager = ElementCreationStager(self)
         self._snapshot_applier = CanvasSnapshotApplier(self)
         self.deletion_service = ComponentDeletionService(
             self.component_registry,
@@ -834,37 +823,17 @@ class PyFigureCanvas(QWidget):
     ) -> tuple[dict[str, Any], str, ColorSelection | None, ColorCycleState | None]:
         """Resolve user-creation Line kwargs. Restore omits unspecified fields."""
 
-        if self._restoring_component_tree_now:
-            kwargs: dict[str, Any] = {"label": label}
-            if linestyle is not None:
-                kwargs["linestyle"] = linestyle
-            if color is not None:
-                kwargs["color"] = normalize_color(color)
-            elif color_selection is not None:
-                kwargs["color"] = color_selection.color
-            if linewidth is not None:
-                kwargs["linewidth"] = float(linewidth)
-            if marker is not None:
-                kwargs["marker"] = marker
-            if markersize is not None:
-                kwargs["markersize"] = float(markersize)
-            if markeredgewidth is not None:
-                kwargs["markeredgewidth"] = float(markeredgewidth)
-            return kwargs, str(kwargs.get("color", "#000000")), color_selection, preview_cycle
-        resolved = self._resolve_line_creation(
-            settings=self._read_component_defaults(),
+        return self._chart_stager.line_plot_plan(
+            label=label,
             color=color,
             color_selection=color_selection,
+            preview_cycle=preview_cycle,
             linestyle=linestyle,
             linewidth=linewidth,
             marker=marker,
             markersize=markersize,
             markeredgewidth=markeredgewidth,
         )
-        commit_selection, cycle = self._commit_resolved_line_color(
-            resolved, color_selection, preview_cycle
-        )
-        return resolved.plot_kwargs(label=label), resolved.color, commit_selection, cycle
 
     def _shared_line_fields(
         self,
@@ -1933,60 +1902,24 @@ class PyFigureCanvas(QWidget):
     ):
         """Add curve."""
 
-        object_id = object_id or new_id()
-        x = np.linspace(x_start, x_stop, 1000)
-        y = evaluate_curve_expression(func_text, x)
-        plot_kwargs, resolved_color, commit_selection, preview_cycle = (
-            self._user_line_plot_plan(
-                label=label,
+        return self._chart_stager.create_curve(
+            CurveCreateRequest(
+                func_text=func_text,
+                x_start=x_start,
+                x_stop=x_stop,
+                style=style,
                 color=color,
+                label=label,
+                color_order=color_order,
+                object_id=object_id,
                 color_selection=color_selection,
                 preview_cycle=preview_cycle,
-                linestyle=style,
                 linewidth=linewidth,
                 marker=marker,
                 markersize=markersize,
                 markeredgewidth=markeredgewidth,
             )
         )
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                (line,) = self.current_axes.plot(x, y, **plot_kwargs)
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(line)
-            )
-            component_order = self._claim_color_order(color_order)
-            controller = self._register_chart_controller(
-                FunctionCurveController,
-                object_id,
-                ComponentRole.FUNCTION_CURVE,
-                line,
-                component_order,
-                self._line_sync_properties(
-                    line, color=resolved_color, label=label
-                ),
-                {
-                    "expression": func_text,
-                    "x_start": float(x_start),
-                    "x_stop": float(x_stop),
-                },
-            )
-            self._prepare_created_component(controller, transaction)
-            color_transition = self._commit_single_creation_color(
-                transaction,
-                commit_selection,
-                preview_cycle,
-            )
-            axes_id = self.current_axes_component_id
-        self._finish_created_component(controller)
-        if color_transition is not None and axes_id is not None:
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                *color_transition,
-            )
-            self.color_library.record_recent(resolved_color)
-        return line
 
     @_history_command("Create Line")
     def add_component_line(
@@ -2002,38 +1935,17 @@ class PyFigureCanvas(QWidget):
     ):
         """Restore/register a generic Line component without a visible panel."""
 
-        color = normalize_color(color)
-        object_id = object_id or new_id()
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                (line,) = self.current_axes.plot(
-                    np.asarray(x),
-                    np.asarray(y),
-                    linestyle=style,
-                    color=color,
-                    label=label,
-                )
-            transaction.on_rollback(lambda: self._remove_created_artist(line))
-            component_order = self._claim_color_order(color_order)
-            controller = self._register_chart_controller(
-                LineController,
-                object_id,
-                ComponentRole.LINE,
-                line,
-                component_order,
-                {
-                    "linestyle": line.get_linestyle(),
-                    "color": color,
-                    "label": label,
-                },
-                {
-                    "x": np.asarray(x).tolist(),
-                    "y": np.asarray(y).tolist(),
-                },
+        return self._chart_stager.create_line(
+            LineCreateRequest(
+                x=x,
+                y=y,
+                style=style,
+                color=color,
+                label=label,
+                object_id=object_id,
+                color_order=color_order,
             )
-            self._prepare_created_component(controller, transaction)
-        self._finish_created_component(controller)
-        return line
+        )
 
     # Add line plot
     @_history_command("Create Plot")
@@ -2059,79 +1971,26 @@ class PyFigureCanvas(QWidget):
     ):
         """Add plot."""
 
-        preprocess = DataPreprocessSpec.from_dict(preprocess)
-        pair = resolve_preprocessed_pair(
-            self.repository,
-            x_ref,
-            y_ref,
-            preprocess,
-            preserve_gaps=True,
-        )
-        if self._restoring_component_tree_now:
-            resolved_color = normalize_color(color)
-            resolved_style, resolved_size, resolved_lw = style, size, linewidth
-            resolved_marker, resolved_mew = marker, markeredgewidth
-            commit_selection = color_selection
-        else:
-            resolved = self._resolve_line_creation(
-                settings=self._read_component_defaults(),
+        return self._chart_stager.create_plot(
+            PlotCreateRequest(
+                x=x,
+                y=y,
+                style=style,
+                size=size,
                 color=color,
-                color_selection=color_selection,
-                linestyle=style,
-                linewidth=linewidth,
-                marker=marker,
-                markersize=size,
-                markeredgewidth=markeredgewidth,
-            )
-            resolved_color = resolved.color
-            resolved_style = resolved.linestyle
-            resolved_size = resolved.markersize
-            resolved_lw = resolved.linewidth
-            resolved_marker = resolved.marker
-            resolved_mew = resolved.markeredgewidth
-            commit_selection, preview_cycle = self._commit_resolved_line_color(
-                resolved, color_selection, preview_cycle
-            )
-        series = PreparedChartSeries(
-            x_ref=x_ref,
-            y_ref=y_ref,
-            x=pair.x,
-            y=pair.y,
-            label=str(label),
-            color=resolved_color,
-            excluded_count=pair.excluded_count,
-        )
-        axes_id = self.current_axes_component_id
-        if axes_id is None:
-            raise ValueError("Select an axes before adding a chart.")
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.watch_existing(axes_id)
-            line, controller = self._stage_plot(
-                transaction,
-                series,
-                style=resolved_style,
-                size=resolved_size,
-                linewidth=resolved_lw,
-                preprocess=preprocess,
+                label=label,
+                x_ref=x_ref,
+                y_ref=y_ref,
                 object_id=object_id,
                 color_order=color_order,
-                marker=resolved_marker,
-                markeredgewidth=resolved_mew,
+                linewidth=linewidth,
+                preprocess=preprocess,
+                marker=marker,
+                markeredgewidth=markeredgewidth,
+                color_selection=color_selection,
+                preview_cycle=preview_cycle,
             )
-            color_transition = self._commit_single_creation_color(
-                transaction,
-                commit_selection,
-                preview_cycle,
-            )
-        self._finish_created_component(controller)
-        if color_transition is not None and axes_id is not None:
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                *color_transition,
-            )
-            self.color_library.record_recent(resolved_color)
-        return line
+        )
 
     @_history_command("Create Plots")
     def add_plots(
@@ -2150,39 +2009,19 @@ class PyFigureCanvas(QWidget):
     ) -> ChartBatchCreationResult:
         """Atomically create one Plot component for every selected Y column."""
 
-        spec = DataPreprocessSpec.from_dict(preprocess)
-        line_style, line_width, line_marker, line_size, line_mew = (
-            self._shared_line_fields(
-                linestyle=style,
+        return self._chart_stager.create_plots(
+            PlotBatchCreateRequest(
+                x_ref=x_ref,
+                y_refs=y_refs,
+                style=style,
+                size=size,
                 linewidth=linewidth,
+                preprocess=preprocess,
+                color_selection=color_selection,
+                record_recent=record_recent,
                 marker=marker,
-                markersize=size,
                 markeredgewidth=markeredgewidth,
             )
-        )
-        prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
-            x_ref,
-            y_refs,
-            spec,
-            color_selection,
-            preserve_gaps=True,
-        )
-        return self._commit_chart_batch(
-            prepared,
-            lambda transaction, series: self._stage_plot(
-                transaction,
-                series,
-                style=line_style,
-                size=line_size,
-                linewidth=line_width,
-                preprocess=spec,
-                marker=line_marker,
-                markeredgewidth=line_mew,
-            ),
-            final_cycle=final_cycle,
-            commit_cycle=commit_cycle,
-            color_transitions=transitions,
-            record_recent=record_recent,
         )
 
     # Add scatter plot
@@ -2211,82 +2050,28 @@ class PyFigureCanvas(QWidget):
     ):
         """Add scatter."""
 
-        preprocess = DataPreprocessSpec.from_dict(preprocess)
-        pair = resolve_preprocessed_pair(
-            self.repository,
-            x_ref,
-            y_ref,
-            preprocess,
-            preserve_gaps=False,
-        )
-        mapping_enabled = False
-        if isinstance(color_mapping, dict):
-            mapping_enabled = bool(color_mapping.get("enabled"))
-        if self._restoring_component_tree_now:
-            resolved_color = normalize_color(color)
-            resolved_marker, resolved_size, resolved_lw = marker, size, linewidth
-            commit_selection = None if mapping_enabled else color_selection
-        else:
-            resolved = self._resolve_scatter_creation(
-                settings=self._read_component_defaults(),
-                color=color,
-                color_selection=None if mapping_enabled else color_selection,
-                marker=marker,
+        return self._chart_stager.create_scatter(
+            ScatterCreateRequest(
+                x=x,
+                y=y,
                 size=size,
-                linewidth=linewidth,
-            )
-            resolved_color = resolved.color
-            resolved_marker = resolved.marker
-            resolved_size = resolved.size
-            resolved_lw = resolved.linewidth
-            if mapping_enabled:
-                commit_selection = None
-            else:
-                commit_selection, preview_cycle = self._commit_resolved_line_color(
-                    resolved, color_selection, preview_cycle
-                )
-        series = PreparedChartSeries(
-            x_ref=x_ref,
-            y_ref=y_ref,
-            x=pair.x,
-            y=pair.y,
-            label=str(label),
-            color=resolved_color,
-            excluded_count=pair.excluded_count,
-        )
-        axes_id = self.current_axes_component_id
-        if axes_id is None:
-            raise ValueError("Select an axes before adding a chart.")
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.watch_existing(axes_id)
-            scatter, controller = self._stage_scatter(
-                transaction,
-                series,
-                size=resolved_size,
-                marker=resolved_marker,
+                color=color,
+                marker=marker,
+                label=label,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                object_id=object_id,
+                color_order=color_order,
                 preprocess=preprocess,
                 color_ref=color_ref,
                 size_ref=size_ref,
                 color_mapping=color_mapping,
                 size_mapping=size_mapping,
-                object_id=object_id,
-                color_order=color_order,
-                linewidth=resolved_lw,
+                linewidth=linewidth,
+                color_selection=color_selection,
+                preview_cycle=preview_cycle,
             )
-            color_transition = self._commit_single_creation_color(
-                transaction,
-                commit_selection,
-                preview_cycle,
-            )
-        self._finish_created_component(controller)
-        if color_transition is not None and axes_id is not None:
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                *color_transition,
-            )
-            self.color_library.record_recent(resolved_color)
-        return scatter
+        )
 
     @_history_command("Create Scatters")
     def add_scatters(
@@ -2307,61 +2092,21 @@ class PyFigureCanvas(QWidget):
     ) -> ChartBatchCreationResult:
         """Atomically create one Scatter component for every selected Y."""
 
-        spec = DataPreprocessSpec.from_dict(preprocess)
-        color_spec = (
-            ScatterController.property_specs()["color_mapping"].normalize(
-                color_mapping
-                if color_mapping is not None
-                else ScatterController.default_properties()["color_mapping"]
-            )
-        )
-        size_spec = (
-            ScatterController.property_specs()["size_mapping"].normalize(
-                size_mapping
-                if size_mapping is not None
-                else ScatterController.default_properties()["size_mapping"]
-            )
-        )
-        if self._restoring_component_tree_now:
-            resolved_marker, resolved_size, resolved_lw = marker, size, linewidth
-        else:
-            resolved = self._resolve_scatter_creation(
-                settings=self._read_component_defaults(),
-                color=color_selection.color,
-                color_selection=color_selection,
-                marker=marker,
+        return self._chart_stager.create_scatters(
+            ScatterBatchCreateRequest(
+                x_ref=x_ref,
+                y_refs=y_refs,
                 size=size,
-                linewidth=linewidth,
-            )
-            resolved_marker = resolved.marker
-            resolved_size = resolved.size
-            resolved_lw = resolved.linewidth
-        prepared, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
-            x_ref,
-            y_refs,
-            spec,
-            color_selection,
-            preserve_gaps=False,
-            consume_palette=not color_spec["enabled"],
-        )
-        return self._commit_chart_batch(
-            prepared,
-            lambda transaction, series: self._stage_scatter(
-                transaction,
-                series,
-                size=resolved_size,
-                marker=resolved_marker,
-                preprocess=spec,
+                marker=marker,
+                preprocess=preprocess,
+                color_selection=color_selection,
                 color_ref=color_ref,
                 size_ref=size_ref,
-                color_mapping=color_spec,
-                size_mapping=size_spec,
-                linewidth=resolved_lw,
-            ),
-            final_cycle=final_cycle,
-            commit_cycle=commit_cycle,
-            color_transitions=transitions,
-            record_recent=record_recent,
+                color_mapping=color_mapping,
+                size_mapping=size_mapping,
+                record_recent=record_recent,
+                linewidth=linewidth,
+            )
         )
 
     # Add error bar
@@ -2405,91 +2150,19 @@ class PyFigureCanvas(QWidget):
     ):
         """Create and publish one table-driven Error Bar atomically."""
 
-        from mygui.figuremodify.components.property_values import (
-            DEFAULT_ERROR_SPEC,
-            normalize_error_spec,
-        )
-
-        preprocess_spec = DataPreprocessSpec.from_dict(preprocess)
-        xerr_spec = normalize_error_spec(
-            xerr if xerr is not None else deepcopy(DEFAULT_ERROR_SPEC)
-        )
-        yerr_spec = normalize_error_spec(
-            yerr if yerr is not None else deepcopy(DEFAULT_ERROR_SPEC)
-        )
-        drawable = resolve_errorbar_data(
-            self.repository,
-            x_ref,
-            y_ref,
-            xerr_spec,
-            yerr_spec,
-            preprocess_spec,
-        )
-        if self._restoring_component_tree_now:
-            resolved = ResolvedErrorBarAppearance(
-                color=normalize_color(color),
-                linestyle=(
-                    deepcopy(linestyle)
-                    if linestyle is not None
-                    else {"kind": "preset", "value": "-"}
-                ),
-                linewidth=float(linewidth) if linewidth is not None else 1.5,
-                marker=(
-                    deepcopy(marker)
-                    if marker is not None
-                    else {"kind": "symbol", "value": "None"}
-                ),
-                markersize=float(markersize) if markersize is not None else 6.0,
-                markeredgewidth=(
-                    float(markeredgewidth) if markeredgewidth is not None else 1.0
-                ),
-                markerfacecoloralt=(
-                    str(markerfacecoloralt)
-                    if markerfacecoloralt is not None
-                    else "none"
-                ),
-                fillstyle=str(fillstyle) if fillstyle is not None else "full",
-                drawstyle=str(drawstyle) if drawstyle is not None else "default",
-                antialiased=bool(antialiased) if antialiased is not None else True,
-                ecolor=(
-                    normalize_color(ecolor)
-                    if ecolor is not None
-                    else normalize_color(color)
-                ),
-                elinewidth=float(elinewidth) if elinewidth is not None else 1.5,
-                capsize=float(capsize) if capsize is not None else 0.0,
-                capthick=float(capthick) if capthick is not None else 1.0,
-                error_linestyle=(
-                    deepcopy(error_linestyle)
-                    if error_linestyle is not None
-                    else {"kind": "preset", "value": "-"}
-                ),
-                error_capstyle=(
-                    None if error_capstyle is None else str(error_capstyle)
-                ),
-                error_antialiased=(
-                    bool(error_antialiased) if error_antialiased is not None else True
-                ),
-                errorevery=(
-                    deepcopy(errorevery) if errorevery is not None else {"kind": "all"}
-                ),
-                lolims=bool(lolims) if lolims is not None else False,
-                uplims=bool(uplims) if uplims is not None else False,
-                xlolims=bool(xlolims) if xlolims is not None else False,
-                xuplims=bool(xuplims) if xuplims is not None else False,
-                barsabove=bool(barsabove) if barsabove is not None else False,
-                color_selection=(
-                    color_selection
-                    if color_selection is not None
-                    else ColorSelection(normalize_color(color))
-                ),
-            )
-            commit_selection = color_selection
-        else:
-            resolved = self._resolve_errorbar_creation(
-                settings=self._read_component_defaults(),
+        return self._chart_stager.create_errorbar(
+            ErrorBarCreateRequest(
+                x_ref=x_ref,
+                y_ref=y_ref,
+                label=label,
+                xerr=xerr,
+                yerr=yerr,
+                preprocess=preprocess,
+                object_id=object_id,
+                color_order=color_order,
                 color=color,
                 color_selection=color_selection,
+                preview_cycle=preview_cycle,
                 linestyle=linestyle,
                 linewidth=linewidth,
                 marker=marker,
@@ -2513,48 +2186,7 @@ class PyFigureCanvas(QWidget):
                 xuplims=xuplims,
                 barsabove=barsabove,
             )
-            commit_selection, preview_cycle = self._commit_resolved_line_color(
-                resolved, color_selection, preview_cycle
-            )
-        series = PreparedErrorBarSeries(
-            x_ref=x_ref,
-            y_ref=y_ref,
-            x=drawable.x,
-            y=drawable.y,
-            xerr=drawable.xerr,
-            yerr=drawable.yerr,
-            label=str(label),
-            xerr_spec=xerr_spec,
-            yerr_spec=yerr_spec,
-            preprocess=preprocess_spec,
-            excluded_count=0,
         )
-        axes_id = self.current_axes_component_id
-        if axes_id is None:
-            raise ValueError("Select an axes before adding a chart.")
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.watch_existing(axes_id)
-            runtime, controller = self._stage_errorbar(
-                transaction,
-                series,
-                appearance=resolved,
-                object_id=object_id,
-                color_order=color_order,
-            )
-            color_transition = self._commit_single_creation_color(
-                transaction,
-                commit_selection,
-                preview_cycle,
-            )
-        self._finish_created_component(controller)
-        if color_transition is not None and axes_id is not None:
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                *color_transition,
-            )
-            self.color_library.record_recent(resolved.color)
-        return runtime
 
     # Add fit curve
     @_history_command("Create Fit Curve")
@@ -2588,110 +2220,34 @@ class PyFigureCanvas(QWidget):
     ):
         """Add fit curve."""
 
-        preprocess = DataPreprocessSpec.from_dict(preprocess)
-        input_range = FitInputRangeSpec.from_dict(fit_input_range)
-        pair = resolve_preprocessed_pair(
-            self.repository,
-            x_ref,
-            y_ref,
-            preprocess,
-            preserve_gaps=False,
-        )
-        selected = select_fit_input_pair(pair, input_range, require_data=False)
-        x, y = selected.x, selected.y
-        try:
-            engine = FitEngine(engine)
-        except ValueError as exc:
-            raise ValueError(
-                f"Unsupported fitting engine: {engine}"
-            ) from exc
-
-        object_id = object_id or new_id()
-        x_array = np.asarray(x, dtype=float)
-        y_array = np.asarray(y, dtype=float)
-        x_start = selected.x_start if x_start is None else float(x_start)
-        x_stop = selected.x_stop if x_stop is None else float(x_stop)
-
-        line_x = x_array
-        line_y = y_array
-        if expression:
-            try:
-                line_x = np.linspace(x_start, x_stop, 1000)
-                line_y = evaluate_curve_expression(
-                    expression,
-                    line_x,
-                    limits=GENERATED_FIT_EXPRESSION_LIMITS,
-                )
-            except ValueError:
-                status_messages.show_error("Saved fit expression could not be restored; showing source data.")
-                expression = ""
-                line_x = x_array
-                line_y = y_array
-
-        plot_kwargs, resolved_color, commit_selection, preview_cycle = (
-            self._user_line_plot_plan(
-                label=label,
+        return self._chart_stager.create_fit_curve(
+            FitCurveCreateRequest(
+                x=x,
+                y=y,
                 color=color,
+                label=label,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                engine=engine,
+                fit_type=fit_type,
+                fit_options=fit_options,
+                fit_result=fit_result,
+                expression=expression,
+                x_start=x_start,
+                x_stop=x_stop,
+                style=style,
+                object_id=object_id,
+                color_order=color_order,
+                preprocess=preprocess,
+                fit_input_range=fit_input_range,
                 color_selection=color_selection,
                 preview_cycle=preview_cycle,
-                linestyle=style,
                 linewidth=linewidth,
                 marker=marker,
                 markersize=markersize,
                 markeredgewidth=markeredgewidth,
             )
         )
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                (line,) = self.current_axes.plot(
-                    line_x,
-                    line_y,
-                    **plot_kwargs,
-                )
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(line)
-            )
-            component_order = self._claim_color_order(color_order)
-            controller = self._register_chart_controller(
-                FitCurveController,
-                object_id,
-                ComponentRole.FIT_CURVE,
-                line,
-                component_order,
-                self._line_sync_properties(
-                    line, color=resolved_color, label=label
-                ),
-                {
-                    "x_ref": x_ref.to_dict(),
-                    "y_ref": y_ref.to_dict(),
-                    "preprocess": preprocess.to_dict(),
-                    "engine": engine.value,
-                    "fit_type": deepcopy(fit_type),
-                    "fit_options": deepcopy(fit_options),
-                    "fit_result": deepcopy(fit_result),
-                    "expression": expression or "",
-                    "x_start": float(x_start),
-                    "x_stop": float(x_stop),
-                    "fit_input_range": input_range.to_dict(),
-                },
-            )
-            self._prepare_created_component(controller, transaction)
-            color_transition = self._commit_single_creation_color(
-                transaction,
-                commit_selection,
-                preview_cycle,
-            )
-            axes_id = self.current_axes_component_id
-        self._finish_created_component(controller)
-        if color_transition is not None and axes_id is not None:
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                *color_transition,
-            )
-            self.color_library.record_recent(resolved_color)
-        return line
-
     # Add interpolation curve
     @_history_command("Create Interpolation")
     def add_interpolate_curve(
@@ -2723,119 +2279,33 @@ class PyFigureCanvas(QWidget):
     ):
         """Add interpolate curve."""
 
-        preprocess = DataPreprocessSpec.from_dict(preprocess)
-        pair = resolve_preprocessed_pair(
-            self.repository,
-            x_ref,
-            y_ref,
-            preprocess,
-            preserve_gaps=False,
-        )
-        x, y = pair.x, pair.y
-        x_values = np.asarray(x)
-        y_values = np.asarray(y)
-        if allow_empty and (x_values.size == 0 or y_values.size == 0):
-            x_new = np.asarray([], dtype=float)
-            y_new = np.asarray([], dtype=float)
-        else:
-            try:
-                x_new, y_new = interpolate_curve(
-                    x_values,
-                    y_values,
-                    method,
-                    k=k,
-                    samples=samples,
-                    lam=lam,
-                    lam_auto=lam_auto,
-                )
-            except ValueError as exc:
-                if not allow_empty:
-                    status_messages.show_error(str(exc))
-                    return None
-                x_new = np.asarray([], dtype=float)
-                y_new = np.asarray([], dtype=float)
-                status_messages.show_warning(
-                    "Interpolation could not be recomputed from the "
-                    f"current source data ({exc}); an empty component "
-                    "was restored."
-                )
-        if self._restoring_component_tree_now:
-            resolved_color = normalize_color(color)
-            line_style, line_width = linestyle, linewidth
-            line_marker, line_ms, line_mew = marker, markersize, markeredgewidth
-            commit_selection = color_selection
-        else:
-            resolved = self._resolve_line_creation(
-                settings=self._read_component_defaults(),
+        return self._chart_stager.create_interpolate_curve(
+            InterpolationCreateRequest(
+                x=x,
+                y=y,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                method=method,
+                k=k,
+                label=label,
                 color=color,
+                samples=samples,
+                lam=lam,
+                lam_auto=lam_auto,
+                object_id=object_id,
+                color_order=color_order,
+                allow_empty=allow_empty,
+                preprocess=preprocess,
+                announce=announce,
                 color_selection=color_selection,
+                preview_cycle=preview_cycle,
                 linestyle=linestyle,
                 linewidth=linewidth,
                 marker=marker,
                 markersize=markersize,
                 markeredgewidth=markeredgewidth,
             )
-            resolved_color = resolved.color
-            line_style = resolved.linestyle
-            line_width = resolved.linewidth
-            line_marker = resolved.marker
-            line_ms = resolved.markersize
-            line_mew = resolved.markeredgewidth
-            commit_selection, preview_cycle = self._commit_resolved_line_color(
-                resolved, color_selection, preview_cycle
-            )
-        series = PreparedChartSeries(
-            x_ref=x_ref,
-            y_ref=y_ref,
-            x=x_new,
-            y=y_new,
-            label=str(label),
-            color=resolved_color,
-            excluded_count=pair.excluded_count,
         )
-        axes_id = self.current_axes_component_id
-        if axes_id is None:
-            raise ValueError("Select an axes before adding a chart.")
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.watch_existing(axes_id)
-            line, controller = self._stage_interpolation(
-                transaction,
-                series,
-                method=method,
-                k=k,
-                samples=samples,
-                lam=lam,
-                lam_auto=lam_auto,
-                preprocess=preprocess,
-                object_id=object_id,
-                color_order=color_order,
-                linestyle=line_style,
-                linewidth=line_width,
-                marker=line_marker,
-                markersize=line_ms,
-                markeredgewidth=line_mew,
-            )
-            color_transition = self._commit_single_creation_color(
-                transaction,
-                commit_selection,
-                preview_cycle,
-            )
-        self._finish_created_component(controller)
-        if color_transition is not None and axes_id is not None:
-            self.color_consumption_ledger.record(
-                axes_id,
-                controller.component_id,
-                *color_transition,
-            )
-            self.color_library.record_recent(resolved_color)
-        if announce and not self._restoring_component_tree_now:
-            if x_new.size:
-                status_messages.show_success("Interpolation curve created.")
-            else:
-                status_messages.show_warning(
-                    "Interpolation curve has no valid data yet; its editor and style were kept."
-                )
-        return line
 
     @_history_command("Create Interpolations")
     def add_interpolate_curves(
@@ -2858,68 +2328,23 @@ class PyFigureCanvas(QWidget):
     ) -> ChartBatchCreationResult:
         """Atomically create one interpolation component for every Y."""
 
-        spec = DataPreprocessSpec.from_dict(preprocess)
-        line_style, line_width, line_marker, line_ms, line_mew = (
-            self._shared_line_fields(
+        return self._chart_stager.create_interpolate_curves(
+            InterpolationBatchCreateRequest(
+                x_ref=x_ref,
+                y_refs=y_refs,
+                method=method,
+                color_selection=color_selection,
+                k=k,
+                samples=samples,
+                lam=lam,
+                lam_auto=lam_auto,
+                preprocess=preprocess,
                 linestyle=linestyle,
                 linewidth=linewidth,
                 marker=marker,
                 markersize=markersize,
                 markeredgewidth=markeredgewidth,
             )
-        )
-        sources, final_cycle, commit_cycle, transitions = self._prepare_data_batch(
-            x_ref,
-            y_refs,
-            spec,
-            color_selection,
-            preserve_gaps=False,
-        )
-        prepared = []
-        for series in sources:
-            try:
-                x_new, y_new = interpolate_curve(
-                    np.asarray(series.x),
-                    np.asarray(series.y),
-                    method,
-                    k=k,
-                    samples=samples,
-                    lam=lam,
-                    lam_auto=lam_auto,
-                )
-            except Exception as exc:
-                raise ValueError(f"{series.label}: {exc}") from exc
-            prepared.append(
-                PreparedChartSeries(
-                    x_ref=series.x_ref,
-                    y_ref=series.y_ref,
-                    x=x_new,
-                    y=y_new,
-                    label=series.label,
-                    color=series.color,
-                    excluded_count=series.excluded_count,
-                )
-            )
-        return self._commit_chart_batch(
-            tuple(prepared),
-            lambda transaction, series: self._stage_interpolation(
-                transaction,
-                series,
-                method=method,
-                k=k,
-                samples=samples,
-                lam=lam,
-                lam_auto=lam_auto,
-                preprocess=spec,
-                linestyle=line_style,
-                linewidth=line_width,
-                marker=line_marker,
-                markersize=line_ms,
-                markeredgewidth=line_mew,
-            ),
-            final_cycle=final_cycle,
-            commit_cycle=commit_cycle,
-            color_transitions=transitions,
         )
 
     # Add text
@@ -2938,39 +2363,13 @@ class PyFigureCanvas(QWidget):
         fontweight=None,
         fontstyle=None,
     ) -> dict[str, Any]:
-        if self._restoring_component_tree_now:
-            kwargs: dict[str, Any] = {
-                "family": fontfamily,
-                "fontsize": fontsize,
-                "usetex": False,
-            }
-            if color is not None:
-                kwargs["color"] = color
-            if fontweight is not None:
-                kwargs["fontweight"] = fontweight
-            if fontstyle is not None:
-                kwargs["fontstyle"] = fontstyle
-            return kwargs
-        resolved = self._resolve_text_creation(
-            settings=self._read_component_defaults(),
-            fontfamily=fontfamily,
-            fontsize=fontsize,
+        return self._element_stager.free_text_artist_kwargs(
+            fontfamily,
+            fontsize,
             color=color,
             fontweight=fontweight,
             fontstyle=fontstyle,
         )
-        kwargs: dict[str, Any] = {
-            "family": resolved.fontfamily,
-            "fontsize": resolved.fontsize,
-            "usetex": False,
-        }
-        if resolved.color is not None:
-            kwargs["color"] = resolved.color
-        if resolved.fontweight is not None:
-            kwargs["fontweight"] = resolved.fontweight
-        if resolved.fontstyle is not None:
-            kwargs["fontstyle"] = resolved.fontstyle
-        return kwargs
 
     @_history_command("Create Text")
     def add_text(
@@ -2988,47 +2387,21 @@ class PyFigureCanvas(QWidget):
     ):
         """Add text."""
 
-        desired_usetex = self._resolve_text_usetex(usetex)
-        text_kwargs = self._free_text_artist_kwargs(
-            fontfamily,
-            fontsize,
-            color=color,
-            fontweight=fontweight,
-            fontstyle=fontstyle,
-        )
-        with matplotlib_style_context(self.component_style):
-            text_artist = self.current_axes.text(
-                x,
-                y,
-                text,
-                transform=self.current_axes.transAxes,
-                **text_kwargs,
-            )
-        object_id = object_id or new_id()
-        parent_id = self.current_axes_component_id
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(text_artist)
-            )
-            controller = self._register_text_controller(
-                object_id,
-                text_artist,
-                parent_id=parent_id,
-                order=self._next_child_order(
-                    parent_id,
-                    kind=ComponentKind.TEXT,
-                ),
+        return self._element_stager.create_text(
+            TextCreateRequest(
+                x=x,
+                y=y,
+                text=text,
+                fontfamily=fontfamily,
+                fontsize=fontsize,
+                usetex=usetex,
+                object_id=object_id,
+                color=color,
+                fontweight=fontweight,
+                fontstyle=fontstyle,
                 scope="axes",
             )
-            result = self.text_render_service.apply(
-                controller,
-                {"usetex": desired_usetex},
-            )
-            self._prepare_created_component(controller, transaction)
-        if not self._restoring_component_tree_now and (not result.ok or result.notices):
-            self.message_presenter.present(result)
-        self._finish_created_component(controller)
-        return text_artist
+        )
 
     @_history_command("Create Text")
     def add_global_text(
@@ -3046,45 +2419,21 @@ class PyFigureCanvas(QWidget):
     ):
         """Add global text."""
 
-        desired_usetex = self._resolve_text_usetex(usetex)
-        text_kwargs = self._free_text_artist_kwargs(
-            fontfamily,
-            fontsize,
-            color=color,
-            fontweight=fontweight,
-            fontstyle=fontstyle,
-        )
-        with matplotlib_style_context(self.component_style):
-            text_artist = self.fig.text(
-                x,
-                y,
-                text,
-                **text_kwargs,
-            )
-        object_id = object_id or new_id()
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(text_artist)
-            )
-            controller = self._register_text_controller(
-                object_id,
-                text_artist,
-                parent_id=self.root_component_id,
-                order=self._next_child_order(
-                    self.root_component_id,
-                    kind=ComponentKind.TEXT,
-                ),
+        return self._element_stager.create_text(
+            TextCreateRequest(
+                x=x,
+                y=y,
+                text=text,
+                fontfamily=fontfamily,
+                fontsize=fontsize,
+                usetex=usetex,
+                object_id=object_id,
+                color=color,
+                fontweight=fontweight,
+                fontstyle=fontstyle,
                 scope="figure",
             )
-            result = self.text_render_service.apply(
-                controller,
-                {"usetex": desired_usetex},
-            )
-            self._prepare_created_component(controller, transaction)
-        if not self._restoring_component_tree_now and (not result.ok or result.notices):
-            self.message_presenter.present(result)
-        self._finish_created_component(controller)
-        return text_artist
+        )
 
     @_history_command("Create Annotation")
     def add_annotation(
@@ -3098,72 +2447,15 @@ class PyFigureCanvas(QWidget):
     ):
         """Create and publish one Annotation atomically on a normal Axes."""
 
-        owner_axes_id = (
-            axes_id if axes_id is not None else self.current_axes_component_id
+        return self._element_stager.create_annotation(
+            AnnotationCreateRequest(
+                properties=properties,
+                axes_id=axes_id,
+                object_id=object_id,
+                component_order=component_order,
+                announce=announce,
+            )
         )
-        if owner_axes_id is None:
-            raise ValueError("Select an Axes before creating an Annotation.")
-        parent = self.component_registry.get(owner_axes_id)
-        if parent.state.kind is not ComponentKind.AXES:
-            raise ValueError("Annotations must be owned by a normal Axes.")
-        axes = parent.resolve_target()
-
-        merged = AnnotationController.default_properties()
-        merged.update(properties or {})
-        component_id = object_id or new_id()
-        artist_kwargs = annotation_artist_kwargs(merged)
-
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                annotation = axes.annotate(merged["text"], **artist_kwargs)
-            transaction.on_rollback(
-                lambda: self._remove_created_artist(annotation)
-            )
-            state = ComponentState(
-                id=component_id,
-                kind=ComponentKind.ANNOTATION,
-                role=ComponentRole.ANNOTATION,
-                parent_id=owner_axes_id,
-                order=(
-                    self._next_child_order(
-                        owner_axes_id,
-                        kind=ComponentKind.ANNOTATION,
-                    )
-                    if component_order is None
-                    else int(component_order)
-                ),
-                selector={"object_id": component_id},
-                properties=merged,
-                data={},
-            )
-            controller = AnnotationController(state, target=annotation)
-            initialized = controller.apply_state(controller.state)
-            if not initialized.ok:
-                raise ValueError(
-                    initialized.message or "Could not initialize the Annotation."
-                )
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=annotation)
-            annotation.set_gid(component_id)
-            if not self._restoring_component_tree_now:
-                result = self.text_render_service.apply(
-                    controller,
-                    {"usetex": bool(merged.get("usetex", False))},
-                )
-                if not result.ok:
-                    raise ValueError(
-                        result.message or "Annotation render validation failed."
-                    )
-            self._prepare_created_component(controller, transaction)
-            self.component_registry.request_update(
-                axes,
-                UpdateImpact.REDRAW,
-            )
-
-        self._finish_created_component(controller)
-        if announce and not self._restoring_component_tree_now:
-            status_messages.show_success("Annotation created.")
-        return annotation
 
     def add_annotation_from_input(
         self,
@@ -3228,82 +2520,9 @@ class PyFigureCanvas(QWidget):
     ) -> Axes:
         """Create one Zoom or embedded-image child Axes Element atomically."""
 
-        parent_axes = self.current_axes
-        parent_id = self.current_axes_component_id
-        if parent_axes is None or parent_id is None:
-            raise ValueError("Select an axes before creating an in_axes Element.")
-        if isinstance(spec, ZoomInAxesCreateSpec):
-            role = ComponentRole.IN_AXES_ZOOM
-            controller_type = ZoomInAxesController
-            properties = spec.properties()
-            data: dict[str, Any] = {}
-        elif isinstance(spec, ImageInAxesCreateSpec):
-            role = ComponentRole.IN_AXES_IMAGE
-            controller_type = ImageInAxesController
-            properties = spec.properties()
-            data = spec.data()
-            decode_in_axes_image(data)
-        else:
-            raise TypeError("add_in_axes requires a Zoom or Image creation spec.")
-
-        component_id = object_id or new_id()
-        state = ComponentState(
-            id=component_id,
-            kind=ComponentKind.IN_AXES,
-            role=role,
-            parent_id=parent_id,
-            order=self._next_child_order(
-                parent_id,
-                kind=ComponentKind.IN_AXES,
-            ),
-            selector={"object_id": component_id},
-            properties=properties,
-            data=data,
+        return self._element_stager.create_in_axes(
+            InAxesElementCreateRequest(spec=spec, object_id=object_id)
         )
-        controller = None
-        mirrored = None
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                runtime = self.in_axes_service.create_runtime(
-                    parent_axes,
-                    tuple(properties["bounds"]),
-                    zorder=float(properties["zorder"]),
-                )
-            transaction.on_rollback(
-                lambda target=runtime: self.in_axes_service.destroy_runtime(target)
-            )
-            controller = controller_type(state, target=runtime)
-            # Controller construction fills every current-schema default. Apply
-            # that complete state so creation inputs may stay focused on the
-            # values a user can reasonably choose up front.
-            initial = controller.apply_state(controller.state)
-            if not initial.ok:
-                raise ValueError(initial.message)
-            if isinstance(controller, ZoomInAxesController):
-                self.in_axes_service.add_zoom_indicator(runtime, properties)
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=runtime)
-            self.in_axes_service.register_runtime(component_id, runtime)
-            transaction.on_rollback(
-                lambda target=component_id: self.in_axes_service.unregister_runtime(target)
-            )
-            if isinstance(controller, ZoomInAxesController):
-                mirrored = self.in_axes_service.refresh_zoom(controller)
-            self._prepare_created_component(controller, transaction)
-
-        self._select_created_component(controller)
-        if not self._restoring_component_tree_now:
-            self.redraw()
-            if role is ComponentRole.IN_AXES_ZOOM and mirrored == 0:
-                status_messages.show_warning(
-                    "Zoom inset created, but the parent Axes has no visible "
-                    "Line or Scatter components yet."
-                )
-            elif role is ComponentRole.IN_AXES_ZOOM:
-                status_messages.show_success("Zoom inset created.")
-            else:
-                status_messages.show_success("Image inset created.")
-        return runtime.axes
 
     def _add_field_2d(
         self,
@@ -3318,93 +2537,19 @@ class PyFigureCanvas(QWidget):
         color_order: int | None,
         announce: bool,
     ):
-        owner_axes_id = self.current_axes_component_id
-        owner_axes = self.current_axes
-        if owner_axes_id is None or owner_axes is None:
-            raise ValueError(f"Select an Axes before creating a {display_name}.")
-        x_ref = ColumnRef.from_dict(x_ref) if not isinstance(x_ref, ColumnRef) else x_ref
-        y_ref = ColumnRef.from_dict(y_ref) if not isinstance(y_ref, ColumnRef) else y_ref
-        z_ref = ColumnRef.from_dict(z_ref) if not isinstance(z_ref, ColumnRef) else z_ref
-        controller_type = {
-            ComponentRole.PSEUDOCOLOR: PseudocolorController,
-            ComponentRole.HEATMAP: HeatmapController,
-            ComponentRole.CONTOUR: ContourController,
-        }[role]
-        component_id = object_id or new_id()
-        if self._restoring_component_tree_now:
-            requested = dict(properties or {})
-        else:
-            requested = default_field_2d_properties(role, self.component_style)
-            requested.update(properties or {})
-        controller = None
-        runtime = None
-        grid = None
-        with self.component_registry.registration_transaction() as transaction:
-            transaction.watch_existing(owner_axes_id)
-            with matplotlib_style_context(self.component_style):
-                grid = self.field_2d_service.resolve_grid(
-                    x_ref, y_ref, z_ref, role
-                )
-                runtime = self.field_2d_service.create_runtime(
-                    owner_axes,
-                    role,
-                    grid,
-                    requested,
-                    style=self.component_style,
-                    gid=component_id,
-                )
-            transaction.on_rollback(
-                lambda target=runtime: self.field_2d_service.destroy_runtime(target)
-            )
-            state = ComponentState(
-                id=component_id,
-                kind=ComponentKind.FIELD_2D,
+        return self._element_stager.create_field_2d(
+            Field2DCreateRequest(
                 role=role,
-                parent_id=owner_axes_id,
-                order=self._claim_color_order(color_order),
-                selector={"object_id": component_id},
-                properties=dict(requested),
-                data={
-                    "x_ref": x_ref.to_dict(),
-                    "y_ref": y_ref.to_dict(),
-                    "z_ref": z_ref.to_dict(),
-                },
+                display_name=display_name,
+                x_ref=x_ref,
+                y_ref=y_ref,
+                z_ref=z_ref,
+                properties=properties,
+                object_id=object_id,
+                color_order=color_order,
+                announce=announce,
             )
-            controller = controller_type(state, target=runtime)
-            actual = controller.sync_from_target(strict=True)
-            desired = deepcopy(actual.properties)
-            for key in requested:
-                desired[key] = deepcopy(requested[key])
-            applied = controller.apply_state(actual.clone(properties=desired))
-            if not applied.ok:
-                raise ValueError(applied.message or f"Could not initialize {display_name}.")
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=runtime)
-            runtime.set_gid(component_id)
-            self.component_registry.request_update(
-                owner_axes,
-                UpdateImpact.AUTOSCALE,
-            )
-            self._prepare_created_component(controller, transaction)
-            self.component_registry.request_update(self.fig, UpdateImpact.REDRAW)
-            if self.fig.canvas is not None:
-                self.fig.canvas.draw()
-
-        self._finish_created_component(controller)
-        if announce and not self._restoring_component_tree_now:
-            if grid is not None and grid.skipped_xy_count:
-                status_messages.show_warning(
-                    f"{display_name} created; skipped "
-                    f"{grid.skipped_xy_count} row(s) with missing or "
-                    "non-finite X or Y coordinates."
-                )
-            elif runtime is not None and runtime.empty:
-                status_messages.show_warning(
-                    f"{display_name} created with no drawable data yet."
-                )
-            else:
-                status_messages.show_success(f"{display_name} created.")
-        return runtime
+        )
 
     @_history_command("Create Pseudocolor")
     def add_pseudocolor(
@@ -3510,72 +2655,15 @@ class PyFigureCanvas(QWidget):
     ):
         """Create and publish one first-class Colorbar Component atomically."""
 
-        owner_axes_id = self.current_axes_component_id
-        owner_axes = self.current_axes
-        if owner_axes_id is None or owner_axes is None:
-            raise ValueError("Select an Axes before creating a Colorbar.")
-        if source_component_id not in self.component_registry:
-            raise ValueError("The selected Colorbar source is unavailable.")
-        self.colorbar_service.validate_source(
-            owner_axes_id,
-            source_component_id,
+        return self._element_stager.create_colorbar(
+            ColorbarCreateRequest(
+                source_component_id=source_component_id,
+                properties=properties,
+                object_id=object_id,
+                component_order=component_order,
+                announce=announce,
+            )
         )
-        component_id = object_id or new_id()
-        requested = dict(properties or {})
-        controller = None
-        runtime = None
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                runtime, normalized = self.colorbar_service.create_runtime(
-                    owner_axes_id,
-                    source_component_id,
-                    requested,
-                    component_id=component_id,
-                )
-            transaction.on_rollback(
-                lambda target=runtime: self.colorbar_service.destroy_runtime(target)
-            )
-            transaction.on_rollback(
-                lambda component_id=component_id: (
-                    self.axes_geometry_service.restore_colorbar_follower(
-                        component_id,
-                        None,
-                    )
-                )
-            )
-            state = ComponentState(
-                id=component_id,
-                kind=ComponentKind.COLORBAR,
-                role=ComponentRole.COLORBAR,
-                parent_id=owner_axes_id,
-                order=(
-                    self._next_child_order(owner_axes_id)
-                    if component_order is None
-                    else int(component_order)
-                ),
-                selector={"object_id": component_id},
-                properties=normalized,
-                data={"source_component_id": str(source_component_id)},
-            )
-            controller = ColorbarController(state, target=runtime)
-            actual = controller.sync_from_target(strict=True)
-            desired = deepcopy(actual.properties)
-            for key in requested:
-                desired[key] = deepcopy(normalized[key])
-            applied = controller.apply_state(actual.clone(properties=desired))
-            if not applied.ok:
-                raise ValueError(applied.message or "Could not initialize Colorbar.")
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=runtime)
-            self._prepare_created_component(controller, transaction)
-            self.component_registry.request_update(self.fig, UpdateImpact.REDRAW)
-            if self.fig.canvas is not None:
-                self.fig.canvas.draw()
-
-        self._finish_created_component(controller)
-        if announce and not self._restoring_component_tree_now:
-            status_messages.show_success("Colorbar created.")
-        return runtime
 
     @_history_command("Create Secondary Axis")
     def add_secondary_axis(
@@ -3590,56 +2678,16 @@ class PyFigureCanvas(QWidget):
     ):
         """Create one reversible parent-bound Secondary Axis atomically."""
 
-        if not isinstance(spec, SecondaryAxisCreateSpec):
-            raise TypeError("add_secondary_axis requires SecondaryAxisCreateSpec.")
-        owner_axes_id = str(axes_id or self.current_axes_component_id or "")
-        owner_axes = self.component_registry.resolve_target(owner_axes_id)
-        if not isinstance(owner_axes, Axes):
-            raise ValueError("Select an Axes before creating a Secondary Axis.")
-        component_id = object_id or new_id()
-        controller = None
-        runtime = None
-        with self.component_registry.registration_transaction() as transaction:
-            with matplotlib_style_context(self.component_style):
-                runtime, normalized = self.secondary_axis_service.create_runtime(
-                    owner_axes_id,
-                    spec,
-                    allow_invalid_domain=allow_invalid_domain,
-                )
-            transaction.on_rollback(
-                lambda target=runtime: self.secondary_axis_service.destroy_runtime(target)
+        return self._element_stager.create_secondary_axis(
+            SecondaryAxisElementRequest(
+                spec=spec,
+                axes_id=axes_id,
+                object_id=object_id,
+                component_order=component_order,
+                announce=announce,
+                allow_invalid_domain=allow_invalid_domain,
             )
-            role = (
-                ComponentRole.SECONDARY_X_AXIS
-                if spec.orientation == "x"
-                else ComponentRole.SECONDARY_Y_AXIS
-            )
-            state = ComponentState(
-                id=component_id,
-                kind=ComponentKind.SECONDARY_AXIS,
-                role=role,
-                parent_id=owner_axes_id,
-                order=(
-                    self._next_child_order(owner_axes_id)
-                    if component_order is None
-                    else int(component_order)
-                ),
-                selector={"object_id": component_id},
-                properties=normalized,
-                data={},
-            )
-            controller = SecondaryAxisController(state, target=runtime)
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=runtime)
-            self._prepare_created_component(controller, transaction)
-            self.component_registry.request_update(owner_axes, UpdateImpact.REDRAW)
-            if self.fig.canvas is not None:
-                self.fig.canvas.draw()
-
-        self._finish_created_component(controller)
-        if announce and not self._restoring_component_tree_now:
-            status_messages.show_success("Secondary Axis created.")
-        return runtime
+        )
 
     @_history_command("Create Reflection Positions")
     def add_reference_marks(
@@ -3655,77 +2703,17 @@ class PyFigureCanvas(QWidget):
     ):
         """Create and publish one Reflection Positions component atomically."""
 
-        owner_axes_id = self.current_axes_component_id
-        owner_axes = self.current_axes
-        if owner_axes_id is None or owner_axes is None:
-            raise ValueError(
-                "Select an Axes before creating Reflection Positions."
+        return self._element_stager.create_reference_marks(
+            ReferenceMarksCreateRequest(
+                positions=positions,
+                properties=properties,
+                object_id=object_id,
+                component_order=component_order,
+                announce=announce,
+                position_ref=position_ref,
+                placement=placement,
             )
-        component_id = object_id or new_id()
-        controller = None
-        runtime = None
-        with self.component_registry.registration_transaction() as transaction:
-            (
-                runtime,
-                normalized_positions,
-                normalized_ref,
-                normalized,
-                normalized_placement,
-            ) = (
-                self.reference_marks_service.create_runtime(
-                    owner_axes_id,
-                    positions,
-                    properties,
-                    position_ref,
-                    placement,
-                )
-            )
-            transaction.on_rollback(
-                lambda target=runtime: (
-                    self.reference_marks_service.destroy_runtime(target)
-                )
-            )
-            state = ComponentState(
-                id=component_id,
-                kind=ComponentKind.REFERENCE_MARKS,
-                role=ComponentRole.REFLECTION_POSITIONS,
-                parent_id=owner_axes_id,
-                order=(
-                    self._next_child_order(owner_axes_id)
-                    if component_order is None
-                    else int(component_order)
-                ),
-                selector={"object_id": component_id},
-                properties=normalized,
-                data={
-                    "positions": normalized_positions,
-                    "position_ref": normalized_ref,
-                    "placement": normalized_placement,
-                },
-            )
-            controller = ReferenceMarksController(state, target=runtime)
-            controller.bind_table(self.repository, self.project_id)
-            initialized = controller.apply_state(controller.state)
-            if not initialized.ok:
-                raise ValueError(
-                    initialized.message
-                    or "Could not initialize Reflection Positions."
-                )
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=runtime)
-            runtime.set_gid(component_id)
-            self._prepare_created_component(controller, transaction)
-            self.component_registry.request_update(
-                owner_axes,
-                UpdateImpact.REDRAW,
-            )
-            if self.fig.canvas is not None:
-                self.fig.canvas.draw()
-
-        self._finish_created_component(controller)
-        if announce and not self._restoring_component_tree_now:
-            status_messages.show_success("Reflection Positions created.")
-        return runtime
+        )
 
     @_history_command("Create Reference Line")
     def add_reference_line(
@@ -3776,136 +2764,20 @@ class PyFigureCanvas(QWidget):
     ):
         """Stage one guide and publish it through one registration boundary."""
 
-        owner_axes_id = self.current_axes_component_id
-        owner_axes = self.current_axes
-        if owner_axes_id is None or owner_axes is None:
-            raise ValueError("Select an Axes before creating a Reference Guide.")
-        style_defaults = self.component_creation_defaults().reference_marks
-        if role is ComponentRole.REFERENCE_LINE:
-            controller_type = ReferenceLineController
-            create_runtime = self.reference_guide_service.create_line_runtime
-            label = "Reference Line"
-            requested = {
-                "color": style_defaults.color,
-                "linewidth": style_defaults.linewidth,
-            }
-        elif role is ComponentRole.REFERENCE_BAND:
-            controller_type = ReferenceBandController
-            create_runtime = self.reference_guide_service.create_band_runtime
-            label = "Reference Band"
-            requested = {
-                "facecolor": style_defaults.color,
-                "edgecolor": style_defaults.color,
-                "linewidth": style_defaults.linewidth,
-            }
-        else:
-            raise ValueError("Unsupported Reference Guide role.")
-        requested.update(properties or {})
-
-        component_id = object_id or new_id()
-        controller = None
-        runtime = None
-        with self.component_registry.registration_transaction() as transaction:
-            runtime, normalized = create_runtime(owner_axes_id, requested)
-            transaction.on_rollback(
-                lambda target=runtime: (
-                    self.reference_guide_service.destroy_runtime(target)
-                )
-            )
-            state = ComponentState(
-                id=component_id,
-                kind=ComponentKind.REFERENCE_GUIDE,
+        return self._element_stager.create_reference_guide(
+            ReferenceGuideCreateRequest(
                 role=role,
-                parent_id=owner_axes_id,
-                order=(
-                    self._next_child_order(owner_axes_id)
-                    if component_order is None
-                    else int(component_order)
-                ),
-                selector={"object_id": component_id},
-                properties=normalized,
-                data={},
+                properties=properties,
+                object_id=object_id,
+                component_order=component_order,
+                announce=announce,
             )
-            controller = controller_type(state, target=runtime)
-            initialized = controller.apply_state(controller.state)
-            if not initialized.ok:
-                raise ValueError(
-                    initialized.message or f"Could not initialize {label}."
-                )
-            controller.sync_from_target(strict=True)
-            self.component_registry.register(controller, target=runtime)
-            runtime.set_gid(component_id)
-            self._prepare_created_component(controller, transaction)
-            self.reference_guide_service.verify_render(controller)
-            self.component_registry.request_update(
-                owner_axes,
-                UpdateImpact.REDRAW,
-            )
-
-        self._finish_created_component(controller)
-        if announce and not self._restoring_component_tree_now:
-            status_messages.show_success(f"{label} created.")
-        return runtime
+        )
 
     def _on_mpl_button_press(self, event) -> None:
         """Handle Matplotlib button_press_event for right-click Annotation creation."""
 
-        if self._disposed or self._restoring_component_tree_now:
-            return
-        if getattr(event, "button", None) != 3:
-            return
-        toolbar_mode = str(getattr(self.navigation_toolbar, "mode", "")).strip()
-        if toolbar_mode != "":
-            return
-        target_axes = getattr(event, "inaxes", None)
-        if target_axes is None:
-            return
-        axes_id = None
-        for controller in self.component_registry.query(kind=ComponentKind.AXES):
-            if controller.resolve_target() is target_axes:
-                if controller.state.role is ComponentRole.AXES:
-                    axes_id = controller.component_id
-                break
-        if axes_id is None:
-            return
-        x_data = getattr(event, "xdata", None)
-        y_data = getattr(event, "ydata", None)
-        if (
-            x_data is None
-            or y_data is None
-            or not (math.isfinite(x_data) and math.isfinite(y_data))
-        ):
-            return
-
-        menu = QMenu(self)
-        action = menu.addAction("Add Annotation Here")
-        gui_event = getattr(event, "guiEvent", None)
-        global_position = None
-        if gui_event is not None:
-            getter = getattr(gui_event, "globalPosition", None)
-            if callable(getter):
-                global_position = getter().toPoint()
-        if menu.exec(global_position or QCursor.pos()) is not action:
-            return
-        properties = {
-            "text": "New Annotation",
-            "xy": [float(x_data), float(y_data)],
-            "xycoords": "data",
-            "xytext": [20.0, 20.0],
-            "textcoords": "offset_points",
-            "arrow_enabled": True,
-        }
-        try:
-            annotation_artist = self.add_annotation_from_input(
-                properties,
-                axes_id=axes_id,
-            )
-            new_id = getattr(annotation_artist, "get_gid", lambda: None)()
-            if new_id:
-                self.select_component(new_id)
-                self._focus_annotation_editor(new_id)
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        self._element_stager.handle_mpl_button_press(event)
 
     def _focus_annotation_editor(self, component_id: str) -> None:
         """Focus the text content input of a newly created Annotation."""
@@ -4063,71 +2935,7 @@ class PyFigureCanvas(QWidget):
     ) -> None:
         """Restore structural history through Axes/materializer architecture."""
 
-        state_by_id = {state.id: state for state in target_states}
-        missing = set(added_ids) - set(state_by_id)
-        if missing:
-            raise ValueError(
-                "Figure history is missing target states: "
-                + ", ".join(sorted(missing))
-            )
-        axes_states = tuple(
-            sorted(
-                (
-                    state_by_id[component_id]
-                    for component_id in added_ids
-                    if state_by_id[component_id].kind is ComponentKind.AXES
-                ),
-                key=lambda state: int(state.selector["index"]),
-            )
-        )
-        dynamic_states = tuple(
-            state_by_id[component_id]
-            for component_id in added_ids
-            if (state_by_id[component_id].kind, state_by_id[component_id].role)
-            in self.component_materializers.keys
-        )
-        restorable_ids = {
-            state.id for state in axes_states
-        } | {state.id for state in dynamic_states}
-        fixed_ids = set(added_ids) - restorable_ids
-        for component_id in fixed_ids:
-            state = state_by_id[component_id]
-            cursor = state.parent_id
-            while cursor is not None and cursor not in restorable_ids:
-                parent = state_by_id.get(cursor)
-                cursor = parent.parent_id if parent is not None else None
-            if cursor is None:
-                raise ValueError(
-                    f"No materializer owns added component {component_id!r}."
-                )
-
-        previous_restoring = self._restoring_component_tree_now
-        self._restoring_component_tree_now = True
-        try:
-            with (
-                self._history_component_id_overrides(target_states),
-                self.component_registry.registration_transaction(),
-            ):
-                if axes_states:
-                    self.axes_layout_service.materialize(axes_states)
-                for phase in self.component_materializers.phases:
-                    for state in self.component_materializers.states_for_phase(
-                        dynamic_states,
-                        phase,
-                    ):
-                        self._restore_component_state(state)
-        finally:
-            self._restoring_component_tree_now = previous_restoring
-        unresolved = sorted(
-            component_id
-            for component_id in added_ids
-            if component_id not in self.component_registry
-        )
-        if unresolved:
-            raise ValueError(
-                "Figure history materialization did not restore: "
-                + ", ".join(unresolved)
-            )
+        self._snapshot_applier.materialize_history_states(target_states, added_ids)
 
     def _restore_component_state(self, state: ComponentState):
         """Materialize one dynamic component within registration scope."""

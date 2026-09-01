@@ -19,7 +19,7 @@ Matplotlib, resolve live Artists/Axes/Figures, call Artist setters/removal, read
 
 `mygui/widgets/figure_canvas/` is the Canvas package, not Inspector
 presentation. `PyFigureCanvas` remains the selection authority and public
-creation/restore entry. `ChartCreationStager`,
+creation/restore entry. `ChartCreationStager`, `ElementCreationStager`,
 `canvas_materialize_handlers`, `CanvasSnapshotApplier`,
 `CanvasPopoutWindow`, and `ProjectNavigationToolbar` may call host Canvas
 APIs (including Axes `plot`/`scatter` during staging) but must not cache

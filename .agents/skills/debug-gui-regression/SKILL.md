@@ -11,7 +11,7 @@ Read the routed UI, Inspector, and testing pages. Preserve
 
 Reproduce the smallest observable failure and trace authoritative state,
 signals/listeners, Controller/Service calls, Registry events, and UI
-synchronization in that order. Canvas host helpers (`ChartCreationStager`,
+synchronization in that order. Canvas host helpers (`ChartCreationStager`, `ElementCreationStager`,
 materializer handlers, `CanvasSnapshotApplier`, popout window, and project
 toolbar) are not a second selection or component-state store;
 `PyFigureCanvas.current_component_id` remains the only selection authority.

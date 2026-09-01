@@ -23,10 +23,18 @@ class CanvasSnapshotHost(Protocol):
     text_render_service: Any
     in_axes_service: Any
     axes_commands: Any
+    component_materializers: Any
     _document_dpi: float
     style: str | None
+    _restoring_component_tree_now: bool
 
     def redraw(self) -> None:
+        ...
+
+    def _history_component_id_overrides(self, target_states: Any) -> Any:
+        ...
+
+    def _restore_component_state(self, state: ComponentState) -> Any:
         ...
 
 
@@ -281,3 +289,77 @@ class CanvasSnapshotApplier:
             )
 
         host.redraw()
+
+    def materialize_history_states(
+        self,
+        target_states: tuple[ComponentState, ...],
+        added_ids: set[str],
+    ) -> None:
+        """Restore structural history through Axes/materializer architecture."""
+
+        host = self._host
+        state_by_id = {state.id: state for state in target_states}
+        missing = set(added_ids) - set(state_by_id)
+        if missing:
+            raise ValueError(
+                "Figure history is missing target states: "
+                + ", ".join(sorted(missing))
+            )
+        axes_states = tuple(
+            sorted(
+                (
+                    state_by_id[component_id]
+                    for component_id in added_ids
+                    if state_by_id[component_id].kind is ComponentKind.AXES
+                ),
+                key=lambda state: int(state.selector["index"]),
+            )
+        )
+        dynamic_states = tuple(
+            state_by_id[component_id]
+            for component_id in added_ids
+            if (state_by_id[component_id].kind, state_by_id[component_id].role)
+            in host.component_materializers.keys
+        )
+        restorable_ids = {
+            state.id for state in axes_states
+        } | {state.id for state in dynamic_states}
+        fixed_ids = set(added_ids) - restorable_ids
+        for component_id in fixed_ids:
+            state = state_by_id[component_id]
+            cursor = state.parent_id
+            while cursor is not None and cursor not in restorable_ids:
+                parent = state_by_id.get(cursor)
+                cursor = parent.parent_id if parent is not None else None
+            if cursor is None:
+                raise ValueError(
+                    f"No materializer owns added component {component_id!r}."
+                )
+
+        previous_restoring = host._restoring_component_tree_now
+        host._restoring_component_tree_now = True
+        try:
+            with (
+                host._history_component_id_overrides(target_states),
+                host.component_registry.registration_transaction(),
+            ):
+                if axes_states:
+                    host.axes_layout_service.materialize(axes_states)
+                for phase in host.component_materializers.phases:
+                    for state in host.component_materializers.states_for_phase(
+                        dynamic_states,
+                        phase,
+                    ):
+                        host._restore_component_state(state)
+        finally:
+            host._restoring_component_tree_now = previous_restoring
+        unresolved = sorted(
+            component_id
+            for component_id in added_ids
+            if component_id not in host.component_registry
+        )
+        if unresolved:
+            raise ValueError(
+                "Figure history materialization did not restore: "
+                + ", ".join(unresolved)
+            )

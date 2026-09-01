@@ -726,8 +726,8 @@ class AnnotationIntegrationAndHistoryTests(unittest.TestCase):
         current_axes = self.canvas.current_axes
 
         # 1. Right click with menu accepted
-        import mygui.widgets.figure_canvas.py_figure_canves as canvas_mod
-        with mock.patch.object(canvas_mod, "QMenu") as mock_menu_cls:
+        import mygui.widgets.figure_canvas.element_creation as element_mod
+        with mock.patch.object(element_mod, "QMenu") as mock_menu_cls:
             mock_menu = mock.MagicMock()
             mock_menu_cls.return_value = mock_menu
             fake_action = object()

@@ -133,6 +133,7 @@ class NewFigureCreationIsolationTests(unittest.TestCase):
 
         forbidden_hosts = (
             ROOT / "mygui/widgets/figure_canvas/chart_creation.py",
+            ROOT / "mygui/widgets/figure_canvas/element_creation.py",
             ROOT / "mygui/widgets/figure_canvas/canvas_materialize_handlers.py",
             ROOT / "mygui/widgets/figure_canvas/canvas_snapshot.py",
             ROOT / "mygui/project_io.py",

@@ -453,6 +453,7 @@ class CreationPreferenceResolverTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for relative in (
             "mygui/widgets/figure_canvas/chart_creation.py",
+            "mygui/widgets/figure_canvas/element_creation.py",
             "mygui/widgets/figure_canvas/canvas_materialize_handlers.py",
         ):
             text = (root / relative).read_text(encoding="utf-8")
