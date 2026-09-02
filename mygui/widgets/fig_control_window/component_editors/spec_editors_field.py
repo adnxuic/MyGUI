@@ -9,12 +9,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QPlainTextEdit,
     QVBoxLayout,
     QWidget,
 )
+
+from mygui.widgets.english_buttons import english_ok_cancel
 
 from mygui.figuremodify.matplotlib_adapter import (
     CONTOUR_LABEL_FORMAT_CHOICES,
@@ -106,11 +107,7 @@ class _ColorMapSpecDialog(QDialog):
         layout.addLayout(form)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -187,11 +184,7 @@ class _GridEdgeSpecDialog(QDialog):
         layout.addLayout(form)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -274,11 +267,7 @@ class _ContourLevelsSpecDialog(QDialog):
         layout.addLayout(form)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -376,11 +365,7 @@ class _ContourLabelSpecDialog(QDialog):
         layout.addWidget(self.details)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

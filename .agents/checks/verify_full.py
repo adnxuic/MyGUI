@@ -169,6 +169,7 @@ APPLICATION_TEST_MODULES = {
     "test_fit_dialog_range": (ISOLATION_GUI_MODULE, 0.5),
     "test_interpolate_func": (ISOLATION_CORE, 0.0),
     "test_color_models": (ISOLATION_CORE, 0.0),
+    "test_visible_english": (ISOLATION_CORE, 0.1),
     "test_scipy_fit_adapter": (ISOLATION_CORE, 0.0),
     "test_component_materializers": (ISOLATION_CORE, 0.0),
     "test_e2e_acceptance": (ISOLATION_GUI_MODULE, 24.0),

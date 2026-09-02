@@ -32,6 +32,12 @@ from .common import (
 )
 from .editor_factories import create_editor_widget
 from .inline_spec_editors import InlineValueEditor
+from .inspector_layout import (
+    apply_expanding_field,
+    configure_inspector_form,
+    labeled_form_row,
+)
+from .property_labels import inspector_label, inspector_tooltip
 from .spec_editors import StructuredValueEditor
 
 
@@ -66,11 +72,7 @@ def _metadata_default(spec: Any, *names: str, default):
 def _display_label(spec: Any, key: str) -> str:
     """Return one non-empty user-facing property label."""
 
-    fallback = str(key).replace("_", " ").title()
-    value = _metadata(spec, "label", "title", default=None)
-    if value is None or not str(value).strip():
-        return fallback
-    return str(value).strip()
+    return inspector_label(spec, key)
 
 
 def _enum_text(value: Any) -> str:
@@ -103,6 +105,7 @@ class ComponentEditorBase(QWidget):
         self.context = context
         self.color_library = color_library
         self.form_layout = QFormLayout(self)
+        configure_inspector_form(self.form_layout)
         self._specs: dict[str, Any] = {}
         self._editors: dict[str, QWidget] = {}
         self._text_bindings: dict[str, DebouncedTextBinding] = {}
@@ -153,14 +156,15 @@ class ComponentEditorBase(QWidget):
             self._specs[key] = spec
             value = properties.get(key, _metadata(spec, "default", default=None))
             editor = self._create_editor(key, spec, value)
+            apply_expanding_field(editor)
             self._editors[key] = editor
             label = _display_label(spec, key)
-            tooltip = str(_metadata(spec, "tooltip", default="") or "")
+            tooltip = inspector_tooltip(spec, key)
             editor.setAccessibleName(label)
             if tooltip:
                 editor.setToolTip(tooltip)
                 editor.setAccessibleDescription(tooltip)
-            self.form_layout.addRow(label, editor)
+            self.form_layout.addRow(labeled_form_row(label, tooltip=tooltip), editor)
 
     def editor(self, key: str) -> QWidget:
         """Return the editor widget used for the property."""

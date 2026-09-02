@@ -5,6 +5,8 @@ from __future__ import annotations
 from functools import wraps
 
 from PySide6.QtWidgets import QDialogButtonBox
+
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
 from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT as NavigationToolbar,
 )
@@ -66,6 +68,7 @@ class ProjectNavigationToolbar(NavigationToolbar):
         ):
             return result
         dialog.setProperty("mygui_history_connected", True)
+        apply_english_dialog_buttons(dialog.bbox)
         apply_button = dialog.bbox.button(
             QDialogButtonBox.StandardButton.Apply
         )

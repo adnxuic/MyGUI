@@ -35,11 +35,10 @@ For multi-axes arrangement and layout templates, see [Axes Layout Templates](../
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
-| Xlim | Range editor | X axis data coordinate boundaries `[min, max]`. | Tuple of 2 numbers; default `[0.0, 1.0]` | `properties.xlim` |
-| Ylim | Range editor | Y axis data coordinate boundaries `[min, max]`. | Tuple of 2 numbers; default `[0.0, 1.0]` | `properties.ylim` |
-| Autoscalex On | Checkbox | Enables automatic X axis data limit fitting based on active data series. | `true` or `false`; default `true` | `properties.autoscalex_on` |
-| Autoscaley On | Checkbox | Enables automatic Y axis data limit fitting based on active data series. | `true` or `false`; default `true` | `properties.autoscaley_on` |
-| Y Lower Reserve | Number | Extra visual reserve space added below the ordinary autoscale interval as a fraction of total Axes height. | Finite `0.0 <= r < 0.9`; default `0.0` | `properties.y_lower_reserve` |
+| X Limits | Range editor | X axis data coordinate boundaries `[min, max]`. | Tuple of 2 numbers; default `[0.0, 1.0]` | `properties.xlim` |
+| Y Limits | Range editor | Y axis data coordinate boundaries `[min, max]`. | Tuple of 2 numbers; default `[0.0, 1.0]` | `properties.ylim` |
+| Autoscale X | Checkbox | Enables automatic X axis data limit fitting based on active data series. | `true` or `false`; default `true` | `properties.autoscalex_on` |
+| Autoscale Y | Checkbox | Enables automatic Y axis data limit fitting based on active data series. | `true` or `false`; default `true` | `properties.autoscaley_on` |
 | X Inverted | Checkbox (proxy) | Reverses the direction of X data coordinates by swapping limit ordering. | `true` or `false`; default `false` | `runtime.x_inverted` |
 | Y Inverted | Checkbox (proxy) | Reverses the direction of Y data coordinates by swapping limit ordering. | `true` or `false`; default `false` | `runtime.y_inverted` |
 
@@ -64,21 +63,22 @@ For details on color choice workflows, see [Color Picker](../../color-picker.md)
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
 | Aspect | Aspect editor | Aspect ratio of coordinate scaling: `auto`, `equal`, or numeric ratio. | `auto`, `equal`, or positive number; default `auto` | `properties.aspect` |
-| Facecolor | Color choice | Background fill color of the Axes plotting rectangle. | Hex color; default `#ffffff` | `properties.facecolor` |
+| Background | Color choice | Background fill color of the Axes plotting rectangle. | Hex color; default `#ffffff` | `properties.facecolor` |
 | Visible | Checkbox | Shows or hides the entire Axes and its children. | `true` or `false`; default `true` | `properties.visible` |
-| Xmargin | Number | Automatic padding fraction added to each side of X data limits during autoscale. When `0`, autoscale X uses the data interval with no locator expansion. XRD Single and Main Plot + Residual set this to `0`. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.xmargin` |
-| Ymargin | Number | Automatic padding fraction added to each side of Y data limits during autoscale. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.ymargin` |
-| Adjustable | Dropdown | Defines whether the physical `box` or data limits `datalim` adjust to satisfy aspect ratio. | `box` or `datalim`; default `box` | `properties.adjustable` |
-| Anchor | Anchor editor | Alignment anchor of the Axes box within its available bounding space. | Compass string (`C`, `SW`, `NE`, etc.); default `C` | `properties.anchor` |
-| Box Aspect | Number | Fixed physical box aspect ratio (height / width), or None for unconstrained. | Positive number or None; default None | `properties.box_aspect` |
-| Axisbelow | Dropdown | Layering of grid lines and tick marks relative to chart data artists. | `true` (below), `false` (above), `line` (grid below, ticks above); default `line` | `properties.axisbelow` |
-| Frameon | Checkbox | Enables drawing of the background patch and bounding spines. | `true` or `false`; default `true` | `properties.frameon` |
-| Zorder | Number | Stacking order of the Axes background patch. | Finite number; default `0.0` | `properties.zorder` |
 
 ## Advanced
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
+| Y Reserve | Number | Extra visual reserve space added below the ordinary autoscale interval as a fraction of total Axes height. | Finite `0.0 <= r < 0.9`; default `0.0` | `properties.y_lower_reserve` |
+| X Margin | Number | Automatic padding fraction added to each side of X data limits during autoscale. When `0`, autoscale X uses the data interval with no locator expansion. XRD Single and Main Plot + Residual set this to `0`. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.xmargin` |
+| Y Margin | Number | Automatic padding fraction added to each side of Y data limits during autoscale. | Finite `-0.5 <= margin <= 10.0`; default `0.05` | `properties.ymargin` |
+| Adjustable | Dropdown | Defines whether the physical `box` or data limits `datalim` adjust to satisfy aspect ratio. | `box` or `datalim`; default `box` | `properties.adjustable` |
+| Anchor | Anchor editor | Alignment anchor of the Axes box within its available bounding space. | Compass string (`C`, `SW`, `NE`, etc.); default `C` | `properties.anchor` |
+| Box Aspect | Number | Fixed physical box aspect ratio (height / width), or None for unconstrained. | Positive number or None; default None | `properties.box_aspect` |
+| Axis Below | Dropdown | Layering of grid lines and tick marks relative to chart data artists. | `true` (below), `false` (above), `line` (grid below, ticks above); default `line` | `properties.axisbelow` |
+| Frame | Checkbox | Enables drawing of the background patch and bounding spines. | `true` or `false`; default `true` | `properties.frameon` |
+| Zorder | Number | Stacking order of the Axes background patch. | Finite number; default `0.0` | `properties.zorder` |
 | Rasterization Zorder | Number | Z-order threshold below which artists are automatically rasterized in vector export. | Finite number or None; default None | `properties.rasterization_zorder` |
 | Alpha | Number | Axes background patch opacity from 0 to 1. | Finite `0 <= alpha <= 1` or None; default None | `properties.alpha` |
 | Label | Text | Display and lookup label for the Axes artist. | Text; default empty | `properties.label` |

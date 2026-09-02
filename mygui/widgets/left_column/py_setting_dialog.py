@@ -2,6 +2,7 @@
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
 from mygui.application_theme import bind_widget_qss
 from mygui.resources import icon_path
 from mygui.application_theme import subscribe_theme_window
@@ -33,7 +34,7 @@ class PySettingDialog(QDialog):
         layout.addWidget(self.reset_layout_button)
 
         layout.addStretch(1)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = apply_english_dialog_buttons(QDialogButtonBox(QDialogButtonBox.Close))
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         subscribe_theme_window(self)

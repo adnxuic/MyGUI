@@ -57,8 +57,9 @@ QLabel#errorbar_data_hint
     color: {{COLOR_TEXT_DANGER}};
 }
 
-QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox
+QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox, QFontComboBox
 {
+    min-width: 1px;
     min-height: 28px;
     border: 1px solid {{COLOR_BORDER_STRONG}};
     border-radius: {{RADIUS_SM}}px;

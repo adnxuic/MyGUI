@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
 from mygui.excel_io import (
     EXCEL_PREVIEW_ROWS,
     ExcelColumnSpec,
@@ -342,7 +343,9 @@ class TextImportDialog(QDialog):
         self.summary_label = QLabel(self)
         self.summary_label.setObjectName("import_summary_label")
         self.preview_layout = QVBoxLayout()
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        self.buttons = apply_english_dialog_buttons(
+            QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        )
         self.buttons.accepted.connect(self._validate_and_accept)
         self.buttons.rejected.connect(self.reject)
 

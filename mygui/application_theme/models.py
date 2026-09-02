@@ -96,6 +96,7 @@ class DensityMetrics:
     bottom: int
     command: int
     gallery: int
+    gallery_icon: int
     table_row: int
     table_header: int
     tree: int

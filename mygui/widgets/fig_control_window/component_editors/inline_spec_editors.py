@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QVBoxLayout,
     QWidget,
 )
 from mygui.figuremodify.components.property_values import (
@@ -566,8 +567,9 @@ class OptionalColorEditor(InlineValueEditor):
                 "OptionalColorEditor requires the application ColorLibrary."
             )
         self._unset_value = unset_value
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         self.use_value_input = QCheckBox("Set", self)
         self.color_input = ColorChoiceWidget(
             fallback,
@@ -575,7 +577,7 @@ class OptionalColorEditor(InlineValueEditor):
             parent=self,
         )
         layout.addWidget(self.use_value_input)
-        layout.addWidget(self.color_input, 1)
+        layout.addWidget(self.color_input)
         self.set_value(value)
         self.use_value_input.toggled.connect(self._use_value_changed)
         self.color_input.colorChanged.connect(self._emit)

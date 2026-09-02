@@ -8,7 +8,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -20,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mygui.widgets.english_buttons import english_ok_cancel
 from mygui.fullprof_prf import FullProfPrfResult, parse_fullprof_prf
 from mygui.xrd_refinement import (
     XrdAppearanceConfig,
@@ -378,10 +378,7 @@ class XrdRefinementInput(QWidget):
         layout.addWidget(marker_editor)
         layout.addWidget(QLabel("Color:", dialog))
         layout.addWidget(color_editor)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=dialog,
-        )
+        buttons = english_ok_cancel(dialog)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -418,10 +415,7 @@ class XrdRefinementInput(QWidget):
         )
         editor.color_input.set_color(current.color)
         layout.addWidget(editor)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=dialog,
-        )
+        buttons = english_ok_cancel(dialog)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -482,10 +476,7 @@ class XrdRefinementInput(QWidget):
         if current.linewidth is not None:
             editor.linewidth_input.setValue(current.linewidth)
         layout.addWidget(editor)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=dialog,
-        )
+        buttons = english_ok_cancel(dialog)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)

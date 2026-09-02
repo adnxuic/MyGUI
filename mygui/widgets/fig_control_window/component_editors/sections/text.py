@@ -96,14 +96,7 @@ class TextTypographySection(PropertySection):
     DEFAULT_KEYS = (
         "fontfamily",
         "fontsize",
-        "fontweight",
-        "fontstyle",
-        "fontstretch",
-        "fontvariant",
-        "math_fontfamily",
-        "parse_math",
         "color",
-        "alpha",
     )
 
     def __init__(
@@ -165,7 +158,7 @@ class TextTransformSection(PropertySection):
 class TextPositionSection(PropertySection):
     """Edit the text position properties of a component."""
 
-    KEYS = ("position", "visible", "zorder", "coordinate_system")
+    KEYS = ("position", "visible")
 
     def __init__(self, controller, *, context, apply_properties, parent=None):
         super().__init__(

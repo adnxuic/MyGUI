@@ -44,6 +44,13 @@ Data-coordinate placement uses the parent `transData` transform.
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
 | Label | Text | Destination unit or axis description. | String; default empty | `properties.label` |
+
+## Label details
+
+The Label details section is collapsed by default.
+
+| Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
+| --- | --- | --- | --- | --- |
 | Label pad | Number | Distance in points between label and axis. | Finite number; default `4.0` | `properties.label_pad` |
 | Label rotation | Rotation editor | Label rotation in degrees. | Finite number; default `0.0` | `properties.label_rotation` |
 | Label font | Font chooser | Complete safe font family, size, weight, style, stretch, variant, and color record. | Font spec; default sans-serif 10 pt, normal, black | `properties.label_font` |

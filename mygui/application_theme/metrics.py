@@ -22,6 +22,7 @@ class DensityBand:
     bottom: int
     command: int
     gallery: int
+    gallery_icon: int
     table_row: int
     table_header: int
     tree: int
@@ -41,7 +42,8 @@ DENSITY_BANDS: dict[Density, DensityBand] = {
         button=36,
         bottom=24,
         command=42,
-        gallery=64,
+        gallery=54,
+        gallery_icon=28,
         table_row=22,
         table_header=38,
         tree=22,
@@ -58,7 +60,8 @@ DENSITY_BANDS: dict[Density, DensityBand] = {
         button=40,
         bottom=28,
         command=48,
-        gallery=72,
+        gallery=60,
+        gallery_icon=32,
         table_row=24,
         table_header=44,
         tree=26,
@@ -75,7 +78,8 @@ DENSITY_BANDS: dict[Density, DensityBand] = {
         button=48,
         bottom=34,
         command=56,
-        gallery=84,
+        gallery=72,
+        gallery_icon=36,
         table_row=30,
         table_header=52,
         tree=32,
@@ -105,6 +109,7 @@ def build_density_metrics(density: Density, font_height: int) -> DensityMetrics:
         bottom=height(band.bottom),
         command=height(band.command),
         gallery=height(band.gallery),
+        gallery_icon=max(band.gallery_icon, int(math.ceil(font_height))),
         table_row=height(band.table_row),
         table_header=height(band.table_header),
         tree=height(band.tree),

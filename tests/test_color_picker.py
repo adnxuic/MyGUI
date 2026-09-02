@@ -30,6 +30,7 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     color_to_qcolor,
     qcolor_to_color,
 )
+from mygui.widgets.common_widget.min_widget import color_choice_dialogs
 
 
 class ColorPickerWidgetTests(unittest.TestCase):
@@ -159,7 +160,7 @@ class ColorPickerWidgetTests(unittest.TestCase):
             dialog._append_color("#123456")
         self.assertEqual(dialog.color_list.count(), 12)
         dialog.add_color()
-        self.assertTrue(any("最多包含 12 个颜色" in msg for msg, _ in self.messages))
+        self.assertTrue(any("at most 12 colors" in msg for msg, _ in self.messages))
 
         # Add color with mock dialog
         dialog.color_list.clear()
@@ -219,7 +220,7 @@ class ColorPickerWidgetTests(unittest.TestCase):
 
         # COLOR_MODE dialog
         dialog = ColorPickerDialog(library, mode=ColorPickerDialog.COLOR_MODE)
-        self.assertEqual(dialog.tabs.count(), 4)  # 最近, 收藏, 全部颜色, 配色组合
+        self.assertEqual(dialog.tabs.count(), 4)  # Recent, Favorites, All Colors, Palettes
 
         # Search filter
         dialog.search_input.setText("FF")
@@ -248,10 +249,10 @@ class ColorPickerWidgetTests(unittest.TestCase):
 
         # PALETTE_MODE dialog
         palette_dialog = ColorPickerDialog(library, mode=ColorPickerDialog.PALETTE_MODE)
-        self.assertEqual(palette_dialog.tabs.count(), 1)  # 配色组合 only
+        self.assertEqual(palette_dialog.tabs.count(), 1)  # Palettes only
         palette_dialog._selected_palette = None
         palette_dialog._accept_current()
-        self.assertTrue(any("请先选择一个配色组合" in msg for msg, _ in self.messages))
+        self.assertTrue(any("Select a palette first." in msg for msg, _ in self.messages))
 
         palette_dialog._palette_selected(palette_dialog.palette_model.index(0, 0))
         with patch.object(palette_dialog, "accept") as mock_accept:
@@ -308,10 +309,10 @@ class ColorPickerWidgetTests(unittest.TestCase):
             with patch.object(CustomPaletteDialog, "_save_and_accept"):
                 pass
 
-        # Delete palette with QMessageBox confirmation
+        # Delete palette with English Yes/No confirmation
         custom_pal = library.create_custom_palette("ToDelete", ("#111111", "#222222"))
         dialog._selected_palette = custom_pal
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch.object(color_choice_dialogs, "ask_yes_no", return_value=True):
             dialog._delete_palette()
         self.assertIsNone(dialog.selected_palette())
 

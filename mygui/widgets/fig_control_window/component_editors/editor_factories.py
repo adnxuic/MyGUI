@@ -26,6 +26,7 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
 
+from .inspector_layout import apply_expanding_field
 from .common import (
     FocusAwareDoubleSpinBox,
     FocusAwareSpinBox,
@@ -270,6 +271,7 @@ def _create_enum_editor(host: Any, key: str, spec: Any, value: Any) -> QWidget:
     if index < 0:
         index = editor.findData(_enum_text(value))
     editor.setCurrentIndex(max(0, index))
+    apply_expanding_field(editor)
     editor.currentIndexChanged.connect(
         lambda _index, combo=editor, property_key=key: host.apply_property(
             property_key,
@@ -303,6 +305,7 @@ def _create_color_editor(host: Any, key: str, spec: Any, value: Any) -> QWidget:
 def _create_font_editor(host: Any, key: str, spec: Any, value: Any) -> QWidget:
     del spec
     editor = QFontComboBox(host)
+    apply_expanding_field(editor)
     if value:
         editor.setCurrentFont(QFont(str(value)))
     editor.currentFontChanged.connect(

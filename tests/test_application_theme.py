@@ -217,6 +217,10 @@ class ThemeContractTests(_ThemeCase):
                 self.assertEqual(snapshot.metrics.bottom, max(band.bottom, floor))
                 self.assertEqual(snapshot.metrics.command, max(band.command, floor))
                 self.assertEqual(snapshot.metrics.gallery, max(band.gallery, floor))
+                self.assertEqual(
+                    snapshot.metrics.gallery_icon,
+                    max(band.gallery_icon, int(math.ceil(font_height))),
+                )
                 self.assertEqual(snapshot.metrics.table_row, max(band.table_row, floor))
                 self.assertEqual(
                     snapshot.metrics.table_header, max(band.table_header, floor)

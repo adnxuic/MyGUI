@@ -226,6 +226,25 @@ interpolate_dict = {
     SMOOTHING_SPLINE_METHOD: smoothing_spline_interpolate,
 }
 
+INTERPOLATION_METHOD_LABELS = {
+    "三次样条插值": "Cubic spline",
+    B_SPLINE_METHOD: "B-spline",
+    "线性插值": "Linear",
+    "最近邻插值": "Nearest",
+    "前值阶梯插值": "Previous",
+    "后值阶梯插值": "Next",
+    "PCHIP保形插值": "PCHIP",
+    "Akima插值": "Akima",
+    "Makima插值": "Makima",
+    SMOOTHING_SPLINE_METHOD: "Smoothing spline",
+}
+
+
+def interpolation_method_label(method: str) -> str:
+    """Return the English display name for a persisted interpolation key."""
+
+    return INTERPOLATION_METHOD_LABELS.get(method, method)
+
 
 def interpolation_uses_order(method: str) -> bool:
     """Return whether the method accepts an interpolation order."""

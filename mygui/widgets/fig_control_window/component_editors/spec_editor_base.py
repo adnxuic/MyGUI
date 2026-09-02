@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
 
 from .common import (
     FocusAwareDoubleSpinBox,
@@ -34,6 +35,7 @@ from .common import (
     format_number_sequence,
     parse_number_sequence,
 )
+from .inspector_layout import apply_expanding_field, configure_inspector_form
 
 _DIALOG_QSS = "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
 
@@ -376,6 +378,7 @@ class _ParameterForm(QWidget):
         self._fields = fields
         self._inputs: dict[str, QWidget] = {}
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         layout.setContentsMargins(0, 6, 0, 0)
         if not fields:
             note = QLabel("This type has no additional parameters.", self)
@@ -385,6 +388,7 @@ class _ParameterForm(QWidget):
             value = _get_path(values, field.path, field.default)
             editor = self._create_input(field, value)
             editor.setAccessibleName(field.label)
+            apply_expanding_field(editor)
             if field.tooltip:
                 editor.setToolTip(field.tooltip)
                 editor.setAccessibleDescription(field.tooltip)
@@ -527,6 +531,7 @@ class _TaggedSpecDialog(QDialog):
             | QDialogButtonBox.StandardButton.Cancel,
             parent=self,
         )
+        apply_english_dialog_buttons(buttons)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -562,13 +567,21 @@ class _StructuredValueEditor(QWidget):
         self._title = title
         self._normalizer = normalizer
         self._value: Any = None
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         self.summary = QLabel(self)
-        self.summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.summary.setWordWrap(True)
+        self.summary.setMinimumWidth(1)
+        self.summary.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
         self.edit_button = QPushButton("Configure…", self)
         self.edit_button.setAccessibleName(f"Configure {title}")
-        layout.addWidget(self.summary, 1)
+        self.edit_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout.addWidget(self.summary)
         layout.addWidget(self.edit_button)
         self.setFocusProxy(self.edit_button)
         self.edit_button.clicked.connect(self._open_dialog)

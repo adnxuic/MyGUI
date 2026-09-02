@@ -1405,6 +1405,57 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
             dialog.close()
             dialog.deleteLater()
 
+    def test_layout_dialog_adapts_simple_advanced_and_xrd_sizes(self):
+        dialog = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            preset_key="single",
+        )
+        try:
+            dialog.show()
+            self.app.processEvents()
+            self.assertFalse(dialog.input.geometry_group.isChecked())
+            self.assertGreaterEqual(
+                dialog.minimumWidth(),
+                min(560, dialog.maximumWidth()),
+            )
+            self.assertLessEqual(dialog.height(), 420)
+            self.assertGreaterEqual(dialog.height(), 360)
+            screen = dialog.screen() or self.app.primaryScreen()
+            geo = screen.availableGeometry()
+            self.assertLessEqual(dialog.maximumWidth(), int(geo.width() * 0.9) + 1)
+            self.assertLessEqual(dialog.maximumHeight(), int(geo.height() * 0.9) + 1)
+
+            dialog.input.geometry_group.setChecked(True)
+            self.app.processEvents()
+            self.assertTrue(dialog.input.geometry_group.isChecked())
+            self.assertGreaterEqual(dialog.height(), 360)
+
+            xrd_index = next(
+                index
+                for index in range(dialog.input.tabs.count())
+                if dialog.input.tabs.tabText(index) == "XRD Refinement"
+            )
+            dialog.input.tabs.setCurrentIndex(xrd_index)
+            self.app.processEvents()
+            self.assertLessEqual(dialog.width(), max(720, dialog.maximumWidth()))
+            self.assertIsNotNone(dialog._xrd_scroll)
+            self.assertIs(dialog.input.tabs.currentWidget(), dialog._xrd_scroll)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+        self.canvas.create_axes_layout(AxesLayoutSpec.grid(1, 1))
+        layout_id = self.canvas.axes_layout_service.layout_definitions()[0]["id"]
+        editor = PyLayoutDialog(
+            figure_window=self.window.figure_window,
+            layout_id=layout_id,
+        )
+        try:
+            self.assertTrue(editor.input.geometry_group.isChecked())
+        finally:
+            editor.close()
+            editor.deleteLater()
+
 
 if __name__ == "__main__":
     unittest.main()

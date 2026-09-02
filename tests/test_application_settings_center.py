@@ -13,7 +13,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QKeySequence, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QRadioButton, QSpinBox, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QLabel,
+    QRadioButton,
+    QSpinBox,
+    QWidget,
+)
 
 from mygui.application_settings import (
     APPEARANCE_DENSITY,
@@ -853,6 +860,25 @@ class SettingsCenterFutureSchemaTests(unittest.TestCase):
             self.future_raw,
         )
         self.assertEqual(self.service.snapshot().appearance.ui_font_point_size, 9)
+
+    def test_future_schema_disables_workspace_remember_and_points_to_maintenance(
+        self,
+    ) -> None:
+        from mygui.widgets.settings_center.window import READ_ONLY_STATUS
+
+        window = self.host.present("workspace")
+        self.app.processEvents()
+        box = window.findChild(QCheckBox, "workspace_remember_layout")
+        self.assertIsNotNone(box)
+        self.assertFalse(box.isEnabled())
+        self.assertFalse(window.apply_button.isEnabled())
+        self.assertFalse(window.ok_button.isEnabled())
+        self.assertEqual(window.status_label.text(), READ_ONLY_STATUS)
+        self.assertIn("maintenance", window.status_label.text().casefold())
+        box.setChecked(False)
+        self.app.processEvents()
+        self.assertFalse(window.apply_button.isEnabled())
+        self.assertTrue(self.service.snapshot().workspace.remember_layout)
 
 
 class SettingsCenterIncompatibleResetTests(unittest.TestCase):

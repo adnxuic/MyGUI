@@ -12,8 +12,12 @@ from PySide6.QtWidgets import QApplication, QDialog, QMainWindow
 
 from mygui.widgets.left_column.py_left_column import PyLeftColumn
 from mygui.widgets.left_column.py_setting_dialog import PySettingDialog
-from mygui.resources import icon_path
-from mygui.widgets.theme import CONTROL_SIZES
+from mygui.application_theme import current_density_metrics
+from mygui.widgets.title_bar.style_gallery import (
+    HIDDEN_STYLE_NAMES,
+    LAYOUT_BUTTON_MIN_WIDTH,
+    style_toolbar_label,
+)
 from mygui.widgets.title_bar.py_title_menu import (
     SelectorChartMenuBar,
     SelectorElementMenuBar,
@@ -29,6 +33,7 @@ from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     PyTextDialog,
     element_action_specs,
 )
+from mygui.resources import icon_path
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 
 
@@ -46,7 +51,7 @@ class CommandGalleryTests(unittest.TestCase):
             SelectorElementMenuBar(),
         ]
         try:
-            self.assertEqual([len(bar.action_dict) for bar in bars], [30, 7, 9, 8])
+            self.assertEqual([len(bar.action_dict) for bar in bars], [27, 7, 9, 8])
             self.assertEqual(
                 next(iter(bars[0].action_dict)),
                 "Apply Template",
@@ -93,14 +98,11 @@ class CommandGalleryTests(unittest.TestCase):
             for action in layout_bar.action_dict.values():
                 button = layout_bar.toolbar.widgetForAction(action)
                 self.assertEqual(button.objectName(), "layout_template_button")
-                self.assertEqual(
-                    (button.minimumWidth(), button.maximumWidth()),
-                    (112, 112),
-                )
-                self.assertEqual(
-                    (button.minimumHeight(), button.maximumHeight()),
-                    (60, 60),
-                )
+                self.assertEqual(button.minimumWidth(), LAYOUT_BUTTON_MIN_WIDTH)
+                gallery_height = current_density_metrics().gallery
+                self.assertEqual(button.maximumHeight(), gallery_height)
+                self.assertEqual(action.toolTip(), action._accessible_name)
+                self.assertEqual(button.accessibleName(), action.toolTip())
                 bounds = QRegion(
                     action.icon().pixmap(40, 40).mask()
                 ).boundingRect()
@@ -152,10 +154,19 @@ class CommandGalleryTests(unittest.TestCase):
         ]
         try:
             self.assertTrue(all(button.isVisible() for button in buttons))
-            self.assertEqual(
-                {(button.width(), button.height()) for button in buttons},
-                {(112, 60)},
+            gallery_height = current_density_metrics().gallery
+            heights = {button.height() for button in buttons}
+            self.assertTrue(
+                all(button.width() >= LAYOUT_BUTTON_MIN_WIDTH for button in buttons)
             )
+            self.assertTrue(
+                all(
+                    button.minimumWidth() >= LAYOUT_BUTTON_MIN_WIDTH
+                    for button in buttons
+                )
+            )
+            self.assertTrue(all(h <= gallery_height for h in heights))
+            self.assertTrue(all(h >= gallery_height - 12 for h in heights))
             self.assertEqual({button.geometry().top() for button in buttons}, {4})
         finally:
             host.close()
@@ -289,7 +300,7 @@ class CommandGalleryTests(unittest.TestCase):
         self.app.processEvents()
         self.app.processEvents()
         try:
-            top_row_height = CONTROL_SIZES["command_row"]
+            top_row_height = current_density_metrics().command
             self.assertEqual(window.title_bar.selector_menu_bar.height(), top_row_height)
             self.assertEqual(window.title_bar.change_button.height(), top_row_height)
             self.assertEqual(
@@ -385,6 +396,56 @@ class CommandGalleryTests(unittest.TestCase):
         finally:
             theme.shutdown()
             reset_theme_runtime_for_tests()
+
+    def test_style_gallery_hides_internal_styles_and_uses_short_labels(self):
+        from PySide6.QtGui import QFontMetrics
+
+        bar = SelectorStyleMenuBar()
+        try:
+            for name in HIDDEN_STYLE_NAMES:
+                self.assertNotIn(name, bar.action_dict)
+                self.assertIn(name, bar.available_styles_dict)
+            dark_palette = bar.action_dict["seaborn-v0_8-dark-palette"]
+            self.assertEqual(dark_palette.text(), "Dark Palette")
+            self.assertEqual(dark_palette.toolTip(), "seaborn-v0_8-dark-palette")
+            metrics = QFontMetrics(bar.font())
+            for name, action in bar.action_dict.items():
+                if name == "Apply Template":
+                    continue
+                button = bar.toolbar.widgetForAction(action)
+                self.assertEqual(action.text(), style_toolbar_label(name))
+                self.assertEqual(action.toolTip(), name)
+                self.assertEqual(button.accessibleName(), name)
+                self.assertLessEqual(
+                    metrics.horizontalAdvance(action.text()),
+                    max(button.sizeHint().width(), 1),
+                )
+        finally:
+            bar.deleteLater()
+
+    def test_hidden_matplotlib_styles_remain_restorable(self):
+        from mygui.figuremodify.components.controllers._helpers import (
+            _figure_style,
+        )
+        from mygui.figuremodify.matplotlib_adapter import available_style_names
+
+        names = set(available_style_names())
+        for style_name in HIDDEN_STYLE_NAMES:
+            self.assertIn(style_name, names)
+            self.assertEqual(_figure_style(style_name), style_name)
+
+    def test_gallery_density_bands_keep_compact_heights_and_icons(self):
+        from mygui.application_theme import Density
+        from mygui.application_theme.metrics import DENSITY_BANDS
+
+        self.assertEqual(
+            tuple(DENSITY_BANDS[item].gallery for item in Density),
+            (54, 60, 72),
+        )
+        self.assertEqual(
+            tuple(DENSITY_BANDS[item].gallery_icon for item in Density),
+            (28, 32, 36),
+        )
 
 
 class CreationDialogCoverageTests(unittest.TestCase):

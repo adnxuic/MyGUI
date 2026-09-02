@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.application_theme import bind_widget_qss, current_qss_tokens, watch_qss_tokens
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
 from mygui.database import ColumnRef, ColumnType, SheetDocument, TableChangeSet, TableMutationCommand
 from mygui.database.table_document import DEFAULT_ROWS, infer_column_type, new_id, validate_component_name
 from mygui.resource_limits import load_resource_limits
@@ -355,7 +356,9 @@ class ExcelImportDialog(QDialog):
             page = ExcelSheetPreview(sheet, self)
             self.pages.append(page)
             self.tabs.addTab(page, sheet.name)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        buttons = apply_english_dialog_buttons(
+            QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        )
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)

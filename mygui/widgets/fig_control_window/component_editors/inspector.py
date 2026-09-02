@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from PySide6.QtWidgets import QFrame, QGroupBox, QVBoxLayout, QWidget
+from mygui.application_theme import current_density_metrics
 from mygui.figuremodify.components import DeletionPolicy
 from mygui.widgets.fig_control_window.component_editors.cleanup import (
     isolate_cleanup,
@@ -190,7 +191,8 @@ class ComponentInspector(QFrame):
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(8)
+        metrics = current_density_metrics()
+        self.layout.setSpacing(metrics.spacing_sm)
 
         try:
             for spec in profile.sections:
@@ -209,8 +211,11 @@ class ComponentInspector(QFrame):
 
                 group = QGroupBox(spec.title, self)
                 group.setObjectName("component_inspector_section")
+                group.setMinimumWidth(1)
                 group_layout = QVBoxLayout(group)
-                group_layout.setContentsMargins(6, 6, 6, 6)
+                pad = metrics.spacing_sm
+                group_layout.setContentsMargins(pad, pad, pad, pad)
+                group_layout.setSpacing(pad)
                 group_layout.addWidget(section)
                 if spec.collapsed:
                     group.setCheckable(True)

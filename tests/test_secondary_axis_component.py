@@ -497,6 +497,7 @@ class SecondaryAxisRuntimeTests(unittest.TestCase):
                     "unit_transform",
                     "placement",
                     "label",
+                    "label_details",
                     "scale_ticks",
                     "tick_appearance",
                     "spine",

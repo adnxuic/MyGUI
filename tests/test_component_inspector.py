@@ -259,7 +259,8 @@ class ComponentInspectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            set(LineAppearanceSection.PROPERTY_KEYS),
+            set(LineAppearanceSection.PRIMARY_KEYS)
+            | set(LineAppearanceSection.ADVANCED_KEYS),
             {spec.key for spec in LineController.PROPERTY_SPECS},
         )
         self.assertEqual(
@@ -273,7 +274,7 @@ class ComponentInspectorTests(unittest.TestCase):
                     ComponentRole.FIT_CURVE
                 ].sections
             ),
-            ("data", "actions", "result", "range", "appearance"),
+            ("data", "actions", "result", "range", "appearance", "advanced"),
         )
 
     def test_reference_marks_exact_profile_data_edit_sync_and_rejection(self):
@@ -398,7 +399,7 @@ class ComponentInspectorTests(unittest.TestCase):
             appearance = inspector.section("appearance")
             self.assertEqual(
                 tuple(appearance.editors()),
-                LineAppearanceSection.PROPERTY_KEYS,
+                LineAppearanceSection.PRIMARY_KEYS,
             )
 
             appearance.editor("linewidth").setValue(4.25)
@@ -579,7 +580,7 @@ class ComponentInspectorTests(unittest.TestCase):
                 appearance = inspector.section("appearance")
                 self.assertEqual(
                     tuple(appearance.editors()),
-                    LineAppearanceSection.PROPERTY_KEYS,
+                    LineAppearanceSection.PRIMARY_KEYS,
                 )
                 linewidth = 2.5 + index
                 appearance.editor("linewidth").setValue(linewidth)
@@ -865,6 +866,31 @@ class ComponentInspectorTests(unittest.TestCase):
         with self.assertRaisesRegex(LookupError, "No exact Editor profile"):
             missing.create(controller, context=context)
         context.editor_manager.close()
+
+    def test_production_inspectors_expand_at_most_eight_properties(self):
+        registry = EditorRegistry()
+        register_production_profiles(registry)
+        for kind, role in sorted(
+            registry.profile_keys,
+            key=lambda item: (item[0].value, item[1].value),
+        ):
+            profile = registry.profile_for(kind, role)
+            expanded = sum(
+                len(section.property_keys or ())
+                for section in profile.sections
+                if not section.collapsed
+            )
+            self.assertLessEqual(
+                expanded,
+                8,
+                f"{kind.value}/{role.value} expands {expanded} properties",
+            )
+            for section in profile.sections:
+                if section.title == "Advanced":
+                    self.assertTrue(
+                        section.collapsed,
+                        f"{kind.value}/{role.value} Advanced must start collapsed",
+                    )
 
     def test_section_factory_failure_disposes_prior_subscriptions(self):
         figure = Figure()

@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.application_settings.errors import SettingsValidationError
+from mygui.application_settings.keys import PAGE_WORKSPACE
 from mygui.application_settings.registry import SettingsRegistry, production_settings_registry
 from mygui.application_settings.service import ApplicationSettingsService
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
@@ -57,6 +58,9 @@ from .pages import (
 from .session_glue import MessageCallback, SettingsCenterSession
 
 SETTINGS_CENTER_QSS_RESOURCE = "mygui/widgets/settings_center/style.qss"
+READ_ONLY_STATUS = (
+    "Settings storage is read-only. Open Maintenance to reset incompatible storage."
+)
 
 ImmediateConfirm = Callable[[str, str], bool]
 
@@ -678,9 +682,13 @@ class SettingsCenterWindow(QDialog):
         writable = self._glue.is_writable()
         self._apply_button.setEnabled(dirty and writable)
         self._ok_button.setEnabled(writable)
+        workspace = self._page_widgets.get(PAGE_WORKSPACE)
+        set_writable = getattr(workspace, "set_storage_writable", None)
+        if callable(set_writable):
+            set_writable(writable)
         if not status_already_set:
             if not writable:
-                self._status.setText("Settings storage is read-only.")
+                self._status.setText(READ_ONLY_STATUS)
             else:
                 self._status.setText("Unsaved changes" if dirty else "")
 

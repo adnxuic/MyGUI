@@ -10,15 +10,20 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QComboBox,
     QFrame,
+    QGroupBox,
     QLayout,
     QLineEdit,
     QPushButton,
     QTableView,
     QToolBar,
+    QToolButton,
     QWidget,
 )
 
 from .models import DensityMetrics
+
+LAYOUT_BUTTON_MIN_WIDTH = 112
+QWIDGETSIZE_MAX = 16777215
 
 # Production widgets whose Python-side chrome sizes read snapshot metrics.
 SIZE_PARTICIPANTS: tuple[dict[str, str], ...] = (
@@ -187,7 +192,8 @@ def _apply_by_object_name(widget: QWidget, metrics: DensityMetrics) -> None:
         widget.setMaximumHeight(metrics.gallery)
         toolbar = widget.findChild(QToolBar)
         if toolbar is not None:
-            toolbar.setIconSize(QSize(metrics.button, metrics.button))
+            toolbar.setIconSize(QSize(metrics.gallery_icon, metrics.gallery_icon))
+            _apply_gallery_button_metrics(toolbar, metrics)
     elif name == "change_button":
         widget.setMinimumHeight(metrics.command)
     elif name == "sheet_table_view":
@@ -220,6 +226,17 @@ def _apply_by_object_name(widget: QWidget, metrics: DensityMetrics) -> None:
         widget.setFixedHeight(metrics.bottom)
 
 
+def _apply_gallery_button_metrics(toolbar: QToolBar, metrics: DensityMetrics) -> None:
+    for button in toolbar.findChildren(QToolButton):
+        if button.objectName() == "qt_toolbar_ext_button":
+            continue
+        if button.objectName() == "layout_template_button":
+            button.setMinimumWidth(LAYOUT_BUTTON_MIN_WIDTH)
+            button.setMaximumWidth(QWIDGETSIZE_MAX)
+        button.setMinimumHeight(0)
+        button.setMaximumHeight(metrics.gallery)
+
+
 def _apply_table_metrics(widget: QWidget, metrics: DensityMetrics) -> None:
     if not isinstance(widget, QTableView):
         return
@@ -229,9 +246,19 @@ def _apply_table_metrics(widget: QWidget, metrics: DensityMetrics) -> None:
 
 
 def _apply_control_minimums(widget: QWidget, metrics: DensityMetrics) -> None:
+    pad = metrics.spacing_sm
     for child in widget.findChildren(QWidget):
         if isinstance(child, (QComboBox, QLineEdit, QAbstractSpinBox)):
             child.setMinimumHeight(metrics.control)
+            child.setMinimumWidth(1)
+        if (
+            isinstance(child, QGroupBox)
+            and child.objectName() == "component_inspector_section"
+        ):
+            layout = _qt_layout(child)
+            if layout is not None:
+                layout.setContentsMargins(pad, pad, pad, pad)
+                layout.setSpacing(pad)
 
 
 def capture_widget_metrics(widget: QWidget) -> dict[str, Any]:

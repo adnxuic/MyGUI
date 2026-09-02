@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from PySide6.QtCore import QModelIndex, Qt
+from PySide6.QtCore import QModelIndex, QSignalBlocker, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -27,6 +27,10 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
+from mygui.widgets.english_buttons import (
+    apply_english_dialog_buttons,
+    ask_yes_no,
+)
 from mygui.figuremodify.style_base.color_models import (
     ColorSelection,
     PaletteDefinition,
@@ -54,27 +58,27 @@ class CustomPaletteDialog(QDialog):
         self.library = library
         self.palette = palette
         self.result_palette: PaletteDefinition | None = None
-        self.setWindowTitle("编辑自定义配色" if palette else "新建自定义配色")
+        self.setWindowTitle("Edit Custom Palette" if palette else "New Custom Palette")
         self.resize(420, 420)
 
         layout = QVBoxLayout(self)
         self.name_input = QLineEdit(palette.name if palette else "", self)
-        self.name_input.setPlaceholderText("配色名称")
-        self.name_input.setAccessibleName("自定义配色名称")
-        layout.addWidget(QLabel("名称：", self))
+        self.name_input.setPlaceholderText("Palette name")
+        self.name_input.setAccessibleName("Custom palette name")
+        layout.addWidget(QLabel("Name", self))
         layout.addWidget(self.name_input)
 
         self.color_list = QListWidget(self)
-        self.color_list.setAccessibleName("自定义配色颜色列表")
+        self.color_list.setAccessibleName("Custom palette colors")
         self.color_list.itemDoubleClicked.connect(lambda *_args: self.edit_color())
         layout.addWidget(self.color_list)
 
         row = QHBoxLayout()
-        self.add_button = QPushButton("添加颜色", self)
-        self.edit_button = QPushButton("编辑颜色", self)
-        self.remove_button = QPushButton("移除", self)
-        self.up_button = QPushButton("上移", self)
-        self.down_button = QPushButton("下移", self)
+        self.add_button = QPushButton("Add Color", self)
+        self.edit_button = QPushButton("Edit Color", self)
+        self.remove_button = QPushButton("Remove", self)
+        self.up_button = QPushButton("Move Up", self)
+        self.down_button = QPushButton("Move Down", self)
         for button in (
             self.add_button,
             self.edit_button,
@@ -92,6 +96,7 @@ class CustomPaletteDialog(QDialog):
         self.down_button.clicked.connect(lambda: self.move_color(1))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        apply_english_dialog_buttons(buttons)
         buttons.accepted.connect(self._save_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -111,7 +116,7 @@ class CustomPaletteDialog(QDialog):
         selected = QColorDialog.getColor(
             color_to_qcolor(initial),
             self,
-            "选择颜色",
+            "Choose Color",
             QColorDialog.ShowAlphaChannel,
         )
         return qcolor_to_color(selected) if selected.isValid() else None
@@ -120,7 +125,7 @@ class CustomPaletteDialog(QDialog):
         """Add color."""
 
         if self.color_list.count() >= 12:
-            status_messages.show_warning("自定义配色最多包含 12 个颜色。")
+            status_messages.show_warning("A custom palette can contain at most 12 colors.")
             return
         color = self._choose_color("#000000")
         if color is not None:
@@ -172,9 +177,11 @@ class CustomPaletteDialog(QDialog):
                 )
         except ValueError as exc:
             status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "无效配色", str(exc))
+            QMessageBox.warning(self, "Invalid Palette", str(exc))
             return
-        status_messages.show_success(f"已保存自定义配色“{self.result_palette.name}”。")
+        status_messages.show_success(
+            f'Saved custom palette "{self.result_palette.name}".'
+        )
         self.accept()
 
 
@@ -201,13 +208,17 @@ class ColorPickerDialog(QDialog):
         self._selected_palette: PaletteDefinition | None = self._selection.palette
         self._syncing_opacity = False
         self.setObjectName("color_picker_dialog")
-        self.setWindowTitle("选择配色" if mode == self.PALETTE_MODE else "选择颜色")
+        self.setWindowTitle(
+            "Choose Palette" if mode == self.PALETTE_MODE else "Choose Color"
+        )
         self.resize(700, 570)
         self.setMinimumSize(560, 440)
 
         layout = QVBoxLayout(self)
         if self.library.consume_load_warning():
-            status_messages.show_warning("部分颜色库设置无效，已忽略并保留可用项目。")
+            status_messages.show_warning(
+                "Some color library settings were invalid and have been ignored."
+            )
 
         self.tabs = QTabWidget(self)
         layout.addWidget(self.tabs, 1)
@@ -219,13 +230,13 @@ class ColorPickerDialog(QDialog):
         self.palette_color_model = ColorGridModel(parent=self)
 
         if mode == self.COLOR_MODE:
-            self.recent_view = self._add_color_tab("最近", self.recent_model)
-            self.favorite_view = self._add_color_tab("收藏", self.favorite_model)
+            self.recent_view = self._add_color_tab("Recent", self.recent_model)
+            self.favorite_view = self._add_color_tab("Favorites", self.favorite_model)
             all_page = QWidget(self)
             all_layout = QVBoxLayout(all_page)
             self.search_input = QLineEdit(all_page)
-            self.search_input.setPlaceholderText("搜索 HEX，例如 #1F77B4")
-            self.search_input.setAccessibleName("搜索颜色")
+            self.search_input.setPlaceholderText("Search HEX, for example #1F77B4")
+            self.search_input.setAccessibleName("Search colors")
             self.search_input.textChanged.connect(self._filter_all_colors)
             all_layout.addWidget(self.search_input)
             self.all_view = QListView(all_page)
@@ -233,20 +244,22 @@ class ColorPickerDialog(QDialog):
             self.all_view.setModel(self.all_model)
             self._connect_color_view(self.all_view)
             all_layout.addWidget(self.all_view)
-            self.tabs.addTab(all_page, "全部颜色")
+            self.tabs.addTab(all_page, "All Colors")
 
         self.palette_page = QWidget(self)
         palette_layout = QVBoxLayout(self.palette_page)
         self.palette_filter = QComboBox(self.palette_page)
-        self.palette_filter.addItems(("全部配色", "收藏配色", "内置配色", "自定义配色"))
-        self.palette_filter.setAccessibleName("配色分类")
+        self.palette_filter.addItems(
+            ("All Palettes", "Favorite Palettes", "Built-in Palettes", "Custom Palettes")
+        )
+        self.palette_filter.setAccessibleName("Palette category")
         self.palette_filter.currentIndexChanged.connect(self._refresh_models)
         palette_layout.addWidget(self.palette_filter)
         self.palette_view = QListView(self.palette_page)
         self.palette_view.setModel(self.palette_model)
         self.palette_view.setItemDelegate(PaletteDelegate(self.palette_view))
         self.palette_view.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.palette_view.setAccessibleName("配色组合列表")
+        self.palette_view.setAccessibleName("Palette list")
         self.palette_view.clicked.connect(self._palette_selected)
         self.palette_view.doubleClicked.connect(self._palette_double_clicked)
         self.palette_view.activated.connect(self._palette_double_clicked)
@@ -261,17 +274,17 @@ class ColorPickerDialog(QDialog):
         palette_layout.addWidget(self.palette_colors_view, 1)
 
         palette_buttons = QHBoxLayout()
-        self.favorite_palette_button = QPushButton("收藏配色", self.palette_page)
-        self.new_palette_button = QPushButton("新建配色", self.palette_page)
-        self.edit_palette_button = QPushButton("编辑配色", self.palette_page)
-        self.delete_palette_button = QPushButton("删除配色", self.palette_page)
+        self.favorite_palette_button = QPushButton("Favorite Palette", self.palette_page)
+        self.new_palette_button = QPushButton("New Palette", self.palette_page)
+        self.edit_palette_button = QPushButton("Edit Palette", self.palette_page)
+        self.delete_palette_button = QPushButton("Delete Palette", self.palette_page)
         palette_buttons.addWidget(self.favorite_palette_button)
         palette_buttons.addStretch()
         palette_buttons.addWidget(self.new_palette_button)
         palette_buttons.addWidget(self.edit_palette_button)
         palette_buttons.addWidget(self.delete_palette_button)
         palette_layout.addLayout(palette_buttons)
-        self.tabs.addTab(self.palette_page, "配色组合")
+        self.tabs.addTab(self.palette_page, "Palettes")
 
         self.favorite_palette_button.clicked.connect(self._toggle_palette_favorite)
         self.new_palette_button.clicked.connect(self._new_palette)
@@ -284,7 +297,7 @@ class ColorPickerDialog(QDialog):
             current_row.addWidget(self.preview)
             current_controls = QVBoxLayout()
             self.hex_input = QLineEdit(self._selection.color, self)
-            self.hex_input.setAccessibleName("颜色十六进制值")
+            self.hex_input.setAccessibleName("Color hexadecimal value")
             self.hex_input.editingFinished.connect(self._hex_edited)
             current_controls.addWidget(self.hex_input)
             rgba_row = QHBoxLayout()
@@ -293,23 +306,23 @@ class ColorPickerDialog(QDialog):
                 rgba_row.addWidget(QLabel(label_text, self))
                 channel_input = QSpinBox(self)
                 channel_input.setRange(0, 255)
-                channel_input.setAccessibleName(f"{label_text} 颜色通道")
+                channel_input.setAccessibleName(f"{label_text} color channel")
                 channel_input.valueChanged.connect(self._rgba_changed)
                 self.rgba_inputs.append(channel_input)
                 rgba_row.addWidget(channel_input)
             current_controls.addLayout(rgba_row)
             opacity_row = QHBoxLayout()
-            opacity_row.addWidget(QLabel("不透明度：", self))
+            opacity_row.addWidget(QLabel("Opacity", self))
             self.opacity_input = QSpinBox(self)
             self.opacity_input.setRange(0, 100)
             self.opacity_input.setSuffix("%")
             self.opacity_input.valueChanged.connect(self._opacity_changed)
             opacity_row.addWidget(self.opacity_input)
-            self.custom_color_button = QPushButton("自定义颜色…", self)
+            self.custom_color_button = QPushButton("Custom Color…", self)
             self.custom_color_button.clicked.connect(self._choose_custom_color)
             opacity_row.addWidget(self.custom_color_button)
-            self.copy_color_button = QPushButton("复制", self)
-            self.copy_color_button.setAccessibleName("复制当前颜色")
+            self.copy_color_button = QPushButton("Copy", self)
+            self.copy_color_button.setAccessibleName("Copy current color")
             self.copy_color_button.clicked.connect(self._copy_color)
             opacity_row.addWidget(self.copy_color_button)
             current_controls.addLayout(opacity_row)
@@ -320,6 +333,7 @@ class ColorPickerDialog(QDialog):
             layout.addLayout(current_row)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        apply_english_dialog_buttons(self.buttons)
         self.buttons.accepted.connect(self._accept_current)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
@@ -423,18 +437,25 @@ class ColorPickerDialog(QDialog):
             return
         color = color_to_qcolor(self._selection.color)
         self.preview.set_color(self._selection.color)
+        blockers = [
+            QSignalBlocker(self.hex_input),
+            QSignalBlocker(self.opacity_input),
+            *[QSignalBlocker(widget) for widget in self.rgba_inputs],
+        ]
         self.hex_input.setText(self._selection.color)
-        self._syncing_opacity = True
         for channel_input, value in zip(
             self.rgba_inputs, (color.red(), color.green(), color.blue()), strict=True
         ):
             channel_input.setValue(value)
         self.opacity_input.setValue(round(color.alphaF() * 100))
-        self._syncing_opacity = False
+        del blockers
         favorite = self.library.is_favorite_color(self._selection.color)
-        self.favorite_color_button.setText("取消收藏" if favorite else "收藏颜色")
+        self.favorite_color_button.setText(
+            "Unfavorite" if favorite else "Favorite Color"
+        )
         self.favorite_color_button.setAccessibleName(
-            ("取消收藏颜色 " if favorite else "收藏颜色 ") + self._selection.color
+            ("Unfavorite color " if favorite else "Favorite color ")
+            + self._selection.color
         )
 
     def _sync_palette_buttons(self):
@@ -448,7 +469,9 @@ class ColorPickerDialog(QDialog):
         self.delete_palette_button.setEnabled(is_custom)
         if palette:
             favorite = self.library.is_favorite_palette(palette.id)
-            self.favorite_palette_button.setText("取消收藏配色" if favorite else "收藏配色")
+            self.favorite_palette_button.setText(
+                "Unfavorite Palette" if favorite else "Favorite Palette"
+            )
 
     def _hex_edited(self):
         try:
@@ -477,13 +500,13 @@ class ColorPickerDialog(QDialog):
 
     def _copy_color(self):
         QApplication.clipboard().setText(self._selection.color)
-        status_messages.show_success(f"已复制颜色 {self._selection.color}。")
+        status_messages.show_success(f"Copied color {self._selection.color}.")
 
     def _choose_custom_color(self):
         selected = QColorDialog.getColor(
             color_to_qcolor(self._selection.color),
             self,
-            "选择自定义颜色",
+            "Choose Custom Color",
             QColorDialog.ShowAlphaChannel,
         )
         if selected.isValid():
@@ -518,22 +541,24 @@ class ColorPickerDialog(QDialog):
         palette = self._selected_palette
         if palette is None or palette.source is not PaletteSource.CUSTOM:
             return
-        answer = QMessageBox.question(
+        if not ask_yes_no(
             self,
-            "删除自定义配色",
-            f"确定从应用颜色库删除“{palette.name}”吗？已有图表和项目快照不会改变。",
-        )
-        if answer != QMessageBox.Yes:
+            "Delete Custom Palette",
+            (
+                f'Delete "{palette.name}" from the application color library? '
+                "Existing charts and project snapshots will not change."
+            ),
+        ):
             return
         if self.library.delete_custom_palette(palette.id):
-            status_messages.show_success(f"已删除自定义配色“{palette.name}”。")
+            status_messages.show_success(f'Deleted custom palette "{palette.name}".')
         self._selected_palette = None
         self.palette_color_model.set_selections(())
         self._refresh_models()
 
     def _accept_current(self):
         if self.mode == self.PALETTE_MODE and self._selected_palette is None:
-            status_messages.show_warning("请先选择一个配色组合。")
+            status_messages.show_warning("Select a palette first.")
             return
         self.accept()
 

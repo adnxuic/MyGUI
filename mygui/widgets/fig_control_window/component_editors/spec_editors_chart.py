@@ -9,12 +9,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
+
+from mygui.widgets.english_buttons import english_ok_cancel
 
 from mygui.figuremodify.matplotlib_adapter import available_colormap_names
 from mygui.figuremodify.components.errors import ComponentValidationError
@@ -164,11 +165,7 @@ class _ScatterColorMapDialog(QDialog):
         self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -269,11 +266,7 @@ class _ScatterSizeMapDialog(QDialog):
         self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -398,11 +391,7 @@ class _ZoomConnectorsDialog(QDialog):
         self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 
 from PySide6.QtWidgets import (
-    QToolBox,
     QVBoxLayout,
     QWidget,
 )
@@ -22,20 +21,19 @@ class LineAppearanceSection(QWidget, EditorSection):
         "color",
         "linestyle",
         "linewidth",
-        "drawstyle",
-        "gapcolor",
-    )
-    MARKER_KEYS = (
         "marker",
         "markersize",
+    )
+    MARKER_KEYS = ()
+    ADVANCED_KEYS = (
+        "drawstyle",
+        "gapcolor",
         "markerfacecolor",
         "markerfacecoloralt",
         "markeredgecolor",
         "markeredgewidth",
         "fillstyle",
         "markevery",
-    )
-    ADVANCED_KEYS = (
         "alpha",
         "zorder",
         "dash_capstyle",
@@ -51,7 +49,8 @@ class LineAppearanceSection(QWidget, EditorSection):
         "snap",
         "url",
     )
-    PROPERTY_KEYS = BASIC_KEYS + MARKER_KEYS + ADVANCED_KEYS
+    PRIMARY_KEYS = BASIC_KEYS + MARKER_KEYS
+    PROPERTY_KEYS = PRIMARY_KEYS + ADVANCED_KEYS
 
     def __init__(self, controller, *, context, parent=None):
         super().__init__(parent)
@@ -59,89 +58,57 @@ class LineAppearanceSection(QWidget, EditorSection):
         self.context = context
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.toolbox = QToolBox(self)
-
         self._base = PropertySection(
             controller,
             context=context,
-            property_keys=self.BASIC_KEYS,
+            property_keys=self.PRIMARY_KEYS,
             parent=self,
         )
-        self._marker = PropertySection(
-            controller,
-            context=context,
-            property_keys=self.MARKER_KEYS,
-            parent=self,
-        )
-        self._advanced = PropertySection(
-            controller,
-            context=context,
-            property_keys=self.ADVANCED_KEYS,
-            parent=self,
-        )
-        self.toolbox.addItem(self._base, "Basic")
-        self.toolbox.addItem(self._marker, "Marker")
-        self.toolbox.addItem(self._advanced, "Advanced")
-        self.layout.addWidget(self.toolbox)
+        self.layout.addWidget(self._base)
 
     def editor(self, key: str):
         """Return the editor widget used for the property."""
 
-        for section in (self._base, self._marker, self._advanced):
-            try:
-                return section.editor(key)
-            except KeyError:
-                continue
-        raise KeyError(key)
+        return self._base.editor(key)
 
     def editors(self):
         """Return the available editors."""
 
-        result = {}
-        for section in (self._base, self._marker, self._advanced):
-            result.update(section.editors())
-        return result
+        return self._base.editors()
 
     def flush_text(self, key: str) -> bool:
         """Commit pending text after the edit-coalescing delay."""
 
-        for section in (self._base, self._marker, self._advanced):
-            if key in section.editors():
-                return section.flush_text(key)
-        raise KeyError(key)
+        return self._base.flush_text(key)
 
     def sync_from_controller(self) -> None:
         """Refresh controls from authoritative Controller state."""
 
         self._base.sync_from_controller()
-        self._marker.sync_from_controller()
-        self._advanced.sync_from_controller()
 
     def dispose(self) -> None:
         """Disconnect callbacks and release resources owned by this object."""
 
         self._base.dispose()
-        self._marker.dispose()
-        self._advanced.dispose()
 
 
 class ScatterAppearanceSection(QWidget, EditorSection):
     """Provide the scatter appearance section Qt widget."""
 
     BASIC_KEYS = (
-        "label",
         "visible",
         "color",
-        "edgecolor",
         "marker",
         "size",
+        "edgecolor",
         "linewidth",
+    )
+    ADVANCED_KEYS = (
+        "label",
         "linestyle",
         "hatch",
         "capstyle",
         "joinstyle",
-    )
-    ADVANCED_KEYS = (
         "alpha",
         "zorder",
         "antialiased",
@@ -154,7 +121,8 @@ class ScatterAppearanceSection(QWidget, EditorSection):
         "url",
         "urls",
     )
-    PROPERTY_KEYS = BASIC_KEYS + ADVANCED_KEYS
+    PRIMARY_KEYS = BASIC_KEYS
+    PROPERTY_KEYS = PRIMARY_KEYS + ADVANCED_KEYS
 
     def __init__(self, controller, *, context, parent=None):
         super().__init__(parent)
@@ -162,57 +130,35 @@ class ScatterAppearanceSection(QWidget, EditorSection):
         self.context = context
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.toolbox = QToolBox(self)
         self._base = PropertySection(
             controller,
             context=context,
-            property_keys=self.BASIC_KEYS,
+            property_keys=self.PRIMARY_KEYS,
             parent=self,
         )
-        self._advanced = PropertySection(
-            controller,
-            context=context,
-            property_keys=self.ADVANCED_KEYS,
-            parent=self,
-        )
-        self.toolbox.addItem(self._base, "Basic")
-        self.toolbox.addItem(self._advanced, "Advanced")
-        self.layout.addWidget(self.toolbox)
+        self.layout.addWidget(self._base)
 
     def editor(self, key: str):
         """Return the editor widget used for the property."""
 
-        for section in (self._base, self._advanced):
-            try:
-                return section.editor(key)
-            except KeyError:
-                continue
-        raise KeyError(key)
+        return self._base.editor(key)
 
     def editors(self):
         """Return the available editors."""
 
-        result = {}
-        result.update(self._base.editors())
-        result.update(self._advanced.editors())
-        return result
+        return self._base.editors()
 
     def flush_text(self, key: str) -> bool:
         """Commit pending text after the edit-coalescing delay."""
 
-        for section in (self._base, self._advanced):
-            if key in section.editors():
-                return section.flush_text(key)
-        raise KeyError(key)
+        return self._base.flush_text(key)
 
     def sync_from_controller(self) -> None:
         """Refresh controls from authoritative Controller state."""
 
         self._base.sync_from_controller()
-        self._advanced.sync_from_controller()
 
     def dispose(self) -> None:
         """Disconnect callbacks and release resources owned by this object."""
 
         self._base.dispose()
-        self._advanced.dispose()

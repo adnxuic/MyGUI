@@ -74,7 +74,7 @@ class FigureExportDialog(QDialog):
         self._generated_path = True
         self.setObjectName("figure_export_dialog")
         self.setModal(True)
-        self.setWindowTitle("导出当前图片")
+        self.setWindowTitle("Export Current Figure")
         self.setWindowIcon(QIcon(icon_path("save.svg")))
         bind_widget_qss(
             self,
@@ -192,7 +192,7 @@ class FigureExportDialog(QDialog):
         patterns = " ".join(f"*{ext}" for ext in fmt.extensions)
         selected, _filter = QFileDialog.getSaveFileName(
             self,
-            "导出当前图片",
+            "Export Current Figure",
             start,
             f"{fmt.display_name} ({patterns})",
             options=QFileDialog.Option.DontConfirmOverwrite,
@@ -283,7 +283,7 @@ class FigureExportDialog(QDialog):
         if request.path.exists():
             answer = QMessageBox.question(
                 self,
-                "导出当前图片",
+                "Export Current Figure",
                 f"Overwrite existing file?\n{request.path}",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,

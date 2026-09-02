@@ -25,12 +25,21 @@ QCheckBox
 }
 
 QRadioButton:focus,
-QCheckBox:focus,
 QSpinBox:focus,
 QDoubleSpinBox:focus,
 QPushButton:focus
 {
     outline: none;
+    border: 2px solid {{COLOR_FOCUS}};
+}
+
+QCheckBox:focus
+{
+    outline: none;
+}
+
+QCheckBox::indicator:focus
+{
     border: 2px solid {{COLOR_FOCUS}};
 }
 

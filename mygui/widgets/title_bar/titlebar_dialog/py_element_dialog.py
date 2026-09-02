@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate,
     QVBoxLayout,
 )
+from mygui.widgets.english_buttons import english_ok_cancel
 from mygui.resources import icon_path
 
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
@@ -232,11 +233,7 @@ class PyAnnotationDialog(QDialog):
         layout = QVBoxLayout(self)
         self.input = AnnotationInput(default_xy=default_xy, parent=self)
         layout.addWidget(self.input)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -291,11 +288,7 @@ class PyInAxesDialog(QDialog):
             parent=self,
         )
         layout.addWidget(self.input)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -343,11 +336,7 @@ class PyColorbarDialog(QDialog):
         layout = QVBoxLayout(self)
         self.input = ColorbarInput(sources, parent=self)
         layout.addWidget(self.input)
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        self.buttons = english_ok_cancel(self)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
@@ -400,11 +389,7 @@ class PySecondaryAxisDialog(QDialog):
         layout = QVBoxLayout(self)
         self.input = SecondaryAxisInput(self)
         layout.addWidget(self.input)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -456,11 +441,7 @@ class PyReferenceMarksDialog(QDialog):
             parent=self,
         )
         layout.addWidget(self.input)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -524,11 +505,7 @@ class _PyReferenceGuideDialog(QDialog):
             parent=self,
         )
         layout.addWidget(self.input)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

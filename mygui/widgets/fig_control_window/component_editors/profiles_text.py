@@ -84,12 +84,14 @@ ANNOTATION_PROFILE = EditorProfile(
             "arrow",
             "Arrow",
             _annotation_arrow,
+            collapsed=True,
             property_keys=AnnotationArrowSection.KEYS,
         ),
         SectionSpec(
             "text_style",
             "Text Style",
             _annotation_text_style,
+            collapsed=True,
             property_keys=(
                 "fontfamily",
                 "fontsize",
@@ -102,6 +104,7 @@ ANNOTATION_PROFILE = EditorProfile(
             "transform",
             "Rotation and alignment",
             _annotation_transform,
+            collapsed=True,
             property_keys=(
                 "rotation",
                 "horizontalalignment",
@@ -112,6 +115,7 @@ ANNOTATION_PROFILE = EditorProfile(
             "box",
             "Box",
             _properties("bbox"),
+            collapsed=True,
             property_keys=("bbox",),
         ),
         SectionSpec(
@@ -193,6 +197,7 @@ LEGEND_PROFILE = EditorProfile(
         ),
         SectionSpec(
             "frame", "Frame", _legend_frame,
+            collapsed=True,
             property_keys=(
                 "frameon", "facecolor", "edgecolor", "framealpha",
                 "fancybox", "shadow", "frame_linewidth",

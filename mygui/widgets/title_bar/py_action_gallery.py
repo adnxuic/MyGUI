@@ -22,14 +22,15 @@ from PySide6.QtWidgets import (
 from mygui.application_theme import current_density_metrics, subscribe_theme_window
 from mygui.application_theme.icons import IconRole, classify_icon_source
 from mygui.application_theme.runtime import default_theme_runtime
+from mygui.widgets.title_bar.style_gallery import LAYOUT_BUTTON_MIN_WIDTH
 
 if TYPE_CHECKING:
     from mygui.application_theme.icons import CachingThemeIconProvider
     from mygui.application_theme.models import ThemeSnapshot
 
-
 DialogFactory = Callable[[QWidget | None], QDialog]
 IconSource = str | QIcon | Path
+QWIDGETSIZE_MAX = 16777215
 
 
 class LazyDialogAction(QAction):
@@ -43,12 +44,17 @@ class LazyDialogAction(QAction):
         parent: QObject,
         *,
         reuse_dialog: bool = True,
+        toolbar_label: str | None = None,
+        tooltip: str | None = None,
     ):
         self._icon_source = icon
         resolved_icon = self._resolve_icon(icon, parent)
-        super().__init__(resolved_icon, text, parent)
-        self.setToolTip(text)
-        self.setStatusTip(text)
+        display = toolbar_label if toolbar_label is not None else text
+        super().__init__(resolved_icon, display, parent)
+        hint = tooltip if tooltip is not None else text
+        self.setToolTip(hint)
+        self.setStatusTip(hint)
+        self._accessible_name = hint
         self._dialog_factory = dialog_factory
         self._reuse_dialog = reuse_dialog
         self._dialog: QDialog | None = None
@@ -111,7 +117,7 @@ class ResponsiveActionGallery(QFrame):
         self.toolbar.setFloatable(False)
         self.toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         metrics = current_density_metrics()
-        self.toolbar.setIconSize(QSize(metrics.button, metrics.button))
+        self.toolbar.setIconSize(QSize(metrics.gallery_icon, metrics.gallery_icon))
         self.toolbar.setMinimumWidth(0)
         self.toolbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.overflow_button = self.toolbar.findChild(
@@ -134,7 +140,16 @@ class ResponsiveActionGallery(QFrame):
 
         self.setMinimumHeight(metrics.gallery)
         self.setMaximumHeight(metrics.gallery)
-        self.toolbar.setIconSize(QSize(metrics.button, metrics.button))
+        self.toolbar.setIconSize(QSize(metrics.gallery_icon, metrics.gallery_icon))
+        for action in self.action_dict.values():
+            button = self.toolbar.widgetForAction(action)
+            if button is None:
+                continue
+            if button.objectName() == "layout_template_button":
+                button.setMinimumWidth(LAYOUT_BUTTON_MIN_WIDTH)
+                button.setMaximumWidth(QWIDGETSIZE_MAX)
+            button.setMinimumHeight(0)
+            button.setMaximumHeight(metrics.gallery)
 
     def apply_theme_icons(
         self,
@@ -203,6 +218,8 @@ class ResponsiveActionGallery(QFrame):
         dialog_factory: DialogFactory,
         *,
         reuse_dialog: bool = True,
+        toolbar_label: str | None = None,
+        tooltip: str | None = None,
     ) -> LazyDialogAction:
         """Add dialog action."""
 
@@ -212,11 +229,14 @@ class ResponsiveActionGallery(QFrame):
             dialog_factory,
             self,
             reuse_dialog=reuse_dialog,
+            toolbar_label=toolbar_label,
+            tooltip=tooltip,
         )
         self.action_dict[name] = action
         self.toolbar.addAction(action)
         button = self.toolbar.widgetForAction(action)
         if button is not None:
-            button.setAccessibleName(name)
-            button.setToolTip(name)
+            accessible = tooltip if tooltip is not None else name
+            button.setAccessibleName(accessible)
+            button.setToolTip(accessible)
         return action

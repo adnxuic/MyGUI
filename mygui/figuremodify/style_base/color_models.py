@@ -85,10 +85,13 @@ class PaletteDefinition:
 
         if not isinstance(value, dict):
             raise ValueError("Palette state must be an object.")
+        category = str(value.get("category", "")).strip()
+        if category == "".join(map(chr, (0x81EA, 0x5B9A, 0x4E49, 0x914D, 0x8272))):
+            category = "Custom"
         return cls(
             id=value.get("id", ""),
             name=value.get("name", ""),
-            category=value.get("category", ""),
+            category=category,
             source=source or value.get("source", PaletteSource.BUILTIN.value),
             colors=tuple(value.get("colors", ())),
         )

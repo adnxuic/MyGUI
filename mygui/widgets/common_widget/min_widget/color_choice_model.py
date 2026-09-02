@@ -93,7 +93,7 @@ class ColorSwatch(QWidget):
         self.update()
 
     def _sync_accessibility(self) -> None:
-        text = f"当前颜色 {color_rgba_text(self._color)}"
+        text = f"Current color {color_rgba_text(self._color)}"
         self.setAccessibleName(text)
         self.setToolTip(text)
 
@@ -189,11 +189,11 @@ class PaletteListModel(QAbstractListModel):
         palette = self.palettes[index.row()]
         if role == Qt.DisplayRole:
             favorite = "★ " if self.library and self.library.is_favorite_palette(palette.id) else ""
-            return f"{favorite}{palette.display_name} · {len(palette.colors)} 色"
+            return f"{favorite}{palette.display_name} · {len(palette.colors)} colors"
         if role == Qt.ToolTipRole:
             return f"{palette.display_name}\n{' / '.join(palette.colors)}"
         if role == Qt.AccessibleTextRole:
-            return f"{palette.display_name}，{len(palette.colors)} 色"
+            return f"{palette.display_name}, {len(palette.colors)} colors"
         if role == Qt.UserRole:
             return palette
         return None
@@ -283,4 +283,4 @@ def _configure_color_view(view: QListView) -> None:
     view.setUniformItemSizes(True)
     view.setSelectionMode(QAbstractItemView.SingleSelection)
     view.setItemDelegate(ColorGridDelegate(view))
-    view.setAccessibleName("颜色网格")
+    view.setAccessibleName("Color grid")

@@ -9,12 +9,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QLineEdit,
     QVBoxLayout,
     QWidget,
 )
+
+from mygui.widgets.english_buttons import english_ok_cancel
 
 from mygui.figuremodify.components.property_values import (
     normalize_annotation_box,
@@ -89,11 +90,7 @@ class _FontSpecDialog(QDialog):
         self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -220,11 +217,7 @@ class _TextBoxDialog(QDialog):
         self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -367,11 +360,7 @@ class _AnnotationBoxDialog(QDialog):
         self.error_label = _chrome_error_label(self)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        buttons = english_ok_cancel(self)
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

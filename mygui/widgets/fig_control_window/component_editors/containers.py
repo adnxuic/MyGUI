@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from PySide6.QtWidgets import QFrame, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 
 from mygui.widgets.fig_control_window.component_editors.cleanup import (
     dispose_object,
@@ -20,6 +20,7 @@ from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 
 from .context import EditorContext
 from .inspector import EditorPlacement
+from .inspector_layout import CurrentPageStackedWidget
 
 
 @dataclass(slots=True)
@@ -51,7 +52,7 @@ class AxesSemanticInspectorPanel(QFrame):
             self,
             "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
         )
-        self.inspector_stack = QStackedWidget(self)
+        self.inspector_stack = CurrentPageStackedWidget(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -239,7 +240,7 @@ class InspectorToolBox(QFrame):
         self.editor_manager = None
         self._disposed = False
 
-        self.inspector_stack = QStackedWidget(self)
+        self.inspector_stack = CurrentPageStackedWidget(self)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -442,7 +443,7 @@ class _ComponentInspectorStack(QFrame):
         super().__init__(parent)
         self._toolboxes = {}
         self._disposed = False
-        self.toolbox_stack = QStackedWidget(self)
+        self.toolbox_stack = CurrentPageStackedWidget(self)
         self.empty_state = PyEmptyState(
             self.EMPTY_TITLE,
             self.EMPTY_DETAIL,

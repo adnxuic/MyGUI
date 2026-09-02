@@ -7,6 +7,11 @@ QDialog
     min-width: 280px;
 }
 
+QDialog#layout_dialog
+{
+    min-width: 560px;
+}
+
 QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox
 {
     min-height: 28px;

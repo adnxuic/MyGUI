@@ -606,6 +606,14 @@ def _text_render(controller, context, parent):
 
 
 TEXT_ADVANCED_KEYS = (
+    "fontweight",
+    "fontstyle",
+    "fontstretch",
+    "fontvariant",
+    "math_fontfamily",
+    "parse_math",
+    "alpha",
+    "zorder",
     "bbox",
     "antialiased",
     "label",
@@ -619,14 +627,21 @@ TEXT_ADVANCED_KEYS = (
 )
 
 
+def _text_advanced_for(*keys: str):
+    def factory(controller, context, parent):
+        return PropertySection(
+            controller,
+            context=context,
+            property_keys=keys,
+            apply_properties=_text_apply(controller, context),
+            parent=parent,
+        )
+
+    return factory
+
+
 def _text_advanced(controller, context, parent):
-    return PropertySection(
-        controller,
-        context=context,
-        property_keys=TEXT_ADVANCED_KEYS,
-        apply_properties=_text_apply(controller, context),
-        parent=parent,
-    )
+    return _text_advanced_for(*TEXT_ADVANCED_KEYS)(controller, context, parent)
 
 
 def _image_in_axes_source(controller, context, parent):
@@ -840,6 +855,9 @@ def _text_sections(*, free: bool) -> tuple[SectionSpec, ...]:
         for key in TextPositionSection.KEYS
         if free or key != "coordinate_system"
     )
+    advanced_keys = TEXT_ADVANCED_KEYS + (
+        ("coordinate_system",) if free else ()
+    )
     return (
         SectionSpec(
             "content", "Content", _text_content,
@@ -862,12 +880,13 @@ def _text_sections(*, free: bool) -> tuple[SectionSpec, ...]:
         ),
         SectionSpec(
             "render", "Rendering", _text_render,
+            collapsed=True,
             property_keys=("usetex",),
         ),
         SectionSpec(
-            "advanced", "Advanced", _text_advanced,
+            "advanced", "Advanced", _text_advanced_for(*advanced_keys),
             collapsed=True,
-            property_keys=TEXT_ADVANCED_KEYS,
+            property_keys=advanced_keys,
         ),
     )
 
@@ -1099,12 +1118,13 @@ def _property_profile(kind: ComponentKind, role: ComponentRole) -> EditorProfile
     ]
     if kind is ComponentKind.AXIS:
         sections.append(
-            SectionSpec(
-                "ticks_labels",
-                "Ticks & Labels",
-                _axis_ticks,
-                property_keys=ticker_keys,
-            )
+        SectionSpec(
+            "ticks_labels",
+            "Ticks & Labels",
+            _axis_ticks,
+            collapsed=True,
+            property_keys=ticker_keys,
+        )
         )
     if advanced_keys:
         sections.append(

@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
@@ -268,6 +269,20 @@ class WorkspacePageTests(SettingsPagesCase):
         self.assertTrue(page.draft_values()[WORKSPACE_REMEMBER_LAYOUT])
         self.assertIn("splitter", page.findChildren(QLabel)[0].text().lower())
         page.remember_box.setChecked(False)
+        self.assertFalse(session.dirty_patch()[WORKSPACE_REMEMBER_LAYOUT])
+
+    def test_remember_checkbox_text_toggles_on_click(self) -> None:
+        service = ApplicationSettingsService(document=MemorySettingsDocumentPort())
+        session = service.begin_session()
+        page = self._track(WorkspaceSettingsPage(session=session))
+        page.show()
+        page.remember_box.adjustSize()
+        self.app.processEvents()
+        self.assertEqual(page.remember_box.text(), "Remember workspace layout")
+        self.assertTrue(page.remember_box.isChecked())
+        QTest.mouseClick(page.remember_box, Qt.LeftButton)
+        self.app.processEvents()
+        self.assertFalse(page.remember_box.isChecked())
         self.assertFalse(session.dirty_patch()[WORKSPACE_REMEMBER_LAYOUT])
 
     def test_reset_confirm_yes_runs_immediate_command(self) -> None:

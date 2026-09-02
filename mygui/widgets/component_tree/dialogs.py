@@ -19,6 +19,9 @@ from PySide6.QtWidgets import (
 )
 
 
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
+
+
 @dataclass(frozen=True, slots=True)
 class DeleteCandidate:
     """UI-only identity and presentation for one batch deletion candidate."""
@@ -118,7 +121,9 @@ class ComponentBatchDeleteDialog(QDialog):
         scroll.setWidget(list_frame)
         layout.addWidget(scroll)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel, self)
+        self.buttons = apply_english_dialog_buttons(
+            QDialogButtonBox(QDialogButtonBox.Cancel, self)
+        )
         self.delete_button = self.buttons.addButton(
             "Delete", QDialogButtonBox.AcceptRole
         )

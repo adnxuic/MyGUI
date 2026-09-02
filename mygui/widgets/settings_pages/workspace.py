@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
+    QLabel,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -23,7 +24,6 @@ from mygui.application_settings.models import DEFAULT_WORKSPACE_LAYOUT
 
 from .page import (
     SettingsPageWidget,
-    add_buddy_row,
     make_hint_label,
     make_intro_label,
 )
@@ -72,16 +72,18 @@ class WorkspaceSettingsPage(SettingsPageWidget):
 
         form = QFormLayout()
         remember_spec = self._registry.spec(WORKSPACE_REMEMBER_LAYOUT)
-        self.remember_box = QCheckBox(self)
+        remember_label_text = remember_spec.label or "Remember workspace layout"
+        self.remember_box = QCheckBox(remember_label_text, self)
         self.remember_box.setObjectName("workspace_remember_layout")
+        self.remember_box.setAccessibleName(remember_label_text)
         self.remember_box.setChecked(bool(remember_spec.default))
         self.remember_box.setFocusPolicy(Qt.StrongFocus)
-        remember_label = add_buddy_row(
-            form,
-            remember_spec.label or "Remember workspace layout",
-            self.remember_box,
-        )
+        remember_label = QLabel(remember_label_text, self)
+        remember_label.setObjectName("settings_page_field_label")
+        remember_label.setBuddy(self.remember_box)
+        remember_label.hide()
         self._buddy_labels[WORKSPACE_REMEMBER_LAYOUT] = remember_label
+        form.addRow(self.remember_box)
         root.addLayout(form)
         root.addWidget(make_hint_label(WORKSPACE_HINT, self))
 
@@ -99,6 +101,7 @@ class WorkspaceSettingsPage(SettingsPageWidget):
         self.remember_box.toggled.connect(self._on_remember_changed)
         self.bind_host(host)
         self.load_values(self._initial_values())
+        self.set_storage_writable(self._host_storage_writable())
 
     @classmethod
     def page_spec(cls):
@@ -129,6 +132,13 @@ class WorkspaceSettingsPage(SettingsPageWidget):
 
     def editors(self) -> dict[str, QWidget]:
         return {WORKSPACE_REMEMBER_LAYOUT: self.remember_box}
+
+    def set_storage_writable(self, writable: bool) -> None:
+        """Disable remember/reset when dual-slot storage cannot commit."""
+
+        enabled = bool(writable)
+        self.remember_box.setEnabled(enabled)
+        self.reset_button.setEnabled(enabled)
 
     def keyboard_editors(self) -> tuple[QWidget, ...]:
         return (self.remember_box, self.reset_button)
@@ -194,8 +204,18 @@ class WorkspaceSettingsPage(SettingsPageWidget):
         )
         return answer == QMessageBox.Yes
 
+    def _host_storage_writable(self) -> bool:
+        host = self._host
+        if host is None:
+            return True
+        glue = getattr(host, "glue", None)
+        is_writable = getattr(glue, "is_writable", None)
+        if callable(is_writable):
+            return bool(is_writable())
+        return True
+
     def _on_remember_changed(self, *_args: object) -> None:
-        if self._loading or self._staging:
+        if self._loading or self._staging or not self.remember_box.isEnabled():
             return
         self._stage_and_emit(self.draft_values())
 

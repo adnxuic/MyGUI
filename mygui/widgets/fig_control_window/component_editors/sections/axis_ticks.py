@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from mygui import status_messages
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.english_buttons import english_ok_cancel
 from mygui.figuremodify.component_services import (
     AxisTickPreviewRenderer,
     AxisTickSettingsDraft,
@@ -535,11 +536,7 @@ class AxisTickSettingsDialog(QDialog):
         self.error_label.setWordWrap(True)
         self.error_label.hide()
         root.addWidget(self.error_label)
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        self.buttons = english_ok_cancel(self)
         root.addWidget(self.buttons)
 
         self.preview_timer = QTimer(self)

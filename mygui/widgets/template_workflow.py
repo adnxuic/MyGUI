@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from mygui import status_messages
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
+from mygui.widgets.english_buttons import apply_english_dialog_buttons
 from mygui.excel_io import (
     EXCEL_FILE_FILTER,
     ExcelImportDialog,
@@ -136,8 +137,8 @@ class TemplateExtractDialog(QDialog):
         token_row.addWidget(self.token_combo, 1)
         token_row.addWidget(insert_button)
 
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel, self
+        self.buttons = apply_english_dialog_buttons(
+            QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel, self)
         )
         self.buttons.accepted.connect(self._validate_and_accept)
         self.buttons.rejected.connect(self.reject)

@@ -24,6 +24,7 @@ from .common import (
     FocusAwareDoubleSpinBox,
     parse_number_sequence,
 )
+from .inspector_layout import configure_inspector_form
 
 class ColorbarInput(QFrame):
     """Controller-free source and placement input for Colorbar creation."""
@@ -31,6 +32,7 @@ class ColorbarInput(QFrame):
     def __init__(self, sources, *, parent=None):
         super().__init__(parent)
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         layout.setContentsMargins(0, 0, 0, 0)
         self.source_input = QComboBox(self)
         for component_id, label in sources:
@@ -119,6 +121,7 @@ class ReferenceMarksInput(QFrame):
         self.max_baseline_plus_height = max_baseline_plus_height
         self.automatic_baseline = bool(automatic_baseline)
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.label_input = QLineEdit(self)
@@ -251,6 +254,7 @@ class ReferenceLineInput(QFrame):
                 "ReferenceLineInput requires the application ColorLibrary."
             )
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         layout.setContentsMargins(0, 0, 0, 0)
         self.label_input = QLineEdit(self)
         layout.addRow("Label:", self.label_input)
@@ -299,6 +303,7 @@ class ReferenceBandInput(QFrame):
                 "ReferenceBandInput requires the application ColorLibrary."
             )
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         layout.setContentsMargins(0, 0, 0, 0)
         self.label_input = QLineEdit(self)
         layout.addRow("Label:", self.label_input)

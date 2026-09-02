@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QGroupBox,
     QLineEdit,
     QPlainTextEdit,
     QVBoxLayout,
@@ -509,7 +510,7 @@ class ComponentEditorTests(unittest.TestCase):
                 ChangeStatus.NOOP,
             )
             self.assertTrue(editor.apply_property("linewidth", 4.0))
-            self.assertEqual(events, [("Linewidth updated.", "success")])
+            self.assertEqual(events, [("Line Width updated.", "success")])
         finally:
             status_messages.clear_status_handler(handler)
             editor.close()
@@ -671,6 +672,9 @@ class ComponentEditorTests(unittest.TestCase):
         dialog = None
         try:
             section = inspector.section("ticks_labels")
+            group = section.parentWidget()
+            if isinstance(group, QGroupBox) and group.isCheckable():
+                group.setChecked(True)
             self.assertTrue(section.configure_button.isEnabled())
             self.assertNotIn("major_locator", inspector.section("properties").editors())
             opening = context.axis_ticks.snapshot(axis.component_id)

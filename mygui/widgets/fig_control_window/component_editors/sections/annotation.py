@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from ..common import DebouncedTextBinding
 from ..inspector import EditorSection
+from ..inspector_layout import apply_expanding_field, configure_inspector_form
 from ._types import ApplyProperties
 from .property import PropertySection
 from .text import TextTypographySection
@@ -107,9 +108,11 @@ class AnnotationContentSection(QWidget, EditorSection):
         layout.addWidget(self.text_content)
 
         details = QFormLayout()
+        configure_inspector_form(details)
         details.setContentsMargins(0, 6, 0, 0)
         self.name_input = QLineEdit(self)
         self.name_input.setPlaceholderText("Component Tree name")
+        apply_expanding_field(self.name_input)
         self.name_input.setText(str(state.properties.get("label", "")))
         self.visible_input = QCheckBox(self)
         self.visible_input.setChecked(bool(state.properties.get("visible", True)))

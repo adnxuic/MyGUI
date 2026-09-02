@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
 )
 
@@ -51,6 +52,8 @@ class ColorChoiceWidget(QFrame):
     ):
         super().__init__(parent)
         self.setObjectName("color_choice_widget")
+        self.setMinimumWidth(1)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         if color_library is None:
             raise ValueError(
                 "ColorChoiceWidget requires the shared ColorLibrary."
@@ -63,28 +66,38 @@ class ColorChoiceWidget(QFrame):
         self.auto_record_recent = bool(auto_record_recent)
         self.allow_favorite = bool(allow_favorite)
 
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        self.color_display = ColorSwatch(self._selection.color, self)
-        layout.addWidget(self.color_display)
+        layout.setSpacing(4)
 
-        controls = QVBoxLayout()
+        swatch_row = QHBoxLayout()
+        swatch_row.setContentsMargins(0, 0, 0, 0)
+        swatch_row.setSpacing(8)
+        self.color_display = ColorSwatch(self._selection.color, self)
+        swatch_row.addWidget(self.color_display)
+        swatch_row.addStretch(1)
+        self.favorite_button = QPushButton("☆", self)
+        self.favorite_button.setFixedWidth(34)
+        self.favorite_button.clicked.connect(self._toggle_favorite)
+        swatch_row.addWidget(self.favorite_button)
+        layout.addLayout(swatch_row)
+
         self.color_button = QPushButton("Choose color…", self)
         self.color_button.setAccessibleName("Open color picker")
+        self.color_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self.color_button.clicked.connect(self.showColorDialog)
-        controls.addWidget(self.color_button)
+        layout.addWidget(self.color_button)
 
         self.rgb_label = QLabel(self)
         self.rgb_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.rgb_label.setWordWrap(True)
-        controls.addWidget(self.rgb_label)
-        layout.addLayout(controls, 1)
-
-        self.favorite_button = QPushButton("☆", self)
-        self.favorite_button.setFixedWidth(34)
-        self.favorite_button.clicked.connect(self._toggle_favorite)
-        layout.addWidget(self.favorite_button)
+        self.rgb_label.setMinimumWidth(1)
+        self.rgb_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        layout.addWidget(self.rgb_label)
         if not self.allow_favorite:
             self.favorite_button.hide()
             self.favorite_button.setEnabled(False)
@@ -93,6 +106,10 @@ class ColorChoiceWidget(QFrame):
             self.colorChanged.connect(connect_signal)
         self.color_library.changed.connect(self._sync_favorite)
         self._sync_display()
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(1, hint.height())
 
     def _sync_display(self):
         text = color_rgba_text(self._selection.color)

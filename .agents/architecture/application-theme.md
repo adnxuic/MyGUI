@@ -86,11 +86,11 @@ Use these logical-pixel bands, then prevent clipping with
 `max(band_height, ceil(QFontMetrics.height()) + vertical_padding)` for row,
 rail, button, tree, and control heights.
 
-| Density | Spacing xs/sm/md/lg/xl | Rail / Button | Bottom | Command / Gallery | Table row / header | Tree / Control |
-| --- | --- | --- | --- | --- | --- | --- |
-| Compact | 3 / 6 / 9 / 12 / 18 | 40 / 36 | 24 | 42 / 64 | 22 / 38 | 22 / 26 |
-| Standard | 4 / 8 / 12 / 16 / 24 | 44 / 40 | 28 | 48 / 72 | 24 / 44 | 26 / 30 |
-| Comfortable | 5 / 10 / 15 / 20 / 30 | 52 / 48 | 34 | 56 / 84 | 30 / 52 | 32 / 36 |
+| Density | Spacing xs/sm/md/lg/xl | Rail / Button | Bottom | Command / Gallery | Gallery icon | Table row / header | Tree / Control |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Compact | 3 / 6 / 9 / 12 / 18 | 40 / 36 | 24 | 42 / 54 | 28 | 22 / 38 | 22 / 26 |
+| Standard | 4 / 8 / 12 / 16 / 24 | 44 / 40 | 28 | 48 / 60 | 32 | 24 / 44 | 26 / 30 |
+| Comfortable | 5 / 10 / 15 / 20 / 30 | 52 / 48 | 34 | 56 / 72 | 36 | 30 / 52 | 32 / 36 |
 
 Standard matches the historical first-run chrome sizes. Compact and
 Comfortable scale that grammar rather than inventing a second layout system.

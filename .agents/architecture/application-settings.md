@@ -148,7 +148,9 @@ an OS Light/Dark switch during the session is honored without a no-op theme
 transaction. Rollback failure keeps the window open and reports one error.
 Apply and OK run `commit_patch` after a rollback-capable preview and are
 disabled when the service is not writable (`READ_ONLY_FUTURE`, recovery,
-write-uncertain).
+write-uncertain). The Workspace remember-layout checkbox and reset command
+are also disabled in those states; the footer tells the user to open
+Maintenance.
 `SettingsHealth` keeps those states independent of `DEGRADED`. Storage
 failure restores persisted values and the pre-window appearance.
 `reset_section` is draft-only (`Restore page defaults`) and excludes hidden

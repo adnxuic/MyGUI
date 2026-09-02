@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from .common import FocusAwareDoubleSpinBox
+from .inspector_layout import configure_inspector_form
 
 _ANNOTATION_TEXT_COORDS = (
     ("Offset points", "offset_points"),
@@ -34,6 +35,7 @@ class AnnotationInput(QFrame):
     ):
         super().__init__(parent)
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.text_input = QLineEdit(self)

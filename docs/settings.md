@@ -22,7 +22,8 @@ draft and, on Workspace, only `workspace.remember_layout` (hidden
 commands (workspace layout reset, incompatible storage reset, color-library
 clear/reset/storage reset) confirm separately and do not ride Apply. Search
 Enter/Return does not activate OK. Apply and OK are disabled when storage is
-read-only. Each user action reports at most one Message Bar result.
+read-only; the footer then tells you to open Maintenance. Each user action
+reports at most one Message Bar result.
 
 The left pane is 190 logical pixels wide and searches page titles, registered
 field labels, enum choice words, and Maintenance command names. The window
@@ -46,7 +47,9 @@ Artists, `rcParams`, or project colors.
 Remember layout is an Apply draft. Resetting the layout is an immediate
 confirmed command and is not part of Apply. The stored layout covers
 splitter sizes, Explorer mode, and Explorer visibility. Window geometry is
-not stored. Restore page defaults does not stage the hidden layout.
+not stored. Restore page defaults does not stage the hidden layout. When
+storage is read-only, the remember checkbox cannot be changed until you
+reset incompatible storage on Maintenance.
 
 | Parameter | Control | Meaning | Values / default | Key |
 | --- | --- | --- | --- | --- |

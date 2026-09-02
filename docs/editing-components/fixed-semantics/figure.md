@@ -4,25 +4,25 @@ The **Figure** component represents the top-level canvas root of a MyGUI visuali
 
 In the Components tree, the Figure root sits at the top of the hierarchy and cannot be deleted. Selecting the Figure root activates the Figure Inspector profile.
 
-## Properties
+## Basic
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
 | Name | Text | Project and figure title name. Synchronized with project tab and table document title. | Text string; default empty | `properties.name` |
 | Style | Text | Active Matplotlib style sheet applied during figure creation. | Style name; default `default` | `properties.style` |
-| Size Inches | Size editor | Physical figure canvas dimensions `(width, height)` in inches. | Positive tuple `(width, height)`; default `[6.4, 4.8]` | `properties.size_inches` |
-| Dpi | Number | Canvas resolution in dots per inch for rendering and image/PDF export. | Positive number; default `100.0` | `properties.dpi` |
-| Facecolor | Color choice | Figure background canvas fill color. | Hex color; default `#ffffff` | `properties.facecolor` |
-| Edgecolor | Color choice | Figure border stroke outline color. | Hex color; default `#ffffff` | `properties.edgecolor` |
-| Frameon | Checkbox | Enables drawing of the background figure canvas rectangle patch. | `true` or `false`; default `true` | `properties.frameon` |
-| Linewidth | Number | Stroke width of the figure border outline in points. | Finite number `>= 0`; default `0.0` | `properties.linewidth` |
-| Alpha | Number | Background canvas opacity from 0 (transparent) to 1 (opaque). | Finite `0 <= alpha <= 1` or None; default None | `properties.alpha` |
+| Size | Size editor | Physical figure canvas dimensions `(width, height)` in inches. | Positive tuple `(width, height)`; default `[6.4, 4.8]` | `properties.size_inches` |
+| DPI | Number | Canvas resolution in dots per inch for rendering and image/PDF export. | Positive number; default `100.0` | `properties.dpi` |
+| Background | Color choice | Figure background canvas fill color. | Hex color; default `#ffffff` | `properties.facecolor` |
 | Layout Engine | Layout engine dialog | Tagged layout engine specification (`none`, `tight`, `constrained`, `compressed`). | Tagged dict; default `{'kind': 'none'}` | `properties.layout_engine` |
 
 ## Advanced
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
+| Border | Color choice | Figure border stroke outline color. | Hex color; default `#ffffff` | `properties.edgecolor` |
+| Frame | Checkbox | Enables drawing of the background figure canvas rectangle patch. | `true` or `false`; default `true` | `properties.frameon` |
+| Line Width | Number | Stroke width of the figure border outline in points. | Finite number `>= 0`; default `0.0` | `properties.linewidth` |
+| Alpha | Number | Background canvas opacity from 0 (transparent) to 1 (opaque). | Finite `0 <= alpha <= 1` or None; default None | `properties.alpha` |
 | Label | Text | Display and lookup label for the Figure artist. | Text; default empty | `properties.label` |
 | Visible | Checkbox | Shows or hides the complete figure canvas rendering. | `true` or `false`; default `true` | `properties.visible` |
 | Zorder | Number | Drawing stacking order of the figure canvas relative to parent container. | Finite number; default `0.0` | `properties.zorder` |

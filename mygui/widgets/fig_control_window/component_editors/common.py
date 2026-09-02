@@ -5,15 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from PySide6.QtCore import QObject, QSignalBlocker, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QSignalBlocker, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -26,6 +28,7 @@ from mygui.figuremodify.components import (
     ComponentChange,
     normalize_linestyle,
 )
+from .inspector_layout import apply_expanding_field
 
 
 LINE_STYLE_OPTIONS = (
@@ -35,13 +38,30 @@ LINE_STYLE_OPTIONS = (
     ("Dotted", ":"),
 )
 
+_SPIN_MIN_WIDTH = 48
+_SPIN_HINT_WIDTH = 88
 
-class FocusAwareSpinBox(QSpinBox):
+
+class _CompactSpinSize:
+    """Keep wide numeric ranges from forcing Inspector horizontal overflow."""
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(_SPIN_MIN_WIDTH, hint.height())
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        return QSize(min(hint.width(), _SPIN_HINT_WIDTH), hint.height())
+
+
+class FocusAwareSpinBox(_CompactSpinSize, QSpinBox):
     """Change value by wheel only after the editor has explicit focus."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setMinimumWidth(_SPIN_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def wheelEvent(self, event) -> None:
         if not self.hasFocus():
@@ -50,12 +70,14 @@ class FocusAwareSpinBox(QSpinBox):
         super().wheelEvent(event)
 
 
-class FocusAwareDoubleSpinBox(QDoubleSpinBox):
+class FocusAwareDoubleSpinBox(_CompactSpinSize, QDoubleSpinBox):
     """Change value by wheel only after the editor has explicit focus."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setMinimumWidth(_SPIN_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def wheelEvent(self, event) -> None:
         if not self.hasFocus():
@@ -284,6 +306,7 @@ class LineStyleEditor(QWidget):
         style_row = QHBoxLayout()
         style_row.addWidget(QLabel("Line style:", self))
         self.style_combo = QComboBox(self)
+        apply_expanding_field(self.style_combo)
         for label, value in LINE_STYLE_OPTIONS:
             self.style_combo.addItem(label, value)
         style_row.addWidget(self.style_combo, 1)
@@ -294,6 +317,7 @@ class LineStyleEditor(QWidget):
         size_layout.setContentsMargins(0, 0, 0, 0)
         size_layout.addWidget(QLabel(size_label, self.size_row))
         self.size_input = FocusAwareDoubleSpinBox(self.size_row)
+        apply_expanding_field(self.size_input)
         self.size_input.setRange(0.0, 1_000_000.0)
         self.size_input.setDecimals(3)
         self.size_input.setSingleStep(0.5)
@@ -485,19 +509,26 @@ class NumericTupleEditor(QWidget):
         )
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         self.use_value_input = None
         if self.nullable:
             self.use_value_input = QCheckBox("Set", self)
             layout.addWidget(self.use_value_input)
         self.inputs: list[QDoubleSpinBox] = []
-        for _index in range(self.length):
+        host = QWidget(self)
+        host_layout = QGridLayout(host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.setSpacing(4)
+        layout.addWidget(host, 1)
+        columns = 1 if self.length == 1 else 2
+        for index in range(self.length):
             editor = FocusAwareDoubleSpinBox(self)
             editor.setRange(float(bounds[0]), float(bounds[1]))
             editor.setDecimals(int(decimals))
             editor.setSingleStep(float(step))
             editor.valueChanged.connect(self._input_changed)
             self.inputs.append(editor)
-            layout.addWidget(editor, 1)
+            host_layout.addWidget(editor, index // columns, index % columns)
         self.set_value(value)
         if self.use_value_input is not None:
             self.use_value_input.toggled.connect(self._use_value_changed)

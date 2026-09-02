@@ -62,7 +62,7 @@ class PyFigControlWindow(QFrame):
         scroll_area.setObjectName("inspector_scroll_area")
         scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         page.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

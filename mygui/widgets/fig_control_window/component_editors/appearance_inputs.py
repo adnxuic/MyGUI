@@ -23,6 +23,7 @@ from mygui.database.interpolate_func import (
     MAX_INTERPOLATION_SAMPLES,
     MIN_INTERPOLATION_SAMPLES,
     interpolate_dict,
+    interpolation_method_label,
     interpolation_uses_lambda,
     interpolation_uses_order,
 )
@@ -398,7 +399,8 @@ class InterpolationOptionsInput(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.method_input = QComboBox(self)
-        self.method_input.addItems(interpolate_dict.keys())
+        for method in interpolate_dict:
+            self.method_input.addItem(interpolation_method_label(method), method)
         layout.addWidget(QLabel("Interpolation Method:", self))
         layout.addWidget(self.method_input)
 
@@ -439,7 +441,7 @@ class InterpolationOptionsInput(QFrame):
         lambda_layout.addLayout(lambda_row)
         layout.addWidget(self.lambda_widget)
 
-        self.method_input.currentTextChanged.connect(self._method_changed)
+        self.method_input.currentIndexChanged.connect(self._method_changed)
         self.samples_input.valueChanged.connect(self.optionsChanged)
         self.k_input.valueChanged.connect(self.optionsChanged)
         self.lambda_auto_input.toggled.connect(self._lambda_auto_changed)
@@ -468,9 +470,10 @@ class InterpolationOptionsInput(QFrame):
         self.lambda_widget.setVisible(interpolation_uses_lambda(method))
 
     def method(self) -> str:
-        """Return the method."""
+        """Return the persisted interpolation method key."""
 
-        return self.method_input.currentText()
+        data = self.method_input.currentData()
+        return str(data if data is not None else self.method_input.currentText())
 
     def lambda_options(self) -> tuple[float | None, bool]:
         """Return the lambda options."""
@@ -512,7 +515,10 @@ class InterpolationOptionsInput(QFrame):
             self.lambda_value_input,
         )
         blockers = [QSignalBlocker(control) for control in controls]
-        self.method_input.setCurrentText(str(method))
+        index = self.method_input.findData(str(method))
+        if index < 0:
+            index = self.method_input.findText(interpolation_method_label(method))
+        self.method_input.setCurrentIndex(max(0, index))
         self.samples_input.setValue(int(samples))
         self.k_input.setValue(int(k))
         self.lambda_auto_input.setChecked(bool(lam_auto))

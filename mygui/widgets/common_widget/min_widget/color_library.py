@@ -340,7 +340,7 @@ class ColorLibrary(QObject):
         palette = PaletteDefinition(
             id=f"custom:{uuid4()}",
             name=self._validate_custom_name(name),
-            category="自定义配色",
+            category="Custom",
             source=PaletteSource.CUSTOM,
             colors=self._validate_custom_colors(colors),
         )
@@ -359,7 +359,7 @@ class ColorLibrary(QObject):
         palette = PaletteDefinition(
             id=current.id,
             name=self._validate_custom_name(name, exclude_id=current.id),
-            category="自定义配色",
+            category="Custom",
             source=PaletteSource.CUSTOM,
             colors=self._validate_custom_colors(colors),
         )

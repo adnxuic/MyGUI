@@ -37,8 +37,6 @@ drawable row rejects the whole change and keeps the previous state.
 | Color | Color choice | Data line color. | Hex color; default `#1f77b4` | `properties.color` |
 | Linestyle | Line-style choice | Data line dash pattern. | Preset or dash tuple; default `solid` | `properties.linestyle` |
 | Linewidth | Number | Data line thickness in points. | Finite number `>= 0`; default `1.5` | `properties.linewidth` |
-| Drawstyle | Dropdown | Data line step-drawing style. | `default`, `steps`, `steps-pre`, `steps-mid`, `steps-post`; default `default` | `properties.drawstyle` |
-| Antialiased | Checkbox | Antialiased rendering of the data line. | `true` or `false`; default `true` | `properties.antialiased` |
 | Visible | Checkbox | Shows or hides every Error Bar artist. | `true` or `false`; default `true` | `properties.visible` |
 
 ## Marker
@@ -47,17 +45,24 @@ drawable row rejects the whole change and keeps the previous state.
 | --- | --- | --- | --- | --- |
 | Marker | Marker choice | Marker symbol drawn by the data line. | Marker spec; default `{'kind': 'symbol', 'value': 'None'}` | `properties.marker` |
 | Markersize | Number | Marker size in points. | Finite number `>= 0`; default `6.0` | `properties.markersize` |
-| Markerfacecolor | Color choice | Marker fill color. | Hex color; default `#1f77b4` | `properties.markerfacecolor` |
-| Markeredgecolor | Color choice | Marker outline stroke color. | Hex color; default `#1f77b4` | `properties.markeredgecolor` |
-| Markeredgewidth | Number | Data-line marker edge width in points; independent from Cap thickness. | Finite number `>= 0`; default `1.0` | `properties.markeredgewidth` |
-| Markerfacecoloralt | Optional color | Alternate marker fill used together with `fillstyle` holes. | Color or `none`; default `none` | `properties.markerfacecoloralt` |
-| Fillstyle | Dropdown | Marker fill style. | `full`, `left`, `right`, `bottom`, `top`, `none`; default `full` | `properties.fillstyle` |
 
 ## Error Bars
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
 | Ecolor | Color choice | Color of error bars and caps. | Hex color; defaults to the main color | `properties.ecolor` |
+
+## Advanced
+
+| Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
+| --- | --- | --- | --- | --- |
+| Drawstyle | Dropdown | Data line step-drawing style. | `default`, `steps`, `steps-pre`, `steps-mid`, `steps-post`; default `default` | `properties.drawstyle` |
+| Antialiased | Checkbox | Antialiased rendering of the data line. | `true` or `false`; default `true` | `properties.antialiased` |
+| Markerfacecolor | Color choice | Marker fill color. | Hex color; default `#1f77b4` | `properties.markerfacecolor` |
+| Markeredgecolor | Color choice | Marker outline stroke color. | Hex color; default `#1f77b4` | `properties.markeredgecolor` |
+| Markeredgewidth | Number | Data-line marker edge width in points; independent from Cap thickness. | Finite number `>= 0`; default `1.0` | `properties.markeredgewidth` |
+| Markerfacecoloralt | Optional color | Alternate marker fill used together with `fillstyle` holes. | Color or `none`; default `none` | `properties.markerfacecoloralt` |
+| Fillstyle | Dropdown | Marker fill style. | `full`, `left`, `right`, `bottom`, `top`, `none`; default `full` | `properties.fillstyle` |
 | Elinewidth | Number | Error bar stroke thickness in points. | Finite number `>= 0`; default `1.5` | `properties.elinewidth` |
 | Capsize | Number | Cap length in points. Caps stay present at zero size so structure never changes. | Finite number `>= 0`; default `0.0` | `properties.capsize` |
 | Capthick | Number | Cap stroke thickness in points; independent from Marker edge width. | Finite number `>= 0`; default `1.0` | `properties.capthick` |
@@ -66,27 +71,10 @@ drawable row rejects the whole change and keeps the previous state.
 | Error antialiased | Checkbox | Antialiased rendering of the error collections and caps. | `true` or `false`; default `true` | `properties.error_antialiased` |
 | Error every | Start/step numbers | Draws error bars only on `data[start::step]`; autoscale folds exactly the drawn segments. | `start >= 0`, `step >= 1`; default every point | `properties.errorevery` |
 | Barsabove | Checkbox | Draws error bars above the data line markers. | `true` or `false`; default `false` | `properties.barsabove` |
-
-### Limit arrows
-
-Component-level Matplotlib limit switches. Enabling a switch replaces the
-matching caps with a one-sided arrow: `lolims` marks Y values as lower limits
-(upward arrow), `uplims` marks Y values as upper limits (downward arrow),
-`xlolims` marks X values as lower limits (rightward arrow), and `xuplims`
-marks X values as upper limits (leftward arrow). Flipping an Axes direction
-rebuilds the container so the arrows keep pointing the Matplotlib-correct way.
-
-| Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
-| --- | --- | --- | --- | --- |
 | Lolims | Checkbox | Draw upward limit arrows for Y errors. | `true` or `false`; default `false` | `properties.lolims` |
 | Uplims | Checkbox | Draw downward limit arrows for Y errors. | `true` or `false`; default `false` | `properties.uplims` |
 | Xlolims | Checkbox | Draw rightward limit arrows for X errors. | `true` or `false`; default `false` | `properties.xlolims` |
 | Xuplims | Checkbox | Draw leftward limit arrows for X errors. | `true` or `false`; default `false` | `properties.xuplims` |
-
-## Advanced
-
-| Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
-| --- | --- | --- | --- | --- |
 | Alpha | Number | Opacity applied to the data line, caps, and error bars. | Finite `0 <= alpha <= 1` or None; default None | `properties.alpha` |
 | Zorder | Number | Base stacking order; error bars draw at this level and the line offsets by `0.1`. | Finite number; default `2.0` | `properties.zorder` |
 | Clip On | Checkbox | Clips all Error Bar artists to the Axes bounding box. | `true` or `false`; default `true` | `properties.clip_on` |

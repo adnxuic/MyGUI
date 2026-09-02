@@ -58,8 +58,8 @@ class DataReferenceInput(QFrame):
         )
         self.x_expression_input.setToolTip(expression_tooltip)
         self.y_expression_input.setToolTip(expression_tooltip)
-        self.x_expression_input.setMinimumWidth(90)
-        self.y_expression_input.setMinimumWidth(90)
+        self.x_expression_input.setMinimumWidth(0)
+        self.y_expression_input.setMinimumWidth(0)
         self.x_layout.addWidget(QLabel("X Data:", self))
         self.x_layout.addWidget(self.x_data_input)
         self.x_layout.addWidget(QLabel("fx:", self))
@@ -597,7 +597,7 @@ class MultiSeriesDataReferenceInput(QFrame):
         self.project_id = project_id
         self._disposed = False
         self._initialized = False
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(0)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -606,7 +606,7 @@ class MultiSeriesDataReferenceInput(QFrame):
         self.x_data_input = QComboBox(self)
         self.x_expression_input = QLineEdit("x", self)
         self.x_expression_input.setPlaceholderText("e.g. x, 1/x")
-        self.x_expression_input.setMinimumWidth(90)
+        self.x_expression_input.setMinimumWidth(0)
         self.x_layout.addWidget(QLabel("X Data:", self))
         self.x_layout.addWidget(self.x_data_input, 1)
         self.x_layout.addWidget(QLabel("X fx:", self))
@@ -618,7 +618,7 @@ class MultiSeriesDataReferenceInput(QFrame):
         self.y_data_input.setObjectName("multi_series_y_combo")
         self.y_expression_input = QLineEdit("y", self)
         self.y_expression_input.setPlaceholderText("e.g. y, log10(y)")
-        self.y_expression_input.setMinimumWidth(90)
+        self.y_expression_input.setMinimumWidth(0)
         self.y_layout.addWidget(QLabel("Y Data:", self))
         self.y_layout.addWidget(self.y_data_input, 1)
         self.y_layout.addWidget(QLabel("Y fx:", self))

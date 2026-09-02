@@ -118,8 +118,9 @@ class FigureController(ContainerController):
             editor="color",
             normalizer=_normalize_color,
             getter=lambda figure: _read_color(figure.get_edgecolor()),
+            advanced=True,
         ),
-        PropertySpec("frameon", bool, True, editor="check"),
+        PropertySpec("frameon", bool, True, editor="check", advanced=True),
         PropertySpec(
             "linewidth",
             float,
@@ -127,6 +128,7 @@ class FigureController(ContainerController):
             editor="double_spin",
             validator=_nonnegative,
             minimum=0.0,
+            advanced=True,
         ),
         PropertySpec(
             "alpha",
@@ -136,6 +138,7 @@ class FigureController(ContainerController):
             allow_none=True,
             minimum=0.0,
             maximum=1.0,
+            advanced=True,
         ),
         PropertySpec(
             "layout_engine",
@@ -411,6 +414,7 @@ class AxesController(ContainerController):
             validator=_y_lower_reserve_value,
             getter=read_y_lower_reserve,
             setter=write_y_lower_reserve,
+            advanced=True,
             impact=(
                 UpdateImpact.RELIM
                 | UpdateImpact.AUTOSCALE
@@ -426,15 +430,16 @@ class AxesController(ContainerController):
             getter=lambda _axes: None,
             setter=lambda _axes, _value: None,
         ),
-        PropertySpec("xmargin", float, 0.05, editor="double_spin", minimum=-0.5, maximum=10.0),
-        PropertySpec("ymargin", float, 0.05, editor="double_spin", minimum=-0.5, maximum=10.0),
-        PropertySpec("adjustable", str, "box", editor="combo", choices=("box", "datalim")),
+        PropertySpec("xmargin", float, 0.05, editor="double_spin", minimum=-0.5, maximum=10.0, advanced=True),
+        PropertySpec("ymargin", float, 0.05, editor="double_spin", minimum=-0.5, maximum=10.0, advanced=True),
+        PropertySpec("adjustable", str, "box", editor="combo", choices=("box", "datalim"), advanced=True),
         PropertySpec(
             "anchor",
             (str, tuple),
             "C",
             editor="axes_anchor",
             normalizer=_anchor,
+            advanced=True,
         ),
         PropertySpec(
             "box_aspect",
@@ -443,6 +448,7 @@ class AxesController(ContainerController):
             editor="double_spin",
             allow_none=True,
             minimum=0.0,
+            advanced=True,
         ),
         PropertySpec(
             "axisbelow",
@@ -450,6 +456,7 @@ class AxesController(ContainerController):
             "line",
             editor="combo",
             choices=(True, False, "line"),
+            advanced=True,
         ),
         PropertySpec(
             "frameon",
@@ -458,8 +465,9 @@ class AxesController(ContainerController):
             editor="check",
             getter="get_frame_on",
             setter="set_frame_on",
+            advanced=True,
         ),
-        PropertySpec("zorder", float, 0.0, editor="double_spin"),
+        PropertySpec("zorder", float, 0.0, editor="double_spin", advanced=True),
         PropertySpec(
             "rasterization_zorder",
             float,

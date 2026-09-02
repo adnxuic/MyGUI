@@ -63,7 +63,8 @@ Workspace remember/restore still covers the workbench splitters and Explorer
 page. Window geometry is not stored because every application launch starts
 maximized. Missing, malformed, or unusable layout values fall back to the
 first-run sizes. Resetting workspace layout is a confirmed immediate command,
-not an Apply draft.
+not an Apply draft. If Settings storage is read-only, remember-layout cannot
+be turned off until Maintenance resets incompatible storage.
 
 After the first successful dual-slot commit, leftover `workspaceLayout`,
 `figureExport`, and `colorLibrary` groups are inert data. Production writers

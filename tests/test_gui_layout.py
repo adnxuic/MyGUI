@@ -169,6 +169,10 @@ class GuiLayoutTests(unittest.TestCase):
             self.app.processEvents()
 
             area = window.fig_control_window.figure_inspector_scroll_area
+            self.assertEqual(
+                area.horizontalScrollBarPolicy(),
+                Qt.ScrollBarAlwaysOff,
+            )
             horizontal = area.horizontalScrollBar()
             vertical = area.verticalScrollBar()
             horizontal.setRange(0, 100)
@@ -222,8 +226,9 @@ class GuiLayoutTests(unittest.TestCase):
             )
             section = inspector.section("properties")
             tick_section = inspector.section("ticks_labels")
+            advanced = inspector.section("advanced")
             scale = section.editor("scale")
-            offset_font = section.editor("offset_font")
+            offset_font = advanced.editor("offset_font")
             self.assertIsInstance(scale, AxisScaleEditor)
             self.assertIsInstance(tick_section, AxisTickSettingsSection)
             self.assertIsInstance(offset_font, FontSpecEditor)
@@ -494,6 +499,47 @@ class GuiLayoutTests(unittest.TestCase):
                 )
             finally:
                 self._close(target)
+
+    def test_inspector_stays_reachable_without_horizontal_scroll(self):
+        window = MainWindow()
+        self._show(window, 1280, 720)
+        try:
+            window.figure_window.add_figure(
+                width=4,
+                height=3,
+                dpi=100,
+                style="default",
+                canva_name="InspectorWidth",
+            )
+            canvas = window.figure_window.current_canva
+            figure_id = canvas.current_component_id
+            create_regular_axes(canvas)
+            control = window.fig_control_window
+            area = control.figure_inspector_scroll_area
+            self.assertEqual(
+                area.horizontalScrollBarPolicy(),
+                Qt.ScrollBarAlwaysOff,
+            )
+            title_id = canvas.component_registry.query(
+                role=ComponentRole.TITLE
+            )[0].component_id
+            x_axis_id = canvas.component_registry.query(
+                role=ComponentRole.X_AXIS
+            )[0].component_id
+            for component_id in (figure_id, x_axis_id, title_id):
+                self.assertTrue(canvas.select_component(component_id))
+                self.app.processEvents()
+                for width in (240, 280, 320, 360):
+                    control.setFixedWidth(width)
+                    self.app.processEvents()
+                    self.assertEqual(
+                        area.horizontalScrollBar().maximum(),
+                        0,
+                        f"horizontal overflow at {width}px for {component_id}",
+                    )
+        finally:
+            window.close_without_prompt()
+            self.app.processEvents()
 
 
 class GuiLayoutSettingsTests(unittest.TestCase):

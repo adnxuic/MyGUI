@@ -27,6 +27,11 @@ from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import chart_dialog
 from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
     element_action_specs,
 )
+from mygui.widgets.title_bar.style_gallery import (
+    HIDDEN_STYLE_NAMES,
+    LAYOUT_BUTTON_MIN_WIDTH,
+    style_toolbar_label,
+)
 from mygui.excel_io import EXCEL_FILE_FILTER, import_excel_into_workspace
 from mygui.text_io import import_text_into_workspace
 from mygui.project_io import export_database_snapshot, restore_project_snapshot, save_project_snapshot
@@ -245,30 +250,30 @@ class MenuBar(QFrame):
     def initActions(self):
         """Initialize actions."""
 
-        file_open_action = QAction(QIcon(icon_path("open.svg")), "打开 Excel...", self.file_menu)
+        file_open_action = QAction(QIcon(icon_path("open.svg")), "Open Excel...", self.file_menu)
         file_open_action.setData("open.svg")
         file_open_action.triggered.connect(self.open_file)
 
-        file_open_text_action = QAction(QIcon(icon_path("open.svg")), "打开文本数据...", self.file_menu)
+        file_open_text_action = QAction(QIcon(icon_path("open.svg")), "Open Text Data...", self.file_menu)
         file_open_text_action.setData("open.svg")
         file_open_text_action.triggered.connect(self.open_text_file)
 
-        file_open_project_action = QAction(QIcon(icon_path("open.svg")), "打开项目...", self.file_menu)
+        file_open_project_action = QAction(QIcon(icon_path("open.svg")), "Open Project...", self.file_menu)
         file_open_project_action.setData("open.svg")
         file_open_project_action.triggered.connect(self.open_project)
 
-        file_save_action = QAction(QIcon(icon_path("save.svg")), "保存项目...", self.file_menu)
+        file_save_action = QAction(QIcon(icon_path("save.svg")), "Save Project...", self.file_menu)
         file_save_action.setData("save.svg")
         file_save_action.triggered.connect(self.save_file)
 
-        file_save_as_action = QAction(QIcon(icon_path("save.svg")), "Project Save As...", self.file_menu)
+        file_save_as_action = QAction(QIcon(icon_path("save.svg")), "Save Project As...", self.file_menu)
         file_save_as_action.setData("save.svg")
         file_save_as_action.triggered.connect(self.save_file_as)
 
-        file_export_figure_action = QAction("导出当前图片...", self.file_menu)
+        file_export_figure_action = QAction("Export Current Figure...", self.file_menu)
         file_export_figure_action.triggered.connect(self.export_current_figure)
 
-        file_export_data_action = QAction("导出数据...", self.file_menu)
+        file_export_data_action = QAction("Export Data...", self.file_menu)
         file_export_data_action.triggered.connect(self.export_data)
 
         self.file_menu.addAction(file_open_action)
@@ -294,7 +299,7 @@ class MenuBar(QFrame):
         canvas = explicit_canvas
         if canvas is None:
             QMessageBox.warning(
-                self, "导出当前图片", "Please select a figure canvas first."
+                self, "Export Current Figure", "Please select a figure canvas first."
             )
             return
         color_library = getattr(canvas, "color_library", None)
@@ -302,7 +307,7 @@ class MenuBar(QFrame):
             color_library = getattr(self.figure_window, "color_library", None)
         if color_library is None:
             QMessageBox.warning(
-                self, "导出当前图片", "The shared color library is unavailable."
+                self, "Export Current Figure", "The shared color library is unavailable."
             )
             return
         dialog = FigureExportDialog(
@@ -317,7 +322,7 @@ class MenuBar(QFrame):
     def export_data(self):
         """Export data."""
 
-        file_name, _ = QFileDialog.getSaveFileName(self, "导出数据", "", "JSON Files (*.json)")
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export Data", "", "JSON Files (*.json)")
         if not file_name:
             return
 
@@ -325,7 +330,7 @@ class MenuBar(QFrame):
             canvas = self.figure_window.current_canva
             export_database_snapshot(file_name, self.table.repository, canvas.project_id)
         except Exception as exc:
-            QMessageBox.warning(self, "导出数据", str(exc))
+            QMessageBox.warning(self, "Export Data", str(exc))
 
     def open_file(self):
         """Open file."""
@@ -529,6 +534,8 @@ class SelectorStyleMenuBar(ResponsiveActionGallery):
         apply_action.setEnabled(template_workflow is not None)
 
         for style in self.available_styles_dict:
+            if style in HIDDEN_STYLE_NAMES:
+                continue
             self.add_dialog_action(
                 style,
                 icon_path(f"style_images/{style}.svg"),
@@ -537,6 +544,8 @@ class SelectorStyleMenuBar(ResponsiveActionGallery):
                     figure_window=figure_window,
                     parent=parent,
                 ),
+                toolbar_label=style_toolbar_label(style),
+                tooltip=style,
             )
 
 
@@ -560,13 +569,14 @@ class SelectorLayoutMenuBar(ResponsiveActionGallery):
                     parent=parent,
                 ),
                 reuse_dialog=False,
+                toolbar_label=preset.toolbar_label,
+                tooltip=preset.label,
             )
-            action.setText(preset.toolbar_label)
-            action.setToolTip(preset.label)
             button = self.toolbar.widgetForAction(action)
             if button is not None:
                 button.setObjectName("layout_template_button")
-                button.setFixedSize(112, 60)
+                button.setMinimumWidth(LAYOUT_BUTTON_MIN_WIDTH)
+                button.setMaximumHeight(current_density_metrics().gallery)
                 button.setAccessibleName(preset.label)
                 button.setToolTip(preset.label)
 

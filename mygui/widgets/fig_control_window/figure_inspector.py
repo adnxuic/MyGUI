@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFrame, QStackedWidget, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QVBoxLayout
 
 from mygui.figuremodify.components import (
     AxesController,
@@ -28,6 +28,9 @@ from mygui.widgets.fig_control_window.component_editors.containers import (
 from mygui.widgets.fig_control_window.component_editors.cleanup import (
     isolate_cleanup,
     isolate_cleanup_steps,
+)
+from mygui.widgets.fig_control_window.component_editors.inspector_layout import (
+    CurrentPageStackedWidget,
 )
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 
@@ -67,7 +70,7 @@ class AxesInspectorPanel(QFrame):
         self.semantic_panel = None
         self._chart_stack = None
         self._element_stack = None
-        self._inspector_stack = QStackedWidget(self)
+        self._inspector_stack = CurrentPageStackedWidget(self)
         try:
             self.semantic_panel = AxesSemanticInspectorPanel(
                 axes_controller,
@@ -415,7 +418,7 @@ class FigureInspectorPanel(QFrame):
         self._shown_component_id = self.root_component_id
         self._disposed = False
 
-        self._inspector_stack = QStackedWidget(self)
+        self._inspector_stack = CurrentPageStackedWidget(self)
         self.root_inspector = None
         self._figure_elements_panel = None
         try:
@@ -803,7 +806,7 @@ class FigureInspectorHost(QFrame):
         self.setObjectName("figure_inspector_host")
         bind_widget_qss(self, "mygui/widgets/fig_control_window/style.qss")
 
-        self._figure_stack = QStackedWidget(self)
+        self._figure_stack = CurrentPageStackedWidget(self)
         self.empty_state = PyEmptyState(
             "No project",
             "Create or open a project to inspect its Components.",

@@ -10,6 +10,7 @@ from .inline_spec_editors import (
     SecondaryAxisPlacementEditor,
     UnitTransformEditor,
 )
+from .inspector_layout import configure_inspector_form
 
 
 class SecondaryAxisInput(QWidget):
@@ -18,6 +19,7 @@ class SecondaryAxisInput(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QFormLayout(self)
+        configure_inspector_form(layout)
         self.orientation_input = QComboBox(self)
         self.orientation_input.addItem("X (top/bottom)", "x")
         self.orientation_input.addItem("Y (left/right)", "y")

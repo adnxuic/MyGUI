@@ -21,13 +21,18 @@ For multi-series workflows and color mapping integration, see [Multi-Series Char
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
-| Label | Text | Legend entry label for the scatter collection. | Text; default empty | `properties.label` |
 | Visible | Checkbox | Shows or hides the scatter collection artist. | `true` or `false`; default `true` | `properties.visible` |
 | Color | Color choice | Uniform marker fill color (active when color mapping is disabled). | Hex color; default `#1f77b4` | `properties.color` |
-| Edgecolor | Color choice | Uniform marker outline stroke color. | Hex color; default `#1f77b4` | `properties.edgecolor` |
 | Marker | Marker choice | Marker symbol shape. | Marker spec; default `{'kind': 'symbol', 'value': 'o'}` | `properties.marker` |
 | Size | Number | Uniform marker area in points-squared (active when size mapping is disabled). | Finite number `>= 0`; default `36.0` | `properties.size` |
+| Edgecolor | Color choice | Uniform marker outline stroke color. | Hex color; default `#1f77b4` | `properties.edgecolor` |
 | Linewidth | Number | Marker outline stroke thickness in points. | Finite number `>= 0`; default `1.0` | `properties.linewidth` |
+
+## Advanced
+
+| Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
+| --- | --- | --- | --- | --- |
+| Label | Text | Legend entry label for the scatter collection. | Text; default empty | `properties.label` |
 | Linestyle | Line-style choice | Marker outline dash pattern. | Preset or dash tuple; default `none` | `properties.linestyle` |
 | Hatch | Text | Hatch fill pattern across scatter markers (e.g. `/`, `x`, `o`). | Hatch string or None; default None | `properties.hatch` |
 | Capstyle | Dropdown | Cap style of marker outlines. | `butt`, `projecting`, `round` or None; default None | `properties.capstyle` |

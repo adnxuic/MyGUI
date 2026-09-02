@@ -1,8 +1,8 @@
 QFrame#title_bar
 {
     background-color: {{COLOR_COMMAND_BACKGROUND}};
-    min-height: 120px;
-    max-height: 120px;
+    min-height: {{SIZE_TITLE_BAR}}px;
+    max-height: {{SIZE_TITLE_BAR}}px;
     border: 0px;
 }
 
@@ -30,8 +30,8 @@ QPushButton#change_button
 {
     min-width: 36px;
     max-width: 36px;
-    min-height: 44px;
-    max-height: 44px;
+    min-height: {{SIZE_CHANGE_BUTTON}}px;
+    max-height: {{SIZE_CHANGE_BUTTON}}px;
     background-color: transparent;
     border: 2px solid transparent;
     icon-size: 24px;
@@ -108,9 +108,8 @@ QToolBar#selector_toolbar QToolButton,
 QToolButton#select_button
 {
     min-width: 64px;
-    max-width: 100px;
-    min-height: 60px;
-    max-height: 60px;
+    min-height: 0px;
+    max-height: {{SIZE_TOOL_GALLERY}}px;
     background-color: transparent;
     border: 2px solid transparent;
     border-radius: {{RADIUS_MD}}px;
@@ -119,17 +118,14 @@ QToolButton#select_button
 }
 
 /*
- * Layout templates use one visual cell.  The dimensions below are content-box
- * values: horizontal padding plus the two-pixel border make the rendered
- * button exactly 112 x 60 pixels after Qt applies the stylesheet.  The width
- * keeps the longest compact label visible without sacrificing alignment.
+ * Layout templates share one minimum width. Height follows the gallery
+ * density band after Qt applies padding and the two-pixel border.
  */
 QToolBar#selector_toolbar QToolButton#layout_template_button
 {
-    min-width: 100px;
-    max-width: 100px;
-    min-height: 54px;
-    max-height: 54px;
+    min-width: 112px;
+    min-height: 0px;
+    max-height: {{SIZE_TOOL_GALLERY}}px;
 }
 
 QToolBar#selector_toolbar QToolButton:hover,
@@ -161,8 +157,8 @@ QToolBar#selector_toolbar QToolButton#qt_toolbar_ext_button
 {
     min-width: 28px;
     max-width: 28px;
-    min-height: 60px;
-    max-height: 60px;
+    min-height: {{SIZE_TOOL_GALLERY}}px;
+    max-height: {{SIZE_TOOL_GALLERY}}px;
     padding: 0px;
     border: 2px solid transparent;
     icon-size: 18px;

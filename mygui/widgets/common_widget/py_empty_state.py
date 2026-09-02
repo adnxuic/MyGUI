@@ -1,7 +1,14 @@
 """Provide a reusable empty-state widget for unpopulated views."""
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+)
 
 
 class PyEmptyState(QFrame):
@@ -12,6 +19,7 @@ class PyEmptyState(QFrame):
     def __init__(self, title: str, detail: str, primary_text: str | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("empty_state")
+        self.setMinimumWidth(1)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(8)
@@ -20,12 +28,21 @@ class PyEmptyState(QFrame):
         self.title_label = QLabel(title, self)
         self.title_label.setObjectName("empty_state_title")
         self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setWordWrap(True)
+        self.title_label.setMinimumWidth(1)
+        self.title_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         layout.addWidget(self.title_label)
 
         self.detail_label = QLabel(detail, self)
         self.detail_label.setObjectName("empty_state_detail")
         self.detail_label.setAlignment(Qt.AlignCenter)
         self.detail_label.setWordWrap(True)
+        self.detail_label.setMinimumWidth(1)
+        self.detail_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         layout.addWidget(self.detail_label)
 
         self.primary_button = None
@@ -42,3 +59,9 @@ class PyEmptyState(QFrame):
 
         layout.addStretch(1)
 
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(1, hint.height())

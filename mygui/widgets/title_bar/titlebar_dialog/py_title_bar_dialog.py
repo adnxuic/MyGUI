@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QSize, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
 )
 
@@ -36,6 +39,13 @@ from mygui.widgets.title_bar.titlebar_dialog.xrd_refinement_input import (
     XrdRefinementInput,
 )
 from mygui.xrd_refinement import XrdRefinementImportService
+
+
+class _BoundedScrollArea(QScrollArea):
+    """Keep XRD pages from inflating the Layout tab size hint."""
+
+    def sizeHint(self):
+        return QSize(560, 280)
 
 
 class PyStyleDialog(QDialog):
@@ -232,6 +242,7 @@ class PyLayoutDialog(QDialog):
                     engine_kind = str(layout_engine.get("kind", "none"))
 
         self.layout = QVBoxLayout()
+        self.layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetNoConstraint)
         self._layout_valid = True
         self._xrd_valid = True
         self.input = AxesLayoutInput(
@@ -246,6 +257,7 @@ class PyLayoutDialog(QDialog):
             parent=self,
         )
         self.xrd_input: XrdRefinementInput | None = None
+        self._xrd_scroll: QScrollArea | None = None
         if self.layout_id is None and self.preset_key in {"single", "main_residual"}:
             if self.input.tabs is None:
                 raise RuntimeError("Layout tabs are unavailable for XRD import.")
@@ -258,7 +270,11 @@ class PyLayoutDialog(QDialog):
                 ),
                 parent=self.input.tabs,
             )
-            self.input.tabs.addTab(self.xrd_input, "XRD Refinement")
+            self._xrd_scroll = _BoundedScrollArea(self.input.tabs)
+            self._xrd_scroll.setWidgetResizable(True)
+            self._xrd_scroll.setFrameShape(QFrame.NoFrame)
+            self._xrd_scroll.setWidget(self.xrd_input)
+            self.input.tabs.addTab(self._xrd_scroll, "XRD Refinement")
             self.xrd_input.validity_changed.connect(
                 self._xrd_validity_changed
             )
@@ -276,12 +292,58 @@ class PyLayoutDialog(QDialog):
         self.layout.addLayout(self.button_layout)
         self.setLayout(self.layout)
         subscribe_theme_window(self)
-        self.resize(720, 620)
+        self.input.geometry_group.toggled.connect(self._adapt_dialog_size)
+        if self.input.tabs is not None:
+            self.input.tabs.currentChanged.connect(self._adapt_dialog_size)
+        self._adapt_dialog_size()
         self._layout_validity_changed(*self.input.refresh_validation())
         if self._preview_timer is not None:
             self._preview_timer.stop()
         if self.xrd_input is not None:
             self._xrd_validity_changed(*self.xrd_input.refresh_validation())
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Recompute the content-driven size after density or QSS changes."""
+
+        del metrics
+        self._adapt_dialog_size()
+
+    def _available_max_size(self) -> tuple[int, int]:
+        screen = self.screen()
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        geo = screen.availableGeometry()
+        return max(1, int(geo.width() * 0.9)), max(1, int(geo.height() * 0.9))
+
+    def _xrd_tab_active(self) -> bool:
+        if self.xrd_input is None or self.input.tabs is None:
+            return False
+        current = self.input.tabs.currentWidget()
+        return current is self._xrd_scroll or current is self.xrd_input
+
+    def _adapt_dialog_size(self, *_args) -> None:
+        """Fit simple layouts to content and clamp complex pages to the screen."""
+
+        max_width, max_height = self._available_max_size()
+        self.setMaximumSize(max_width, max_height)
+        min_width = min(560, max_width)
+        self.setMinimumWidth(min_width)
+        self.setMinimumHeight(0)
+        if self._xrd_tab_active():
+            width, height = 720, 620
+        else:
+            hint = self.sizeHint()
+            width = max(min_width, hint.width())
+            if self.input.geometry_group.isChecked():
+                height = max(hint.height(), 360)
+            else:
+                height = min(max(hint.height(), 360), 420)
+                self.setMaximumHeight(min(420, max_height))
+        self.resize(min(width, max_width), min(height, self.maximumHeight()))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._adapt_dialog_size()
 
     def _layout_validity_changed(self, valid: bool, _message: str) -> None:
         self._layout_valid = bool(valid)

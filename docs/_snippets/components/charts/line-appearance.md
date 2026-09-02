@@ -1,14 +1,21 @@
+## Basic
+
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
 | Label | Text | Legend entry label. Empty labels do not create legend entries. | Text; default empty | `properties.label` |
 | Visible | Checkbox | Shows or hides the line artist. | `true` or `false`; default `true` | `properties.visible` |
 | Color | Color choice | Uniform line color using Matplotlib color contract. | Hex color; default `#1f77b4` | `properties.color` |
-| Linestyle | Line-style choice | Line pattern: solid, dashed, dashdot, dotted, none, or custom dash sequence. | Preset or dash tuple; default `-` | `properties.linestyle` |
-| Linewidth | Number | Line thickness in points. | Finite number `>= 0`; default `1.5` | `properties.linewidth` |
+| Line Style | Line-style choice | Line pattern: solid, dashed, dashdot, dotted, none, or custom dash sequence. | Preset or dash tuple; default `-` | `properties.linestyle` |
+| Line Width | Number | Line thickness in points. | Finite number `>= 0`; default `1.5` | `properties.linewidth` |
+| Marker | Marker choice | Marker symbol shape: none, symbol (`o`, `s`, `^`, etc.), or regular polygon. | Marker spec; default `None` | `properties.marker` |
+| Marker Size | Number | Marker diameter in points. | Finite number `>= 0`; default `6.0` | `properties.markersize` |
+
+## Advanced
+
+| Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
+| --- | --- | --- | --- | --- |
 | Drawstyle | Dropdown | Point connection style: `default` (straight), `steps`, `steps-pre`, `steps-mid`, `steps-post`. | Matplotlib drawstyle; default `default` | `properties.drawstyle` |
 | Gapcolor | Optional color | Alternating color shown inside dashed gaps. | Hex color or none; default none | `properties.gapcolor` |
-| Marker | Marker choice | Marker symbol shape: none, symbol (`o`, `s`, `^`, etc.), or regular polygon. | Marker spec; default `None` | `properties.marker` |
-| Markersize | Number | Marker diameter in points. | Finite number `>= 0`; default `6.0` | `properties.markersize` |
 | Markerfacecolor | Color choice | Marker fill color. | Hex color; default `#1f77b4` | `properties.markerfacecolor` |
 | Markerfacecoloralt | Optional color | Alternate fill color for half-fill marker styles. | Hex color or none; default `none` | `properties.markerfacecoloralt` |
 | Markeredgecolor | Color choice | Marker outline color. | Hex color; default `#1f77b4` | `properties.markeredgecolor` |

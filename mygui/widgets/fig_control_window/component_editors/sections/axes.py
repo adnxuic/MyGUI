@@ -19,6 +19,7 @@ from mygui import status_messages
 from ..common import FocusAwareDoubleSpinBox
 from ..context import perform_editor_action
 from ..inspector import EditorSection
+from ..inspector_layout import apply_expanding_field, configure_inspector_form
 from .property import PropertySection
 
 class AxesLimitsSection(QWidget, EditorSection):
@@ -29,7 +30,6 @@ class AxesLimitsSection(QWidget, EditorSection):
         "ylim",
         "autoscalex_on",
         "autoscaley_on",
-        "y_lower_reserve",
     )
     LIMIT_KEYS = ("xlim", "ylim", "autoscalex_on", "autoscaley_on")
     PROXY_KEYS = ("x_inverted", "y_inverted")
@@ -73,14 +73,7 @@ class AxesLimitsSection(QWidget, EditorSection):
             apply_properties=apply,
             parent=self,
         )
-        self.reserve = PropertySection(
-            controller,
-            context=context,
-            property_keys=("y_lower_reserve",),
-            parent=self,
-        )
         layout.addWidget(self.properties)
-        layout.addWidget(self.reserve)
         proxy_row = QHBoxLayout()
         self.x_inverted = QCheckBox("Invert X", self)
         self.y_inverted = QCheckBox("Invert Y", self)
@@ -122,8 +115,6 @@ class AxesLimitsSection(QWidget, EditorSection):
 
         if key in self.PROXY_KEYS:
             return getattr(self, key)
-        if key == "y_lower_reserve":
-            return self.reserve.editor(key)
         return self.properties.editor(key)
 
     def editors(self):
@@ -131,7 +122,6 @@ class AxesLimitsSection(QWidget, EditorSection):
 
         return {
             **self.properties.editors(),
-            **self.reserve.editors(),
             "x_inverted": self.x_inverted,
             "y_inverted": self.y_inverted,
         }
@@ -140,7 +130,6 @@ class AxesLimitsSection(QWidget, EditorSection):
         """Synchronize limits and derived inversion without recursion."""
 
         self.properties.sync_from_controller()
-        self.reserve.sync_from_controller()
         state = self.controller.read_state().properties
         blockers = (
             QSignalBlocker(self.x_inverted),
@@ -159,7 +148,6 @@ class AxesLimitsSection(QWidget, EditorSection):
         except (RuntimeError, TypeError):
             pass
         self.properties.dispose()
-        self.reserve.dispose()
 
 
 class AxesLayoutSection(QWidget, EditorSection):
@@ -211,30 +199,34 @@ class AxesLayoutSection(QWidget, EditorSection):
         manual_layout.setContentsMargins(0, 0, 0, 0)
 
         form_layout = QFormLayout()
-        form_layout.setContentsMargins(0, 0, 0, 0)
+        configure_inspector_form(form_layout)
 
         self.left_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.left_spin.setRange(0.0, 1.0)
         self.left_spin.setDecimals(6)
         self.left_spin.setSingleStep(0.01)
+        apply_expanding_field(self.left_spin)
         form_layout.addRow("Left:", self.left_spin)
 
         self.bottom_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.bottom_spin.setRange(0.0, 1.0)
         self.bottom_spin.setDecimals(6)
         self.bottom_spin.setSingleStep(0.01)
+        apply_expanding_field(self.bottom_spin)
         form_layout.addRow("Bottom:", self.bottom_spin)
 
         self.width_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.width_spin.setRange(0.000001, 1.0)
         self.width_spin.setDecimals(6)
         self.width_spin.setSingleStep(0.01)
+        apply_expanding_field(self.width_spin)
         form_layout.addRow("Width:", self.width_spin)
 
         self.height_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.height_spin.setRange(0.000001, 1.0)
         self.height_spin.setDecimals(6)
         self.height_spin.setSingleStep(0.01)
+        apply_expanding_field(self.height_spin)
         form_layout.addRow("Height:", self.height_spin)
 
         self.right_label = QLabel("0.000000", self.manual_container)
