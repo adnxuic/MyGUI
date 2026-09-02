@@ -29,9 +29,10 @@ and the Legend, In-Axes, and Secondary Axis `_read_property` /
 `create_editor_widget` has the same cap. `PyFigureCanvas` methods with
 McCabe greater than 10 stay at most 15; public `add_*` wrappers stay at
 McCabe 2 because remaining length is signature forwarding into creation
-requests. New hotspot functions added by the compatibility hardening keep
-the ceilings in `tests.test_architecture_rule_evolution` and must not
-worsen. These caps are not a repository-wide complexity rule.
+requests. Schema validators, `DeletionCoordinator`, and other hotspot
+functions added by the compatibility hardening keep the ceilings in
+`tests.test_architecture_rule_evolution` and must not worsen. These caps are
+not a repository-wide complexity rule.
 
 `verify_fast` runs compileall, Ruff, and the route's focused modules.
 `verify_full --profile application` runs the complete suite once under branch
@@ -43,7 +44,9 @@ set is `registry`, `_delete_transaction`, `serialization`, `matplotlib_removal`,
 `DeletionCoordinator`, template transformation, and Secondary Axis runtime; its
 next hardening target is 90% without lowering another gate. Summary `coverage report` output is kept
 for humans. Additional per-file floors cover the Figure toolbar (90%), Settings
-envelope (85%), and template application/storage (80%). A discovery subprocess collects exact unittest IDs;
+envelope (85%), template application/storage (80%), and the Template workflow,
+Title menu, Chart/Element creation dialogs, Inspector containers/Axes
+sections, and Spec editor modules (80%). A discovery subprocess collects exact unittest IDs;
 empty, failed, or duplicate collections reject the run.
 
 All application batches share one process pool. GUI-sensitive modules keep

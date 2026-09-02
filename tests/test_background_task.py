@@ -11,6 +11,7 @@ from mygui.widgets.fig_control_window.background_task import (
     cancel_background_tasks,
     drain_background_tasks,
     start_background_task,
+    start_matlab_task,
 )
 
 
@@ -103,6 +104,21 @@ class BackgroundTaskTests(unittest.TestCase):
         finally:
             owner.deleteLater()
 
+    def test_matlab_wrapper_uses_shared_background_task(self):
+        owner = QWidget()
+        callback = []
+        try:
+            start_matlab_task(
+                owner,
+                lambda: "matlab-ok",
+                callback.append,
+                self.fail,
+            )
+            self._wait_until(lambda: callback == ["matlab-ok"])
+        finally:
+            owner.deleteLater()
+
 
 if __name__ == "__main__":
     unittest.main()
+

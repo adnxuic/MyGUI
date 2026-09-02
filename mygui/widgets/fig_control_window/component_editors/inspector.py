@@ -8,6 +8,9 @@ from typing import Any, Callable
 
 from PySide6.QtWidgets import QFrame, QGroupBox, QVBoxLayout, QWidget
 from mygui.figuremodify.components import DeletionPolicy
+from mygui.widgets.fig_control_window.component_editors.cleanup import (
+    isolate_cleanup,
+)
 
 
 class EditorSection:
@@ -293,8 +296,15 @@ class ComponentInspector(QFrame):
         self._disposed = True
         manager = getattr(self.context, "editor_manager", None)
         release = getattr(manager, "release", None)
+        owner = type(self).__name__
+        target = getattr(self.controller, "component_id", owner)
         if callable(release):
-            release(self)
+            isolate_cleanup(
+                lambda: release(self),
+                owner=owner,
+                target=str(target),
+                operation="release",
+            )
         self._dispose_sections()
 
     def _dispose_sections(self) -> None:
@@ -303,18 +313,29 @@ class ComponentInspector(QFrame):
         sections = tuple(reversed(self._sections))
         self._sections.clear()
         self._sections_by_key.clear()
+        owner = type(self).__name__
         for section in sections:
+            target = str(getattr(section, "section_key", None) or type(section).__name__)
             cleanup = getattr(section, "dispose", None)
-            try:
-                if callable(cleanup):
-                    cleanup()
-            except Exception:
-                pass
-            try:
-                section.setParent(None)
-                section.deleteLater()
-            except RuntimeError:
-                pass
+            if callable(cleanup):
+                isolate_cleanup(
+                    cleanup,
+                    owner=owner,
+                    target=target,
+                    operation="dispose",
+                )
+            isolate_cleanup(
+                lambda current=section: current.setParent(None),
+                owner=owner,
+                target=target,
+                operation="setParent",
+            )
+            isolate_cleanup(
+                lambda current=section: current.deleteLater(),
+                owner=owner,
+                target=target,
+                operation="deleteLater",
+            )
 
     def closeEvent(self, event):
         """Handle Qt close events and release owned resources."""

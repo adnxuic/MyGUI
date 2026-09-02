@@ -50,6 +50,7 @@ from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui import status_messages
 from mygui.resources import icon_path
 from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+    CreationDialogSession,
     creation_defaults as _creation_defaults,
     new_line_appearance_input as _new_line_appearance_input,
     palette_selection as _palette_selection,
@@ -274,21 +275,28 @@ class PyCurveDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        try:
-            self.figure_window.current_canva.add_curve(func_text=self.expression_edit.text(),
-                                                       x_start=self.x_start_input.value(),
-                                                       x_stop=self.x_stop_input.value(),
-                                                       style=self.appearance_input.style(),
-                                                       color=self.color_input.color(),
-                                                       label=self.label_input.text(),
-                                                       color_selection=self.color_input.selection(),
-                                                       preview_cycle=self.color_input.colorselector,
-                                                       linewidth=self._resolved_line.linewidth,
-                                                       marker=self._resolved_line.marker,
-                                                       markersize=self._resolved_line.markersize,
-                                                       markeredgewidth=self._resolved_line.markeredgewidth)
-        except ValueError as exc:
-            QMessageBox.warning(self, 'Invalid Expression', str(exc))
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_curve(
+                func_text=self.expression_edit.text(),
+                x_start=self.x_start_input.value(),
+                x_stop=self.x_stop_input.value(),
+                style=self.appearance_input.style(),
+                color=self.color_input.color(),
+                label=self.label_input.text(),
+                color_selection=self.color_input.selection(),
+                preview_cycle=self.color_input.colorselector,
+                linewidth=self._resolved_line.linewidth,
+                marker=self._resolved_line.marker,
+                markersize=self._resolved_line.markersize,
+                markeredgewidth=self._resolved_line.markeredgewidth,
+            ),
+            errors=ValueError,
+            on_error=lambda exc: QMessageBox.warning(
+                self, 'Invalid Expression', str(exc)
+            ),
+        )
+        if not outcome:
             return
         super().accept()
 
@@ -380,8 +388,9 @@ class PyPlotDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        try:
-            result = self.figure_window.current_canva.add_plots(
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_plots(
                 self.data_reference_input.get_x_ref(),
                 self.data_reference_input.get_y_refs(),
                 style=self.line_style_editor.style(),
@@ -392,11 +401,11 @@ class PyPlotDialog(QDialog):
                 marker=self._resolved_line.marker,
                 markeredgewidth=self._resolved_line.markeredgewidth,
             )
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        )
+        if not outcome:
             return
 
-        _show_batch_creation_result("Plot", result)
+        _show_batch_creation_result("Plot", outcome.value)
         self.data_reference_input.dispose()
         super().accept()
 
@@ -506,8 +515,9 @@ class PyScatterDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        try:
-            result = self.figure_window.current_canva.add_scatters(
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_scatters(
                 self.data_reference_input.get_x_ref(),
                 self.data_reference_input.get_y_refs(),
                 size=self.size_input.value(),
@@ -520,11 +530,11 @@ class PyScatterDialog(QDialog):
                 color_mapping=self.scatter_mapping_input.color_mapping(),
                 size_mapping=self.scatter_mapping_input.size_mapping(),
             )
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        )
+        if not outcome:
             return
 
-        _show_batch_creation_result("Scatter", result)
+        _show_batch_creation_result("Scatter", outcome.value)
         self.data_reference_input.dispose()
         self.scatter_mapping_input.dispose()
         super().accept()
@@ -614,16 +624,19 @@ class PyFitDialog(QDialog):
             QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
             return
 
-        try:
-            x_ref, y_ref, pair, preprocess = _selected_pair(
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: _selected_pair(
                 self.figure_window,
                 self.x_data_input,
                 self.y_data_input,
                 self.data_reference_input.preprocess_values(),
-            )
-        except ValueError as exc:
-            status_messages.show_error(str(exc))
+            ),
+            errors=ValueError,
+        )
+        if not outcome:
             return
+        x_ref, y_ref, pair, preprocess = outcome.value
 
         self.figure_window.current_canva.add_fit_curve(
             x=pair.x,
@@ -756,8 +769,9 @@ class PyInterpolationDialog(QDialog):
             return
 
         options = self.options_input.options()
-        try:
-            result = self.figure_window.current_canva.add_interpolate_curves(
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_interpolate_curves(
                 self.data_reference_input.get_x_ref(),
                 self.data_reference_input.get_y_refs(),
                 preprocess=self.data_reference_input.preprocess_values(),
@@ -769,11 +783,11 @@ class PyInterpolationDialog(QDialog):
                 markeredgewidth=self._resolved_line.markeredgewidth,
                 **options,
             )
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        )
+        if not outcome:
             return
 
-        _show_batch_creation_result("Interpolation", result)
+        _show_batch_creation_result("Interpolation", outcome.value)
         self.data_reference_input.dispose()
         super().accept()
 
@@ -867,14 +881,16 @@ class _Field2DDialog(QDialog):
             )
             return
         adder = getattr(canvas, self.ADDER_NAME)
-        try:
-            adder(x_ref, y_ref, z_ref, self._role_properties())
-        except Exception as exc:
-            QMessageBox.warning(
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: adder(x_ref, y_ref, z_ref, self._role_properties()),
+            on_error=lambda exc: QMessageBox.warning(
                 self,
                 f"Could not create {self.DISPLAY_NAME}",
                 str(exc),
-            )
+            ),
+        )
+        if not outcome:
             return
         self.data_reference_input.dispose()
         super().accept()

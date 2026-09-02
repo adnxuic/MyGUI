@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QTextCursor
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QWidget
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import LineCollection
@@ -44,9 +45,15 @@ from mygui.figuremodify.components import (
     register_figure_components,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.fig_control_window.component_editors.cleanup import (
+    CleanupFailure,
+    drain_cleanup_failures,
+    isolate_cleanup,
+)
 from mygui.widgets.fig_control_window.component_editors.containers import (
     AxesSemanticInspectorPanel,
     ChartInspectorStack,
+    InspectorToolBox,
 )
 from mygui.widgets.fig_control_window.component_editors.fit_sections import (
     FitDomainSection,
@@ -131,6 +138,7 @@ class ComponentInspectorTests(unittest.TestCase):
 
     def setUp(self):
         status_messages.clear_status_handler()
+        drain_cleanup_failures()
         QApplication.processEvents()
 
     def tearDown(self):
@@ -1038,6 +1046,413 @@ class ComponentInspectorTests(unittest.TestCase):
 
         self.assertEqual(tuple(registry._event_subscribers), subscribers_before)
         self.assertEqual(context.editor_manager._editors, {})
+        context.editor_manager.close()
+
+
+class InspectorCleanupFailureTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        status_messages.clear_status_handler()
+        drain_cleanup_failures()
+        QApplication.processEvents()
+
+    def tearDown(self):
+        status_messages.clear_status_handler()
+        drain_cleanup_failures()
+        QApplication.processEvents()
+
+    def test_isolate_cleanup_records_and_does_not_raise(self):
+        def boom():
+            raise RuntimeError("injected isolate failure")
+
+        with self.assertLogs(
+            "mygui.widgets.fig_control_window.component_editors.cleanup",
+            level="ERROR",
+        ):
+            failure = isolate_cleanup(
+                boom,
+                owner="Owner",
+                target="target",
+                operation="dispose",
+            )
+        self.assertIsInstance(failure, CleanupFailure)
+        self.assertEqual(failure.owner, "Owner")
+        self.assertEqual(failure.target, "target")
+        self.assertEqual(failure.operation, "dispose")
+        self.assertEqual(failure.error_type, "RuntimeError")
+        recorded = drain_cleanup_failures()
+        self.assertEqual(recorded, (failure,))
+        self.assertEqual(drain_cleanup_failures(), ())
+
+    def test_section_dispose_failure_continues_and_stays_idempotent(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        controller = registry.find_one(kind=ComponentKind.FIGURE)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        baseline = len(registry._event_subscribers)
+        tracked = []
+
+        class TrackingSection(QWidget, EditorSection):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.disposed = False
+                self._unsubscribe = registry.subscribe(lambda _event: None)
+                self._timer = QTimer(self)
+                self._timer.start(10_000)
+                tracked.append(self)
+
+            def dispose(self):
+                self.disposed = True
+                if self._unsubscribe is not None:
+                    self._unsubscribe()
+                    self._unsubscribe = None
+                self._timer.stop()
+
+        class FailingSection(QWidget, EditorSection):
+            def dispose(self):
+                raise RuntimeError("injected section dispose failure")
+
+        profile = EditorProfile(
+            "cleanup",
+            "Cleanup",
+            (
+                SectionSpec(
+                    "tracking",
+                    "Tracking",
+                    lambda _controller, _context, parent: TrackingSection(parent),
+                ),
+                SectionSpec(
+                    "failure",
+                    "Failure",
+                    lambda _controller, _context, parent: FailingSection(parent),
+                ),
+            ),
+            placement=EditorPlacement.FIGURE,
+            tree=TreePresentationSpec("Cleanup"),
+        )
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+        inspector = ComponentInspector(
+            controller,
+            context=context,
+            profile=profile,
+        )
+        tracking = tracked[0]
+        self.assertTrue(tracking._timer.isActive())
+        inspector.dispose()
+        inspector.dispose()
+        failures = drain_cleanup_failures()
+        self.assertTrue(inspector._disposed)
+        self.assertTrue(tracking.disposed)
+        self.assertFalse(tracking._timer.isActive())
+        self.assertIsNone(tracking._unsubscribe)
+        self.assertEqual(len(registry._event_subscribers), baseline)
+        self.assertEqual(seen, [])
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0].operation, "dispose")
+        self.assertEqual(failures[0].error_type, "RuntimeError")
+        self.assertEqual(failures[0].target, "failure")
+        context.editor_manager.close()
+
+    def test_manager_close_isolates_partial_dispose_failure(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        figure.text(0.5, 0.5, "note")
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        root = registry.find_one(kind=ComponentKind.FIGURE)
+        text = registry.find_one(kind=ComponentKind.TEXT, role=ComponentRole.TEXT)
+        first = context.editor_manager.create(root, context=context)
+        second = context.editor_manager.create(text, context=context)
+        render = second.section("render")
+        first.dispose = lambda: (_ for _ in ()).throw(
+            RuntimeError("injected manager dispose failure")
+        )
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+        context.editor_manager.close()
+        context.editor_manager.close()
+        failures = drain_cleanup_failures()
+        self.assertTrue(second._disposed)
+        self.assertTrue(render._disposed)
+        self.assertNotIn(render._listener, tex_config._TEX_AVAILABILITY_LISTENERS)
+        self.assertEqual(context.editor_manager._editors, {})
+        self.assertEqual(seen, [])
+        self.assertTrue(
+            any(
+                failure.operation == "dispose"
+                and failure.error_type == "RuntimeError"
+                for failure in failures
+            )
+        )
+
+    def test_toolbox_remove_isolates_dispose_and_empty_callback_failures(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        controller = registry.find_one(kind=ComponentKind.FIGURE)
+        toolbox = InspectorToolBox()
+        toolbox.editor_manager = context.editor_manager
+        inspector = context.editor_manager.create(
+            controller,
+            context=context,
+            parent=toolbox,
+            remover=toolbox.remove_inspector,
+        )
+        toolbox.add_inspector(inspector)
+        toolbox.set_empty_callback(
+            lambda: (_ for _ in ()).throw(
+                RuntimeError("injected empty callback failure")
+            )
+        )
+        inspector.dispose = lambda: (_ for _ in ()).throw(
+            RuntimeError("injected toolbox dispose failure")
+        )
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+        self.assertTrue(toolbox.remove_inspector(inspector))
+        self.assertTrue(toolbox.remove_inspector(inspector) is False)
+        failures = drain_cleanup_failures()
+        self.assertEqual(toolbox.count(), 0)
+        self.assertEqual(seen, [])
+        operations = {failure.operation for failure in failures}
+        self.assertIn("dispose", operations)
+        self.assertIn("empty_callback", operations)
+        toolbox.dispose()
+        context.editor_manager.close()
+
+    def test_axes_panel_construction_failure_isolates_partial_dispose(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        axes_controller = registry.find_one(kind=ComponentKind.AXES)
+        subscribers_before = tuple(registry._event_subscribers)
+
+        def exploding_dispose(_self):
+            raise RuntimeError("injected semantic dispose failure")
+
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+        with patch(
+            "mygui.widgets.fig_control_window.figure_inspector."
+            "ChartInspectorStack",
+            side_effect=RuntimeError("injected Axes Panel failure"),
+        ), patch.object(
+            AxesSemanticInspectorPanel,
+            "dispose",
+            exploding_dispose,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Axes Panel"):
+                AxesInspectorPanel(axes_controller, context)
+
+        failures = drain_cleanup_failures()
+        self.assertEqual(tuple(registry._event_subscribers), subscribers_before)
+        self.assertEqual(context.editor_manager._editors, {})
+        self.assertEqual(seen, [])
+        self.assertTrue(
+            any(
+                failure.operation == "dispose"
+                and failure.error_type == "RuntimeError"
+                for failure in failures
+            )
+        )
+        context.editor_manager.close()
+
+    def test_toolbox_construction_rollback_isolates_dispose_failure(self):
+        stack = ChartInspectorStack()
+        original_count = stack.toolbox_stack.count()
+        original_add = stack.toolbox_stack.addWidget
+
+        def fail_after_add(widget):
+            original_add(widget)
+            raise RuntimeError("injected Toolbox insertion failure")
+
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+        with patch.object(
+            stack.toolbox_stack,
+            "addWidget",
+            side_effect=fail_after_add,
+        ), patch(
+            "mygui.widgets.fig_control_window.component_editors.containers."
+            "InspectorToolBox.dispose",
+            side_effect=RuntimeError("injected toolbox dispose failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Toolbox insertion"):
+                stack.ensure_toolbox((ComponentKind.LINE, ComponentRole.LINE))
+        failures = drain_cleanup_failures()
+        self.assertIsNone(stack.toolbox((ComponentKind.LINE, ComponentRole.LINE)))
+        self.assertEqual(stack.toolbox_stack.count(), original_count)
+        self.assertEqual(seen, [])
+        self.assertTrue(
+            any(
+                failure.operation == "dispose"
+                and failure.error_type == "RuntimeError"
+                for failure in failures
+            )
+        )
+        stack.dispose()
+
+    def test_semantic_construction_rollback_isolates_dispose_failure(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        axes_controller = registry.find_one(kind=ComponentKind.AXES)
+        panel = AxesSemanticInspectorPanel(axes_controller, context)
+        controller = registry.find_one(kind=ComponentKind.AXIS, role=ComponentRole.X_AXIS)
+        original_add = panel.inspector_stack.addWidget
+
+        def fail_after_add(widget):
+            original_add(widget)
+            raise RuntimeError("injected semantic insertion failure")
+
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+        with patch.object(
+            panel.inspector_stack,
+            "addWidget",
+            side_effect=fail_after_add,
+        ), patch(
+            "mygui.widgets.fig_control_window.component_editors.inspector."
+            "ComponentInspector.dispose",
+            side_effect=RuntimeError("injected inspector dispose failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "semantic insertion"):
+                panel.ensure_inspector(controller.component_id)
+        failures = drain_cleanup_failures()
+        self.assertIsNone(panel.inspector(controller.component_id))
+        self.assertEqual(seen, [])
+        self.assertTrue(
+            any(
+                failure.operation == "dispose"
+                and failure.error_type == "RuntimeError"
+                for failure in failures
+            )
+        )
+        panel.dispose()
+        context.editor_manager.close()
+
+    def test_manager_and_presenter_isolate_unsubscribe_failures(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        presenter = MessagePresenter(registry)
+        baseline = len(registry._event_subscribers)
+        seen = []
+        status_messages.set_status_handler(
+            lambda message, level: seen.append((message, level))
+        )
+
+        def boom_then(original):
+            def boom():
+                if original is not None:
+                    original()
+                raise RuntimeError("injected unsubscribe failure")
+
+            return boom
+
+        context.editor_manager._unsubscribe = boom_then(
+            context.editor_manager._unsubscribe
+        )
+        presenter._unsubscribe = boom_then(presenter._unsubscribe)
+        context.editor_manager.close()
+        context.editor_manager.close()
+        presenter.close()
+        presenter.close()
+        failures = drain_cleanup_failures()
+        self.assertEqual(seen, [])
+        self.assertEqual(len(registry._event_subscribers), baseline - 2)
+        self.assertTrue(
+            any(
+                failure.operation == "unsubscribe"
+                and failure.error_type == "RuntimeError"
+                for failure in failures
+            )
+        )
+
+    def test_semantic_panel_and_toolbox_lifecycle_paths(self):
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        figure.subplots()
+        registry = register_figure_components(figure)
+        context = _context(registry, TableRepository(), ColorLibrary())
+        axes_controller = registry.find_one(kind=ComponentKind.AXES)
+        panel = AxesSemanticInspectorPanel(axes_controller, context)
+        x_axis = registry.find_one(kind=ComponentKind.AXIS, role=ComponentRole.X_AXIS)
+        inspector = panel.ensure_inspector(x_axis.component_id)
+        self.assertIs(panel.inspector(x_axis.component_id), inspector)
+        self.assertTrue(panel.show_component(x_axis.component_id))
+        self.assertEqual(panel.current_component_id(), x_axis.component_id)
+        self.assertIn(x_axis.component_id, panel.component_ids())
+        handle = panel.take_inspector(inspector)
+        self.assertIsNotNone(handle)
+        self.assertIsNone(panel.inspector(x_axis.component_id))
+        self.assertIsNone(panel.take_inspector(inspector))
+        panel.restore_inspector(handle)
+        panel.restore_inspector(handle)
+        self.assertFalse(panel.show_component("missing"))
+        self.assertFalse(panel.remove_component("missing"))
+        panel.dispose()
+        panel.dispose()
+
+        stack = ChartInspectorStack()
+        key = (ComponentKind.LINE, ComponentRole.LINE)
+        toolbox = stack.ensure_toolbox(key)
+        toolbox.editor_manager = context.editor_manager
+        figure_controller = registry.find_one(kind=ComponentKind.FIGURE)
+        hosted = context.editor_manager.create(
+            figure_controller,
+            context=context,
+            parent=toolbox,
+            remover=toolbox.remove_inspector,
+        )
+        toolbox.add_inspector(hosted)
+        self.assertTrue(stack.show_component(figure_controller.component_id))
+        self.assertEqual(stack.current_component_id(), figure_controller.component_id)
+        self.assertIs(stack.inspector(figure_controller.component_id), hosted)
+        self.assertIs(
+            stack.toolbox_for_component(figure_controller.component_id),
+            toolbox,
+        )
+        detached = toolbox.take_inspector(hosted)
+        self.assertIsNotNone(detached)
+        toolbox.restore_inspector(detached)
+        toolbox.restore_inspector(detached)
+        with self.assertRaises(ValueError):
+            toolbox.add_inspector(hosted)
+        with self.assertRaises(ValueError):
+            toolbox.add_inspector(QWidget())
+        self.assertTrue(stack.remove_component(figure_controller.component_id))
+        self.assertFalse(stack.remove_component(figure_controller.component_id))
+        self.assertFalse(stack.show_toolbox(("missing", "missing")))
+        stack.dispose()
+        stack.dispose()
         context.editor_manager.close()
 
 

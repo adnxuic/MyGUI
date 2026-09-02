@@ -16,6 +16,7 @@ from matplotlib import colors as mcolors
 from matplotlib.legend import Legend
 from matplotlib.markers import MarkerStyle
 from matplotlib.spines import Spine
+from matplotlib.text import Text
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from mygui.database import ColumnRef
@@ -26,11 +27,13 @@ from mygui.figuremodify.matplotlib_adapter import (
 
 from ..errors import ComponentValidationError
 from ..models import (
+    ComponentMutation,
     ComponentState,
     PropertySpec,
 )
 from ..property_values import (
     normalize_connector,
+    normalize_font,
     normalize_line_pattern,
     normalize_marker,
 )
@@ -231,6 +234,50 @@ _DEFAULT_FONT_SPEC = {
     "variant": "normal",
     "color": "#000000",
 }
+
+
+def apply_font_spec(texts: list[Text], value: dict[str, Any]) -> None:
+    """Project one closed font spec onto Matplotlib Text artists."""
+
+    for text in texts:
+        text.set_fontfamily(value["family"])
+        text.set_fontsize(value["size"])
+        text.set_fontweight(value["weight"])
+        text.set_fontstyle(value["style"])
+        text.set_fontstretch(value["stretch"])
+        text.set_fontvariant(value["variant"])
+        text.set_color(value["color"])
+
+
+def font_spec_from_text(text: Text, fallback: dict[str, Any]) -> dict[str, Any]:
+    """Read a closed font spec from one Text artist, else return fallback."""
+
+    try:
+        return normalize_font(
+            {
+                "family": list(text.get_fontfamily()),
+                "size": float(text.get_fontsize()),
+                "weight": text.get_fontweight(),
+                "style": text.get_fontstyle(),
+                "stretch": text.get_fontproperties().get_stretch(),
+                "variant": text.get_fontproperties().get_variant(),
+                "color": _read_color(text.get_color()),
+            }
+        )
+    except Exception:
+        return deepcopy(fallback)
+
+
+def apply_data_component_mutation(controller: Any, data: dict[str, Any], *, drawable: Any):
+    """Apply data and runtime arrays as one Controller mutation."""
+
+    return controller.apply_mutation(
+        ComponentMutation(
+            controller.component_id,
+            data=data,
+            runtime_data=drawable,
+        )
+    )
 
 
 def _rectangle(value: Any) -> tuple[float, float, float, float]:

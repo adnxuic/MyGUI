@@ -20,25 +20,10 @@ from PySide6.QtWidgets import (
 from typing import Any
 
 from mygui.database import FitInputRangeSpec, matlab_adapter, scipy_fit_adapter
-from mygui.widgets.fig_control_window.background_task import start_background_task
+from mygui.widgets.fig_control_window.background_task import start_matlab_task
 
 import numpy as np
 import time
-
-
-def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
-    """Start matlab task."""
-
-    return start_background_task(
-        owner,
-        func,
-        on_finished,
-        on_failed,
-        *args,
-        logger=matlab_adapter.matlab_logger(),
-        task_log_prefix="MATLAB background task",
-        **kwargs,
-    )
 
 
 class FitDataRangeWidget(QGroupBox):

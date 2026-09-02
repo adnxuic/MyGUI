@@ -70,6 +70,7 @@ state.
 
 | Module | Role |
 | --- | --- |
+| `canvas_host.py` | Narrow helper Protocols: register, select, create, snapshot, delete, dependency restore |
 | `chart_creation.py` | `ChartCreationStager` and batch records |
 | `element_creation.py` | `ElementCreationStager` for chart-adjacent Element publication |
 | `canvas_materialize_handlers.py` | Canvas restore handlers; bind with `register_canvas_materializers()` |
@@ -80,6 +81,13 @@ state.
 | `component_materializers.py` | Matplotlib-free `ComponentMaterializerRegistry` |
 | `py_figure_window.py` | Figure window host |
 | `project_metadata.py` | project metadata port |
+
+`ComponentContractAuditRow` and `audit_component_contracts()` in
+`mygui.figuremodify.components.contract_audit` summarize Controller,
+EditorProfile, restore-phase, materializer, and deletion-handler completeness
+for startup verification and tests. They are not a second business-state
+source. Canvas construction calls `require_complete_component_contracts()`
+after the live registries are sealed.
 
 Do not move `add_*` handlers into `component_materializers.py`. Keep thin
 `PyFigureCanvas._materialize_*` wrappers so restore and tests still enter
@@ -123,7 +131,9 @@ through the Canvas.
   registration transaction. Do not expose partial events or selection.
 - Creation dialogs may reuse Controller-free Inputs only. Acceptance still
   delegates component creation to the Canvas/Controller workflow; dialogs do
-  not publish Artists or Registry state themselves.
+  not publish Artists or Registry state themselves. Chart and Element dialogs
+  construct typed requests; `CreationDialogSession` runs the Canvas call,
+  isolates exceptions, and keeps one Message Bar result for that request.
 - Multi-series Plot, Scatter, and Interpolation creation stages through
   `ChartCreationStager` inside one `registration_transaction()`, then
   commits the Axes color cycle and ledger only after that transaction

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 
@@ -13,29 +13,7 @@ from mygui.figuremodify.components import (
     ComponentRole,
     ComponentState,
 )
-
-
-class CanvasSnapshotHost(Protocol):
-    """Canvas surface used after Matplotlib targets already exist."""
-
-    component_registry: Any
-    axes_layout_service: Any
-    text_render_service: Any
-    in_axes_service: Any
-    axes_commands: Any
-    component_materializers: Any
-    _document_dpi: float
-    style: str | None
-    _restoring_component_tree_now: bool
-
-    def redraw(self) -> None:
-        ...
-
-    def _history_component_id_overrides(self, target_states: Any) -> Any:
-        ...
-
-    def _restore_component_state(self, state: ComponentState) -> Any:
-        ...
+from mygui.widgets.figure_canvas.canvas_host import CanvasSnapshotHost
 
 
 def component_paths_from_tree(

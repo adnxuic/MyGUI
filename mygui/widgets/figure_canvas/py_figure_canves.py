@@ -130,6 +130,7 @@ from mygui.figuremodify.components import (
     TextController,
     UpdateImpact,
     create_semantic_children,
+    require_complete_component_contracts,
     validate_controller_contracts,
 )
 from mygui.figuremodify.components.serialization import (
@@ -366,6 +367,11 @@ class PyFigureCanvas(QWidget):
         )
         self._register_component_materializers(materializer_contracts)
         self.editor_registry.freeze()
+        require_complete_component_contracts(
+            editor_profile_keys=self.editor_registry.profile_keys,
+            materializer_keys=self.component_materializers.keys,
+            deletion_handler_keys=self.deletion_service.handlers.keys,
+        )
         self.dependency_service = ComponentDependencyService(
             self.component_registry,
             restore_state=self._restore_component_state,
@@ -1380,9 +1386,16 @@ class PyFigureCanvas(QWidget):
             self.repository.transaction_committed.disconnect(self._table_changed)
         except (RuntimeError, TypeError):
             pass
-        if self._selection_unsubscribe is not None:
-            self._selection_unsubscribe()
-            self._selection_unsubscribe = None
+        from mygui.widgets.fig_control_window.component_editors.cleanup import (
+            dispose_subscription,
+        )
+
+        dispose_subscription(
+            self._selection_unsubscribe,
+            owner="PyFigureCanvas",
+            target="selection",
+        )
+        self._selection_unsubscribe = None
         if self._button_press_cid is not None:
             try:
                 self.canva.mpl_disconnect(self._button_press_cid)

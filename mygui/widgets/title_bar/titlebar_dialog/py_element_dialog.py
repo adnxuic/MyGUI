@@ -39,6 +39,9 @@ from mygui.widgets.fig_control_window.component_editors import (
 )
 
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+    CreationDialogSession,
+)
 
 
 class PyTextDialog(QDialog):
@@ -247,10 +250,11 @@ class PyAnnotationDialog(QDialog):
                 "Select an Axes before creating an Annotation."
             )
             return
-        try:
-            canvas.add_annotation_from_input(self.input.properties())
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_annotation_from_input(self.input.properties())
+        )
+        if not outcome:
             return
         super().accept()
 
@@ -307,10 +311,14 @@ class PyInAxesDialog(QDialog):
                 "Select an Axes before creating an in_axes Element.",
             )
             return
-        try:
-            canvas.add_in_axes(self.input.spec())
-        except Exception as exc:
-            QMessageBox.warning(self, "Could not create in_axes", str(exc))
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_in_axes(self.input.spec()),
+            on_error=lambda exc: QMessageBox.warning(
+                self, "Could not create in_axes", str(exc)
+            ),
+        )
+        if not outcome:
             return
         super().accept()
 
@@ -365,10 +373,11 @@ class PyColorbarDialog(QDialog):
                 "No eligible scalar-mapped Scatter source is available."
             )
             return
-        try:
-            canvas.add_colorbar(source_id, self.input.properties())
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_colorbar(source_id, self.input.properties())
+        )
+        if not outcome:
             return
         super().accept()
 
@@ -407,10 +416,9 @@ class PySecondaryAxisDialog(QDialog):
                 "Select an Axes before creating a Secondary Axis."
             )
             return
-        try:
-            canvas.add_secondary_axis(self.input.spec())
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(lambda: session.canvas.add_secondary_axis(self.input.spec()))
+        if not outcome:
             return
         super().accept()
 
@@ -466,15 +474,18 @@ class PyReferenceMarksDialog(QDialog):
                 "Select an Axes before creating Reflection Positions."
             )
             return
-        try:
+        session = CreationDialogSession(self, self.figure_window)
+
+        def _create():
             self.input.validate_geometry()
-            canvas.add_reference_marks(
+            return session.canvas.add_reference_marks(
                 self.input.positions(),
                 self.input.properties(),
                 position_ref=self.input.position_ref(),
             )
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+
+        outcome = session.run(_create)
+        if not outcome:
             return
         super().accept()
 
@@ -529,10 +540,11 @@ class _PyReferenceGuideDialog(QDialog):
                 f"Select an Axes before creating a {self.GUIDE_LABEL}."
             )
             return
-        try:
-            getattr(canvas, self.CREATE_METHOD)(self.input.properties())
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: getattr(session.canvas, self.CREATE_METHOD)(self.input.properties())
+        )
+        if not outcome:
             return
         super().accept()
 

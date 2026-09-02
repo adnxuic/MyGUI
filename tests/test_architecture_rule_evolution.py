@@ -52,6 +52,19 @@ class SchemaValidatorRegistryTests(unittest.TestCase):
         self.assertEqual(set(schema._PARENT_KINDS), keys)
         self.assertEqual(set(schema._SELECTOR_VALIDATORS), keys)
 
+    def test_template_schema_hops_cover_v1_through_v7(self):
+        from mygui.template_library.schema import (
+            TEMPLATE_SCHEMA_HOPS,
+            TEMPLATE_SCHEMA_VERSION,
+        )
+
+        sources = [hop.source_version for hop in TEMPLATE_SCHEMA_HOPS]
+        targets = [hop.target_version for hop in TEMPLATE_SCHEMA_HOPS]
+        self.assertEqual(sources, list(range(1, TEMPLATE_SCHEMA_VERSION)))
+        self.assertEqual(targets, list(range(2, TEMPLATE_SCHEMA_VERSION + 1)))
+        for hop in TEMPLATE_SCHEMA_HOPS:
+            self.assertTrue(callable(hop.migrate))
+
     def test_selector_and_parent_validators_reject_invalid_payloads(self):
         figure = ComponentState(
             id="figure",
@@ -191,6 +204,37 @@ class SchemaValidatorRegistryTests(unittest.TestCase):
         finally:
             schema._PARENT_KINDS[(ComponentKind.LINE, ComponentRole.LINE)] = missing
 
+    def test_figure_schema_policy_covers_v10_through_v23(self):
+        from mygui.figuremodify.components.schema_policy import (
+            FIGURE_SCHEMA_POLICIES,
+            KIND_INTRODUCED_AT,
+            figure_schema_policy,
+        )
+
+        self.assertEqual(set(FIGURE_SCHEMA_POLICIES), set(range(10, 24)))
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.COLORBAR], 11)
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.REFERENCE_MARKS], 12)
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.REFERENCE_GUIDE], 13)
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.FIELD_2D], 16)
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.ANNOTATION], 17)
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.ERRORBAR], 20)
+        self.assertEqual(KIND_INTRODUCED_AT[ComponentKind.SECONDARY_AXIS], 23)
+        v10 = figure_schema_policy(10)
+        self.assertTrue(v10.forbids_fit_input_range)
+        self.assertTrue(v10.forbids_axes_geometry)
+        self.assertFalse(v10.colorbar_allows_field_2d_source)
+        self.assertTrue(v10.reference_marks_positions_only)
+        self.assertTrue(v10.errorbar_v20_properties)
+        v23 = figure_schema_policy(23)
+        self.assertTrue(v23.requires_fit_input_range)
+        self.assertTrue(v23.requires_axes_geometry)
+        self.assertTrue(v23.allows_index_locator)
+        self.assertTrue(v23.allows_format_str_formatter)
+        self.assertTrue(v23.colorbar_allows_field_2d_source)
+        self.assertFalse(v23.errorbar_v20_properties)
+        with self.assertRaises(ValueError):
+            figure_schema_policy(9)
+
 
 
 class DeleteTransactionPhaseTests(unittest.TestCase):
@@ -322,6 +366,8 @@ def _module_function(path: Path, function_name: str) -> ast.FunctionDef:
 CANVAS_COMPLEXITY_WARNING_MAX = 15
 ADD_STAR_MCCABE_MAX = 2
 REFACTORED_DISPATCH_MCCABE_MAX = 5
+SCHEMA_VALIDATOR_MCCABE_MAX = 10
+SCHEMA_ORCHESTRATOR_MCCABE_MAX = 15
 NEW_HOTSPOT_MCCABE_CEILINGS = {
     (
         ROOT / "mygui/widgets/figure_canvas/chart_creation.py",
@@ -398,6 +444,22 @@ NEW_HOTSPOT_MCCABE_CEILINGS = {
         ROOT / "mygui/figuremodify/components/controllers/_helpers.py",
         "bind_closed_property_handlers",
     ): 3,
+    (
+        ROOT / "mygui/figuremodify/components/figure_schema_validators.py",
+        "_validate_figure",
+    ): 15,
+    (
+        ROOT / "mygui/figuremodify/components/figure_schema_validators.py",
+        "_validate_controller_contract",
+    ): 15,
+    (
+        ROOT / "mygui/widgets/figure_canvas/deletion_coordinator.py",
+        "DeletionCoordinator.delete",
+    ): 47,
+    (
+        ROOT / "mygui/widgets/figure_canvas/deletion_coordinator.py",
+        "DeletionCoordinator._fallback_id",
+    ): 21,
 }
 
 
@@ -441,6 +503,21 @@ class RefactoredHotspotComplexityTests(unittest.TestCase):
             with self.subTest(path=path.name, function=qualname):
                 score = _mccabe(_named_functions(path)[qualname])
                 self.assertLessEqual(score, ceiling)
+
+    def test_split_schema_validators_stay_below_hardening_caps(self):
+        path = ROOT / "mygui/figuremodify/components/figure_schema_validators.py"
+        orchestrators = {
+            "_validate_figure",
+            "_validate_controller_contract",
+        }
+        for name, node in _named_functions(path).items():
+            ceiling = (
+                SCHEMA_ORCHESTRATOR_MCCABE_MAX
+                if name in orchestrators
+                else SCHEMA_VALIDATOR_MCCABE_MAX
+            )
+            with self.subTest(function=name):
+                self.assertLessEqual(_mccabe(node), ceiling)
 
 
 class RefactoredDispatchComplexityTests(unittest.TestCase):
@@ -561,4 +638,20 @@ class ClosedPropertyHandlerTests(unittest.TestCase):
                 specs,
                 owner="MissingSubset",
             )
+
+    def test_canvas_helpers_store_only_a_host_reference(self):
+        from mygui.widgets.figure_canvas.canvas_snapshot import CanvasSnapshotApplier
+        from mygui.widgets.figure_canvas.chart_creation import ChartCreationStager
+        from mygui.widgets.figure_canvas.element_creation import ElementCreationStager
+
+        host = object()
+        for helper_type in (
+            ChartCreationStager,
+            ElementCreationStager,
+            CanvasSnapshotApplier,
+        ):
+            with self.subTest(helper=helper_type.__name__):
+                helper = helper_type(host)
+                self.assertEqual(vars(helper), {"_host": host})
+
 

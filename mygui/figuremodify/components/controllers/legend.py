@@ -37,6 +37,7 @@ from ._helpers import (
     _normalize_color,
     _read_color,
     _DEFAULT_FONT_SPEC,
+    apply_font_spec,
     bind_closed_property_handlers,
     lookup_property_handler,
 )
@@ -417,14 +418,7 @@ def _legend_write_font(controller, target, spec, value):
     else:
         controller._label_font_value = normalize_font(value)
         texts = target.get_texts()
-    for text in texts:
-        text.set_fontfamily(value["family"])
-        text.set_fontsize(value["size"])
-        text.set_fontweight(value["weight"])
-        text.set_fontstyle(value["style"])
-        text.set_fontstretch(value["stretch"])
-        text.set_fontvariant(value["variant"])
-        text.set_color(value["color"])
+    apply_font_spec(texts, value)
 
 
 def _legend_write_draggable(controller, target, spec, value):

@@ -1,6 +1,7 @@
 import os
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -384,6 +385,244 @@ class CommandGalleryTests(unittest.TestCase):
         finally:
             theme.shutdown()
             reset_theme_runtime_for_tests()
+
+
+class CreationDialogCoverageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_chart_and_element_dialogs_construct_and_keep_session_errors(self):
+        from main import MainWindow
+        from mygui import status_messages
+        from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
+            PyContourDialog,
+            PyCurveDialog,
+            PyFitDialog,
+            PyHeatmapDialog,
+            PyInterpolationDialog,
+            PyPlotDialog,
+            PyPseudocolorDialog,
+            PyScatterDialog,
+            _show_batch_creation_result,
+            _show_creation_result,
+        )
+        from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import (
+            PyAnnotationDialog,
+            PyColorbarDialog,
+            PyReferenceBandDialog,
+            PyReferenceLineDialog,
+            PyReferenceMarksDialog,
+            PySecondaryAxisDialog,
+        )
+        from tests.axes_helpers import create_regular_axes
+
+        window = MainWindow()
+        window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="DialogCoverage",
+        )
+        canvas = window.figure_window.current_canva
+        create_regular_axes(canvas)
+        dialogs = []
+        try:
+            dialogs = [
+                PyAnnotationDialog("Annotation", window.figure_window),
+                PyColorbarDialog("Colorbar", window.figure_window),
+                PyInAxesDialog("in_axes", window.figure_window),
+                PySecondaryAxisDialog("Secondary Axis", window.figure_window),
+                PyReferenceLineDialog("Reference Line", window.figure_window),
+                PyReferenceBandDialog("Reference Band", window.figure_window),
+                PyTextDialog("Text", window.figure_window),
+                PyPlotDialog("Plot", window.figure_window),
+                PyCurveDialog("Curve", window.figure_window),
+                PyPseudocolorDialog("Pseudocolor", window.figure_window),
+                PyHeatmapDialog("Heatmap", window.figure_window),
+                PyContourDialog("Contour", window.figure_window),
+            ]
+            for dialog in dialogs:
+                dialog.reject()
+
+            shown = []
+            bare = MainWindow()
+            try:
+                bare.figure_window.add_figure(
+                    width=4,
+                    height=3,
+                    dpi=100,
+                    style="default",
+                    canva_name="NoAxes",
+                )
+                missing_axes = [
+                    PyAnnotationDialog("Annotation", bare.figure_window),
+                    PyColorbarDialog("Colorbar", bare.figure_window),
+                ]
+                with patch.object(status_messages, "show_warning", shown.append):
+                    for dialog in missing_axes:
+                        dialog.accept()
+                self.assertTrue(shown)
+                for dialog in missing_axes:
+                    dialog.close()
+            finally:
+                bare.close()
+                self.app.processEvents()
+
+            with patch.object(canvas, "add_annotation_from_input", side_effect=ValueError("boom")):
+                with patch.object(status_messages, "show_error") as error:
+                    dialog = PyAnnotationDialog("Annotation", window.figure_window)
+                    dialog.accept()
+                    dialog.close()
+                error.assert_called_once()
+                self.assertEqual(error.call_args[0][0], "boom")
+
+            text = PyTextDialog("Text", window.figure_window)
+            text.text_edit.setText("hello")
+            text.accept()
+            text.close()
+            text.global_button.setChecked(True)
+            text = PyTextDialog("Text", window.figure_window)
+            text.global_button.setChecked(True)
+            text.text_edit.setText("figure text")
+            text.accept()
+            text.close()
+
+            annotation = PyAnnotationDialog("Annotation", window.figure_window)
+            with patch.object(canvas, "add_annotation_from_input", return_value="ann"):
+                annotation.accept()
+            annotation.close()
+
+            in_axes = PyInAxesDialog("in_axes", window.figure_window)
+            with patch.object(canvas, "add_in_axes", return_value="inset"):
+                in_axes.accept()
+            in_axes.close()
+
+            secondary = PySecondaryAxisDialog("Secondary Axis", window.figure_window)
+            with patch.object(canvas, "add_secondary_axis", return_value="sec"):
+                secondary.accept()
+            secondary.close()
+
+            line = PyReferenceLineDialog("Reference Line", window.figure_window)
+            with patch.object(canvas, "add_reference_line", return_value="line"):
+                line.accept()
+            line.close()
+
+            band = PyReferenceBandDialog("Reference Band", window.figure_window)
+            with patch.object(canvas, "add_reference_band", return_value="band"):
+                band.accept()
+            band.close()
+
+            plot = PyPlotDialog("Plot", window.figure_window)
+            with patch.object(canvas, "add_plots", return_value=SimpleNamespace(
+                component_ids=("p1",),
+                excluded_counts=(0,),
+            )):
+                plot.accept()
+            plot.close()
+
+            curve = PyCurveDialog("Curve", window.figure_window)
+            with patch.object(canvas, "add_curve", return_value="curve"):
+                curve.accept()
+            curve.close()
+
+            from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+                creation_defaults,
+                palette_selection,
+                settings_snapshot,
+            )
+
+            scatter = PyScatterDialog("Scatter", window.figure_window)
+            with patch.object(canvas, "add_scatters", return_value=SimpleNamespace(
+                component_ids=("s1", "s2"),
+                excluded_counts=(1, 0),
+            )):
+                scatter.accept()
+            scatter.reject()
+            scatter.close()
+
+            fit = PyFitDialog("Fit", window.figure_window)
+            with patch(
+                "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+            ), patch.object(canvas, "add_fit_curve", return_value="fit"):
+                fit.accept()
+            fit.reject()
+            fit.close()
+
+            interpolation = PyInterpolationDialog(
+                "Interpolation", window.figure_window
+            )
+            with patch.object(
+                canvas,
+                "add_interpolate_curves",
+                return_value=SimpleNamespace(
+                    component_ids=("i1",),
+                    excluded_counts=(0,),
+                ),
+            ):
+                interpolation.accept()
+            interpolation.reject()
+            interpolation.close()
+
+            for dialog_type, adder in (
+                (PyPseudocolorDialog, "add_pseudocolor"),
+                (PyHeatmapDialog, "add_heatmap"),
+                (PyContourDialog, "add_contour"),
+            ):
+                field = dialog_type(dialog_type.DISPLAY_NAME, window.figure_window)
+                with patch(
+                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                ), patch.object(
+                    field.data_reference_input, "get_x_ref", return_value="x"
+                ), patch.object(
+                    field.data_reference_input, "get_y_ref", return_value="y"
+                ), patch.object(
+                    field.data_reference_input, "get_z_ref", return_value="z"
+                ), patch.object(canvas, adder, return_value="field"):
+                    field.accept()
+                missing = dialog_type(dialog_type.DISPLAY_NAME, window.figure_window)
+                with patch(
+                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                ) as warning:
+                    missing.accept()
+                    warning.assert_called()
+                missing.reject()
+                missing.close()
+
+            marks = PyReferenceMarksDialog(
+                "Reflection Positions", window.figure_window
+            )
+            with patch.object(
+                canvas, "add_reference_marks", return_value="marks"
+            ):
+                marks.accept()
+            marks.close()
+
+            colorbar = PyColorbarDialog("Colorbar", window.figure_window)
+            with patch.object(
+                colorbar.input, "source_component_id", return_value="src"
+            ), patch.object(canvas, "add_colorbar", return_value="cb"):
+                colorbar.accept()
+            colorbar.close()
+            _show_creation_result("Plot", SimpleNamespace(excluded_count=0))
+            _show_creation_result("Plot", SimpleNamespace(excluded_count=2))
+            _show_batch_creation_result(
+                "Plot",
+                SimpleNamespace(component_ids=("a",), excluded_counts=(0,)),
+            )
+            _show_batch_creation_result(
+                "Plot",
+                SimpleNamespace(component_ids=("a", "b"), excluded_counts=(1, 0)),
+            )
+            self.assertIsNotNone(creation_defaults(window.figure_window))
+            self.assertIsNotNone(palette_selection(window.figure_window))
+            settings_snapshot(window.figure_window)
+        finally:
+            for dialog in dialogs:
+                dialog.close()
+            window.close()
+            self.app.processEvents()
 
 
 class LazySettingsDialogTests(unittest.TestCase):

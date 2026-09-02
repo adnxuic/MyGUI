@@ -51,12 +51,15 @@ from mygui.widgets.figure_canvas.creation_requests import (
     SecondaryAxisElementRequest,
     TextCreateRequest,
 )
+from mygui.widgets.figure_canvas.canvas_host import (
+    CanvasRegistrationHost,
+    CanvasSelectionHost,
+)
 
 
-class ElementCreationHost(Protocol):
-    """Canvas surface used by element staging; the host remains state authority."""
+class ElementCreationHost(CanvasRegistrationHost, CanvasSelectionHost, Protocol):
+    """Element staging extras on top of the narrow Canvas helper slices."""
 
-    component_registry: Any
     component_style: str
     current_axes: Any
     current_axes_component_id: str | None
@@ -79,27 +82,6 @@ class ElementCreationHost(Protocol):
     repository: Any
     project_id: str
 
-    def _next_child_order(self, parent_id: str, *, kind: Any = None) -> int:
-        ...
-
-    def _prepare_created_component(self, controller: Any, transaction: Any) -> None:
-        ...
-
-    def _finish_created_component(self, controller: Any) -> None:
-        ...
-
-    def _select_created_component(self, controller: Any) -> None:
-        ...
-
-    def _remove_created_artist(self, artist: Any) -> None:
-        ...
-
-    def _claim_color_order(self, preferred: int | None = None) -> int:
-        ...
-
-    def _register_text_controller(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
     def _resolve_text_usetex(self, usetex: bool | None) -> bool:
         ...
 
@@ -115,13 +97,7 @@ class ElementCreationHost(Protocol):
     def add_annotation_from_input(self, *args: Any, **kwargs: Any) -> Any:
         ...
 
-    def select_component(self, component_id: str) -> None:
-        ...
-
     def _focus_annotation_editor(self, component_id: str) -> None:
-        ...
-
-    def redraw(self) -> None:
         ...
 
 

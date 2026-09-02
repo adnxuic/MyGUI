@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 import re
 from typing import Any
@@ -507,6 +509,49 @@ def migrate_v6_template_to_v7(value: Any) -> ChartTemplate:
     return parse_template(migrated)
 
 
+@dataclass(frozen=True, slots=True)
+class TemplateSchemaHop:
+    """One strict hop in the template v1-v7 migration table."""
+
+    source_version: int
+    target_version: int
+    migrate: Callable[[Any], Any]
+
+
+TEMPLATE_SCHEMA_HOPS: tuple[TemplateSchemaHop, ...] = (
+    TemplateSchemaHop(
+        TEMPLATE_SCHEMA_V1_VERSION,
+        TEMPLATE_SCHEMA_V2_VERSION,
+        migrate_v1_template_to_v2,
+    ),
+    TemplateSchemaHop(
+        TEMPLATE_SCHEMA_V2_VERSION,
+        TEMPLATE_SCHEMA_V3_VERSION,
+        migrate_v2_template_to_v3,
+    ),
+    TemplateSchemaHop(
+        TEMPLATE_SCHEMA_V3_VERSION,
+        TEMPLATE_SCHEMA_V4_VERSION,
+        migrate_v3_template_to_v4,
+    ),
+    TemplateSchemaHop(
+        TEMPLATE_SCHEMA_V4_VERSION,
+        TEMPLATE_SCHEMA_V5_VERSION,
+        migrate_v4_template_to_v5,
+    ),
+    TemplateSchemaHop(
+        TEMPLATE_SCHEMA_V5_VERSION,
+        TEMPLATE_SCHEMA_V6_VERSION,
+        migrate_v5_template_to_v6,
+    ),
+    TemplateSchemaHop(
+        TEMPLATE_SCHEMA_V6_VERSION,
+        TEMPLATE_SCHEMA_VERSION,
+        migrate_v6_template_to_v7,
+    ),
+)
+
+
 def _finish_v5_migration(template: ChartTemplate) -> ChartTemplate:
     migrated_v6 = migrate_v5_template_to_v6(
         _template_to_dict_version(template, version=TEMPLATE_SCHEMA_V5_VERSION)
@@ -524,37 +569,22 @@ def parse_template_record(value: Any) -> ChartTemplate:
         and value.get("schema") == TEMPLATE_SCHEMA_NAME
         and type(value.get("schema_version")) is int
     ):
-        if value["schema_version"] == TEMPLATE_SCHEMA_V1_VERSION:
-            return _finish_v5_migration(
-                migrate_v4_template_to_v5(
-                    migrate_v3_template_to_v4(
-                        migrate_v2_template_to_v3(
-                            migrate_v1_template_to_v2(value)
-                        )
-                    )
+        current: Any = value
+        version = current["schema_version"]
+        for hop in TEMPLATE_SCHEMA_HOPS:
+            if hop.source_version < version:
+                continue
+            if hop.source_version != version:
+                break
+            payload = current
+            if isinstance(current, ChartTemplate):
+                payload = _template_to_dict_version(
+                    current, version=hop.source_version
                 )
-            )
-        if value["schema_version"] == TEMPLATE_SCHEMA_V2_VERSION:
-            return _finish_v5_migration(
-                migrate_v4_template_to_v5(
-                    migrate_v3_template_to_v4(migrate_v2_template_to_v3(value))
-                )
-            )
-        if value["schema_version"] == TEMPLATE_SCHEMA_V3_VERSION:
-            return _finish_v5_migration(
-                migrate_v4_template_to_v5(migrate_v3_template_to_v4(value))
-            )
-        if value["schema_version"] == TEMPLATE_SCHEMA_V4_VERSION:
-            return _finish_v5_migration(migrate_v4_template_to_v5(value))
-        if value["schema_version"] == TEMPLATE_SCHEMA_V5_VERSION:
-            migrated = migrate_v5_template_to_v6(value)
-            return migrate_v6_template_to_v7(
-                _template_to_dict_version(
-                    migrated, version=TEMPLATE_SCHEMA_V6_VERSION
-                )
-            )
-        if value["schema_version"] == TEMPLATE_SCHEMA_V6_VERSION:
-            return migrate_v6_template_to_v7(value)
+            current = hop.migrate(payload)
+            version = hop.target_version
+        if isinstance(current, ChartTemplate):
+            return current
     return parse_template(value)
 
 

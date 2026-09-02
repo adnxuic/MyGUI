@@ -105,6 +105,12 @@ class EditorRegistry:
         self._frozen = True
 
     @property
+    def profile_keys(self) -> frozenset[EditorKey]:
+        """Return the exact registered production EditorProfile keys."""
+
+        return frozenset(self._profiles)
+
+    @property
     def frozen(self) -> bool:
         return self._frozen
 

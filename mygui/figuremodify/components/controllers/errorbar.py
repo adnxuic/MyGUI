@@ -37,6 +37,7 @@ from ._helpers import (
     _nonnegative,
     _normalize_color,
     _read_color,
+    apply_data_component_mutation,
 )
 from mygui.database import DataPreprocessSpec
 
@@ -560,13 +561,7 @@ class ErrorBarController(ComponentController[Any]):
     ) -> ComponentChange:
         """Apply data and drawable arrays as one Controller transaction."""
 
-        return self.apply_mutation(
-            ComponentMutation(
-                self.component_id,
-                data=data,
-                runtime_data=drawable,
-            )
-        )
+        return apply_data_component_mutation(self, data, drawable=drawable)
 
     def _properties_require_data_apply(
         self, property_patch: dict[str, Any]

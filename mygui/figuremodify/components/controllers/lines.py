@@ -26,7 +26,6 @@ from ..errors import ComponentValidationError
 from ..models import (
     ComponentChange,
     ComponentKind,
-    ComponentMutation,
     ComponentRole,
     ComponentState,
     DeletionPolicy,
@@ -53,6 +52,7 @@ from ._helpers import (
     _column_reference,
     _finite_number,
     _exact_data_fields,
+    apply_data_component_mutation,
 )
 
 class LineController(ComponentController[Line2D]):
@@ -534,13 +534,7 @@ class LineController(ComponentController[Line2D]):
     ) -> ComponentChange:
         """Apply role data."""
 
-        return self.apply_mutation(
-            ComponentMutation(
-                self.component_id,
-                data=data,
-                runtime_data=drawable,
-            )
-        )
+        return apply_data_component_mutation(self, data, drawable=drawable)
 
     def set_xy_data(
         self,

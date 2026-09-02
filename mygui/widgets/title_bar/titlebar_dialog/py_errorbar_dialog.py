@@ -39,6 +39,7 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
 from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+    CreationDialogSession,
     creation_defaults as _creation_defaults,
     new_line_appearance_input as _new_line_appearance_input,
     palette_selection as _palette_selection,
@@ -456,8 +457,9 @@ class PyErrorBarDialog(QDialog):
             return
 
         values = self.style_group.values()
-        try:
-            runtime = self.figure_window.current_canva.add_errorbar(
+        session = CreationDialogSession(self, self.figure_window)
+        outcome = session.run(
+            lambda: session.canvas.add_errorbar(
                 self.data_reference_input.get_x_ref(),
                 self.data_reference_input.get_y_ref(),
                 self.label_input.text(),
@@ -488,10 +490,10 @@ class PyErrorBarDialog(QDialog):
                 xuplims=values["xuplims"],
                 barsabove=values["barsabove"],
             )
-        except Exception as exc:
-            status_messages.show_error(str(exc))
+        )
+        if not outcome:
             return
-        del runtime
+        del outcome
         self.figure_window.color_library.record_recent(self.color_input.color())
         self.figure_window.color_library.record_recent(values["ecolor"])
         alternate = values["markerfacecoloralt"]

@@ -55,6 +55,10 @@ from mygui.widgets.figure_canvas.creation_requests import (
     ScatterBatchCreateRequest,
     ScatterCreateRequest,
 )
+from mygui.widgets.figure_canvas.canvas_host import (
+    CanvasRegistrationHost,
+    CanvasSelectionHost,
+)
 
 import numpy as np
 
@@ -97,47 +101,19 @@ class PreparedErrorBarSeries:
     excluded_count: int
 
 
-class ChartCreationHost(Protocol):
-    """Canvas surface used by the stager; the host remains state authority."""
+class ChartCreationHost(CanvasRegistrationHost, CanvasSelectionHost, Protocol):
+    """Chart staging extras on top of the narrow Canvas helper slices."""
 
     project_id: str
     repository: Any
     current_axes_component_id: str | None
     current_axes: Any
     current_axes_controller: Any
-    component_registry: Any
     axes_commands: Any
     chart_data_service: Any
     color_consumption_ledger: Any
     color_library: Any
     component_style: str
-
-    def _remove_created_artist(self, artist: Any) -> None:
-        ...
-
-    def _claim_color_order(self, preferred: int | None = None) -> int:
-        ...
-
-    def _register_chart_controller(
-        self,
-        controller_type: Any,
-        component_id: str,
-        role: ComponentRole,
-        artist: Any,
-        order: int,
-        properties: dict[str, Any],
-        data: dict[str, Any],
-    ) -> Any:
-        ...
-
-    def _prepare_created_component(self, controller: Any, transaction: Any) -> None:
-        ...
-
-    def _select_created_component(self, controller: Any) -> None:
-        ...
-
-    def redraw(self) -> None:
-        ...
 
 
 class ChartCreationStager:

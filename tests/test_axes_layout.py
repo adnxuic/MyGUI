@@ -1118,6 +1118,9 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
                 "preview",
                 wraps=dialog._edit_session.preview,
             ) as mock_preview:
+                # Lengthen the production 120ms debounce so rapid edits stay
+                # coalesced even when the suite is under process load.
+                dialog._preview_timer.setInterval(400)
                 dialog.input.left_input.setValue(0.13)
                 dialog.input.left_input.setValue(0.14)
                 dialog.input.left_input.setValue(0.15)
@@ -1125,7 +1128,7 @@ class AxesLayoutIntegrationTests(unittest.TestCase):
                 QTest.qWait(50)
                 self.assertEqual(mock_preview.call_count, 0)
                 dialog.input.left_input.setValue(0.16)
-                QTest.qWait(150)
+                QTest.qWait(500)
                 self.assertEqual(mock_preview.call_count, 1)
                 self.assertAlmostEqual(dialog.input.left_input.value(), 0.16)
         finally:

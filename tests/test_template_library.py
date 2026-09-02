@@ -5,13 +5,14 @@ import unittest
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QShowEvent
-from PySide6.QtWidgets import QApplication, QPlainTextEdit
+from PySide6.QtWidgets import QApplication, QDialog, QPlainTextEdit
 
 from main import MainWindow
 from mygui.database import ColumnRef, ColumnType, scipy_fit_adapter
@@ -954,6 +955,293 @@ class TemplateSettingsIntegrationTests(unittest.TestCase):
             finally:
                 window.close()
                 self.app.processEvents()
+
+
+class TemplateWorkflowDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.window = MainWindow()
+        self.window.figure_window.add_figure(
+            width=4,
+            height=3,
+            dpi=100,
+            style="default",
+            canva_name="Workflow Project",
+        )
+        self.canvas = self.window.figure_window.current_canva
+        create_regular_axes(self.canvas)
+        sheet = self.window.table.current_subtable().get_table(0).table_model.sheet
+        sheet.columns[0].name = "X"
+        sheet.columns[1].name = "Y"
+        sheet.set_block(0, 0, [[0, 1], [1, 3], [2, 5], [3, 7]])
+        x_ref = ColumnRef(self.canvas.project_id, sheet.id, sheet.columns[0].id)
+        y_ref = ColumnRef(self.canvas.project_id, sheet.id, sheet.columns[1].id)
+        pair = self.window.repository.line_pair(x_ref, y_ref)
+        self.canvas.add_plot(pair.x, pair.y, "-", 2, "black", "Observed", x_ref, y_ref)
+        self.library = TemplateLibrary(Path(self.temp.name) / "templates")
+        self.window.template_workflow.library = self.library
+        self.template = TemplateExtractor(self.window.repository).extract(
+            self.canvas, name="Workflow Template", notes="Reusable"
+        )
+        self.library.save(self.template)
+
+    def tearDown(self):
+        self.window.close()
+        self.app.processEvents()
+        self.temp.cleanup()
+
+    def test_extract_dialog_inserts_tokens_and_rejects_empty_names(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        dialog = TemplateExtractDialog(self.template)
+        try:
+            self.assertGreater(dialog.text_table.rowCount(), 0)
+            dialog.text_table.clearSelection()
+            dialog._insert_token()
+            dialog.text_table.setCurrentCell(0, 2)
+            before = dialog.text_table.item(0, 2).text()
+            dialog._insert_token()
+            self.assertTrue(dialog.text_table.item(0, 2).text().startswith(before))
+            dialog._insert_token()
+            dialog.name_edit.setText("   ")
+            with mock.patch.object(QMessageBox, "warning") as warning:
+                dialog._validate_and_accept()
+            warning.assert_called_once()
+            self.assertNotEqual(dialog.result(), QDialog.DialogCode.Accepted)
+        finally:
+            dialog.close()
+
+    def test_apply_dialog_guards_steps_and_empty_project_name(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        dialog = TemplateApplyDialog(self.window.template_workflow)
+        try:
+            with mock.patch(
+                "mygui.widgets.template_workflow.QFileDialog.getOpenFileName",
+                return_value=("", ""),
+            ):
+                dialog._choose_data()
+            dialog._cancelled.set()
+            dialog._prepared(object())
+            dialog._prepare_failed("cancelled")
+            dialog._cancelled.clear()
+            dialog._prepare_failed("prepare failed")
+            dialog._filter_templates("zzz-missing")
+            hidden = [
+                dialog.template_list.item(index).isHidden()
+                for index in range(dialog.template_list.count())
+            ]
+            self.assertTrue(all(hidden))
+            dialog._filter_templates("")
+            dialog._next()
+            self.assertEqual(dialog.steps.currentIndex(), 1)
+            with mock.patch.object(QMessageBox, "warning") as warning:
+                dialog._next()
+            warning.assert_called_once()
+            self.assertIn("preview", warning.call_args[0][2].casefold())
+            dialog._back()
+            self.assertEqual(dialog.steps.currentIndex(), 0)
+            dialog._template = None
+            with mock.patch.object(QMessageBox, "warning") as warning:
+                dialog._next()
+            warning.assert_called_once()
+            dialog._populate_templates()
+            dialog.steps.setCurrentIndex(2)
+            dialog._sync_buttons()
+            self.assertEqual(dialog.next_button.text(), "Create Project")
+            dialog.project_name_edit.clear()
+            dialog._source_file = Path("data.csv")
+            dialog._specs = imported_specs()
+            with mock.patch.object(QMessageBox, "warning") as warning:
+                dialog._start_processing()
+            warning.assert_called_once()
+            self.assertIn("project name", warning.call_args[0][2].casefold())
+            dialog._processing = True
+            dialog._back()
+            self.assertEqual(dialog.steps.currentIndex(), 2)
+            dialog.reject()
+        finally:
+            dialog.close()
+
+    def test_extract_reports_extractor_failures_without_saving(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        with mock.patch.object(
+            self.window.template_workflow.extractor,
+            "extract",
+            side_effect=ValueError("cannot extract"),
+        ):
+            with mock.patch.object(QMessageBox, "warning") as warning:
+                result = self.window.template_workflow.open_extract(self.window)
+        self.assertIsNone(result)
+        warning.assert_called_once()
+        self.assertIn("cannot extract", warning.call_args[0][2])
+
+    def test_workflow_requires_a_figure_before_extract(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        empty = MainWindow()
+        try:
+            empty.template_workflow.library = self.library
+            with mock.patch.object(QMessageBox, "warning") as warning:
+                result = empty.template_workflow.open_extract(empty)
+            self.assertIsNone(result)
+            warning.assert_called_once()
+        finally:
+            empty.close()
+            self.app.processEvents()
+
+    def test_apply_dialog_mapping_prepare_and_publish_paths(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        dialog = TemplateApplyDialog(
+            self.window.template_workflow,
+            template_id=self.template.metadata.id,
+        )
+        csv_path = Path(self.temp.name) / "source.csv"
+        csv_path.write_text("X,Y\n1,2\n", encoding="utf-8")
+        try:
+            with mock.patch.object(QMessageBox, "warning"):
+                self.assertIsNotNone(dialog.template_list.currentItem())
+                dialog._filter_templates("workflow")
+                dialog._filter_templates("")
+                dialog._template_selected(None)
+                dialog._populate_templates()
+                with mock.patch(
+                    "mygui.widgets.template_workflow.QFileDialog.getOpenFileName",
+                    return_value=(str(csv_path), ""),
+                ), mock.patch(
+                    "mygui.widgets.template_workflow.read_text_source",
+                    return_value=object(),
+                ), mock.patch(
+                    "mygui.widgets.template_workflow.TextImportDialog",
+                ) as preview_type:
+                    preview = preview_type.return_value
+                    preview.exec.return_value = QDialog.Rejected
+                    dialog._choose_data()
+                    preview.exec.return_value = QDialog.Accepted
+                    preview.specs.return_value = []
+                    dialog._choose_data()
+                    preview.specs.return_value = imported_specs()
+                    dialog._choose_data()
+                self.assertEqual(dialog._source_file, csv_path)
+                self.assertTrue(dialog._prepare_mapping())
+                mapping = dialog._explicit_mapping()
+                self.assertTrue(mapping)
+                dialog._refresh_mapping_table()
+                dialog._clear_mapping_form()
+                dialog._refresh_mapping_table()
+                xlsx_path = Path(self.temp.name) / "source.xlsx"
+                xlsx_path.write_bytes(b"fake")
+                with mock.patch(
+                    "mygui.widgets.template_workflow.QFileDialog.getOpenFileName",
+                    return_value=(str(xlsx_path), ""),
+                ), mock.patch(
+                    "mygui.widgets.template_workflow.read_excel_workbook",
+                    return_value=object(),
+                ), mock.patch(
+                    "mygui.widgets.template_workflow.ExcelImportDialog",
+                ) as excel_type:
+                    excel = excel_type.return_value
+                    excel.exec.return_value = QDialog.Accepted
+                    excel.specs.return_value = imported_specs()
+                    dialog._choose_data()
+                with mock.patch(
+                    "mygui.widgets.template_workflow.QFileDialog.getOpenFileName",
+                    return_value=(str(csv_path), ""),
+                ), mock.patch(
+                    "mygui.widgets.template_workflow.read_text_source",
+                    side_effect=RuntimeError("cannot open"),
+                ):
+                    dialog._choose_data()
+
+                def run_prepare(owner, func, on_finished, on_failed, *args, **kwargs):
+                    on_finished(SimpleNamespace(ok=True))
+
+                dialog._template = self.template
+                dialog._source_file = csv_path
+                dialog._specs = imported_specs()
+                dialog._prepare_mapping()
+                with mock.patch(
+                    "mygui.widgets.template_workflow.start_background_task",
+                    side_effect=run_prepare,
+                ), mock.patch.object(
+                    dialog.workflow.apply_service,
+                    "publish",
+                    side_effect=RuntimeError("publish failed"),
+                ):
+                    dialog.project_name_edit.setText("Applied")
+                    dialog._start_processing()
+                self.assertFalse(dialog._processing)
+                with mock.patch(
+                    "mygui.widgets.template_workflow.start_background_task",
+                    side_effect=lambda *_args, **_kwargs: None,
+                ), mock.patch.object(
+                    TemplateMatcher,
+                    "match",
+                    return_value=SimpleNamespace(
+                        valid=False, diagnostics=("bad map",)
+                    ),
+                ):
+                    dialog._start_processing()
+                dialog._cancelled.set()
+                dialog._prepared(object())
+                dialog._prepare_failed("ignored")
+                dialog._cancelled.clear()
+                with mock.patch.object(
+                    dialog.workflow.apply_service,
+                    "publish",
+                ) as publish:
+                    dialog._prepared(object())
+                publish.assert_called_once()
+                self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+        finally:
+            dialog.close()
+
+    def test_workflow_open_apply_and_extract_success(self):
+        workflow = self.window.template_workflow
+        created = workflow.create_apply_dialog(
+            self.window, template_id=self.template.metadata.id
+        )
+        created.close()
+        with mock.patch.object(
+            TemplateApplyDialog, "exec", return_value=QDialog.DialogCode.Accepted
+        ):
+            self.assertEqual(
+                workflow.open_apply(self.window),
+                int(QDialog.DialogCode.Accepted),
+            )
+        with mock.patch.object(
+            TemplateExtractDialog, "exec", return_value=QDialog.DialogCode.Rejected
+        ):
+            self.assertIsNone(workflow.open_extract(self.window))
+        with mock.patch.object(
+            TemplateExtractDialog, "exec", return_value=QDialog.DialogCode.Accepted
+        ), mock.patch.object(
+            TemplateExtractDialog,
+            "result_template",
+            return_value=self.template,
+        ):
+            saved = workflow.open_extract(self.window, existing=self.template)
+        self.assertEqual(saved.metadata.id, self.template.metadata.id)
+        with mock.patch.object(
+            workflow.extractor,
+            "extract",
+            return_value=self.template,
+        ), mock.patch.object(
+            TemplateExtractDialog, "exec", return_value=QDialog.DialogCode.Accepted
+        ), mock.patch.object(
+            TemplateExtractDialog,
+            "result_template",
+            side_effect=ValueError("bad save"),
+        ), mock.patch(
+            "mygui.widgets.template_workflow.QMessageBox.warning"
+        ):
+            self.assertIsNone(workflow.open_extract(self.window))
 
 
 if __name__ == "__main__":

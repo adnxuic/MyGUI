@@ -34,7 +34,6 @@ from ..errors import ComponentValidationError
 from ..matplotlib_removal import MATPLOTLIB_REMOVAL, Field2DRemovalHandle
 from ..models import (
     ComponentKind,
-    ComponentMutation,
     ComponentRole,
     ComponentState,
     DeletionPolicy,
@@ -50,6 +49,7 @@ from ._helpers import (
     _column_reference,
     _exact_data_fields,
     _nonnegative,
+    apply_data_component_mutation,
 )
 
 _FIELD_EXPORT_PROPERTIES = tuple(
@@ -279,14 +279,10 @@ class Field2DController(ComponentController[Field2DRuntime]):
         *,
         drawable: Field2DData | None = None,
     ):
-        return self.apply_mutation(
-            ComponentMutation(
-                self.component_id,
-                data=data,
-                runtime_data=(
-                    drawable if drawable is not None else KEEP_RUNTIME_DATA
-                ),
-            )
+        return apply_data_component_mutation(
+            self,
+            data,
+            drawable=(drawable if drawable is not None else KEEP_RUNTIME_DATA),
         )
 
 

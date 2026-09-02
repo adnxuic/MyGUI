@@ -18,72 +18,16 @@ from mygui.figuremodify.in_axes import (
     ZoomInAxesCreateSpec,
 )
 from mygui.widgets.figure_canvas.component_materializers import ComponentMaterializer
+from mygui.widgets.figure_canvas.canvas_host import CanvasCreationHost
 
 
-class CanvasMaterializeHost(Protocol):
-    """Canvas surface used by restore materializers."""
+class CanvasMaterializeHost(CanvasCreationHost, Protocol):
+    """Restore handlers on top of the public Canvas creation surface."""
 
     component_registry: Any
     repository: Any
     root_component_id: str
     component_materializers: Any
-
-    def add_in_axes(self, spec: Any, *, object_id: str | None = None) -> Any:
-        ...
-
-    def add_curve(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_component_line(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_plot(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_scatter(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_errorbar(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_pseudocolor(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_heatmap(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_contour(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_colorbar(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_secondary_axis(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_reference_marks(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_reference_line(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_reference_band(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_interpolate_curve(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_fit_curve(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_text(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_global_text(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    def add_annotation(self, *args: Any, **kwargs: Any) -> Any:
-        ...
 
     def _materialize_zoom_in_axes(self, state: Any, _transaction: Any) -> None:
         ...

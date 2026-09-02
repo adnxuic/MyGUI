@@ -35,8 +35,14 @@ before any Table or Figure state is published; v4-v9 remain unsupported.
 Closed composite contracts reject unknown keys, non-finite values, invalid
 kind/parameter combinations, callables, Matplotlib objects, and runtime state.
 Schema-v23 parent and selector checks are a closed `(ComponentKind,
-ComponentRole)` validator table covering every Controller key exactly. The
-version, migration order, error types, and serialized bytes stay the same.
+ComponentRole)` validator table covering every Controller key exactly. Version-
+specific component introduction and compatibility contracts live in the
+internal immutable `FigureSchemaPolicy` table for schema v10-v23. Controller
+contracts, tree structure, relations, data references, and version specials
+are independent pure validators composed by one orchestrator; public
+`normalize_v10_figure`–`normalize_v23_figure` and `validate_v10_figure`–
+`validate_v23_figure` names and signatures stay stable. The version, migration
+order, error types, and serialized bytes stay the same.
 
 Any later persisted field, renamed key, kind/role, selector, or wire-shape
 change requires a dedicated schema migration task. That task defines migration
@@ -100,7 +106,9 @@ directory, resolved independently of the process CWD, and are not project
 files or QSettings. The library is absent until an explicit save, import, or
 Open Folder action. Writes use a sibling temporary file plus atomic
 replacement; corrupt records remain visible to management UI but are excluded
-from application choices.
+from application choices. Template schema v1-v7 hops execute from a closed
+per-version migration table; each hop still strictly validates its predecessor
+and successor without changing migration content, error types, or output.
 
 The template Figure is a schema-v23 component-tree blueprint with template-
 local identities and logical ColumnRefs. It stores component configuration,

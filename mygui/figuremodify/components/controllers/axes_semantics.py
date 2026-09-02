@@ -60,6 +60,7 @@ from ._helpers import (
     _set_spine_bounds,
     _axis_name,
     _level,
+    apply_font_spec,
 )
 
 class AxisComponentController(ComponentController[Any]):
@@ -285,14 +286,7 @@ class AxisController(AxisComponentController):
             target.set_label_position(value)
             return
         if spec.key == "offset_font":
-            offset = target.get_offset_text()
-            offset.set_fontfamily(value["family"])
-            offset.set_fontsize(value["size"])
-            offset.set_fontweight(value["weight"])
-            offset.set_fontstyle(value["style"])
-            offset.set_fontstretch(value["stretch"])
-            offset.set_fontvariant(value["variant"])
-            offset.set_color(value["color"])
+            apply_font_spec([target.get_offset_text()], value)
             return
         if spec.key == "offset_visible":
             target.get_offset_text().set_visible(bool(value))

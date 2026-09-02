@@ -46,6 +46,19 @@ ADDITIONAL_FILE_COVERAGE_MIN = {
     "mygui/application_settings/storage/envelope.py": 85,
     "mygui/template_library/application.py": 80,
     "mygui/template_library/storage.py": 80,
+    "mygui/widgets/template_workflow.py": 80,
+    "mygui/widgets/title_bar/py_title_menu.py": 80,
+    "mygui/widgets/title_bar/titlebar_dialog/py_chart_dialog.py": 80,
+    "mygui/widgets/title_bar/titlebar_dialog/py_element_dialog.py": 80,
+    "mygui/widgets/title_bar/titlebar_dialog/creation_dialog_support.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/containers.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/sections/axes.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/spec_editor_base.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/spec_editors.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/spec_editors_axis.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/spec_editors_chart.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/spec_editors_field.py": 80,
+    "mygui/widgets/fig_control_window/component_editors/spec_editors_text.py": 80,
 }
 GLOBAL_COVERAGE_MIN = 80
 CRITICAL_COVERAGE_MIN = 90

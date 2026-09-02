@@ -59,6 +59,7 @@ from ._helpers import (
     reflection_placement_is_automatic,
     _column_reference,
     _exact_data_fields,
+    apply_data_component_mutation,
 )
 from .lines import LineController
 
@@ -1266,13 +1267,7 @@ class ScatterController(CollectionController):
     ) -> ComponentChange:
         """Apply role data."""
 
-        return self.apply_mutation(
-            ComponentMutation(
-                self.component_id,
-                data=data,
-                runtime_data=drawable,
-            )
-        )
+        return apply_data_component_mutation(self, data, drawable=drawable)
 
     def set_xy_data(
         self,

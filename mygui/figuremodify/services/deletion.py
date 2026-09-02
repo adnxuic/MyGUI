@@ -234,6 +234,12 @@ class DeletionHandlerRegistry:
             )
         self._handlers[key] = handler
 
+    @property
+    def keys(self) -> frozenset[tuple[ComponentKind, ComponentRole]]:
+        """Return the exact registered deletion-handler keys."""
+
+        return frozenset(self._handlers)
+
     def resolve(self, controller) -> DeletionHandler | None:
         state = controller.state
         return self._handlers.get((state.kind, state.role))

@@ -1,6 +1,11 @@
 """Qt-independent controllers for Matplotlib Figure components."""
 
 from .base import ComponentController, ControllerRuntimeMemento, RemovalHandle
+from .contract_audit import (
+    ComponentContractAuditRow,
+    audit_component_contracts,
+    require_complete_component_contracts,
+)
 from .controllers import (
     CONTROLLER_TYPES,
     LINESTYLE_ALIASES,
@@ -222,6 +227,9 @@ __all__ = [
     "normalize_reference_positions",
     "normalize_reflection_placement",
     "reflection_placement_is_automatic",
+    "ComponentContractAuditRow",
+    "audit_component_contracts",
+    "require_complete_component_contracts",
     "validate_controller_contracts",
     "register_figure_components",
 ]

@@ -59,13 +59,16 @@ from mygui.widgets.fig_control_window.component_editors import (
     AxisLocatorEditor,
     AxisScaleEditor,
     AxisTickSettingsDialog,
+    ColorMapSpecEditor,
     ComponentEditorBase,
     ComponentEditorManager,
     DebouncedTextBinding,
     EditorContext,
     EditorRegistry,
+    ErrorEveryEditor,
     FigureLayoutEditor,
     FontSpecEditor,
+    GridEdgeSpecEditor,
     InlineValueEditor,
     LegendAnchorEditor,
     LinePatternEditor,
@@ -73,6 +76,7 @@ from mygui.widgets.fig_control_window.component_editors import (
     MarkEveryEditor,
     MarkerSpecEditor,
     NamedNumberEditor,
+    NormSpecEditor,
     NullableDoubleEditor,
     NumberSequenceEditor,
     NumericTupleEditor,
@@ -85,6 +89,8 @@ from mygui.widgets.fig_control_window.component_editors import (
     StringListEditor,
     StructuredValueEditor,
     TextBoxEditor,
+    ContourLabelSpecEditor,
+    ContourLevelsSpecEditor,
     ZoomConnectorsEditor,
     MessagePresenter,
     register_production_profiles,
@@ -1447,6 +1453,116 @@ class ComponentEditorTests(unittest.TestCase):
             editor.close()
             context.editor_manager.close()
 
+    def test_axes_layout_section_handles_missing_geometry_and_layout_id(self):
+        from mygui.widgets.fig_control_window.component_editors.sections.axes import (
+            AxesLayoutSection,
+        )
+
+        state = SimpleNamespace(
+            data={
+                "subplot": {"row": 0, "column": 0, "layer": "primary"},
+                "geometry": {"mode": "grid"},
+            }
+        )
+        controller = SimpleNamespace(
+            component_id="axes-1",
+            state=state,
+            read_state=lambda: state,
+        )
+        context = SimpleNamespace(
+            axes_geometry=None,
+            axes_layout=None,
+            messages=SimpleNamespace(present=lambda *_args, **_kwargs: False),
+        )
+        section = AxesLayoutSection(controller, context=context)
+        try:
+            self.assertIs(section.editor("edit_button"), section.edit_button)
+            with self.assertRaises(KeyError):
+                section.editor("missing")
+            section.switch_to_manual()
+            section.return_to_grid()
+            section.reset_position()
+            section._apply_manual_bounds()
+            with patch(
+                "mygui.widgets.fig_control_window.component_editors.sections.axes.status_messages.show_error"
+            ) as error:
+                section.edit_layout()
+            error.assert_called_once()
+            section.sync_from_controller()
+            state.data["geometry"] = {
+                "mode": "manual",
+                "bounds": [0.1, 0.2, 0.3, 0.4],
+            }
+            state.data["subplot"]["share_x_group"] = "x"
+            state.data["subplot"]["share_y_group"] = "y"
+            state.data["subplot"]["layer"] = "right_y"
+            section.sync_from_controller()
+            self.assertTrue(section.manual_container.isVisibleTo(section))
+        finally:
+            section.dispose()
+            section.close()
+
+    def test_axes_layout_section_applies_geometry_and_opens_layout_dialog(self):
+        from mygui.widgets.fig_control_window.component_editors.sections.axes import (
+            AxesLayoutSection,
+        )
+
+        applied = []
+        state = SimpleNamespace(
+            data={
+                "subplot": {
+                    "row": 0,
+                    "column": 0,
+                    "layer": "primary",
+                    "layout_id": "layout-1",
+                },
+                "geometry": {"mode": "manual", "bounds": [0.1, 0.2, 0.3, 0.4]},
+            }
+        )
+        controller = SimpleNamespace(
+            component_id="axes-1",
+            state=state,
+            read_state=lambda: state,
+        )
+        geometry = SimpleNamespace(
+            set_manual_bounds=lambda *_args, **_kwargs: "bounds",
+            switch_to_manual=lambda *_args, **_kwargs: "manual",
+            return_to_grid=lambda *_args, **_kwargs: "grid",
+            reset_to_grid_bounds=lambda *_args, **_kwargs: "reset",
+            twin_group=lambda *_args, **_kwargs: (),
+        )
+        messages = SimpleNamespace(
+            present=lambda result, **_kwargs: applied.append(result) or True
+        )
+        context = SimpleNamespace(
+            axes_geometry=geometry,
+            axes_layout=SimpleNamespace(canvas=SimpleNamespace(figure_window=None)),
+            messages=messages,
+            history=None,
+            perform=None,
+        )
+        section = AxesLayoutSection(controller, context=context)
+        try:
+            section.switch_to_manual()
+            section.return_to_grid()
+            section.reset_position()
+            section.width_spin.setValue(0.95)
+            section._apply_manual_bounds()
+            messages.present = lambda *_args, **_kwargs: False
+            section.switch_to_manual()
+            section.return_to_grid()
+            section.reset_position()
+            section._apply_manual_bounds()
+            with patch(
+                "mygui.widgets.fig_control_window.component_editors.sections.axes.status_messages.show_error"
+            ) as error:
+                section.edit_layout()
+            error.assert_called()
+            self.assertIn("manual", applied)
+        finally:
+            section.dispose()
+            section.close()
+
 
 class ComponentSpecEditorTests(unittest.TestCase):
     @classmethod
@@ -2098,6 +2214,260 @@ class ComponentSpecEditorTests(unittest.TestCase):
                 )
         finally:
             editor.close()
+
+
+class CreationDialogSessionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_session_records_success_and_isolates_errors(self):
+        from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
+            CreationDialogSession,
+            CreationRunResult,
+        )
+
+        dialog = QWidget()
+        window = SimpleNamespace(current_canva=SimpleNamespace(marker="canvas"))
+        session = CreationDialogSession(dialog, window)
+        self.assertIs(session.canvas, window.current_canva)
+        ok = session.run(lambda: "created")
+        self.assertIsInstance(ok, CreationRunResult)
+        self.assertTrue(ok)
+        self.assertEqual(ok.value, "created")
+
+        shown = []
+        with patch.object(status_messages, "show_error", shown.append):
+            failed = session.run(lambda: (_ for _ in ()).throw(ValueError("nope")))
+        self.assertFalse(failed)
+        self.assertEqual(shown, ["nope"])
+
+        boxed = []
+        boxed_fail = session.run(
+            lambda: (_ for _ in ()).throw(ValueError("bad expr")),
+            errors=ValueError,
+            on_error=lambda exc: boxed.append(str(exc)),
+        )
+        self.assertFalse(boxed_fail)
+        self.assertEqual(boxed, ["bad expr"])
+        dialog.close()
+
+    def test_domain_spec_editors_open_and_cancel_without_mutating(self):
+        from mygui.figuremodify.components.property_values import (
+            DEFAULT_COLOR_MAP,
+            DEFAULT_CONTOUR_LABELS,
+            DEFAULT_CONTOUR_LEVELS,
+            DEFAULT_ERROR_EVERY,
+            DEFAULT_GRID_EDGE,
+            DEFAULT_NORM,
+        )
+        from mygui.widgets.fig_control_window.component_editors.spec_editors import (
+            AnnotationBoxEditor,
+            AxisFormatterEditor,
+            AxisLocatorEditor,
+            AxisScaleEditor,
+            FigureLayoutEditor,
+            MarkEveryEditor,
+            TextBoxEditor,
+        )
+
+        library = ColorLibrary()
+        font = {
+            "family": ["sans-serif"],
+            "size": 10.0,
+            "weight": "normal",
+            "style": "normal",
+            "stretch": "normal",
+            "variant": "normal",
+            "color": "#000000",
+        }
+        connectors = tuple(
+            {
+                "visible": True,
+                "color": "#808080",
+                "line_pattern": {"kind": "preset", "value": "-"},
+                "linewidth": 1.0,
+                "alpha": 0.5,
+                "zorder": 4.99,
+            }
+            for _index in range(4)
+        )
+        scatter_color = {
+            "enabled": False,
+            "cmap": "viridis",
+            "norm": {
+                "kind": "linear",
+                "params": {"vmin": None, "vmax": None, "clip": False},
+            },
+            "bad": "#00000000",
+            "under": None,
+            "over": None,
+            "nonfinite": "drop",
+        }
+        scatter_size = {
+            "enabled": False,
+            "input": None,
+            "output": [12.0, 120.0],
+            "clamp": True,
+        }
+        cases = (
+            FontSpecEditor(font, color_library=library),
+            ErrorEveryEditor(DEFAULT_ERROR_EVERY),
+            NormSpecEditor(DEFAULT_NORM),
+            ColorMapSpecEditor(DEFAULT_COLOR_MAP, color_library=library),
+            GridEdgeSpecEditor(DEFAULT_GRID_EDGE, color_library=library),
+            ContourLevelsSpecEditor(DEFAULT_CONTOUR_LEVELS),
+            ContourLabelSpecEditor(DEFAULT_CONTOUR_LABELS, color_library=library),
+            ScatterColorMapEditor(scatter_color, color_library=library),
+            ScatterSizeMapEditor(scatter_size),
+            ZoomConnectorsEditor(connectors, color_library=library),
+            AnnotationBoxEditor(
+                {
+                    "enabled": False,
+                    "style": "square",
+                    "facecolor": "#ffffff",
+                    "edgecolor": "#000000",
+                    "linewidth": 1.0,
+                    "alpha": 1.0,
+                    "padding": 0.4,
+                },
+                color_library=library,
+            ),
+            AxisScaleEditor({"kind": "linear", "params": {}}),
+            AxisLocatorEditor({"kind": "auto", "params": {}}),
+            AxisFormatterEditor(
+                {
+                    "kind": "percent",
+                    "params": {
+                        "xmax": 100.0,
+                        "decimals": 1,
+                        "symbol": "%",
+                        "is_latex": False,
+                    },
+                }
+            ),
+            FigureLayoutEditor({"kind": "none", "params": {}}),
+            MarkEveryEditor({"kind": "all"}),
+            TextBoxEditor({"enabled": False}, color_library=library),
+        )
+        try:
+            for editor in cases:
+                with self.subTest(editor=type(editor).__name__):
+                    before = editor.value()
+                    dialog = editor._dialog()
+                    try:
+                        dialog.reject()
+                    finally:
+                        dialog.close()
+                    self.assertEqual(editor.value(), before)
+        finally:
+            for editor in cases:
+                editor.close()
+
+    def test_field_spec_editors_write_every_supported_kind(self):
+        from mygui.figuremodify.components.property_values import (
+            DEFAULT_COLOR_MAP,
+            DEFAULT_CONTOUR_LABELS,
+            DEFAULT_CONTOUR_LEVELS,
+            DEFAULT_GRID_EDGE,
+            DEFAULT_NORM,
+        )
+
+        library = ColorLibrary()
+        kind_editors = (
+            NormSpecEditor(DEFAULT_NORM),
+            GridEdgeSpecEditor(DEFAULT_GRID_EDGE, color_library=library),
+            ContourLevelsSpecEditor(DEFAULT_CONTOUR_LEVELS),
+        )
+        other_editors = (
+            ColorMapSpecEditor(DEFAULT_COLOR_MAP, color_library=library),
+            ContourLabelSpecEditor(DEFAULT_CONTOUR_LABELS, color_library=library),
+        )
+        try:
+            for editor in kind_editors:
+                probe = editor._dialog()
+                kinds = [
+                    probe.kind_input.itemData(index)
+                    for index in range(probe.kind_input.count())
+                ]
+                probe.close()
+                for kind in kinds:
+                    with self.subTest(editor=type(editor).__name__, kind=kind):
+                        dialog = editor._dialog()
+                        try:
+                            dialog.kind_input.setCurrentIndex(
+                                dialog.kind_input.findData(kind)
+                            )
+                            if kind == "values" and hasattr(dialog, "values_input"):
+                                dialog.values_input.setPlainText("1 2 3 4")
+                            dialog._validate_and_accept()
+                            self.assertIsNotNone(dialog.value())
+                            self.assertEqual(dialog.value()["kind"], kind)
+                        finally:
+                            dialog.close()
+            for editor in other_editors:
+                with self.subTest(editor=type(editor).__name__):
+                    dialog = editor._dialog()
+                    try:
+                        dialog._validate_and_accept()
+                        self.assertFalse(dialog.error_label.isVisible())
+                        self.assertIsNotNone(dialog.value())
+                    finally:
+                        dialog.close()
+        finally:
+            for editor in kind_editors + other_editors:
+                editor.close()
+
+    def test_field_spec_editors_surface_invalid_payloads(self):
+        from mygui.figuremodify.components.property_values import (
+            DEFAULT_COLOR_MAP,
+            DEFAULT_CONTOUR_LABELS,
+            DEFAULT_CONTOUR_LEVELS,
+        )
+
+        library = ColorLibrary()
+        colormap = ColorMapSpecEditor(DEFAULT_COLOR_MAP, color_library=library)
+        levels = ContourLevelsSpecEditor(DEFAULT_CONTOUR_LEVELS)
+        labels = ContourLabelSpecEditor(
+            DEFAULT_CONTOUR_LABELS, color_library=library
+        )
+        try:
+            color_dialog = colormap._dialog()
+            try:
+                with patch(
+                    "mygui.widgets.fig_control_window.component_editors.spec_editors_field.normalize_color_map_spec",
+                    side_effect=ValueError("bad colormap"),
+                ):
+                    color_dialog._validate_and_accept()
+                self.assertEqual(color_dialog.error_label.text(), "bad colormap")
+            finally:
+                color_dialog.close()
+
+            level_dialog = levels._dialog()
+            try:
+                level_dialog.kind_input.setCurrentIndex(
+                    level_dialog.kind_input.findData("values")
+                )
+                level_dialog.values_input.setPlainText("")
+                level_dialog._validate_and_accept()
+                self.assertTrue(bool(level_dialog.error_label.text()))
+            finally:
+                level_dialog.close()
+
+            label_dialog = labels._dialog()
+            try:
+                with patch(
+                    "mygui.widgets.fig_control_window.component_editors.spec_editors_field.normalize_contour_label_spec",
+                    side_effect=ValueError("bad labels"),
+                ):
+                    label_dialog._validate_and_accept()
+                self.assertEqual(label_dialog.error_label.text(), "bad labels")
+            finally:
+                label_dialog.close()
+        finally:
+            colormap.close()
+            levels.close()
+            labels.close()
 
 
 if __name__ == "__main__":

@@ -16,8 +16,13 @@ explicit placement, a complete `TreePresentationSpec`, and non-empty unique
 never a silent production fallback.
 
 Use `PropertySection` for `PropertySpec` fields. Dialog-backed summaries live
-in `spec_editors.py`, inline compound editors in `inline_spec_editors.py`, and
-numeric/text primitives in `common.py`. Reusable Inspector sections live under
+in `spec_editors.py`, which re-exports Axis, Text/Annotation, Chart, and
+Field/Mapping editors from dedicated modules with explicit registration and
+no generic/JSON fallback. Production `EditorProfile` records use the same
+domain split: `profiles.py` remains the stable facade and explicit
+`register_production_profiles()` owner, while Axis, Text/Annotation, Chart,
+and Field/Mapping profiles live in dedicated modules. Inline compound editors live in
+`inline_spec_editors.py`, and numeric/text primitives in `common.py`. Reusable Inspector sections live under
 `component_editors/sections/` and are imported as
 `component_editors.sections`. Role-specific Function Curve, Interpolation, and
 Fit sections remain in `chart_sections.py` and `fit_sections.py`.
@@ -71,7 +76,10 @@ Callers use public add/find/show/remove/clear/toolbox APIs. Access to
 `_element_stack`, or other private container layout state violates
 `ARCH-PRIVATE-CONTAINER-ACCESS`. Manager tracking is released before Section
 cleanup; partial construction unwinds in reverse order and cleanup exceptions
-are isolated.
+are isolated as structured `CleanupFailure` records. Those records are logged
+by default, remaining objects continue to dispose, `dispose()` stays
+idempotent and non-raising, and cleanup does not emit an extra Message Bar
+result. This is a diagnostic contract, not a CORE rule.
 
 Resolve Figure/Axes ownership from Registry ancestry, never Artist inspection
 or private Qt layout state. Removal and clearing always use public recursive

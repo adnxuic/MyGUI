@@ -6,6 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import weakref
 
+from mygui.widgets.fig_control_window.component_editors.cleanup import (
+    dispose_subscription,
+    isolate_cleanup,
+    isolate_cleanup_steps,
+)
+
 from PySide6.QtCore import QTimer
 
 from mygui import status_messages
@@ -78,11 +84,19 @@ class MessagePresenter:
         )
 
     def _detach_registry(self) -> None:
-        if self._unsubscribe is not None:
-            self._unsubscribe()
+        dispose_subscription(
+            self._unsubscribe,
+            owner=type(self).__name__,
+            target="registry",
+        )
         self._unsubscribe = None
         self.registry = None
-        self._flush_timer.stop()
+        isolate_cleanup(
+            self._flush_timer.stop,
+            owner=type(self).__name__,
+            target="flush_timer",
+            operation="stop",
+        )
         self._pending_changes.clear()
         self._consumed_changes.clear()
 
@@ -397,19 +411,34 @@ class ComponentEditorManager:
             return
         if event.kind is ComponentEventKind.REMOVED:
             self._editors.pop(event.component_id, None)
+            owner = type(self).__name__
             for editor_ref, remover in registrations:
                 editor = editor_ref()
                 if editor is None:
                     continue
-                try:
-                    self._dispose_editor(editor)
-                    if remover is not None:
-                        remover(editor)
-                    else:
-                        editor.setEnabled(False)
-                        editor.deleteLater()
-                except Exception:
-                    pass
+                target = str(event.component_id)
+                isolate_cleanup(
+                    lambda current=editor: self._dispose_editor(current),
+                    owner=owner,
+                    target=target,
+                    operation="dispose",
+                )
+                if remover is not None:
+                    isolate_cleanup(
+                        lambda current=editor: remover(current),
+                        owner=owner,
+                        target=target,
+                        operation="remove",
+                    )
+                else:
+                    isolate_cleanup_steps(
+                        (
+                            ("setEnabled", lambda current=editor: current.setEnabled(False)),
+                            ("deleteLater", editor.deleteLater),
+                        ),
+                        owner=owner,
+                        target=target,
+                    )
             return
         if event.kind is ComponentEventKind.CHANGED:
             for editor_ref, _remover in registrations:
@@ -446,21 +475,29 @@ class ComponentEditorManager:
         if self._closed:
             return
         self._closed = True
-        self._unsubscribe()
+        dispose_subscription(
+            self._unsubscribe,
+            owner=type(self).__name__,
+            target="registry",
+        )
+        self._unsubscribe = None
         registrations = tuple(
             registration
             for entries in self._editors.values()
             for registration in entries
         )
         self._editors.clear()
+        owner = type(self).__name__
         for editor_ref, _remover in registrations:
             editor = editor_ref()
             if editor is None:
                 continue
-            try:
-                self._dispose_editor(editor)
-            except Exception:
-                pass
+            isolate_cleanup(
+                lambda current=editor: self._dispose_editor(current),
+                owner=owner,
+                target=type(editor).__name__,
+                operation="dispose",
+            )
 
 
 @dataclass(slots=True)

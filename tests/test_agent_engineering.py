@@ -450,6 +450,25 @@ class AgentEngineeringTests(unittest.TestCase):
             ],
             85,
         )
+        for path in (
+            "mygui/widgets/template_workflow.py",
+            "mygui/widgets/title_bar/py_title_menu.py",
+            "mygui/widgets/title_bar/titlebar_dialog/py_chart_dialog.py",
+            "mygui/widgets/title_bar/titlebar_dialog/py_element_dialog.py",
+            "mygui/widgets/title_bar/titlebar_dialog/creation_dialog_support.py",
+            "mygui/widgets/fig_control_window/component_editors/containers.py",
+            "mygui/widgets/fig_control_window/component_editors/sections/axes.py",
+            "mygui/widgets/fig_control_window/component_editors/spec_editor_base.py",
+            "mygui/widgets/fig_control_window/component_editors/spec_editors.py",
+            "mygui/widgets/fig_control_window/component_editors/spec_editors_axis.py",
+            "mygui/widgets/fig_control_window/component_editors/spec_editors_chart.py",
+            "mygui/widgets/fig_control_window/component_editors/spec_editors_field.py",
+            "mygui/widgets/fig_control_window/component_editors/spec_editors_text.py",
+        ):
+            self.assertEqual(
+                self.verify_full.ADDITIONAL_FILE_COVERAGE_MIN[path],
+                80,
+            )
 
     def _synthetic_coverage_files(self, percents: dict[str, float]) -> dict:
         files = {}

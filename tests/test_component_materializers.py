@@ -178,7 +178,72 @@ class ComponentMaterializerContractTests(unittest.TestCase):
         self.assertEqual(ordered, (s3, s2, s1))
 
 
+class ComponentContractAuditTests(unittest.TestCase):
+    def test_production_contracts_are_complete_without_becoming_state(self):
+        from mygui.figuremodify.component_services import production_deletion_handlers
+        from mygui.figuremodify.components import (
+            ComponentContractAuditRow,
+            require_complete_component_contracts,
+        )
+        from mygui.figuremodify.components.models import DeletionPolicy, ROLES_BY_KIND
+        from mygui.widgets.fig_control_window.component_editors import (
+            EditorRegistry,
+            register_production_profiles,
+        )
+
+        registry = EditorRegistry()
+        register_production_profiles(registry)
+        handlers = production_deletion_handlers()
+        rows = require_complete_component_contracts(
+            editor_profile_keys=registry.profile_keys,
+            materializer_keys=validate_controller_contracts(),
+            deletion_handler_keys=handlers.keys,
+        )
+        self.assertTrue(rows)
+        self.assertTrue(all(isinstance(row, ComponentContractAuditRow) for row in rows))
+        self.assertTrue(all(row.complete for row in rows))
+        expected = {
+            (kind, role)
+            for kind, roles in ROLES_BY_KIND.items()
+            for role in roles
+        }
+        self.assertEqual({(row.kind, row.role) for row in rows}, expected)
+        hide_rows = [row for row in rows if row.deletion_policy is DeletionPolicy.HIDE]
+        self.assertTrue(hide_rows)
+        self.assertTrue(all(not row.has_deletion_handler for row in hide_rows))
+
+    def test_audit_reports_incomplete_editor_coverage(self):
+        from mygui.figuremodify.components import (
+            ComponentKind,
+            ComponentRole,
+            ComponentValidationError,
+            require_complete_component_contracts,
+        )
+
+        with self.assertRaisesRegex(ComponentValidationError, "Incomplete"):
+            require_complete_component_contracts(
+                editor_profile_keys=(),
+                materializer_keys=validate_controller_contracts(),
+                deletion_handler_keys=(),
+            )
+        from mygui.figuremodify.components import audit_component_contracts
+
+        rows = audit_component_contracts(
+            editor_profile_keys=(),
+            materializer_keys=validate_controller_contracts(),
+            deletion_handler_keys=(),
+        )
+        line = next(
+            row
+            for row in rows
+            if row.kind is ComponentKind.LINE and row.role is ComponentRole.LINE
+        )
+        self.assertFalse(line.complete)
+        self.assertFalse(line.has_editor_profile)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 

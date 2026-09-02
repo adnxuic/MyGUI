@@ -53,7 +53,9 @@ from ._helpers import (
     _normalize_color,
     _read_color,
     _set_spine_bounds,
+    apply_font_spec,
     bind_closed_property_handlers,
+    font_spec_from_text,
     lookup_property_handler,
 )
 
@@ -83,31 +85,11 @@ def _optional_bounds(value: Any) -> tuple[float, float] | None:
 
 
 def _apply_font(texts: list[Text], value: dict[str, Any]) -> None:
-    for text in texts:
-        text.set_fontfamily(value["family"])
-        text.set_fontsize(value["size"])
-        text.set_fontweight(value["weight"])
-        text.set_fontstyle(value["style"])
-        text.set_fontstretch(value["stretch"])
-        text.set_fontvariant(value["variant"])
-        text.set_color(value["color"])
+    apply_font_spec(texts, value)
 
 
 def _font_from_text(text: Text, fallback: dict[str, Any]) -> dict[str, Any]:
-    try:
-        return normalize_font(
-            {
-                "family": list(text.get_fontfamily()),
-                "size": float(text.get_fontsize()),
-                "weight": text.get_fontweight(),
-                "style": text.get_fontstyle(),
-                "stretch": text.get_fontproperties().get_stretch(),
-                "variant": text.get_fontproperties().get_variant(),
-                "color": _read_color(text.get_color()),
-            }
-        )
-    except Exception:
-        return deepcopy(fallback)
+    return font_spec_from_text(text, fallback)
 
 
 @dataclass(slots=True)

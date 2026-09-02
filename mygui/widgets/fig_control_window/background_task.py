@@ -255,3 +255,20 @@ def drain_background_tasks(timeout_ms: int = 1000) -> bool:
         record.thread is None or not record.thread.is_alive()
         for record in records
     )
+
+
+def start_matlab_task(owner, func, on_finished, on_failed, *args, **kwargs):
+    """Start a MATLAB-tagged background task with the shared MATLAB logger."""
+
+    from mygui.database import matlab_adapter
+
+    kwargs.setdefault("logger", matlab_adapter.matlab_logger())
+    kwargs.setdefault("task_log_prefix", "MATLAB background task")
+    return start_background_task(
+        owner,
+        func,
+        on_finished,
+        on_failed,
+        *args,
+        **kwargs,
+    )

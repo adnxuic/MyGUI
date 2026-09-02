@@ -25,6 +25,10 @@ from mygui.widgets.fig_control_window.component_editors.containers import (
     InspectorRemoval,
     InspectorToolBox,
 )
+from mygui.widgets.fig_control_window.component_editors.cleanup import (
+    isolate_cleanup,
+    isolate_cleanup_steps,
+)
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 
 
@@ -132,11 +136,23 @@ class AxesInspectorPanel(QFrame):
         try:
             toolbox.add_inspector(inspector)
         except Exception:
-            self.context.editor_manager.release(inspector)
-            inspector.dispose()
-            inspector.setParent(None)
-            inspector.deleteLater()
-            self._remove_component_toolbox(stack, editor_key)
+            isolate_cleanup_steps(
+                (
+                    (
+                        "release",
+                        lambda: self.context.editor_manager.release(inspector),
+                    ),
+                    ("dispose", inspector.dispose),
+                    ("setParent", lambda: inspector.setParent(None)),
+                    ("deleteLater", inspector.deleteLater),
+                    (
+                        "remove_toolbox",
+                        lambda: self._remove_component_toolbox(stack, editor_key),
+                    ),
+                ),
+                owner=type(self).__name__,
+                target=component_id,
+            )
             raise
         return inspector
 
@@ -260,10 +276,12 @@ class AxesInspectorPanel(QFrame):
         ):
             if container is None:
                 continue
-            try:
-                container.dispose()
-            except Exception:
-                pass
+            isolate_cleanup(
+                container.dispose,
+                owner=type(self).__name__,
+                target=type(container).__name__,
+                operation="dispose",
+            )
 
     def closeEvent(self, event):
         self.dispose()
@@ -320,11 +338,20 @@ class FigureElementInspectorPanel(QFrame):
         try:
             toolbox.add_inspector(inspector)
         except Exception:
-            self.context.editor_manager.release(inspector)
-            inspector.dispose()
-            inspector.setParent(None)
-            inspector.deleteLater()
-            self.remove_toolbox(editor_key)
+            isolate_cleanup_steps(
+                (
+                    (
+                        "release",
+                        lambda: self.context.editor_manager.release(inspector),
+                    ),
+                    ("dispose", inspector.dispose),
+                    ("setParent", lambda: inspector.setParent(None)),
+                    ("deleteLater", inspector.deleteLater),
+                    ("remove_toolbox", lambda: self.remove_toolbox(editor_key)),
+                ),
+                owner=type(self).__name__,
+                target=component_id,
+            )
             raise
         return inspector
 
@@ -358,7 +385,12 @@ class FigureElementInspectorPanel(QFrame):
             return
         self._disposed = True
         if self._element_stack is not None:
-            self._element_stack.dispose()
+            isolate_cleanup(
+                self._element_stack.dispose,
+                owner=type(self).__name__,
+                target="ElementInspectorStack",
+                operation="dispose",
+            )
 
     def closeEvent(self, event):
         self.dispose()
@@ -423,9 +455,15 @@ class FigureInspectorPanel(QFrame):
             self._inspector_stack.addWidget(panel)
             self._axes_panels[component_id] = panel
         except Exception:
-            panel.dispose()
-            panel.setParent(None)
-            panel.deleteLater()
+            isolate_cleanup_steps(
+                (
+                    ("dispose", panel.dispose),
+                    ("setParent", lambda: panel.setParent(None)),
+                    ("deleteLater", panel.deleteLater),
+                ),
+                owner=type(self).__name__,
+                target=component_id,
+            )
             raise
         return panel
 
@@ -714,11 +752,14 @@ class FigureInspectorPanel(QFrame):
         if self._disposed:
             return
         self._disposed = True
+        owner = type(self).__name__
         for panel in tuple(self._axes_panels.values()):
-            try:
-                panel.dispose()
-            except Exception:
-                pass
+            isolate_cleanup(
+                panel.dispose,
+                owner=owner,
+                target=panel.axes_controller.component_id,
+                operation="dispose",
+            )
         self._axes_panels.clear()
         for inspector in (
             self._figure_elements_panel,
@@ -726,15 +767,26 @@ class FigureInspectorPanel(QFrame):
         ):
             if inspector is None:
                 continue
+            target = (
+                self.root_component_id
+                if inspector is self.root_inspector
+                else type(inspector).__name__
+            )
             if inspector is self.root_inspector:
-                try:
-                    self.context.editor_manager.release(inspector)
-                except Exception:
-                    pass
-            try:
-                inspector.dispose()
-            except Exception:
-                pass
+                isolate_cleanup(
+                    lambda current=inspector: self.context.editor_manager.release(
+                        current
+                    ),
+                    owner=owner,
+                    target=str(target),
+                    operation="release",
+                )
+            isolate_cleanup(
+                inspector.dispose,
+                owner=owner,
+                target=str(target),
+                operation="dispose",
+            )
 
     def closeEvent(self, event):
         self.dispose()
@@ -783,9 +835,15 @@ class FigureInspectorHost(QFrame):
         try:
             self.publish_figure_inspector(panel)
         except Exception:
-            panel.dispose()
-            panel.setParent(None)
-            panel.deleteLater()
+            isolate_cleanup_steps(
+                (
+                    ("dispose", panel.dispose),
+                    ("setParent", lambda: panel.setParent(None)),
+                    ("deleteLater", panel.deleteLater),
+                ),
+                owner=type(self).__name__,
+                target=root_controller.component_id,
+            )
             raise
         return panel
 
@@ -845,16 +903,31 @@ class FigureInspectorHost(QFrame):
         self._figure_stack.setCurrentWidget(self.empty_state)
 
     def clear_figure_inspectors(self) -> None:
+        owner = type(self).__name__
         for index in range(self._figure_stack.count() - 1, 0, -1):
             widget = self._figure_stack.widget(index)
+            target = str(getattr(widget, "root_component_id", type(widget).__name__))
             if isinstance(widget, FigureInspectorPanel):
-                try:
-                    widget.dispose()
-                except Exception:
-                    pass
-            self._figure_stack.removeWidget(widget)
-            widget.setParent(None)
-            widget.deleteLater()
+                isolate_cleanup(
+                    widget.dispose,
+                    owner=owner,
+                    target=target,
+                    operation="dispose",
+                )
+            isolate_cleanup_steps(
+                (
+                    (
+                        "removeWidget",
+                        lambda current=widget: self._figure_stack.removeWidget(
+                            current
+                        ),
+                    ),
+                    ("setParent", lambda current=widget: current.setParent(None)),
+                    ("deleteLater", widget.deleteLater),
+                ),
+                owner=owner,
+                target=target,
+            )
         self.show_empty_state()
 
     def dispose(self) -> None:
