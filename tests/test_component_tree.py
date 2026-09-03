@@ -26,6 +26,7 @@ from mygui.widgets.component_tree import (
     ComponentTreeModel,
     ComponentBatchDeleteDialog,
 )
+from mygui.widgets.component_tree.nodes import COMPONENT_SEARCH_ROLE
 from mygui.widgets.left_column import ExplorerMode
 from mygui.widgets.fig_control_window.component_editors import (
     EditorRegistry,
@@ -1083,7 +1084,7 @@ class ComponentTreeTests(unittest.TestCase):
         host = self.window.component_tree_host
 
         def inspect_cancel(message):
-            self.assertIn("confirm-curve", message.informativeText())
+            self.assertIn("confirm-curve", message.text())
             self.assertEqual(message.defaultButton().text(), "Cancel")
             self.assertIn(
                 host._source_label("confirm-curve"),
@@ -1245,6 +1246,61 @@ class ComponentTreeTests(unittest.TestCase):
         y_major_labels_index = model.index(0, 0, y_major_ticks_index)
         self.assertEqual(y_major_labels_index.data(Qt.DisplayRole), "Tick Labels")
         self.assertFalse(y_major_labels_index.data(VIRTUAL_GROUP_ROLE))
+
+    def test_projection_data_does_not_read_registry_or_clone_state(self):
+        from mygui.figuremodify.components.models import ComponentState
+
+        model = self.window.component_tree_host.model
+        index = model.index_for_component(self.canvas.root_component_id)
+        self.assertTrue(index.isValid())
+        with mock.patch.object(
+            model.registry,
+            "get",
+            side_effect=AssertionError("registry.get"),
+        ), mock.patch.object(
+            ComponentState,
+            "clone",
+            side_effect=AssertionError("ComponentState.clone"),
+        ):
+            self.assertTrue(model.data(index, Qt.DisplayRole))
+            self.assertTrue(model.data(index, Qt.ToolTipRole))
+            self.assertTrue(model.data(index, COMPONENT_SEARCH_ROLE))
+            self.assertTrue(bool(model.flags(index) & Qt.ItemIsEnabled))
+
+    def test_name_event_updates_display_and_search_without_reset(self):
+        self.canvas.add_global_text(
+            0.1,
+            0.2,
+            "Original projection note",
+            "DejaVu Sans",
+            10,
+            object_id="projection-note",
+        )
+        host = self.window.component_tree_host
+        model = host.model
+        selected = self.canvas.current_component_id
+        refreshes = []
+        model.refreshed.connect(lambda: refreshes.append(True))
+        change = self.canvas.component_registry.get("projection-note").set_property(
+            "text",
+            "Unique renamed projection note",
+        )
+        self.assertTrue(change.ok)
+        index = model.index_for_component("projection-note")
+        self.assertEqual(
+            index.data(Qt.DisplayRole),
+            "Text — Unique renamed projection note",
+        )
+        self.assertIn(
+            "Unique renamed projection note",
+            str(index.data(COMPONENT_SEARCH_ROLE) or ""),
+        )
+        self.assertEqual(refreshes, [])
+        host.search_input.setText("Unique renamed projection")
+        self.app.processEvents()
+        self.assertIn("projection-note", self._model_ids(host.proxy_model))
+        self.assertEqual(self.canvas.current_component_id, selected)
+        self.assertEqual(host.search_input.text(), "Unique renamed projection")
 
 
 if __name__ == "__main__":

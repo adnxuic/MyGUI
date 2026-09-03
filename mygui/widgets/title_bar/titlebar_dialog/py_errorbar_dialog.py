@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -20,6 +19,12 @@ from PySide6.QtWidgets import (
 
 from mygui import status_messages
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.ui_components import (
+    annotate_sections,
+    present_warning,
+    set_validation_state,
+    style_accept_cancel,
+)
 from mygui.figuremodify.style_base.color_models import ColorSelection
 from mygui.figuremodify.style_base.creation_preferences import (
     is_override,
@@ -429,6 +434,7 @@ class PyErrorBarDialog(QDialog):
 
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -437,6 +443,7 @@ class PyErrorBarDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
 
+        annotate_sections(self)
         self.setMinimumWidth(680)
         self.resize(760, 720)
 
@@ -444,16 +451,19 @@ class PyErrorBarDialog(QDialog):
         """Validate the inputs and create one Error Bar when usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, "Warning", "Please add an axes first!")
+            present_warning(self, "Warning", "Please add an axes first!")
             return
         if not self.figure_window.current_canva.has_current_axes:
-            QMessageBox.warning(self, "Warning", "Please select an axes first!")
+            present_warning(self, "Warning", "Please select an axes first!")
             return
         spec_error = self.data_reference_input.spec_error()
         if spec_error is not None:
             # An incomplete error draft is a visible draft, not a silent
             # none; keep the dialog open so the user can finish it.
-            QMessageBox.warning(self, "Warning", spec_error)
+            set_validation_state(
+                self.data_reference_input, invalid=True, message=spec_error
+            )
+            present_warning(self, "Warning", spec_error)
             return
 
         values = self.style_group.values()

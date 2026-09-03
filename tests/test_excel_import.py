@@ -194,7 +194,10 @@ class ExcelImportV4Tests(unittest.TestCase):
             self.window.figure_window.current_canva.project_id,
             subtable.project.id,
         )
-        self.assertIn("Excel imported", self.window.bottom_bar.message_bar.message_label.text())
+        self.assertIn(
+            "Excel imported",
+            self.window.bottom_bar.message_bar.full_message,
+        )
 
     def test_canvas_failure_rolls_back_new_excel_workspace(self):
         with patch.object(

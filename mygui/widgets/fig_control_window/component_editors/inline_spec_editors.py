@@ -11,14 +11,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Iterable
 
-from PySide6.QtCore import QSignalBlocker, Signal
+from PySide6.QtCore import QSignalBlocker, QSize, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -44,6 +44,7 @@ from .common import (
     format_number_sequence,
     parse_number_sequence,
 )
+from .inspector_layout import apply_expanding_field, labeled_form_row
 
 
 FONT_WEIGHT_NAMES = (
@@ -149,8 +150,10 @@ class LinePatternEditor(InlineValueEditor):
         for label, item in LINE_PATTERN_PRESETS:
             self.kind_input.addItem(label, item)
         self.kind_input.addItem("Custom dashes", _CUSTOM_DASHES)
-        self.offset_label = QLabel("Offset:", self)
         self.offset_input = FocusAwareDoubleSpinBox(self)
+        self.offset_label = labeled_form_row(
+            "Offset:", buddy=self.offset_input, parent=self
+        )
         self.offset_input.setRange(-1e6, 1e6)
         self.offset_input.setDecimals(3)
         self.offset_input.setSingleStep(0.5)
@@ -159,6 +162,9 @@ class LinePatternEditor(InlineValueEditor):
         self.dashes_input.setToolTip(
             "An even number of positive on/off dash lengths in points."
         )
+        apply_expanding_field(self.kind_input)
+        apply_expanding_field(self.offset_input)
+        apply_expanding_field(self.dashes_input)
         layout.addWidget(self.kind_input, 1)
         layout.addWidget(self.offset_label)
         layout.addWidget(self.offset_input)
@@ -578,9 +584,18 @@ class OptionalColorEditor(InlineValueEditor):
         )
         layout.addWidget(self.use_value_input)
         layout.addWidget(self.color_input)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.set_value(value)
         self.use_value_input.toggled.connect(self._use_value_changed)
         self.color_input.colorChanged.connect(self._emit)
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        color = self.color_input.minimumSizeHint()
+        return QSize(
+            max(hint.width(), color.width()),
+            max(hint.height(), color.height()),
+        )
 
     def _inputs(self) -> tuple[QWidget, ...]:
         return (self.use_value_input, self.color_input)

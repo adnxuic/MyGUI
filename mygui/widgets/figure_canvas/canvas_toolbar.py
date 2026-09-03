@@ -7,6 +7,7 @@ from functools import wraps
 from PySide6.QtWidgets import QDialogButtonBox
 
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.application_theme import subscribe_theme_window
 from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT as NavigationToolbar,
 )
@@ -38,6 +39,7 @@ class ProjectNavigationToolbar(NavigationToolbar):
     def __init__(self, canvas, parent, history) -> None:
         self._project_history = history
         super().__init__(canvas, parent)
+        subscribe_theme_window(self)
 
     def home(self, *args):
         return self._project_history.perform(

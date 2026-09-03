@@ -176,7 +176,7 @@ class ColorIntegrationTests(unittest.TestCase):
 
         failed = PyCurveDialog("Curve", self.window.figure_window)
         failed.expression_edit.setText("__import__('os')")
-        with patch("mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"):
+        with patch("mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.present_warning"):
             failed.accept()
         self.assertEqual(
             self.canvas.axes_commands.cycle_state(axes_id).next_index,
@@ -217,7 +217,7 @@ class ColorIntegrationTests(unittest.TestCase):
                     return_value=rejected,
                 ),
                 patch(
-                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.present_warning"
                 ),
             ):
                 dialog.accept()
@@ -299,7 +299,7 @@ class ColorIntegrationTests(unittest.TestCase):
         failed.expression_edit.setText("__import__('os')")
         with patch(
             "mygui.widgets.title_bar.titlebar_dialog."
-            "py_chart_dialog.QMessageBox.warning"
+            "py_chart_dialog.present_warning"
         ):
             failed.accept()
         self.assertIsNone(

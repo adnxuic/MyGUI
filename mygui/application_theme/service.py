@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+import time
 from typing import Any
 
-from PySide6.QtCore import QEvent, QObject, QThread, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QThread, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -120,6 +121,8 @@ class ThemeService(QObject):
         self._session_snapshot: ThemeSnapshot | None = None
         self._session_steps: list[str] = []
         self.last_applied_steps: tuple[str, ...] = ()
+        self.last_step_timings_ms: dict[str, float] = {}
+        self.last_rollback_timings_ms: dict[str, float] = {}
         self._snapshot = self._compose_snapshot(
             initial if initial is not None else AppearancePreferences()
         )
@@ -440,14 +443,20 @@ class ThemeService(QObject):
         memento = self._capture(planned)
         self._in_transaction = True
         applied: list[str] = []
+        timings: dict[str, float] = {}
+        self.last_step_timings_ms = {}
         try:
             self._set_hub_snapshot(prepared.snapshot)
-            for step in planned:
-                self._maybe_fail_apply(step)
-                if step == "qss" and not self._qss_documents_changed(prepared):
-                    continue
-                self._run_apply_step(step, prepared)
-                applied.append(step)
+            block_layout = "font" not in planned and "metrics" not in planned
+            with _batch_chrome_updates(self._app, block_layout=block_layout):
+                for step in planned:
+                    self._maybe_fail_apply(step)
+                    if step == "qss" and not self._qss_documents_changed(prepared):
+                        continue
+                    started = time.perf_counter()
+                    self._run_apply_step(step, prepared)
+                    timings[step] = round((time.perf_counter() - started) * 1000, 3)
+                    applied.append(step)
         except Exception as exc:
             self._rollback_applied(applied, memento, primary=exc)
             raise
@@ -455,6 +464,9 @@ class ThemeService(QObject):
             self._in_transaction = False
         executed = tuple(applied)
         self.last_applied_steps = executed
+        merged = dict(self.last_step_timings_ms)
+        merged.update(timings)
+        self.last_step_timings_ms = merged
         return executed
 
     def _plan_steps(
@@ -514,18 +526,22 @@ class ThemeService(QObject):
                 pass
             return
         if step == "qss":
-            self._app.setStyleSheet(prepared.app_qss)
+            from .qss import apply_application_stylesheet
+
+            started = time.perf_counter()
+            apply_application_stylesheet(self._app, prepared.app_qss)
+            self.last_step_timings_ms["qss_app"] = round(
+                (time.perf_counter() - started) * 1000, 3
+            )
+            started = time.perf_counter()
             binding_apply(self._bindings, prepared.local_qss)
+            self.last_step_timings_ms["qss_local"] = round(
+                (time.perf_counter() - started) * 1000, 3
+            )
             try:
-                from .qss import default_qss_binding
+                from .qss import publish_qss_tokens
 
-                default_qss_binding().apply_tokens(snapshot.tokens)
-            except ImportError:
-                pass
-            try:
-                from .windows import refresh_chrome_style
-
-                refresh_chrome_style()
+                publish_qss_tokens(snapshot.tokens)
             except ImportError:
                 pass
             return
@@ -547,19 +563,15 @@ class ThemeService(QObject):
                 self._metrics_port.restore(memento.metrics)
             return
         if step == "qss":
-            self._app.setStyleSheet(memento.stylesheet)
+            from .qss import apply_application_stylesheet
+
+            apply_application_stylesheet(self._app, memento.stylesheet)
             binding_restore(self._bindings, memento.local_styles)
             try:
-                from .qss import default_qss_binding
+                from .qss import publish_qss_tokens
 
                 if memento.qss_tokens:
-                    default_qss_binding().apply_tokens(memento.qss_tokens)
-            except ImportError:
-                pass
-            try:
-                from .windows import refresh_chrome_style
-
-                refresh_chrome_style()
+                    publish_qss_tokens(memento.qss_tokens)
             except ImportError:
                 pass
             return
@@ -587,9 +599,15 @@ class ThemeService(QObject):
         self._set_hub_snapshot(memento.hub_snapshot)
         selected = APPLY_STEPS if steps is None else steps
         wanted = set(selected)
-        for step in reversed(APPLY_STEPS):
-            if step in wanted:
-                self._restore_step(step, memento)
+        rollback: dict[str, float] = {}
+        block_layout = "font" not in wanted and "metrics" not in wanted
+        with _batch_chrome_updates(self._app, block_layout=block_layout):
+            for step in reversed(APPLY_STEPS):
+                if step in wanted:
+                    started = time.perf_counter()
+                    self._restore_step(step, memento)
+                    rollback[step] = round((time.perf_counter() - started) * 1000, 3)
+        self.last_rollback_timings_ms = rollback
 
     def _maybe_fail_apply(self, step: str) -> None:
         hooks = self._fault_hooks
@@ -607,24 +625,112 @@ class ThemeService(QObject):
 
 
 class _SkipHiddenFontFilter(QObject):
-    """Drop FontChange on hidden widgets so cached Settings pages are not polished."""
+    """Drop chrome polish events on hidden widgets during a theme transaction."""
 
     _EVENTS = frozenset(
         {
             QEvent.Type.FontChange,
             QEvent.Type.ApplicationFontChange,
+            QEvent.Type.StyleChange,
+            QEvent.Type.Polish,
+            QEvent.Type.PolishRequest,
+            QEvent.Type.LayoutRequest,
+            QEvent.Type.UpdateRequest,
+            QEvent.Type.Paint,
         }
     )
 
+    def __init__(self, parent: QObject | None = None, *, block_layout: bool = False):
+        super().__init__(parent)
+        self._block_layout = block_layout
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        if event.type() not in self._EVENTS:
-            return False
         if not isinstance(watched, QWidget):
             return False
+        event_type = event.type()
         try:
+            if "FigureCanvas" in type(watched).__name__:
+                return event_type in self._EVENTS or event_type == QEvent.Type.Resize
+            if self._block_layout and event_type == QEvent.Type.LayoutRequest:
+                return True
+            if event_type not in self._EVENTS:
+                return False
             return not watched.isVisible()
         except RuntimeError:
             return True
+
+
+def _iter_matplotlib_canvases(root: QWidget) -> Iterator[QWidget]:
+    """Yield Figure canvases without importing Matplotlib."""
+
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            children = current.findChildren(
+                QWidget,
+                "",
+                Qt.FindChildOption.FindDirectChildrenOnly,
+            )
+        except RuntimeError:
+            continue
+        for child in children:
+            try:
+                if "FigureCanvas" in type(child).__name__:
+                    yield child
+                else:
+                    stack.append(child)
+            except RuntimeError:
+                continue
+
+
+def _freeze_matplotlib_canvases(app: QApplication) -> list[tuple[QWidget, bool]]:
+    """Stop Figure canvases from painting while workbench chrome restyles."""
+
+    frozen: list[tuple[QWidget, bool]] = []
+    for top in app.topLevelWidgets():
+        for canvas in _iter_matplotlib_canvases(top):
+            try:
+                frozen.append((canvas, canvas.updatesEnabled()))
+                canvas.setUpdatesEnabled(False)
+            except RuntimeError:
+                continue
+    return frozen
+
+
+@contextmanager
+def _batch_chrome_updates(
+    app: QApplication,
+    *,
+    block_layout: bool = False,
+) -> Iterator[None]:
+    """Defer top-level paints until the theme transaction finishes."""
+
+    previous: list[tuple[QWidget, bool]] = []
+    for widget in app.topLevelWidgets():
+        try:
+            previous.append((widget, widget.updatesEnabled()))
+            widget.setUpdatesEnabled(False)
+        except RuntimeError:
+            continue
+    canvases = _freeze_matplotlib_canvases(app)
+    filt = _SkipHiddenFontFilter(app, block_layout=block_layout)
+    app.installEventFilter(filt)
+    try:
+        yield
+    finally:
+        for widget, enabled in previous:
+            try:
+                widget.setUpdatesEnabled(enabled)
+            except RuntimeError:
+                continue
+        for canvas, enabled in canvases:
+            try:
+                canvas.setUpdatesEnabled(enabled)
+            except RuntimeError:
+                continue
+        app.removeEventFilter(filt)
+        filt.deleteLater()
 
 
 @contextmanager

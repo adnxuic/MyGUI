@@ -53,6 +53,21 @@ from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
 from mygui.widgets.title_bar.titlebar_dialog.py_element_dialog import PyTextDialog
 from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyLayoutDialog
 
+from desktop_smoke.frame_probe import (
+    measure_frame,
+    median_ms,
+    p95_ms,
+    staged_timing_payload,
+    wait_settle,
+)
+from desktop_smoke.gates import (
+    SAMPLE_FRAMES,
+    THEME_LEAK_ITERS,
+    WARMUP_FRAMES,
+    assert_theme_gates,
+    require_census_stable,
+    theme_census,
+)
 from desktop_smoke.harness import (
     OVERRIDE_FACECOLOR,
     OVERRIDE_LINEWIDTH,
@@ -80,12 +95,211 @@ SCATTER_KEYS = 4
 TEXT_KEYS = 5
 
 
+def _record_staged(harness: SmokeHarness, name: str, measured: dict[str, Any], alias: str, alias_p95: str | None = None) -> None:
+    payload = staged_timing_payload(
+        name,
+        measured,
+        alias_median_key=alias,
+        alias_p95_key=alias_p95,
+    )
+    harness.timings.update(payload)
+
+
+def _measure_lazy_galleries(harness: SmokeHarness) -> None:
+    """Time first Layout/Chart/Element gallery create and cached stack opens."""
+
+    title = harness.window.title_bar
+    created = []
+    for index in (1, 2, 3):
+        created.append(
+            measure_frame(title, lambda current=index: title.ensure_gallery_at(current))
+        )
+    _record_staged(
+        harness,
+        "gallery_first_create",
+        _staged_from_samples("title_bar", created),
+        "gallery_first_create_ms",
+        "gallery_first_create_p95_ms",
+    )
+
+    def show_layout() -> None:
+        title.stacklayout_bottom.setCurrentIndex(1)
+
+    def show_style() -> None:
+        title.stacklayout_bottom.setCurrentIndex(0)
+
+    show_style()
+    wait_settle(title)
+    cached_samples = []
+    measure_frame(title, show_layout)
+    for _ in range(5):
+        show_style()
+        wait_settle(title)
+        cached_samples.append(measure_frame(title, show_layout))
+    _record_staged(
+        harness,
+        "gallery_cached_open",
+        _staged_from_samples("title_bar", cached_samples),
+        "gallery_cached_open_ms",
+        "gallery_cached_open_p95_ms",
+    )
+    show_style()
+
+
+def _staged_from_samples(region: str, samples: list[Any]) -> dict[str, Any]:
+    dispatch = [item.dispatch_ms for item in samples]
+    first_paint = [item.first_paint_ms for item in samples]
+    settle = [item.settle_ms for item in samples]
+    return {
+        "paintRegion": region,
+        "dispatch_ms": {
+            "samples": dispatch,
+            "median": median_ms(dispatch),
+            "p95": p95_ms(dispatch),
+        },
+        "first_paint_ms": {
+            "samples": first_paint,
+            "median": median_ms(first_paint),
+            "p95": p95_ms(first_paint),
+        },
+        "settle_ms": {
+            "samples": settle,
+            "median": median_ms(settle),
+            "p95": p95_ms(settle),
+        },
+    }
+
+
+def _measure_appearance_theme_frames(
+    harness: SmokeHarness,
+    dialog: SettingsCenterWindow,
+    dark: QRadioButton | None,
+    light: QRadioButton | None,
+) -> None:
+    if dark is None or light is None:
+        raise SmokeError("Appearance Light/Dark radios are missing.")
+    from unittest.mock import patch
+
+    from PySide6.QtWidgets import QWidget
+
+    sheet_calls: list[str] = []
+    origin_app = type(harness.app).setStyleSheet
+    origin_widget = QWidget.setStyleSheet
+
+    def _app_sheet(app, sheet):
+        sheet_calls.append("app")
+        return origin_app(app, sheet)
+
+    def _widget_sheet(widget, sheet):
+        sheet_calls.append("widget")
+        return origin_widget(widget, sheet)
+
+    with (
+        patch.object(type(harness.app), "setStyleSheet", _app_sheet),
+        patch.object(QWidget, "setStyleSheet", _widget_sheet),
+    ):
+        reselect = measure_frame(
+            dialog,
+            lambda: harness.click_nowait(dark),
+            visible_only=True,
+        )
+    harness.timings["appearance_same_theme_reselect_ms"] = reselect.settle_ms
+    if sheet_calls:
+        raise SmokeError(
+            "Same-theme Appearance reselect called setStyleSheet "
+            f"{len(sheet_calls)} time(s)."
+        )
+
+    def to_light() -> None:
+        if not light.isChecked():
+            harness.click_nowait(light)
+        wait_settle(dialog, visible_only=True)
+
+    def to_dark() -> None:
+        harness.click_nowait(dark)
+
+    to_light()
+    for _ in range(WARMUP_FRAMES):
+        measure_frame(dialog, to_dark, visible_only=True)
+        to_light()
+    dark_samples = []
+    for _ in range(SAMPLE_FRAMES):
+        to_light()
+        dark_samples.append(measure_frame(dialog, to_dark, visible_only=True))
+    _record_staged(
+        harness,
+        "appearance_dark_preview",
+        _staged_from_samples(dialog.objectName() or "setting_dialog", dark_samples),
+        "appearance_dark_preview_ms",
+    )
+    harness.timings["appearance_dark_preview_p95_ms"] = p95_ms(
+        [item.settle_ms for item in dark_samples]
+    )
+
+
+def _measure_appearance_rollback_frames(harness: SmokeHarness) -> None:
+    window = harness.window
+    if window is None:
+        raise SmokeError("MainWindow is missing for Appearance rollback timing.")
+    resolve = getattr(window, "_resolve_theme_service", None)
+    theme = resolve() if callable(resolve) else getattr(window, "_theme_service", None)
+    if theme is None:
+        raise SmokeError("ThemeService is missing for Appearance rollback timing.")
+    wall = harness.timings.get("appearance_dark_rollback_ms")
+    samples = []
+    dialog = _prepare_dark_preview(harness)
+    for _ in range(WARMUP_FRAMES):
+        measure_frame(
+            dialog,
+            theme.restore_pre_session_appearance,
+            visible_only=True,
+        )
+        dialog = _prepare_dark_preview(harness)
+    for _ in range(SAMPLE_FRAMES):
+        dialog = _prepare_dark_preview(harness)
+        samples.append(
+            measure_frame(
+                dialog,
+                theme.restore_pre_session_appearance,
+                visible_only=True,
+            )
+        )
+    _record_staged(
+        harness,
+        "appearance_dark_rollback",
+        _staged_from_samples(dialog.objectName() or "setting_dialog", samples),
+        "appearance_dark_rollback_frame_ms",
+    )
+    harness.timings["appearance_dark_rollback_p95_ms"] = p95_ms(
+        [item.settle_ms for item in samples]
+    )
+    if wall is not None:
+        harness.timings["appearance_dark_rollback_ms"] = wall
+
+
+def _prepare_dark_preview(harness: SmokeHarness) -> SettingsCenterWindow:
+    dialog = harness.present_settings(PAGE_APPEARANCE, wait_ms=0)
+    wait_settle(dialog, visible_only=True)
+    dark = dialog.findChild(QRadioButton, "appearance_theme_dark")
+    light = dialog.findChild(QRadioButton, "appearance_theme_light")
+    if dark is None:
+        raise SmokeError("Appearance Dark radio is missing.")
+    if dark.isChecked() and light is not None:
+        harness.click_nowait(light)
+        wait_settle(dialog, visible_only=True)
+    if not dark.isChecked():
+        harness.click_nowait(dark)
+        wait_settle(dialog, visible_only=True)
+    return dialog
+
+
 def run_settings_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
     """Walk Settings Center and the minimum NEXT_USE creation path."""
 
     results: list[dict[str, Any]] = []
     seed = harness.seed_default_project()
     harness.grab(seed.canvas, "00-canvas-seed")
+    _measure_lazy_galleries(harness)
 
     results.append(
         _run_case(harness, "settings.open", lambda: _scenario_open(harness))
@@ -117,6 +331,13 @@ def run_settings_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
             harness,
             "settings.next_use",
             lambda: _scenario_next_use(harness, seed),
+        )
+    )
+    results.append(
+        _run_case(
+            harness,
+            "settings.feedback",
+            lambda: _scenario_feedback(harness),
         )
     )
     return results
@@ -232,6 +453,7 @@ def _scenario_pages(harness: SmokeHarness) -> None:
             )
         if page_id == PAGE_APPEARANCE:
             dark = dialog.findChild(QRadioButton, "appearance_theme_dark")
+            light = dialog.findChild(QRadioButton, "appearance_theme_light")
             started = time.perf_counter()
             harness.click(dark)
             harness.timings["appearance_dark_preview_ms"] = (
@@ -239,6 +461,14 @@ def _scenario_pages(harness: SmokeHarness) -> None:
             ) * 1000
             harness.grab(dialog, "10-appearance-live-dark")
             harness.grab_main("10-appearance-live-dark-main")
+            _measure_appearance_theme_frames(harness, dialog, dark, light)
+            bar = harness.window.bottom_bar.message_bar
+            started = time.perf_counter()
+            for index in range(100):
+                bar.show_message("Ready.", "info")
+            harness.timings["message_bar_same_tone_100_ms"] = (
+                time.perf_counter() - started
+            ) * 1000
         if page_id == PAGE_WORKSPACE:
             page = _page_inner(dialog, page_id)
             if not isinstance(page, WorkspaceSettingsPage):
@@ -249,9 +479,12 @@ def _scenario_pages(harness: SmokeHarness) -> None:
             if not isinstance(page, MaintenanceSettingsPage):
                 raise SmokeError("Maintenance page widget is missing.")
             harness.click_and_dismiss_confirm(page.reset_all_button)
+    started = time.perf_counter()
     QTest.keyClick(dialog, Qt.Key_Escape)
     harness.pump(80)
-    # Esc discards the Appearance live preview. Reopen the cached window.
+    harness.timings["appearance_dark_rollback_ms"] = (
+        time.perf_counter() - started
+    ) * 1000
     started = time.perf_counter()
     dialog = harness.present_settings(PAGE_APPEARANCE, wait_ms=0)
     harness.timings["cached_open_ms"] = (time.perf_counter() - started) * 1000
@@ -262,6 +495,22 @@ def _scenario_pages(harness: SmokeHarness) -> None:
     started = time.perf_counter()
     harness.close_settings(cancel=True, wait_ms=0)
     harness.timings["cached_close_ms"] = (time.perf_counter() - started) * 1000
+    harness.pump(50)
+    _measure_appearance_rollback_frames(harness)
+    if "appearance_dark_preview_p95_ms" in harness.timings:
+        assert_theme_gates(harness.timings)
+    resolve = getattr(harness.window, "_resolve_theme_service", None)
+    theme = resolve() if callable(resolve) else None
+    if theme is not None:
+        from mygui.application_theme import AppearancePreferences, ThemeMode
+
+        before = theme_census()
+        dark_prefs = AppearancePreferences(mode=ThemeMode.DARK)
+        for _ in range(THEME_LEAK_ITERS):
+            theme.preview(dark_prefs)
+            theme.cancel_preview()
+        require_census_stable(before, theme_census(), "50 theme preview/cancel")
+    harness.close_settings(cancel=True, wait_ms=0)
     harness.pump(50)
 
     dialog = harness.present_settings(PAGE_APPEARANCE)
@@ -464,7 +713,7 @@ def _scenario_next_use(harness: SmokeHarness, seed: ProjectSeed) -> None:
         raise SmokeError("Apply stayed disabled after staging overrides.")
     harness.click(dialog.apply_button, wait_ms=80)
     harness.grab_main("26-message-bar-after-apply")
-    message = harness.window.bottom_bar.message_bar.message_label.text()
+    message = harness.window.bottom_bar.message_bar.full_message
     if "applied" not in message.casefold():
         raise SmokeError(f"Apply Message Bar text is {message!r}.")
     level = str(harness.window.bottom_bar.message_bar.property("level") or "")
@@ -721,3 +970,80 @@ def _scroll_page_to_top(dialog: SettingsCenterWindow, page_id: str) -> None:
     bar = scroll.verticalScrollBar()
     if bar is not None:
         bar.setValue(0)
+
+
+def _scenario_feedback(harness: SmokeHarness) -> None:
+    """Capture Message Bar tones, a destructive confirm, and form validation."""
+
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    from mygui import status_messages
+    from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import (
+        PyStyleDialog,
+    )
+
+    harness.close_settings(cancel=True)
+    tones = (
+        ("info", "Ready for the next action."),
+        ("success", "Project saved."),
+        ("warning", "No data rows matched the filter."),
+        ("error", "Expression was rejected."),
+    )
+    for level, text in tones:
+        status_messages.show_message(text, level)
+        harness.pump(40)
+        harness.grab_main(f"feedback-message-{level}-light")
+
+    dialog = harness.present_settings(PAGE_APPEARANCE)
+    dark = dialog.findChild(QRadioButton, "appearance_theme_dark")
+    harness.click(dark)
+    for level, text in tones:
+        status_messages.show_message(text, level)
+        harness.pump(40)
+        harness.grab_main(f"feedback-message-{level}-dark")
+    light = dialog.findChild(QRadioButton, "appearance_theme_light")
+    harness.click(light)
+    harness.close_settings(cancel=True)
+
+    page_dialog = harness.present_settings(PAGE_WORKSPACE)
+    page = _page_inner(page_dialog, PAGE_WORKSPACE)
+    if not isinstance(page, WorkspaceSettingsPage):
+        raise SmokeError("Workspace page widget is missing.")
+    QTimer.singleShot(
+        0,
+        lambda: harness.grab_visible_message_box(
+            "feedback-destructive-confirm-light"
+        ),
+    )
+    QTimer.singleShot(80, harness.dismiss_confirmation)
+    page.reset_button.click()
+    harness.pump(160)
+    harness.dismiss_confirmation()
+    harness.close_settings(cancel=True)
+
+    create = PyStyleDialog(
+        "feedback-invalid",
+        harness.window.figure_window,
+        parent=harness.window,
+    )
+    create.setModal(False)
+    create.show()
+    harness.pump(80)
+    create.width_line.setText("not-a-number")
+    QTimer.singleShot(
+        0,
+        lambda: harness.grab_visible_message_box(
+            "feedback-form-validation-modal-light"
+        ),
+    )
+    QTimer.singleShot(80, harness.dismiss_all_dialogs)
+    create.accept()
+    harness.pump(160)
+    harness.grab(create, "feedback-form-validation-light")
+    harness.dismiss_all_dialogs()
+    create.close()
+    create.deleteLater()
+    app = harness.app or QApplication.instance()
+    if app is not None:
+        app.processEvents()

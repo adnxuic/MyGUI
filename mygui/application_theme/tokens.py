@@ -109,7 +109,7 @@ LIGHT_RADII = MappingProxyType(
     }
 )
 
-# Standard density (historical first-run chrome). Density apply is SubAgent C.
+# Standard density (historical first-run chrome).
 LIGHT_CONTROL_SIZES = MappingProxyType(
     {
         "command_row": 48,
@@ -118,6 +118,13 @@ LIGHT_CONTROL_SIZES = MappingProxyType(
         "activity_rail": 44,
         "bottom_bar": 28,
         "focus_border": 2,
+        "button": 40,
+        "control": 30,
+        "table_row": 24,
+        "table_header": 44,
+        "tree": 26,
+        "indicator": 16,
+        "scrollbar": 10,
     }
 )
 
@@ -133,57 +140,125 @@ ICON_QSS_TOKEN_NAMES = (
 )
 
 
+def _ui_semantic_aliases(tokens: dict[str, str]) -> dict[str, str]:
+    """Map shadcn-inspired names onto the existing Light/Dark chrome colors."""
+
+    destructive = tokens["COLOR_TEXT_DANGER"]
+    destructive_fg = tokens["COLOR_TEXT_ON_DARK"]
+    if destructive.lower() == tokens["COLOR_ERROR"].lower():
+        destructive_fg = tokens["COLOR_COMMAND_BACKGROUND"]
+    return {
+        "UI_BACKGROUND": tokens["COLOR_CONTENT_BACKGROUND"],
+        "UI_FOREGROUND": tokens["COLOR_TEXT_PRIMARY"],
+        "UI_CARD": tokens["COLOR_SURFACE"],
+        "UI_CARD_FOREGROUND": tokens["COLOR_TEXT_PRIMARY"],
+        "UI_POPOVER": tokens["COLOR_SURFACE"],
+        "UI_POPOVER_FOREGROUND": tokens["COLOR_TEXT_PRIMARY"],
+        "UI_PRIMARY": tokens["COLOR_ACCENT"],
+        "UI_PRIMARY_FOREGROUND": tokens["COLOR_TEXT_ON_DARK"],
+        "UI_PRIMARY_HOVER": tokens["COLOR_ACCENT_HOVER"],
+        "UI_SECONDARY": tokens["COLOR_SURFACE_ALT"],
+        "UI_SECONDARY_FOREGROUND": tokens["COLOR_TEXT_PRIMARY"],
+        "UI_MUTED": tokens["COLOR_SURFACE_ALT"],
+        "UI_MUTED_FOREGROUND": tokens["COLOR_TEXT_MUTED"],
+        "UI_ACCENT": tokens["COLOR_ACCENT_SOFT"],
+        "UI_ACCENT_FOREGROUND": tokens["COLOR_TEXT_PRIMARY"],
+        "UI_DESTRUCTIVE": destructive,
+        "UI_DESTRUCTIVE_FOREGROUND": destructive_fg,
+        "UI_DESTRUCTIVE_SOFT": tokens["COLOR_ERROR_SOFT"],
+        "UI_BORDER": tokens["COLOR_BORDER"],
+        "UI_INPUT": tokens["COLOR_BORDER_STRONG"],
+        "UI_RING": tokens["COLOR_FOCUS"],
+        "UI_INFO": tokens["COLOR_TEXT_INFO"],
+        "UI_SUCCESS": tokens["COLOR_TEXT_SUCCESS"],
+        "UI_WARNING": tokens["COLOR_WARNING"],
+        "UI_ERROR": tokens["COLOR_ERROR"],
+    }
+
+
 def _qss_tokens_from_roles(
     colors: Mapping[str, str],
     spacing: Mapping[str, int],
     radii: Mapping[str, int],
     sizes: Mapping[str, int],
 ) -> MappingProxyType[str, str]:
-    return MappingProxyType(
-        {
-            "COLOR_CONTENT_BACKGROUND": colors["content_background"],
-            "COLOR_SURFACE": colors["surface"],
-            "COLOR_COMMAND_BACKGROUND": colors["command_background"],
-            "COLOR_STATUS_BACKGROUND": colors["status_background"],
-            "COLOR_TEXT_PRIMARY": colors["text_primary"],
-            "COLOR_TEXT_ON_DARK": colors["text_on_dark"],
-            "COLOR_TEXT_MUTED_ON_DARK": colors["text_muted_on_dark"],
-            "COLOR_ACCENT": colors["accent"],
-            "COLOR_ACCENT_HOVER": colors["accent_hover"],
-            "COLOR_ACCENT_SOFT": colors["accent_soft"],
-            "COLOR_FOCUS": colors["focus"],
-            "COLOR_SUCCESS": colors["success"],
-            "COLOR_WARNING": colors["warning"],
-            "COLOR_ERROR": colors["error"],
-            "COLOR_BORDER": colors["border"],
-            "COLOR_BORDER_STRONG": colors["border_strong"],
-            "COLOR_HOVER_LIGHT": colors["hover_light"],
-            "COLOR_SURFACE_ALT": colors["surface_alt"],
-            "COLOR_TEXT_MUTED": colors["text_muted"],
-            "COLOR_COMMAND_HOVER": colors["command_hover"],
-            "COLOR_SEPARATOR": colors["separator"],
-            "COLOR_TEXT_DANGER": colors["text_danger"],
-            "COLOR_TEXT_SUCCESS": colors["text_success"],
-            "COLOR_TEXT_INFO": colors["text_info"],
-            "COLOR_ERROR_SOFT": colors["error_soft"],
-            "SPACE_XS": str(spacing["xs"]),
-            "SPACE_SM": str(spacing["sm"]),
-            "SPACE_MD": str(spacing["md"]),
-            "SPACE_LG": str(spacing["lg"]),
-            "SPACE_XL": str(spacing["xl"]),
-            "RADIUS_SM": str(radii["sm"]),
-            "RADIUS_MD": str(radii["md"]),
-            "RADIUS_LG": str(radii["lg"]),
-            "SIZE_COMMAND_ROW": str(sizes["command_row"]),
-            "SIZE_CHANGE_BUTTON": str(max(1, sizes["command_row"] - 4)),
-            "SIZE_TOOL_GALLERY": str(sizes["tool_gallery"]),
-            "SIZE_TITLE_BAR": str(sizes["command_row"] + sizes["tool_gallery"]),
-            "SIZE_GALLERY_ICON": str(sizes.get("gallery_icon", 32)),
-            "SIZE_ACTIVITY_RAIL": str(sizes["activity_rail"]),
-            "SIZE_BOTTOM_BAR": str(sizes["bottom_bar"]),
-            "SIZE_FOCUS_BORDER": str(sizes["focus_border"]),
-        }
-    )
+    button = int(sizes.get("button", 40))
+    tokens = {
+        "COLOR_CONTENT_BACKGROUND": colors["content_background"],
+        "COLOR_SURFACE": colors["surface"],
+        "COLOR_COMMAND_BACKGROUND": colors["command_background"],
+        "COLOR_STATUS_BACKGROUND": colors["status_background"],
+        "COLOR_TEXT_PRIMARY": colors["text_primary"],
+        "COLOR_TEXT_ON_DARK": colors["text_on_dark"],
+        "COLOR_TEXT_MUTED_ON_DARK": colors["text_muted_on_dark"],
+        "COLOR_ACCENT": colors["accent"],
+        "COLOR_ACCENT_HOVER": colors["accent_hover"],
+        "COLOR_ACCENT_SOFT": colors["accent_soft"],
+        "COLOR_FOCUS": colors["focus"],
+        "COLOR_SUCCESS": colors["success"],
+        "COLOR_WARNING": colors["warning"],
+        "COLOR_ERROR": colors["error"],
+        "COLOR_BORDER": colors["border"],
+        "COLOR_BORDER_STRONG": colors["border_strong"],
+        "COLOR_HOVER_LIGHT": colors["hover_light"],
+        "COLOR_SURFACE_ALT": colors["surface_alt"],
+        "COLOR_TEXT_MUTED": colors["text_muted"],
+        "COLOR_COMMAND_HOVER": colors["command_hover"],
+        "COLOR_SEPARATOR": colors["separator"],
+        "COLOR_TEXT_DANGER": colors["text_danger"],
+        "COLOR_TEXT_SUCCESS": colors["text_success"],
+        "COLOR_TEXT_INFO": colors["text_info"],
+        "COLOR_ERROR_SOFT": colors["error_soft"],
+        "SPACE_XS": str(spacing["xs"]),
+        "SPACE_SM": str(spacing["sm"]),
+        "SPACE_MD": str(spacing["md"]),
+        "SPACE_LG": str(spacing["lg"]),
+        "SPACE_XL": str(spacing["xl"]),
+        "RADIUS_SM": str(radii["sm"]),
+        "RADIUS_MD": str(radii["md"]),
+        "RADIUS_LG": str(radii["lg"]),
+        "SIZE_COMMAND_ROW": str(sizes["command_row"]),
+        "SIZE_CHANGE_BUTTON": str(max(1, sizes["command_row"] - 4)),
+        "SIZE_TOOL_GALLERY": str(sizes["tool_gallery"]),
+        "SIZE_TITLE_BAR": str(sizes["command_row"] + sizes["tool_gallery"]),
+        "SIZE_GALLERY_ICON": str(sizes.get("gallery_icon", 32)),
+        "SIZE_ACTIVITY_RAIL": str(sizes["activity_rail"]),
+        "SIZE_BOTTOM_BAR": str(sizes["bottom_bar"]),
+        "SIZE_FOCUS_BORDER": str(sizes["focus_border"]),
+        "SIZE_BUTTON": str(button),
+        "SIZE_BUTTON_SMALL": str(max(1, button - 8)),
+        "SIZE_BUTTON_LARGE": str(button + 8),
+        "SIZE_ICON_BUTTON": str(button),
+        "SIZE_CONTROL": str(sizes.get("control", 30)),
+        "SIZE_TABLE_ROW": str(sizes.get("table_row", 24)),
+        "SIZE_TABLE_HEADER": str(sizes.get("table_header", 44)),
+        "SIZE_TREE": str(sizes.get("tree", 26)),
+        "SIZE_INDICATOR": str(sizes.get("indicator", 16)),
+        "SIZE_RADIO_RADIUS": str(max(1, int(sizes.get("indicator", 16)) // 2)),
+        "SIZE_SECTION_TITLE_TOP": str(spacing["xs"]),
+        "SIZE_SECTION_TITLE_LEFT": str(
+            int(spacing["sm"]) + int(sizes.get("indicator", 16)) + int(spacing["xs"])
+        ),
+        "SIZE_SECTION_MARGIN_TOP": str(
+            int(spacing["xs"])
+            + max(int(sizes.get("indicator", 16)), int(spacing["lg"]))
+            + int(spacing["xs"])
+        ),
+        "SIZE_SCROLLBAR": str(sizes.get("scrollbar", 10)),
+        "SIZE_SCROLLBAR_HANDLE": str(sizes.get("table_row", 24)),
+        "SIZE_MENU_ITEM_PAD_V": str(spacing["xs"] + 2),
+        "SIZE_MENU_ITEM_PAD_H": str(spacing["lg"] + spacing["sm"]),
+        "SIZE_PROGRESS_MIN": str(spacing["sm"]),
+        "SIZE_PROGRESS_MAX": str(spacing["md"]),
+        "FONT_PT_BODY": str(FONT_SIZE_PT),
+        "FONT_PT_PAGE_TITLE": str(FONT_SIZE_PT + 2),
+        "FONT_PT_SECTION_TITLE": str(FONT_SIZE_PT),
+        "FONT_PT_CAPTION": str(max(8, FONT_SIZE_PT - 1)),
+        "FONT_WEIGHT_TITLE": "600",
+        "FONT_WEIGHT_BODY": "400",
+    }
+    tokens.update(_ui_semantic_aliases(tokens))
+    return MappingProxyType(tokens)
 
 
 LIGHT_QSS_TOKENS = _qss_tokens_from_roles(
@@ -239,7 +314,7 @@ def qss_tokens_for_scheme(scheme: EffectiveScheme | str) -> MappingProxyType[str
     return LIGHT_QSS_TOKENS
 
 
-# --- Snapshot helpers used by ThemeService / chrome appliers (SubAgent A+C) ---
+# --- Snapshot helpers used by ThemeService and chrome appliers ---
 
 LIGHT_COLOR_TOKENS = MappingProxyType(
     {key: value for key, value in LIGHT_QSS_TOKENS.items() if key.startswith("COLOR_")}
@@ -365,6 +440,27 @@ def build_tokens(scheme, metrics, preferences) -> dict[str, str]:
             "SIZE_TABLE_HEADER": str(metrics.table_header),
             "SIZE_TREE": str(metrics.tree),
             "SIZE_CONTROL": str(metrics.control),
+            "SIZE_INDICATOR": str(metrics.indicator),
+            "SIZE_RADIO_RADIUS": str(max(1, metrics.indicator // 2)),
+            "SIZE_SECTION_TITLE_TOP": str(metrics.section_title_top),
+            "SIZE_SECTION_TITLE_LEFT": str(metrics.section_title_left),
+            "SIZE_SECTION_MARGIN_TOP": str(metrics.section_margin_top),
+            "SIZE_SCROLLBAR": str(metrics.scrollbar),
+            "SIZE_SCROLLBAR_HANDLE": str(metrics.table_row),
+            "SIZE_MENU_ITEM_PAD_V": str(metrics.spacing_xs + 2),
+            "SIZE_MENU_ITEM_PAD_H": str(metrics.spacing_lg + metrics.spacing_sm),
+            "SIZE_PROGRESS_MIN": str(metrics.spacing_sm),
+            "SIZE_PROGRESS_MAX": str(metrics.spacing_md),
+            "SIZE_BUTTON_SMALL": str(max(1, metrics.button - 8)),
+            "SIZE_BUTTON_LARGE": str(metrics.button + 8),
+            "SIZE_ICON_BUTTON": str(metrics.button),
+            "FONT_PT_BODY": str(preferences.font_pt),
+            "FONT_PT_PAGE_TITLE": str(preferences.font_pt + 2),
+            "FONT_PT_SECTION_TITLE": str(preferences.font_pt),
+            "FONT_PT_CAPTION": str(max(8, preferences.font_pt - 1)),
+            "FONT_WEIGHT_TITLE": "600",
+            "FONT_WEIGHT_BODY": "400",
         }
     )
+    colors.update(_ui_semantic_aliases(colors))
     return colors

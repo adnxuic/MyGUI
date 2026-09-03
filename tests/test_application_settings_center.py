@@ -943,7 +943,6 @@ class SettingsCenterIncompatibleResetTests(unittest.TestCase):
     ) -> None:
         from unittest.mock import patch
 
-        from PySide6.QtWidgets import QMessageBox
 
         from mygui.application_settings.storage import (
             APPLICATION_SETTINGS_GROUP,
@@ -991,7 +990,7 @@ class SettingsCenterIncompatibleResetTests(unittest.TestCase):
         self.app.processEvents()
         page = window.findChild(QWidget, "maintenance_settings_page")
         self.assertIsNotNone(page)
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch.object(window, "confirm_immediate_command", return_value=True):
             self.assertTrue(page.reset_incompatible_storage())
         self.app.processEvents()
         self.assertEqual(

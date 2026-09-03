@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QAbstractItemView, QTreeView
 
 from .nodes import COMPONENT_ID_ROLE, NODE_KEY_ROLE, TreeNodeKey
 from mygui.application_theme import current_density_metrics, subscribe_theme_window
+from mygui.widgets.ui_components import UiRole, apply_ui_style
 
 
 class ComponentTreeView(QTreeView):
@@ -27,6 +28,7 @@ class ComponentTreeView(QTreeView):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu_requested)
         self._theme_row_height = current_density_metrics().tree
+        apply_ui_style(self, role=UiRole.TREE)
         subscribe_theme_window(self)
 
     def sizeHintForRow(self, row: int) -> int:
@@ -105,6 +107,6 @@ class ComponentTreeView(QTreeView):
         source_index = source.index_for_component(component_id)
         while source_index.isValid():
             proxy_index = proxy.mapFromSource(source_index)
-            if proxy_index.isValid():
+            if proxy_index.isValid() and not self.isExpanded(proxy_index):
                 self.setExpanded(proxy_index, True)
             source_index = source.parent(source_index)

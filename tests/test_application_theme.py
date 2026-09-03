@@ -235,7 +235,7 @@ class ThemeContractTests(_ThemeCase):
         old, new = self.events[0]
         self.assertIsNot(old, new)
         self.assertEqual(new.scheme, EffectiveScheme.DARK)
-        self.assertIn("mygui-theme:dark", self.app.styleSheet())
+        self.assertIn("mygui-theme-app", self.app.styleSheet())
         self.assertEqual(self.app.font().pointSize(), 9)
         self.assertEqual(dict(new.icon_roles), dict(ICON_ROLES))
 
@@ -297,7 +297,7 @@ class ThemeContractTests(_ThemeCase):
         self.theme.cancel_preview()
         self.assertIs(self.theme.snapshot(), origin)
         self.assertEqual(self.app.font().pointSize(), 9)
-        self.assertIn("mygui-theme:light", self.app.styleSheet())
+        self.assertIn("mygui-theme-app", self.app.styleSheet())
 
     def test_settings_live_commit_goes_through_theme_service(self) -> None:
         extra = RecordingRuntimeBinder("extra")
@@ -438,6 +438,13 @@ class ThemeStartupIntegrationTests(_ThemeCase):
         ).read_text(encoding="utf-8")
         self.assertIn("def render_mainwindow_stylesheet", basic)
         self.assertNotIn("mainwindow_qss = load_qss_resource", basic)
+
+    def test_figure_canvas_isolates_matplotlib_through_theme_owner(self) -> None:
+        source = (
+            ROOT / "mygui" / "widgets" / "figure_canvas" / "py_figure_canves.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("isolate_matplotlib_canvas(self.canva)", source)
+        self.assertNotIn("self.canva.setStyleSheet", source)
 
 
 if __name__ == "__main__":

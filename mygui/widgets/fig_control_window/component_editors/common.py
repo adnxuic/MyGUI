@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QPlainTextEdit,
     QSizePolicy,
@@ -22,13 +21,15 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
+from mygui.application_theme import current_density_metrics
+from mygui.widgets.ui_components import set_validation_state
 from mygui.figuremodify.components import (
     ChangeStatus,
     ComponentBatchChange,
     ComponentChange,
     normalize_linestyle,
 )
-from .inspector_layout import apply_expanding_field
+from .inspector_layout import SAFE_MIN_WIDTH, apply_expanding_field, labeled_form_row
 
 
 LINE_STYLE_OPTIONS = (
@@ -235,6 +236,7 @@ class DebouncedTextBinding(QObject):
         self._set_editor_text(text)
         if accepted:
             self._last_valid_text = text
+            set_validation_state(self.editor, invalid=False)
 
     def rollback(self) -> None:
         """Restore the last valid control value after a failed update."""
@@ -252,15 +254,23 @@ class DebouncedTextBinding(QObject):
         try:
             result = self.callback(candidate)
         except Exception as exc:
+            set_validation_state(self.editor, invalid=True, message=str(exc))
             self.rollback()
             status_messages.show_error(str(exc))
             self.rejected.emit(candidate)
             return False
         if self.result_presenter is not None:
             if not self.result_presenter(result):
+                message = modification_message(result)
+                set_validation_state(
+                    self.editor,
+                    invalid=True,
+                    message=message or "Value was rejected.",
+                )
                 self.rollback()
                 self.rejected.emit(candidate)
                 return False
+            set_validation_state(self.editor, invalid=False)
             self._last_valid_text = candidate
             self._mark_committed()
             self.applied.emit(candidate)
@@ -268,6 +278,7 @@ class DebouncedTextBinding(QObject):
         if not modification_succeeded(result):
             self.rollback()
             message = modification_message(result)
+            set_validation_state(self.editor, invalid=True, message=message or str(candidate))
             if message:
                 status_messages.show_error(message)
             self.rejected.emit(candidate)
@@ -278,6 +289,7 @@ class DebouncedTextBinding(QObject):
             status_messages.show_warning(message)
         elif status != "noop":
             status_messages.show_success(message or "Text updated.")
+        set_validation_state(self.editor, invalid=False)
         self._last_valid_text = candidate
         self._mark_committed()
         self.applied.emit(candidate)
@@ -304,20 +316,24 @@ class LineStyleEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         style_row = QHBoxLayout()
-        style_row.addWidget(QLabel("Line style:", self))
         self.style_combo = QComboBox(self)
         apply_expanding_field(self.style_combo)
         for label, value in LINE_STYLE_OPTIONS:
             self.style_combo.addItem(label, value)
+        style_row.addWidget(
+            labeled_form_row("Line style:", buddy=self.style_combo, parent=self)
+        )
         style_row.addWidget(self.style_combo, 1)
         layout.addLayout(style_row)
 
         self.size_row = QWidget(self)
         size_layout = QHBoxLayout(self.size_row)
         size_layout.setContentsMargins(0, 0, 0, 0)
-        size_layout.addWidget(QLabel(size_label, self.size_row))
         self.size_input = FocusAwareDoubleSpinBox(self.size_row)
         apply_expanding_field(self.size_input)
+        size_layout.addWidget(
+            labeled_form_row(size_label, buddy=self.size_input, parent=self.size_row)
+        )
         self.size_input.setRange(0.0, 1_000_000.0)
         self.size_input.setDecimals(3)
         self.size_input.setSingleStep(0.5)
@@ -381,7 +397,7 @@ class RangeEditor(QWidget):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
+        layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.minimum_input = FocusAwareDoubleSpinBox(self)
         self.maximum_input = FocusAwareDoubleSpinBox(self)
@@ -389,13 +405,33 @@ class RangeEditor(QWidget):
             spin.setRange(float(bounds[0]), float(bounds[1]))
             spin.setSingleStep(float(step))
             spin.setDecimals(6)
-        layout.addWidget(QLabel(lower_label, self))
-        layout.addWidget(self.minimum_input)
-        layout.addWidget(QLabel(upper_label, self))
-        layout.addWidget(self.maximum_input)
+            apply_expanding_field(spin)
+        self.lower_label = labeled_form_row(
+            lower_label, buddy=self.minimum_input, parent=self
+        )
+        self.upper_label = labeled_form_row(
+            upper_label, buddy=self.maximum_input, parent=self
+        )
+        layout.addWidget(self.lower_label, 0, 0)
+        layout.addWidget(self.minimum_input, 0, 1)
+        layout.addWidget(self.upper_label, 1, 0)
+        layout.addWidget(self.maximum_input, 1, 1)
+        layout.setColumnStretch(1, 1)
+        self.setMinimumWidth(SAFE_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.apply_theme_metrics(current_density_metrics())
         self.set_range(minimum, maximum)
         self.minimum_input.valueChanged.connect(self._emit_range)
         self.maximum_input.valueChanged.connect(self._emit_range)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Refresh range-row spacing from published density metrics."""
+
+        layout = QWidget.layout(self)
+        if layout is None:
+            return
+        layout.setHorizontalSpacing(metrics.spacing_xs)
+        layout.setVerticalSpacing(metrics.spacing_xs)
 
     def _emit_range(self, *_args) -> None:
         self.rangeChanged.emit(*self.values())
@@ -431,16 +467,20 @@ class NullableDoubleEditor(QWidget):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        self.setMinimumWidth(SAFE_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.use_value_input = QCheckBox("Set", self)
         self.value_input = FocusAwareDoubleSpinBox(self)
         self.value_input.setRange(float(bounds[0]), float(bounds[1]))
         self.value_input.setDecimals(int(decimals))
         self.value_input.setSingleStep(float(step))
+        apply_expanding_field(self.value_input)
         self._fallback = float(fallback)
         layout.addWidget(self.use_value_input)
-        layout.addWidget(self.value_input, 1)
+        layout.addWidget(self.value_input)
         self.set_value(value)
         self.use_value_input.toggled.connect(self._use_value_changed)
         self.value_input.valueChanged.connect(self._value_changed)
@@ -507,28 +547,34 @@ class NumericTupleEditor(QWidget):
                 else (0.0,) * self.length
             )
         )
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
+        self.setMinimumWidth(SAFE_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.use_value_input = None
         if self.nullable:
             self.use_value_input = QCheckBox("Set", self)
             layout.addWidget(self.use_value_input)
         self.inputs: list[QDoubleSpinBox] = []
-        host = QWidget(self)
-        host_layout = QGridLayout(host)
-        host_layout.setContentsMargins(0, 0, 0, 0)
-        host_layout.setSpacing(4)
-        layout.addWidget(host, 1)
-        columns = 1 if self.length == 1 else 2
+        self._grid_host = QWidget(self)
+        self._grid_host.setMinimumWidth(SAFE_MIN_WIDTH)
+        self._grid_host.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self._grid_layout = QGridLayout(self._grid_host)
+        self._grid_layout.setContentsMargins(0, 0, 0, 0)
+        self._grid_layout.setSpacing(4)
+        layout.addWidget(self._grid_host, 1)
         for index in range(self.length):
             editor = FocusAwareDoubleSpinBox(self)
             editor.setRange(float(bounds[0]), float(bounds[1]))
             editor.setDecimals(int(decimals))
             editor.setSingleStep(float(step))
             editor.valueChanged.connect(self._input_changed)
+            apply_expanding_field(editor)
             self.inputs.append(editor)
-            host_layout.addWidget(editor, index // columns, index % columns)
+            self._grid_layout.addWidget(editor, index, 0)
         self.set_value(value)
         if self.use_value_input is not None:
             self.use_value_input.toggled.connect(self._use_value_changed)
@@ -595,20 +641,56 @@ class SpinePositionEditor(QWidget):
 
     def __init__(self, value=("outward", 0.0), parent: QWidget | None = None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self.setMinimumWidth(SAFE_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._stack_narrow = False
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(4)
         self.kind_input = QComboBox(self)
         for label, item in self.POSITION_TYPES:
             self.kind_input.addItem(label, item)
+        apply_expanding_field(self.kind_input)
         self.value_input = FocusAwareDoubleSpinBox(self)
         self.value_input.setRange(-1e300, 1e300)
         self.value_input.setDecimals(6)
         self.value_input.setSingleStep(0.1)
-        layout.addWidget(self.kind_input)
-        layout.addWidget(self.value_input, 1)
+        apply_expanding_field(self.value_input)
+        grid.addWidget(self.kind_input, 0, 0)
+        grid.addWidget(self.value_input, 0, 1)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
         self.set_value(value)
         self.kind_input.currentIndexChanged.connect(self._changed)
         self.value_input.valueChanged.connect(self._changed)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._relayout()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._relayout()
+
+    def _relayout(self) -> None:
+        grid = QWidget.layout(self)
+        if not isinstance(grid, QGridLayout):
+            return
+        kind_min = self.kind_input.minimumSizeHint().width()
+        value_min = self.value_input.minimumSizeHint().width()
+        spacing = max(grid.spacing(), 0)
+        stack = self.width() < kind_min + value_min + spacing
+        if stack == self._stack_narrow:
+            return
+        self._stack_narrow = stack
+        grid.removeWidget(self.kind_input)
+        grid.removeWidget(self.value_input)
+        if stack:
+            grid.addWidget(self.kind_input, 0, 0, 1, 2)
+            grid.addWidget(self.value_input, 1, 0, 1, 2)
+        else:
+            grid.addWidget(self.kind_input, 0, 0)
+            grid.addWidget(self.value_input, 0, 1)
 
     def value(self):
         """Return the current control value."""
@@ -667,19 +749,23 @@ class ScatterStyleEditor(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel("Marker:", self))
         self.marker_input = QComboBox(self)
         self.marker_input.addItems([str(item) for item in (markers or self.DEFAULT_MARKERS)])
         if self.marker_input.findText(str(marker)) < 0:
             self.marker_input.addItem(str(marker))
         self.marker_input.setCurrentText(str(marker))
+        apply_expanding_field(self.marker_input)
+        layout.addWidget(
+            labeled_form_row("Marker:", buddy=self.marker_input, parent=self)
+        )
         layout.addWidget(self.marker_input)
 
-        layout.addWidget(QLabel("Size:", self))
         self.size_input = FocusAwareDoubleSpinBox(self)
         self.size_input.setRange(0.0, 1_000_000.0)
         self.size_input.setDecimals(3)
         self.size_input.setValue(float(size))
+        apply_expanding_field(self.size_input)
+        layout.addWidget(labeled_form_row("Size:", buddy=self.size_input, parent=self))
         layout.addWidget(self.size_input)
 
         self.marker_input.currentTextChanged.connect(self.markerChanged)

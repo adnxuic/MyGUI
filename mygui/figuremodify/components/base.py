@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from matplotlib.axes import Axes
@@ -226,6 +227,30 @@ class ComponentController(Generic[T]):
         """Return the stable component identifier."""
 
         return self._state.id
+
+    @property
+    def kind(self) -> ComponentKind:
+        """Return the live component kind without copying state."""
+
+        return self._state.kind
+
+    @property
+    def role(self) -> ComponentRole:
+        """Return the live component role without copying state."""
+
+        return self._state.role
+
+    @property
+    def parent_id(self) -> str | None:
+        """Return the live parent id without copying state."""
+
+        return self._state.parent_id
+
+    @property
+    def selector(self) -> Mapping[str, Any]:
+        """Return the live selector mapping without copying state."""
+
+        return self._state.selector
 
     @property
     def state(self) -> ComponentState:

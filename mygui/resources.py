@@ -12,18 +12,31 @@ from typing import Any
 PACKAGE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PACKAGE_ROOT.parent
 _QSS_TOKEN_PATTERN = re.compile(r"\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}")
+_RESOURCE_PATH_CACHE: dict[tuple[str, bool], Path] = {}
+_ICON_DIRECTORY_CACHE: dict[str, Path] = {}
+
+
+def clear_resource_path_cache_for_tests() -> None:
+    """Drop immutable resource-path caches. Tests only."""
+
+    _RESOURCE_PATH_CACHE.clear()
+    _ICON_DIRECTORY_CACHE.clear()
 
 
 def resource_path(relative_path: str | Path, *, required: bool = True) -> Path:
     """Return an absolute path below the repository resource root."""
 
     relative = PurePosixPath(str(relative_path).replace("\\", "/"))
+    cache_key = (str(relative), bool(required))
+    cached = _RESOURCE_PATH_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     if relative.is_absolute() or ".." in relative.parts:
         raise ValueError("Resource paths must be relative and remain below the resource root.")
     resolved = REPOSITORY_ROOT.joinpath(*relative.parts)
     if required and not resolved.is_file():
         raise FileNotFoundError(f"Application resource does not exist: {relative}")
-    return resolved
+    return _RESOURCE_PATH_CACHE.setdefault(cache_key, resolved)
 
 
 def icon_path(relative_path: str | Path) -> str:
@@ -37,12 +50,17 @@ def icon_directory(relative_path: str | Path = "") -> Path:
     """Return a validated directory below ``pictures/icons``."""
 
     relative = PurePosixPath(str(relative_path).replace("\\", "/"))
+    cache_key = str(relative)
+    cached = _ICON_DIRECTORY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     directory = resource_path(
         PurePosixPath("pictures/icons") / relative,
         required=False,
     )
     if not directory.is_dir():
         raise FileNotFoundError(f"Application icon directory does not exist: {relative}")
+    _ICON_DIRECTORY_CACHE[cache_key] = directory
     return directory
 
 

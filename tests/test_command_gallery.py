@@ -605,7 +605,7 @@ class CreationDialogCoverageTests(unittest.TestCase):
 
             fit = PyFitDialog("Fit", window.figure_window)
             with patch(
-                "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.present_warning"
             ), patch.object(canvas, "add_fit_curve", return_value="fit"):
                 fit.accept()
             fit.reject()
@@ -633,7 +633,7 @@ class CreationDialogCoverageTests(unittest.TestCase):
             ):
                 field = dialog_type(dialog_type.DISPLAY_NAME, window.figure_window)
                 with patch(
-                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.present_warning"
                 ), patch.object(
                     field.data_reference_input, "get_x_ref", return_value="x"
                 ), patch.object(
@@ -644,7 +644,7 @@ class CreationDialogCoverageTests(unittest.TestCase):
                     field.accept()
                 missing = dialog_type(dialog_type.DISPLAY_NAME, window.figure_window)
                 with patch(
-                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.QMessageBox.warning"
+                    "mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog.present_warning"
                 ) as warning:
                     missing.accept()
                     warning.assert_called()
@@ -707,6 +707,34 @@ class LazySettingsDialogTests(unittest.TestCase):
             self.assertIs(dialog.parentWidget(), host)
             dialog.reset_layout_button.click()
             reset_layout.assert_called_once_with()
+        finally:
+            host.close()
+            self.app.processEvents()
+
+
+class LazyTitleGalleryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_layout_chart_element_galleries_are_lazy_and_property_creates_once(self):
+        from main import MainWindow
+
+        host = MainWindow()
+        try:
+            title = host.title_bar
+            self.assertIsNone(title._selector_layout_bar)
+            self.assertIsNone(title._selector_chart_bar)
+            self.assertIsNone(title._selector_element_bar)
+            self.assertIsNotNone(title.selector_style_bar)
+            title.selector_menu_bar.layout_button.click()
+            self.app.processEvents()
+            self.assertIsNone(title._selector_layout_bar)
+            first = title.selector_layout_bar
+            second = title.selector_layout_bar
+            self.assertIs(first, second)
+            self.assertIs(title.stacklayout_bottom.widget(1), first)
+            self.assertEqual(title.stacklayout_bottom.count(), 4)
         finally:
             host.close()
             self.app.processEvents()

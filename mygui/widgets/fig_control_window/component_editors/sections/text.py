@@ -8,7 +8,6 @@ from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
-    QLabel,
     QPlainTextEdit,
     QVBoxLayout,
     QWidget,
@@ -22,6 +21,7 @@ from ..common import (
 )
 from ..context import perform_editor_action
 from ..inspector import EditorSection
+from ..inspector_layout import labeled_form_row
 from ..lifecycle import CallbackLifecycle
 from ._types import ApplyProperties
 from .property import PropertySection
@@ -191,9 +191,11 @@ class TextRenderSection(QWidget, EditorSection):
         self._lifecycle = CallbackLifecycle()
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.addWidget(QLabel("Render:", self))
         self.tex_render = QCheckBox("TeX", self)
         self.tex_render.setToolTip("Render this text with TeX")
+        self.layout.addWidget(
+            labeled_form_row("Render:", buddy=self.tex_render, parent=self)
+        )
         self.layout.addWidget(self.tex_render)
         self.layout.addStretch()
         self._listener = self._tex_state_changed

@@ -7,12 +7,8 @@ from typing import Any
 
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
-    QAbstractSpinBox,
-    QComboBox,
     QFrame,
-    QGroupBox,
     QLayout,
-    QLineEdit,
     QPushButton,
     QTableView,
     QToolBar,
@@ -157,22 +153,19 @@ def _qt_layout(widget: QWidget) -> QLayout | None:
     return QWidget.layout(widget)
 
 
-def apply_metrics_to_widget(widget: QWidget, metrics: DensityMetrics) -> None:
-    """Apply density metrics to one chrome participant and known children."""
+def apply_metrics_to_one_widget(widget: QWidget, metrics: DensityMetrics) -> None:
+    """Apply density metrics to ``widget`` only. Does not walk descendants."""
 
     method = getattr(widget, "apply_theme_metrics", None)
     if callable(method):
         method(metrics)
     _apply_by_object_name(widget, metrics)
-    for child in widget.findChildren(QWidget):
-        if child is widget:
-            continue
-        name = child.objectName()
-        if name and any(item["object_name"] == name for item in SIZE_PARTICIPANTS):
-            child_method = getattr(child, "apply_theme_metrics", None)
-            if callable(child_method):
-                child_method(metrics)
-            _apply_by_object_name(child, metrics)
+
+
+def apply_metrics_to_widget(widget: QWidget, metrics: DensityMetrics) -> None:
+    """Apply density metrics to one chrome participant."""
+
+    apply_metrics_to_one_widget(widget, metrics)
 
 
 def _apply_by_object_name(widget: QWidget, metrics: DensityMetrics) -> None:
@@ -221,7 +214,9 @@ def _apply_by_object_name(widget: QWidget, metrics: DensityMetrics) -> None:
         "figure_inspector_panel",
         "axes_inspector_panel",
     }:
-        _apply_control_minimums(widget, metrics)
+        apply = getattr(widget, "apply_theme_metrics", None)
+        if callable(apply):
+            apply(metrics)
     elif name == "command_separator" and isinstance(widget, QFrame):
         widget.setFixedHeight(metrics.bottom)
 
@@ -243,22 +238,6 @@ def _apply_table_metrics(widget: QWidget, metrics: DensityMetrics) -> None:
     header = widget.horizontalHeader()
     header.setFixedHeight(metrics.table_header)
     widget.verticalHeader().setDefaultSectionSize(metrics.table_row)
-
-
-def _apply_control_minimums(widget: QWidget, metrics: DensityMetrics) -> None:
-    pad = metrics.spacing_sm
-    for child in widget.findChildren(QWidget):
-        if isinstance(child, (QComboBox, QLineEdit, QAbstractSpinBox)):
-            child.setMinimumHeight(metrics.control)
-            child.setMinimumWidth(1)
-        if (
-            isinstance(child, QGroupBox)
-            and child.objectName() == "component_inspector_section"
-        ):
-            layout = _qt_layout(child)
-            if layout is not None:
-                layout.setContentsMargins(pad, pad, pad, pad)
-                layout.setSpacing(pad)
 
 
 def capture_widget_metrics(widget: QWidget) -> dict[str, Any]:
@@ -333,10 +312,38 @@ class ThemeMetricsApplier:
 
         return tuple(default_window_registry().live_widgets())
 
+    def _targets(self) -> tuple[QWidget, ...]:
+        registry = self._registry
+        if registry is None:
+            from .windows import default_window_registry
+
+            registry = default_window_registry()
+        seen: set[int] = set()
+        widgets: list[QWidget] = []
+        streams = [registry.live_widgets()]
+        live_metrics = getattr(registry, "live_metrics_participants", None)
+        if callable(live_metrics):
+            streams.append(live_metrics())
+        for stream in streams:
+            for widget in stream:
+                key = id(widget)
+                if key in seen:
+                    continue
+                seen.add(key)
+                widgets.append(widget)
+        return tuple(widgets)
+
     def apply(self, metrics: DensityMetrics) -> None:
         """Apply density metrics to every subscribed chrome window."""
 
         self._applied = metrics
+        from .windows import default_window_registry
+
+        registry = self._registry if self._registry is not None else default_window_registry()
+        apply_metrics = getattr(registry, "apply_metrics", None)
+        if callable(apply_metrics):
+            apply_metrics(metrics)
+            return
         for widget in self._windows():
             apply_metrics_to_widget(widget, metrics)
 
@@ -344,7 +351,7 @@ class ThemeMetricsApplier:
         """Return structural-size mementos for rollback."""
 
         captured: dict[int, dict[str, Any]] = {}
-        for widget in self._windows():
+        for widget in self._targets():
             captured[id(widget)] = capture_widget_metrics(widget)
         return {"widgets": captured, "metrics": self._applied}
 
@@ -353,7 +360,7 @@ class ThemeMetricsApplier:
 
         payload = dict(memento) if isinstance(memento, dict) else {}
         captured = payload.get("widgets") or {}
-        for widget in self._windows():
+        for widget in self._targets():
             item = captured.get(id(widget))
             if item is not None:
                 restore_widget_metrics(widget, item)

@@ -7,12 +7,15 @@ weak binding so a later snapshot can replay without cached QSS strings.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+import hashlib
 from types import MappingProxyType
 import weakref
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QWidget
 
 from mygui.resources import expand_qss_tokens, load_qss_resource, resource_path
 
@@ -21,8 +24,47 @@ from .ports import ThemeBindingPort
 from .tokens import LIGHT_QSS_TOKENS
 
 APPLICATION_QSS_RESOURCE = "mygui/widgets/mainwindow_init/app_style.qss"
+COMPONENT_QSS_RESOURCE = "mygui/widgets/ui_components/style.qss"
 MAINWINDOW_QSS_RESOURCE = "mygui/widgets/mainwindow_init/style.qss"
 DIALOG_QSS_RESOURCE = "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
+QSS_BUNDLE_SEPARATOR = "\x1e"
+
+
+@dataclass(frozen=True, slots=True)
+class QssResourceBundle:
+    """Ordered bundled QSS documents applied as one local stylesheet.
+
+    The original resource paths stay the owners of the rule text. Callers bind
+    the bundle once; they do not copy QSS contents.
+    """
+
+    resources: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        paths = tuple(str(item) for item in self.resources if str(item))
+        if not paths:
+            raise ValueError("QssResourceBundle requires at least one resource.")
+        object.__setattr__(self, "resources", paths)
+
+    @property
+    def key(self) -> str:
+        return QSS_BUNDLE_SEPARATOR.join(self.resources)
+
+
+def qss_bind_key(resource: str | QssResourceBundle) -> str:
+    """Return the ThemeBindingRegistry key for a resource or bundle."""
+
+    if isinstance(resource, QssResourceBundle):
+        return resource.key
+    return str(resource)
+
+
+def split_qss_resource_key(resource: str) -> tuple[str, ...]:
+    """Split a bind key into ordered bundled resource paths."""
+
+    if QSS_BUNDLE_SEPARATOR in resource:
+        return tuple(part for part in resource.split(QSS_BUNDLE_SEPARATOR) if part)
+    return (str(resource),)
 
 
 @dataclass(slots=True)
@@ -37,6 +79,9 @@ _BINDINGS: dict[int, _QssBinding] = {}
 _WATCHERS: dict[int, tuple[weakref.ref[QWidget], Callable[[Mapping[str, str]], None], object]] = {}
 _INSTALLED_BINDING: ThemeBindingPort | None = None
 _DEFAULT_BINDING: QssThemeBinding | None = None
+_QSS_DOC_CACHE_MAX = 48
+_COMPONENT_QSS_CACHE: OrderedDict[str, str] = OrderedDict()
+_QSS_DOC_CACHE: OrderedDict[tuple[str, str], str] = OrderedDict()
 
 
 def _alive_widget(widget_ref: weakref.ref[QWidget]) -> QWidget | None:
@@ -58,6 +103,169 @@ def _forget_watcher(key: int, *_args: object) -> None:
     _WATCHERS.pop(key, None)
 
 
+@dataclass(slots=True)
+class _ComboState:
+    combo: QComboBox
+    index: int
+    checks: tuple[object, ...]
+
+
+def _combo_is_checkable(combo: QComboBox) -> bool:
+    model = combo.model()
+    if model is None or model.rowCount() <= 0:
+        return False
+    sample = model.data(
+        model.index(0, combo.modelColumn()),
+        Qt.ItemDataRole.CheckStateRole,
+    )
+    return sample is not None
+
+
+def _combo_states(root: QWidget) -> list[_ComboState]:
+    combos = list(root.findChildren(QComboBox))
+    if isinstance(root, QComboBox):
+        combos.insert(0, root)
+    states: list[_ComboState] = []
+    for combo in combos:
+        try:
+            if not combo.isVisible():
+                continue
+        except RuntimeError:
+            continue
+        if not _combo_is_checkable(combo):
+            continue
+        model = combo.model()
+        checks: tuple[object, ...] = ()
+        if model is not None and model.rowCount() > 0:
+            column = combo.modelColumn()
+            checks = tuple(
+                model.data(
+                    model.index(row, column),
+                    Qt.ItemDataRole.CheckStateRole,
+                )
+                for row in range(model.rowCount())
+            )
+        states.append(_ComboState(combo, combo.currentIndex(), checks))
+    return states
+
+
+def _restore_combo_states(states: list[_ComboState]) -> None:
+    for state in states:
+        combo = state.combo
+        try:
+            combo.objectName()
+        except RuntimeError:
+            continue
+        blocker = QSignalBlocker(combo)
+        model = combo.model()
+        if model is not None and state.checks:
+            model_blocker = QSignalBlocker(model)
+            column = combo.modelColumn()
+            for row, check in enumerate(state.checks):
+                current = model.data(
+                    model.index(row, column),
+                    Qt.ItemDataRole.CheckStateRole,
+                )
+                if check is not None and current != check:
+                    model.setData(
+                        model.index(row, column),
+                        check,
+                        Qt.ItemDataRole.CheckStateRole,
+                    )
+            del model_blocker
+        if combo.currentIndex() != state.index:
+            combo.setCurrentIndex(state.index)
+        del blocker
+
+
+MATPLOTLIB_CANVAS_ISOLATION_QSS = "/* matplotlib figure; not workbench chrome */"
+
+
+def isolate_matplotlib_canvas(widget: QWidget) -> None:
+    """Keep workbench QSS from becoming Matplotlib Figure style.
+
+    The isolation sheet is token-free and is not a ThemeBindingRegistry
+    participant, so later theme transactions do not rewrite it or polish
+    Figure pixels.
+    """
+
+    widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    if widget.styleSheet() != MATPLOTLIB_CANVAS_ISOLATION_QSS:
+        widget.setStyleSheet(MATPLOTLIB_CANVAS_ISOLATION_QSS)
+
+
+def apply_widget_stylesheet(widget: QWidget, stylesheet: str) -> None:
+    """Apply a local stylesheet without resetting combo selection state."""
+
+    if widget.styleSheet() == stylesheet:
+        return
+    states = _combo_states(widget)
+    widget.setStyleSheet(stylesheet)
+    _restore_combo_states(states)
+
+
+def apply_application_stylesheet(app: QApplication, stylesheet: str) -> None:
+    """Apply the process stylesheet without resetting live combo state."""
+
+    if app.styleSheet() == stylesheet:
+        return
+    states: list[_ComboState] = []
+    for widget in app.topLevelWidgets():
+        states.extend(_combo_states(widget))
+    app.setStyleSheet(stylesheet)
+    _restore_combo_states(states)
+
+
+def qss_token_fingerprint(tokens: Mapping[str, object]) -> str:
+    """Return a CWD-independent fingerprint of a token mapping."""
+
+    payload = "\0".join(
+        f"{name}={value}"
+        for name, value in sorted(
+            (str(key), str(item)) for key, item in tokens.items()
+        )
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _cache_put(cache: OrderedDict, key, value, *, maxsize: int = _QSS_DOC_CACHE_MAX):
+    cache[key] = value
+    cache.move_to_end(key)
+    while len(cache) > maxsize:
+        cache.popitem(last=False)
+    return value
+
+
+def _component_qss_for_tokens(tokens: Mapping[str, object]) -> str:
+    fingerprint = qss_token_fingerprint(tokens)
+    cached = _COMPONENT_QSS_CACHE.get(fingerprint)
+    if cached is not None:
+        _COMPONENT_QSS_CACHE.move_to_end(fingerprint)
+        return cached
+    rendered = load_qss_resource(COMPONENT_QSS_RESOURCE, tokens=tokens)
+    return _cache_put(_COMPONENT_QSS_CACHE, fingerprint, rendered)
+
+
+def _cached_resource_document(
+    resource: str,
+    tokens: Mapping[str, object],
+    factory,
+) -> str:
+    key = (qss_token_fingerprint(tokens), str(resource))
+    cached = _QSS_DOC_CACHE.get(key)
+    if cached is not None:
+        _QSS_DOC_CACHE.move_to_end(key)
+        return cached
+    return _cache_put(_QSS_DOC_CACHE, key, factory())
+
+
+def clear_qss_document_cache_for_tests() -> None:
+    """Drop expanded QSS caches. Tests only."""
+
+    _COMPONENT_QSS_CACHE.clear()
+    _QSS_DOC_CACHE.clear()
+
+
 def _apply_stylesheet(
     widget: QWidget,
     *,
@@ -66,11 +274,14 @@ def _apply_stylesheet(
     tokens: Mapping[str, object],
 ) -> None:
     if inline is not None:
-        widget.setStyleSheet(expand_qss_tokens(inline, tokens))
+        apply_widget_stylesheet(widget, expand_qss_tokens(inline, tokens))
         return
     if resource is None:
         raise ValueError("QSS binding requires a resource path or inline template")
-    widget.setStyleSheet(load_qss_resource(resource, tokens=tokens))
+    apply_widget_stylesheet(
+        widget,
+        compose_component_stylesheet(resource, tokens),
+    )
 
 
 def _register(
@@ -101,8 +312,8 @@ def bind_qss(widget: QWidget, resource: str, tokens: Mapping[str, object]) -> No
     """Apply bundled QSS with explicit snapshot tokens and register a weak bind.
 
     ThemeService replays live bindings via ``apply_stylesheets``. Canvas popouts
-    (SubAgent C) should call ``ThemeBindingPort.bind_qss`` on the parentless
-    window; this helper is the token-explicit implementation behind that port.
+    should call ``ThemeBindingPort.bind_qss`` on the parentless window; this
+    helper is the token-explicit implementation behind that port.
     """
 
     _apply_stylesheet(widget, resource=resource, inline=None, tokens=tokens)
@@ -230,13 +441,32 @@ class QssThemeBinding:
 
         bind_qss(widget, resource, self._tokens)
 
-    def apply_tokens(self, tokens: Mapping[str, object]) -> None:
-        """Replace tokens and replay every live binding. No rollback engine."""
+    def publish_tokens(self, tokens: Mapping[str, object]) -> None:
+        """Replace the token table without replaying bound stylesheets."""
 
         self._tokens = MappingProxyType(
             {str(name): str(value) for name, value in tokens.items()}
         )
+
+    def apply_tokens(self, tokens: Mapping[str, object]) -> None:
+        """Replace tokens and replay every live binding. No rollback engine."""
+
+        self.publish_tokens(tokens)
         rebind_qss_bindings(self._tokens)
+
+
+def publish_qss_tokens(tokens: Mapping[str, object]) -> None:
+    """Update token tables and watchers without calling ``setStyleSheet``.
+
+    ThemeService uses this after the single application sheet and each changed
+    regional root have been applied. It is not a second stylesheet publisher.
+    """
+
+    snapshot = MappingProxyType(
+        {str(name): str(value) for name, value in tokens.items()}
+    )
+    default_qss_binding().publish_tokens(snapshot)
+    _notify_token_watchers(snapshot)
 
 
 def default_qss_binding() -> QssThemeBinding:
@@ -276,24 +506,55 @@ def _live_registry() -> ThemeBindingPort | None:
 
 def bind_widget_qss(
     widget: QWidget,
-    resource: str,
+    resource: str | QssResourceBundle,
     *,
     theme_binding: ThemeBindingPort | None = None,
 ) -> None:
-    """Bind bundled QSS through an injected port, or the process default.
+    """Bind bundled QSS through one registry and apply the sheet once.
 
-    Always expands from current snapshot tokens (never a cached stylesheet
-    string). Also registers on ThemeService's weak registry when the runtime
-    hub has been wired, so hidden Settings/Style/Inspector/Fit hosts and
-    parentless Canvas popouts retokenize on the next apply.
+    When ThemeService has wired ``ThemeBindingRegistry``, that registry is the
+    only bind table. Otherwise the module-level fallback records the widget so
+    tests and pre-service hosts can still retokenize.
     """
 
-    tokens = current_qss_tokens()
-    bind_qss(widget, resource, tokens)
+    path = qss_bind_key(resource)
     port = theme_binding if theme_binding is not None else _live_registry()
-    if port is None or port is current_theme_binding():
+    if port is not None:
+        port.bind_qss(widget, path)
         return
-    port.bind_qss(widget, resource)
+    bind_qss(widget, path, current_qss_tokens())
+
+
+def compose_component_stylesheet(
+    resource: str,
+    tokens: Mapping[str, object],
+    *,
+    regional: str | None = None,
+) -> str:
+    """Prefix shared component QSS so local sheets keep control semantics.
+
+    Qt local stylesheets isolate a widget from the application sheet, so every
+    regional ``bind_qss`` document includes the component rules. Shared
+    component QSS expands once per token fingerprint; regional documents are
+    cached by fingerprint plus resource and never resolve from CWD.
+    """
+
+    component = _component_qss_for_tokens(tokens)
+    resources = split_qss_resource_key(resource)
+    if resources == (COMPONENT_QSS_RESOURCE,):
+        return component
+    if regional is not None:
+        return f"{component}\n{regional}"
+
+    def _compose() -> str:
+        bodies = [
+            load_qss_resource(path, tokens=tokens)
+            for path in resources
+            if path != COMPONENT_QSS_RESOURCE
+        ]
+        return f"{component}\n" + "\n".join(bodies)
+
+    return _cached_resource_document(resource, tokens, _compose)
 
 
 def try_render_bound_resource(
@@ -302,34 +563,59 @@ def try_render_bound_resource(
 ) -> str | None:
     """Return expanded QSS for an existing bundled resource, else ``None``."""
 
+    paths = split_qss_resource_key(resource)
     try:
-        resource_path(resource)
+        for path in paths:
+            resource_path(path)
     except (FileNotFoundError, ValueError):
         return None
     mapping = current_qss_tokens() if tokens is None else tokens
-    return load_qss_resource(resource, tokens=mapping)
+    return compose_component_stylesheet(resource, mapping)
 
 
 def render_application_stylesheet(snapshot: ThemeSnapshot) -> str:
-    """Pre-render application QSS. Prefix keeps ThemeService apply markers."""
+    """Pre-render the small process-global popup and message-box stylesheet.
 
-    marker = f"/* mygui-theme:{snapshot.scheme.value} */\n"
-    return marker + load_qss_resource(
-        APPLICATION_QSS_RESOURCE,
-        tokens=snapshot.tokens,
+    Shared control rules stay on regional ``bind_qss`` documents. Qt local
+    stylesheets isolate those subtrees, so repeating the component document on
+    ``QApplication`` would polish the workbench twice.
+    """
+
+    def _compose() -> str:
+        marker = "/* mygui-theme-app */\n"
+        return marker + load_qss_resource(
+            APPLICATION_QSS_RESOURCE,
+            tokens=snapshot.tokens,
+        )
+
+    return _cached_resource_document(
+        f"theme-doc:{APPLICATION_QSS_RESOURCE}",
+        snapshot.tokens,
+        _compose,
     )
 
 
 def render_resource_stylesheet(resource: str, snapshot: ThemeSnapshot) -> str:
     """Pre-render one bundled QSS document, or a marker if the file is absent."""
 
-    marker = f"/* mygui-theme-resource:{resource}:{snapshot.scheme.value} */\n"
-    rendered = try_render_bound_resource(resource, snapshot.tokens)
-    if rendered is None:
-        from .chrome import render_placeholder_resource_qss
+    paths = split_qss_resource_key(resource)
 
-        return render_placeholder_resource_qss(resource, snapshot)
-    return marker + rendered
+    def _compose() -> str:
+        marker = f"/* mygui-theme-resource:{resource}:{snapshot.scheme.value} */\n"
+        try:
+            for path in paths:
+                resource_path(path)
+        except (FileNotFoundError, ValueError):
+            from .chrome import render_placeholder_resource_qss
+
+            return render_placeholder_resource_qss(resource, snapshot)
+        return marker + compose_component_stylesheet(resource, snapshot.tokens)
+
+    return _cached_resource_document(
+        f"theme-doc:{resource}",
+        snapshot.tokens,
+        _compose,
+    )
 
 
 class BundledQssRenderer:
@@ -340,14 +626,26 @@ class BundledQssRenderer:
 
     def render_resource(self, resource: str, snapshot: ThemeSnapshot) -> str:
         if resource == MAINWINDOW_QSS_RESOURCE:
-            from mygui.widgets.mainwindow_init.basic_setting import (
-                render_mainwindow_stylesheet,
-            )
 
-            marker = (
-                f"/* mygui-theme-resource:{resource}:{snapshot.scheme.value} */\n"
+            def _compose() -> str:
+                from mygui.widgets.mainwindow_init.basic_setting import (
+                    render_mainwindow_stylesheet,
+                )
+
+                marker = (
+                    f"/* mygui-theme-resource:{resource}:{snapshot.scheme.value} */\n"
+                )
+                return marker + compose_component_stylesheet(
+                    resource,
+                    snapshot.tokens,
+                    regional=render_mainwindow_stylesheet(snapshot=snapshot),
+                )
+
+            return _cached_resource_document(
+                f"theme-doc:{resource}",
+                snapshot.tokens,
+                _compose,
             )
-            return marker + render_mainwindow_stylesheet(snapshot=snapshot)
         return render_resource_stylesheet(resource, snapshot)
 
 
@@ -359,3 +657,10 @@ def reset_qss_bindings_for_tests() -> None:
     _WATCHERS.clear()
     _INSTALLED_BINDING = None
     _DEFAULT_BINDING = QssThemeBinding(LIGHT_QSS_TOKENS)
+    clear_qss_document_cache_for_tests()
+    try:
+        from .runtime import default_theme_runtime
+
+        default_theme_runtime().binding_port = None
+    except ImportError:
+        pass

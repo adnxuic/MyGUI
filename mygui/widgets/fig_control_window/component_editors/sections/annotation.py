@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QLabel,
     QLineEdit,
     QPlainTextEdit,
     QVBoxLayout,
@@ -16,7 +15,11 @@ from PySide6.QtWidgets import (
 
 from ..common import DebouncedTextBinding
 from ..inspector import EditorSection
-from ..inspector_layout import apply_expanding_field, configure_inspector_form
+from ..inspector_layout import (
+    add_labeled_form_row,
+    apply_expanding_field,
+    configure_inspector_form,
+)
 from ._types import ApplyProperties
 from .property import PropertySection
 from .text import TextTypographySection
@@ -116,8 +119,8 @@ class AnnotationContentSection(QWidget, EditorSection):
         self.name_input.setText(str(state.properties.get("label", "")))
         self.visible_input = QCheckBox(self)
         self.visible_input.setChecked(bool(state.properties.get("visible", True)))
-        details.addRow(QLabel("Name", self), self.name_input)
-        details.addRow(QLabel("Visible", self), self.visible_input)
+        add_labeled_form_row(details, "Name", self.name_input)
+        add_labeled_form_row(details, "Visible", self.visible_input)
         layout.addLayout(details)
 
         self._text_binding = DebouncedTextBinding(
@@ -245,7 +248,7 @@ class AnnotationPlacementSection(AnnotationPropertySection):
         self.preset_input.setToolTip(
             "Fill the text position with one fixed offset preset"
         )
-        self.form_layout.addRow("Placement preset", self.preset_input)
+        add_labeled_form_row(self.form_layout, "Placement preset", self.preset_input)
         self.preset_input.activated.connect(self._apply_preset)
 
     def _apply_preset(self, index: int) -> None:

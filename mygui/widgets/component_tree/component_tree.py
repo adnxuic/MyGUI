@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QLineEdit,
     QMenu,
-    QMessageBox,
     QStackedWidget,
     QVBoxLayout,
 )
@@ -26,6 +25,7 @@ from .dialogs import ComponentBatchDeleteDialog, DeleteCandidate
 from .model import ComponentTreeFilterProxyModel, ComponentTreeModel
 from .nodes import ComponentNodeKey, TreeNodeKey
 from .view import ComponentTreeView
+from mygui.widgets.ui_components import ask_confirmation, present_warning
 from mygui.application_theme import (
     bind_widget_qss,
     current_density_metrics,
@@ -57,6 +57,9 @@ class ComponentTreeHost(QFrame):
         self.search_input.setObjectName("component_tree_search")
         self.search_input.setPlaceholderText("Search components")
         self.search_input.setClearButtonEnabled(True)
+        from mygui.widgets.ui_components import UiRole, apply_ui_style
+
+        apply_ui_style(self.search_input, role=UiRole.INPUT)
 
         self.model = ComponentTreeModel(self)
         self.proxy_model = ComponentTreeFilterProxyModel(self)
@@ -312,7 +315,7 @@ class ComponentTreeHost(QFrame):
             try:
                 new_id = canvas.duplicate_component(component_id)
             except Exception as exc:
-                QMessageBox.warning(
+                present_warning(
                     self,
                     duplicate_label or "Duplicate Component",
                     f"Could not duplicate component: {exc}",
@@ -345,20 +348,14 @@ class ComponentTreeHost(QFrame):
         descendants = canvas.component_registry.descendants(component_id)
         if descendants:
             detail = f" and its {len(descendants)} child components"
-        message = QMessageBox(self)
-        message.setWindowTitle("Delete Component")
-        message.setIcon(QMessageBox.Warning)
-        message.setText(f"Delete {label}{detail}?")
-        message.setInformativeText(
-            f"Stable ID: {component_id}\nThis action cannot be undone."
+        return ask_confirmation(
+            self,
+            "Delete Component",
+            f"Delete {label}{detail}?\n\n"
+            f"Stable ID: {component_id}\nThis action cannot be undone.",
+            destructive=True,
+            confirm_text="Delete",
         )
-        delete_button = message.addButton(
-            "Delete", QMessageBox.DestructiveRole
-        )
-        cancel_button = message.addButton(QMessageBox.Cancel)
-        message.setDefaultButton(cancel_button)
-        message.exec()
-        return message.clickedButton() is delete_button
 
     def _batch_candidates(
         self, state: ComponentState

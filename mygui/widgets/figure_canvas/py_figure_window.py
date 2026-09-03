@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLineEdit,
     QMenu,
-    QMessageBox,
     QPlainTextEdit,
     QStackedWidget,
     QTabWidget,
@@ -34,6 +33,7 @@ from mygui.widgets.fig_control_window.figure_inspector import (
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.ui_components import ask_confirmation, present_warning
 
 
 class _ProjectHistoryShortcutFilter(QObject):
@@ -120,6 +120,9 @@ class FigureTabWidget(QTabWidget):
         tab_bar = self.tabBar()
         tab_bar.setContextMenuPolicy(Qt.CustomContextMenu)
         tab_bar.customContextMenuRequested.connect(self.show_context_menu)
+        from mygui.widgets.ui_components import UiRole, apply_ui_style
+
+        apply_ui_style(self, role=UiRole.TABS)
 
     def show_context_menu(self, position):
         """Show the menu for the exact tab under the pointer."""
@@ -196,15 +199,51 @@ class PyFigureWindow(QFrame):
         self.tabwindow.currentChanged.connect(self.change_current_canvas)
         self.project_metadata = ProjectMetadataService(self, self.repository)
         self._history_shortcut_filter = _ProjectHistoryShortcutFilter(self)
-        application = QApplication.instance()
-        if application is not None:
-            application.installEventFilter(self._history_shortcut_filter)
+        self._history_shortcut_installed = False
+        filter_obj = self._history_shortcut_filter
+
+        def _cleanup(*_args: object, filt=filter_obj) -> None:
+            application = QApplication.instance()
+            if application is None:
+                return
+            try:
+                application.removeEventFilter(filt)
+            except RuntimeError:
+                pass
+
+        self.destroyed.connect(_cleanup)
 
         self.content_stack.addWidget(self.empty_state)
         self.content_stack.addWidget(self.tabwindow)
         self.content_stack.setCurrentWidget(self.empty_state)
         self.layout.addWidget(self.content_stack)
         self.setLayout(self.layout)
+
+    def showEvent(self, event):  # noqa: N802 - Qt API
+        super().showEvent(event)
+        self._install_history_shortcut_filter()
+
+    def closeEvent(self, event):  # noqa: N802 - Qt API
+        self._remove_history_shortcut_filter()
+        super().closeEvent(event)
+
+    def _install_history_shortcut_filter(self) -> None:
+        if self._history_shortcut_installed:
+            return
+        application = QApplication.instance()
+        if application is None:
+            return
+        application.installEventFilter(self._history_shortcut_filter)
+        self._history_shortcut_installed = True
+
+    def _remove_history_shortcut_filter(self, *_args: object) -> None:
+        application = QApplication.instance()
+        if application is not None:
+            try:
+                application.removeEventFilter(self._history_shortcut_filter)
+            except RuntimeError:
+                pass
+        self._history_shortcut_installed = False
 
     def _update_empty_state(self):
         if self.tabwindow.count() == 0:
@@ -592,25 +631,24 @@ class PyFigureWindow(QFrame):
                     for snapshot in snapshots
                 )
         if not captured:
-            if reason == "delete-sheet" and QMessageBox.question(
+            if reason == "delete-sheet" and not ask_confirmation(
                 self,
                 "Delete Sheet",
                 "Delete the selected sheet?",
-                QMessageBox.Yes | QMessageBox.No,
-            ) != QMessageBox.Yes:
+                destructive=True,
+            ):
                 return False
             return (lambda: None, lambda: None)
         summary = ", ".join(labels[:8])
         if len(labels) > 8:
             summary += f", and {len(labels) - 8} more"
         action = "change the column type" if reason == "type" else "delete the selected data"
-        response = QMessageBox.question(
+        if not ask_confirmation(
             self,
             "Dependent Objects",
             f"This operation will remove {total} dependent objects ({summary}).\n\nContinue and {action}?",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if response != QMessageBox.Yes:
+            destructive=True,
+        ):
             return False
 
         def redo():
@@ -695,7 +733,7 @@ class PyFigureWindow(QFrame):
                 raise IndexError(f"Invalid project index: {tab_index}")
             self.rename_project(canvas.project_id, new_name)
         except Exception as exc:
-            QMessageBox.warning(self, "Rename Project", str(exc))
+            present_warning(self, "Rename Project", str(exc))
 
     def rename_project(self, project_id: str, new_name: str):
         """Rename project."""

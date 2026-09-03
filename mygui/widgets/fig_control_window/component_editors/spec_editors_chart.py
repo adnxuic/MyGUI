@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.widgets.english_buttons import english_ok_cancel
+from mygui.widgets.ui_components import UiRole, apply_ui_style
 
 from mygui.figuremodify.matplotlib_adapter import available_colormap_names
 from mygui.figuremodify.components.errors import ComponentValidationError
@@ -33,6 +34,8 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
 
 from .common import FocusAwareDoubleSpinBox, NumericTupleEditor
 from .inline_spec_editors import LinePatternEditor, OptionalColorEditor
+from .inspector_layout import add_labeled_form_row
+
 from .spec_editor_base import (
     CONNECTOR_LABELS,
     _ERROR_EVERY_FIELDS,
@@ -154,12 +157,12 @@ class _ScatterColorMapDialog(QDialog):
         self.nonfinite_input.setCurrentIndex(
             max(0, self.nonfinite_input.findData(spec["nonfinite"]))
         )
-        form.addRow("Colormap", self.cmap_input)
-        form.addRow("Normalization", self.norm_input)
-        form.addRow("Bad color", self.bad_input)
-        form.addRow("Under color", self.under_input)
-        form.addRow("Over color", self.over_input)
-        form.addRow("Non-finite values", self.nonfinite_input)
+        add_labeled_form_row(form, "Colormap", self.cmap_input)
+        add_labeled_form_row(form, "Normalization", self.norm_input)
+        add_labeled_form_row(form, "Bad color", self.bad_input)
+        add_labeled_form_row(form, "Under color", self.under_input)
+        add_labeled_form_row(form, "Over color", self.over_input)
+        add_labeled_form_row(form, "Non-finite values", self.nonfinite_input)
         layout.addWidget(self.details)
 
         self.error_label = _chrome_error_label(self)
@@ -258,9 +261,9 @@ class _ScatterSizeMapDialog(QDialog):
         )
         self.clamp_input = QCheckBox(self.details)
         self.clamp_input.setChecked(bool(spec["clamp"]))
-        form.addRow("Data range", self.input_range_input)
-        form.addRow("Point area (pt\u00b2)", self.output_range_input)
-        form.addRow("Clamp to range", self.clamp_input)
+        add_labeled_form_row(form, "Data range", self.input_range_input)
+        add_labeled_form_row(form, "Point area (pt\u00b2)", self.output_range_input)
+        add_labeled_form_row(form, "Clamp to range", self.clamp_input)
         layout.addWidget(self.details)
 
         self.error_label = _chrome_error_label(self)
@@ -349,13 +352,12 @@ class _ConnectorPage(QWidget):
         self.zorder_input.setRange(-1e6, 1e6)
         self.zorder_input.setDecimals(3)
         self.zorder_input.setValue(float(spec["zorder"]))
-        form.addRow("Visible", self.visible_input)
-        form.addRow("Color", self.color_input)
-        form.addRow("Pattern", self.line_pattern_input)
-        form.addRow("Width", self.linewidth_input)
-        form.addRow("Opacity", self.alpha_input)
-        form.addRow("Z order", self.zorder_input)
-
+        add_labeled_form_row(form, "Visible", self.visible_input)
+        add_labeled_form_row(form, "Color", self.color_input)
+        add_labeled_form_row(form, "Pattern", self.line_pattern_input)
+        add_labeled_form_row(form, "Width", self.linewidth_input)
+        add_labeled_form_row(form, "Opacity", self.alpha_input)
+        add_labeled_form_row(form, "Z order", self.zorder_input)
     def values(self) -> dict[str, Any]:
         """Return this connector's complete record."""
 
@@ -381,6 +383,7 @@ class _ZoomConnectorsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget(self)
+        apply_ui_style(self.tabs, role=UiRole.TABS)
         self.pages: list[_ConnectorPage] = []
         for label, spec in zip(CONNECTOR_LABELS, specs, strict=True):
             page = _ConnectorPage(spec, color_library, self.tabs)

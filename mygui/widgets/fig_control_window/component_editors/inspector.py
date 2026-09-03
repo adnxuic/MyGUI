@@ -6,11 +6,17 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
 
+from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QFrame, QGroupBox, QVBoxLayout, QWidget
-from mygui.application_theme import current_density_metrics
+from mygui.application_theme import current_density_metrics, subscribe_theme_window
+from mygui.widgets.ui_components import annotate_form_fields, annotate_section
 from mygui.figuremodify.components import DeletionPolicy
 from mygui.widgets.fig_control_window.component_editors.cleanup import (
     isolate_cleanup,
+)
+from mygui.widgets.fig_control_window.component_editors.inspector_layout import (
+    request_inspector_geometry_refresh,
 )
 
 
@@ -28,6 +34,118 @@ class EditorSection:
         """Disconnect callbacks and release resources owned by this object."""
 
         return None
+
+
+def _collapse_inspector_section(section: QWidget, expanded: bool) -> None:
+    """Toggle visibility without leaving QGroupBox children disabled."""
+
+    section.setVisible(expanded)
+    section.setEnabled(True)
+    parent = section.parentWidget()
+    restore = getattr(parent, "_keep_children_enabled", None)
+    if callable(restore):
+        restore()
+    request_inspector_geometry_refresh(section)
+
+
+class InspectorSectionGroup(QGroupBox):
+    """Collapsible Inspector chrome that hides children instead of disabling them."""
+
+    def __init__(self, title: str = "", parent: QWidget | None = None):
+        super().__init__(title, parent)
+        self.setObjectName("component_inspector_section")
+        self._full_title = title
+        self.setToolTip(title)
+        self.setAccessibleName(title)
+
+    def setTitle(self, title: str) -> None:  # noqa: N802
+        self._full_title = str(title)
+        self.setToolTip(self._full_title)
+        self.setAccessibleName(self._full_title)
+        super().setTitle(self._full_title)
+        self._apply_title_elide()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._apply_title_elide()
+
+    def _apply_title_elide(self) -> None:
+        full = getattr(self, "_full_title", self.title())
+        if not full or self.width() <= 1:
+            return
+        metrics = current_density_metrics()
+        left = (
+            metrics.section_title_left
+            if self.isCheckable()
+            else metrics.spacing_sm
+        )
+        available = max(
+            8,
+            self.width()
+            - left
+            - (2 * metrics.spacing_xs)
+            - metrics.spacing_sm
+            - 4,
+        )
+        elided = QFontMetrics(self.font()).elidedText(
+            full,
+            Qt.TextElideMode.ElideRight,
+            available,
+        )
+        if elided != self.title():
+            super().setTitle(elided)
+
+    def full_title(self) -> str:
+        """Return the unelided section title used by tests and smoke."""
+
+        return getattr(self, "_full_title", self.title())
+
+    def setChecked(self, checked: bool) -> None:
+        super().setChecked(checked)
+        self._keep_children_enabled()
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if event.type() in (
+            QEvent.Type.EnabledChange,
+            QEvent.Type.StyleChange,
+            QEvent.Type.ParentChange,
+            QEvent.Type.FontChange,
+        ):
+            self._keep_children_enabled()
+            if event.type() in (QEvent.Type.StyleChange, QEvent.Type.FontChange):
+                self._apply_title_elide()
+
+    def childEvent(self, event) -> None:
+        super().childEvent(event)
+        self._keep_children_enabled()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._keep_children_enabled()
+        self._apply_title_elide()
+
+    def _keep_children_enabled(self) -> None:
+        if not self.isCheckable() or self.isChecked():
+            return
+        for child in self.children():
+            if isinstance(child, QWidget):
+                child.setEnabled(True)
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Apply density padding without walking unrelated Inspector widgets."""
+
+        layout = self.layout()
+        if layout is None:
+            return
+        pad = metrics.spacing_sm
+        layout.setContentsMargins(pad, pad, pad, pad)
+        layout.setSpacing(pad)
+        self._apply_title_elide()
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(1, hint.height())
 
 
 SectionFactory = Callable[[object, object, QWidget | None], QWidget]
@@ -209,9 +327,7 @@ class ComponentInspector(QFrame):
                 self._sections.append(section)
                 self._sections_by_key[spec.key] = section
 
-                group = QGroupBox(spec.title, self)
-                group.setObjectName("component_inspector_section")
-                group.setMinimumWidth(1)
+                group = InspectorSectionGroup(spec.title, self)
                 group_layout = QVBoxLayout(group)
                 pad = metrics.spacing_sm
                 group_layout.setContentsMargins(pad, pad, pad, pad)
@@ -221,13 +337,59 @@ class ComponentInspector(QFrame):
                     group.setCheckable(True)
                     group.setChecked(False)
                     section.setVisible(False)
-                    group.toggled.connect(section.setVisible)
+                    group._keep_children_enabled()
+                    group.toggled.connect(
+                        lambda checked, current=section: _collapse_inspector_section(
+                            current, checked
+                        )
+                    )
+                annotate_section(group)
                 self.layout.addWidget(group)
+            annotate_form_fields(self)
         except Exception:
             self._dispose_sections()
             raise
 
         self.layout.addStretch()
+        subscribe_theme_window(self)
+
+    def minimumSizeHint(self) -> QSize:
+        hint = QFrame.minimumSizeHint(self)
+        return QSize(1, hint.height())
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if event.oldSize().width() == event.size().width():
+            return
+        from mygui.widgets.fig_control_window.component_editors.inspector_layout import (
+            InspectorFormLabel,
+        )
+
+        for form_label in self.findChildren(InspectorFormLabel):
+            form_label.apply_theme_metrics()
+
+    def apply_theme_metrics(self, metrics) -> None:
+        """Update section spacing from the published density metrics."""
+
+        self.layout.setSpacing(metrics.spacing_sm)
+        for index in range(self.layout.count()):
+            item = self.layout.itemAt(index)
+            widget = item.widget() if item is not None else None
+            apply = getattr(widget, "apply_theme_metrics", None)
+            if callable(apply):
+                apply(metrics)
+        from mygui.widgets.fig_control_window.component_editors.common import (
+            RangeEditor,
+        )
+
+        for editor in self.findChildren(RangeEditor):
+            editor.apply_theme_metrics(metrics)
+        from mygui.widgets.fig_control_window.component_editors.inspector_layout import (
+            InspectorFormLabel,
+        )
+
+        for form_label in self.findChildren(InspectorFormLabel):
+            form_label.apply_theme_metrics(metrics)
 
     def section(self, key: str) -> QWidget:
         """Return the requested section."""

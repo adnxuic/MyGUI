@@ -17,13 +17,13 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QLabel,
-    QMessageBox,
     QSpinBox,
     QVBoxLayout,
 )
 
 from mygui.application_theme import bind_widget_qss
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.widgets.ui_components import present_warning
 from mygui.excel_io import (
     EXCEL_PREVIEW_ROWS,
     ExcelColumnSpec,
@@ -468,7 +468,7 @@ class TextImportDialog(QDialog):
             if not specs:
                 raise ValueError("Select at least one column to import.")
         except ValueError as exc:
-            QMessageBox.warning(self, "Import Text Data", str(exc))
+            present_warning(self, "Import Text Data", str(exc))
             return
         finally:
             QApplication.restoreOverrideCursor()

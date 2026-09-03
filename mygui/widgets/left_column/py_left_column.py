@@ -12,6 +12,7 @@ from mygui.application_theme import (
 from mygui.resources import icon_path as resolve_icon_path
 from mygui.widgets.left_column.py_setting_dialog import PySettingDialog
 from mygui.application_theme.runtime import default_theme_runtime
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style
 
 
 def _tinted_icon(icon_path, color):
@@ -86,6 +87,11 @@ class PyLeftColumn(QFrame):
         self.setting_button.setObjectName("setting_button")
         self.setting_button.setToolTip("Open settings")
         self.setting_button.setAccessibleName("Open settings")
+        apply_ui_style(
+            self.setting_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.GHOST,
+        )
         self.setting_button.setIcon(
             _chrome_icon(
                 resolve_icon_path("setting.svg"),
@@ -113,6 +119,7 @@ class PyLeftColumn(QFrame):
         button.setToolTip(tooltip)
         button.setAccessibleName(accessible_name)
         button.setCheckable(True)
+        apply_ui_style(button, role=UiRole.BUTTON, variant=UiVariant.GHOST)
         button.clicked.connect(
             lambda _checked=False, target=mode:
             self.explorerModeRequested.emit(target)

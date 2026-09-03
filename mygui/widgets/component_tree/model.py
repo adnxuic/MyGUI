@@ -34,6 +34,18 @@ class _TreePointer:
 
 
 @dataclass(frozen=True, slots=True)
+class _ComponentPresentation:
+    """UI-only tree row. Does not cache component properties or business state."""
+
+    component_id: str
+    kind: ComponentKind
+    role: ComponentRole
+    display_label: str
+    tooltip: str
+    search_text: str
+
+
+@dataclass(frozen=True, slots=True)
 class _VirtualGroup:
     node_key: GroupNodeKey
     parent_component_id: str
@@ -60,6 +72,7 @@ class ComponentTreeModel(QAbstractItemModel):
         self._component_keys: dict[str, ComponentNodeKey] = {}
         self._pointers: dict[TreeNodeKey, _TreePointer] = {}
         self._groups: dict[GroupNodeKey, _VirtualGroup] = {}
+        self._presentations: dict[str, _ComponentPresentation] = {}
 
     def set_registry(self, registry, editor_registry=None) -> None:
         """Bind a Registry and atomically replace the projected topology."""
@@ -132,6 +145,7 @@ class ComponentTreeModel(QAbstractItemModel):
             self._component_keys,
             self._pointers,
             self._groups,
+            self._presentations,
         ) = projection
         self.endResetModel()
         self.refreshed.emit()
@@ -146,10 +160,11 @@ class ComponentTreeModel(QAbstractItemModel):
         component_keys: dict[str, ComponentNodeKey] = {}
         pointers: dict[TreeNodeKey, _TreePointer] = {}
         groups: dict[GroupNodeKey, _VirtualGroup] = {}
+        presentations: dict[str, _ComponentPresentation] = {}
         if self.registry is None:
             return (
                 node_children, node_parents, component_children,
-                component_keys, pointers, groups,
+                component_keys, pointers, groups, presentations,
             )
 
         states = list(self.registry.states())
@@ -294,9 +309,40 @@ class ComponentTreeModel(QAbstractItemModel):
             raise ValueError(
                 "Component tree presentation contains unreachable components."
             )
+        for component_id, key in component_keys.items():
+            state = states_by_id[component_id]
+            parent_group = groups.get(node_parents.get(key))
+            ungrouped = self.presentation.display_label(state)
+            if parent_group is not None and parent_group.role is not None:
+                try:
+                    index_in_group = node_children[parent_group.node_key].index(key)
+                except ValueError:
+                    index_in_group = max(0, state.order)
+                display = self.presentation.grouped_label(state, index_in_group)
+            else:
+                display = ungrouped
+            tooltip = (
+                f"ID: {state.id}\nKind: {state.kind.value}\n"
+                f"Role: {state.role.value}\nParent: {state.parent_id or 'None'}"
+            )
+            presentations[component_id] = _ComponentPresentation(
+                component_id=state.id,
+                kind=state.kind,
+                role=state.role,
+                display_label=display,
+                tooltip=tooltip,
+                search_text=" ".join(
+                    (
+                        ungrouped,
+                        display,
+                        state.kind.value,
+                        state.role.value,
+                    )
+                ),
+            )
         return (
             node_children, node_parents, component_children,
-            component_keys, pointers, groups,
+            component_keys, pointers, groups, presentations,
         )
 
     def _component_event(self, event: ComponentEvent) -> None:
@@ -316,14 +362,18 @@ class ComponentTreeModel(QAbstractItemModel):
         if candidate_signature != current_signature:
             self._publish_projection(candidate)
             return
-        for event in events:
-            index = self.index_for_component(event.component_id)
+        previous = self._presentations
+        self._presentations = candidate[6]
+        changed_ids = [
+            component_id
+            for component_id, presentation in self._presentations.items()
+            if previous.get(component_id) != presentation
+        ]
+        roles = [Qt.DisplayRole, Qt.ToolTipRole, COMPONENT_SEARCH_ROLE]
+        for component_id in changed_ids:
+            index = self.index_for_component(component_id)
             if index.isValid():
-                self.dataChanged.emit(
-                    index,
-                    index,
-                    [Qt.DisplayRole, Qt.ToolTipRole, COMPONENT_SEARCH_ROLE],
-                )
+                self.dataChanged.emit(index, index, roles)
 
     def index(self, row, column, parent=QModelIndex()):
         if row < 0 or column != 0 or (parent.isValid() and parent.column() != 0):
@@ -387,44 +437,25 @@ class ComponentTreeModel(QAbstractItemModel):
             return None
 
         component_id = self.component_id(index)
-        if not component_id or self.registry is None or component_id not in self.registry:
+        if not component_id:
             return None
-        state = self.registry.get(component_id).state
+        presentation = self._presentations.get(component_id)
+        if presentation is None:
+            return None
         if role == Qt.DisplayRole:
-            parent_group = self._groups.get(
-                self._node_parents.get(self._component_keys[component_id])
-            )
-            if parent_group is not None and parent_group.role is not None:
-                try:
-                    index_in_group = self._node_children[
-                        parent_group.node_key
-                    ].index(self._component_keys[component_id])
-                except ValueError:
-                    index_in_group = max(0, state.order)
-                return self.presentation.grouped_label(state, index_in_group)
-            return self.presentation.display_label(state)
+            return presentation.display_label
         if role == Qt.ToolTipRole:
-            return (
-                f"ID: {state.id}\nKind: {state.kind.value}\n"
-                f"Role: {state.role.value}\nParent: {state.parent_id or 'None'}"
-            )
+            return presentation.tooltip
         if role == COMPONENT_ID_ROLE:
-            return state.id
+            return presentation.component_id
         if role == COMPONENT_KIND_ROLE:
-            return state.kind.value
+            return presentation.kind.value
         if role == COMPONENT_ROLE_ROLE:
-            return state.role.value
+            return presentation.role.value
         if role == COMPONENT_SEARCH_ROLE:
-            return " ".join(
-                (
-                    self.presentation.display_label(state),
-                    str(self.data(index, Qt.DisplayRole) or ""),
-                    state.kind.value,
-                    state.role.value,
-                )
-            )
+            return presentation.search_text
         if role == NODE_KEY_ROLE:
-            return self._component_keys[state.id]
+            return self._component_keys.get(presentation.component_id)
         if role == VIRTUAL_GROUP_ROLE:
             return False
         return None
@@ -432,7 +463,8 @@ class ComponentTreeModel(QAbstractItemModel):
     def flags(self, index):
         if not index.isValid():
             return Qt.NoItemFlags
-        if index.data(VIRTUAL_GROUP_ROLE):
+        node_key = self.node_key(index)
+        if node_key in self._groups:
             return Qt.ItemIsEnabled
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 

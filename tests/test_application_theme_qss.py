@@ -6,6 +6,7 @@ import os
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -276,3 +277,188 @@ class QssBindReplayTests(unittest.TestCase):
             MAINWINDOW_QSS_RESOURCE,
             "mygui/widgets/mainwindow_init/style.qss",
         )
+
+
+class QssSingleChannelPublishTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = _qapp()
+
+    def setUp(self) -> None:
+        reset_qss_bindings_for_tests()
+        from mygui.application_theme.runtime import reset_theme_runtime_for_tests
+
+        reset_theme_runtime_for_tests()
+
+    def tearDown(self) -> None:
+        reset_qss_bindings_for_tests()
+        from mygui.application_theme.runtime import reset_theme_runtime_for_tests
+
+        reset_theme_runtime_for_tests()
+        self.app.setStyleSheet("")
+
+    def test_bind_widget_qss_uses_theme_registry_only(self) -> None:
+        from mygui.application_theme import AppearancePreferences, ThemeMode, compose_theme_service
+
+        theme = compose_theme_service(self.app)
+        theme.apply_committed(AppearancePreferences(mode=ThemeMode.LIGHT))
+        widget = QWidget()
+        bind_widget_qss(widget, DIALOG_QSS_RESOURCE)
+        self.assertEqual(binding_count(), 0)
+        bound = list(theme.bindings.iter_bindings())
+        self.assertEqual(len(bound), 1)
+        self.assertIs(bound[0][0], widget)
+        widget.deleteLater()
+        self.app.processEvents()
+
+    def test_theme_switch_is_one_app_sheet_and_changed_roots(self) -> None:
+        from mygui.application_theme import AppearancePreferences, ThemeMode, compose_theme_service
+        from mygui.application_theme.qss import rebind_qss_bindings
+
+        theme = compose_theme_service(self.app)
+        theme.apply_committed(AppearancePreferences(mode=ThemeMode.LIGHT))
+        roots = [QWidget() for _ in range(3)]
+        for widget in roots:
+            bind_widget_qss(widget, DIALOG_QSS_RESOURCE)
+
+        app_calls: list[object] = []
+        widget_calls: list[object] = []
+        origin_app = type(self.app).setStyleSheet
+        origin_widget = QWidget.setStyleSheet
+
+        def _app_sheet(app, sheet):
+            app_calls.append(app)
+            return origin_app(app, sheet)
+
+        def _widget_sheet(widget, sheet):
+            widget_calls.append(widget)
+            return origin_widget(widget, sheet)
+
+        with (
+            patch.object(type(self.app), "setStyleSheet", _app_sheet),
+            patch.object(QWidget, "setStyleSheet", _widget_sheet),
+            patch(
+                "mygui.application_theme.windows.refresh_chrome_style",
+            ) as polish,
+            patch(
+                "mygui.application_theme.qss.rebind_qss_bindings",
+                wraps=rebind_qss_bindings,
+            ) as rebind,
+        ):
+            theme.apply_committed(AppearancePreferences(mode=ThemeMode.DARK))
+        self.assertEqual(len(app_calls), 0)
+        self.assertEqual(len(widget_calls), 3)
+        self.assertEqual(set(widget_calls), set(roots))
+        polish.assert_not_called()
+        rebind.assert_not_called()
+        for widget in roots:
+            widget.deleteLater()
+        self.app.processEvents()
+
+    def test_identical_stylesheet_skips_setstylesheet(self) -> None:
+        widget = QWidget()
+        bind_widget_qss(widget, DIALOG_QSS_RESOURCE)
+        origin = QWidget.setStyleSheet
+        calls: list[object] = []
+
+        def _sheet(target, stylesheet):
+            calls.append(target)
+            return origin(target, stylesheet)
+
+        with patch.object(QWidget, "setStyleSheet", _sheet):
+            bind_widget_qss(widget, DIALOG_QSS_RESOURCE)
+        self.assertEqual(calls, [])
+        widget.deleteLater()
+        self.app.processEvents()
+
+    def test_isolate_matplotlib_canvas_is_token_free_and_idempotent(self) -> None:
+        from mygui.application_theme import isolate_matplotlib_canvas
+        from mygui.application_theme.qss import MATPLOTLIB_CANVAS_ISOLATION_QSS
+
+        widget = QWidget()
+        isolate_matplotlib_canvas(widget)
+        self.assertEqual(widget.styleSheet(), MATPLOTLIB_CANVAS_ISOLATION_QSS)
+        origin = QWidget.setStyleSheet
+        calls: list[object] = []
+
+        def _sheet(target, stylesheet):
+            calls.append(target)
+            return origin(target, stylesheet)
+
+        with patch.object(QWidget, "setStyleSheet", _sheet):
+            isolate_matplotlib_canvas(widget)
+        self.assertEqual(calls, [])
+        widget.deleteLater()
+        self.app.processEvents()
+
+    def test_theme_rollback_restores_combo_without_tree_polish(self) -> None:
+        from mygui.application_theme import AppearancePreferences, ThemeMode, compose_theme_service
+        from PySide6.QtWidgets import QComboBox
+
+        theme = compose_theme_service(self.app)
+        theme.apply_committed(AppearancePreferences(mode=ThemeMode.LIGHT))
+        host = QWidget()
+        combo = QComboBox(host)
+        combo.addItem("one")
+        combo.addItem("two")
+        combo.addItem("three")
+        combo.setCurrentIndex(1)
+        bind_widget_qss(host, DIALOG_QSS_RESOURCE)
+        with patch("mygui.application_theme.windows.refresh_chrome_style") as polish:
+            theme.preview(AppearancePreferences(mode=ThemeMode.DARK))
+            self.assertEqual(combo.currentIndex(), 1)
+            theme.cancel_preview()
+        polish.assert_not_called()
+        self.assertEqual(combo.currentIndex(), 1)
+        host.deleteLater()
+        self.app.processEvents()
+
+    def test_qss_cache_does_not_depend_on_cwd(self) -> None:
+        import os
+        import tempfile
+
+        from mygui.application_theme.qss import compose_component_stylesheet
+
+        first = compose_component_stylesheet(DIALOG_QSS_RESOURCE, LIGHT_QSS_TOKENS)
+        with tempfile.TemporaryDirectory() as folder:
+            previous = os.getcwd()
+            os.chdir(folder)
+            try:
+                second = compose_component_stylesheet(
+                    DIALOG_QSS_RESOURCE, LIGHT_QSS_TOKENS
+                )
+            finally:
+                os.chdir(previous)
+        self.assertEqual(first, second)
+        self.assertTrue(first)
+
+
+class QssResourceBundleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self) -> None:
+        reset_qss_bindings_for_tests()
+
+    def tearDown(self) -> None:
+        reset_qss_bindings_for_tests()
+
+    def test_bundle_composes_ordered_resources_once(self) -> None:
+        from mygui.application_theme import QssResourceBundle
+        from mygui.application_theme.qss import compose_component_stylesheet
+
+        bundle = QssResourceBundle(
+            (
+                "mygui/widgets/settings_center/style.qss",
+                "mygui/widgets/settings_pages/style.qss",
+            )
+        )
+        rendered = compose_component_stylesheet(bundle.key, LIGHT_QSS_TOKENS)
+        self.assertIn("setting_dialog", rendered)
+        self.assertIn("settings_page_appearance", rendered)
+        widget = QWidget()
+        bind_widget_qss(widget, bundle)
+        self.assertIn("setting_dialog", widget.styleSheet())
+        widget.deleteLater()
+        self.app.processEvents()

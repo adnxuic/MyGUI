@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFrame, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QWidget
 
 from mygui.figuremodify.components import (
     AxesController,
@@ -31,6 +31,8 @@ from mygui.widgets.fig_control_window.component_editors.cleanup import (
 )
 from mygui.widgets.fig_control_window.component_editors.inspector_layout import (
     CurrentPageStackedWidget,
+    inspector_page_switch_batch,
+    present_inspector_page,
 )
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 
@@ -52,6 +54,7 @@ class ComponentInspectorRemoval:
     component_id: str
     owner: object
     handle: InspectorRemoval
+    from_visible_stack: bool = False
 
 
 class AxesInspectorPanel(QFrame):
@@ -67,6 +70,7 @@ class AxesInspectorPanel(QFrame):
         self.axes_controller = axes_controller
         self.context = context
         self._disposed = False
+        self._current_component_id = axes_controller.component_id
         self.semantic_panel = None
         self._chart_stack = None
         self._element_stack = None
@@ -86,6 +90,7 @@ class AxesInspectorPanel(QFrame):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             layout.addWidget(self._inspector_stack)
+            self._inspector_stack.attach_switch_host(self)
         except Exception:
             self.dispose()
             raise
@@ -122,7 +127,7 @@ class AxesInspectorPanel(QFrame):
             raise ValueError(
                 f"Invalid Axes Inspector placement {profile.placement.value!r}."
             )
-        editor_key: EditorKey = (controller.state.kind, controller.state.role)
+        editor_key: EditorKey = (controller.kind, controller.role)
         toolbox = stack.ensure_toolbox(editor_key)
         toolbox.editor_manager = self.context.editor_manager
         toolbox.set_empty_callback(
@@ -205,26 +210,18 @@ class AxesInspectorPanel(QFrame):
     def show_component(self, component_id: str) -> bool:
         """Show exactly one Axes-owned Component Inspector."""
 
+        with inspector_page_switch_batch(self):
+            return self._show_component_impl(component_id)
+
+    def _show_component_impl(self, component_id: str) -> bool:
         try:
             inspector = self.ensure_component(component_id)
         except (KeyError, ValueError):
             return False
-        profile = self.context.editor_manager.editor_registry.resolve_profile(
-            inspector.controller
-        )
-        if profile.placement is EditorPlacement.SEMANTIC:
-            self.semantic_panel.show_component(component_id)
-            self._inspector_stack.setCurrentWidget(self.semantic_panel)
-            return True
-        if profile.placement is EditorPlacement.CHART:
-            self._chart_stack.show_component(component_id)
-            self._inspector_stack.setCurrentWidget(self._chart_stack)
-            return True
-        if profile.placement is EditorPlacement.ELEMENT:
-            self._element_stack.show_component(component_id)
-            self._inspector_stack.setCurrentWidget(self._element_stack)
-            return True
-        return False
+        if inspector is None:
+            return False
+        self._current_component_id = str(component_id)
+        return True
 
     def inspector(self, component_id: str):
         """Return an Inspector owned by this Axes panel."""
@@ -258,13 +255,7 @@ class AxesInspectorPanel(QFrame):
         return False
 
     def current_component_id(self) -> str | None:
-        current = self._inspector_stack.currentWidget()
-        if current is self.semantic_panel:
-            return self.semantic_panel.current_component_id()
-        for stack in (self._chart_stack, self._element_stack):
-            if current is stack:
-                return stack.current_component_id()
-        return None
+        return self._current_component_id
 
     def dispose(self) -> None:
         """Recursively release all Inspectors owned by this Axes."""
@@ -298,6 +289,7 @@ class FigureElementInspectorPanel(QFrame):
         super().__init__()
         self.context = context
         self._disposed = False
+        self._current_component_id: str | None = None
         self._element_stack = None
         try:
             self._element_stack = ElementInspectorStack(self)
@@ -330,7 +322,7 @@ class FigureElementInspectorPanel(QFrame):
         )
         if profile is None or profile.placement is not EditorPlacement.ELEMENT:
             raise ValueError("Component is not a Figure element.")
-        editor_key: EditorKey = (controller.state.kind, controller.state.role)
+        editor_key: EditorKey = (controller.kind, controller.role)
         toolbox = self.ensure_toolbox(editor_key)
         inspector = self.context.editor_manager.create(
             controller,
@@ -369,7 +361,8 @@ class FigureElementInspectorPanel(QFrame):
             self.ensure_component(component_id)
         except (KeyError, ValueError):
             return False
-        return self._element_stack.show_component(component_id)
+        self._current_component_id = str(component_id)
+        return True
 
     def inspector(self, component_id: str):
         return self._element_stack.inspector(component_id)
@@ -381,7 +374,7 @@ class FigureElementInspectorPanel(QFrame):
         return self._element_stack.remove_component(component_id)
 
     def current_component_id(self) -> str | None:
-        return self._element_stack.current_component_id()
+        return self._current_component_id
 
     def dispose(self) -> None:
         if self._disposed:
@@ -419,6 +412,9 @@ class FigureInspectorPanel(QFrame):
         self._disposed = False
 
         self._inspector_stack = CurrentPageStackedWidget(self)
+        self._owner_root = QWidget(self)
+        self._owner_root.setObjectName("inspector_owner_root")
+        self._owner_root.hide()
         self.root_inspector = None
         self._figure_elements_panel = None
         try:
@@ -428,13 +424,18 @@ class FigureInspectorPanel(QFrame):
                 parent=self._inspector_stack,
             )
             self._figure_elements_panel = FigureElementInspectorPanel(context)
+            self._figure_elements_panel.setParent(self._owner_root)
             self._inspector_stack.addWidget(self.root_inspector)
-            self._inspector_stack.addWidget(self._figure_elements_panel)
+            bind_widget_qss(
+                self._inspector_stack,
+                "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
+            )
 
             layout = QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             layout.addWidget(self._inspector_stack)
+            self._inspector_stack.attach_switch_host(self)
             self._inspector_stack.setCurrentWidget(self.root_inspector)
         except Exception:
             self.dispose()
@@ -455,7 +456,7 @@ class FigureInspectorPanel(QFrame):
             context,
         )
         try:
-            self._inspector_stack.addWidget(panel)
+            panel.setParent(self._owner_root)
             self._axes_panels[component_id] = panel
         except Exception:
             isolate_cleanup_steps(
@@ -489,20 +490,21 @@ class FigureInspectorPanel(QFrame):
         panel = self._axes_panels.get(component_id)
         if panel is None:
             return None
-        index = self._inspector_stack.indexOf(panel)
-        was_current = self._inspector_stack.currentWidget() is panel
+        index = 0
+        was_current = self._axes_owns_shown(component_id)
         try:
             self._axes_panels.pop(component_id)
-            self._inspector_stack.removeWidget(panel)
+            self._withdraw_panel_leaves(panel)
+            panel.setParent(None)
         except Exception:
             self._axes_panels[component_id] = panel
-            if self._inspector_stack.indexOf(panel) < 0:
-                self._inspector_stack.insertWidget(max(0, index), panel)
+            panel.setParent(self._owner_root)
             if was_current:
-                self._inspector_stack.setCurrentWidget(panel)
+                self.show_axes_inspector(panel)
             raise
-        if self._inspector_stack.currentWidget() is None:
-            self._inspector_stack.setCurrentWidget(self.root_inspector)
+        if was_current:
+            self._present_leaf(self.root_inspector)
+            self._component_shown(self.root_component_id)
         return AxesInspectorRemoval(component_id, panel, index, was_current)
 
     def restore_axes_inspector(
@@ -513,13 +515,10 @@ class FigureInspectorPanel(QFrame):
 
         if handle.component_id in self._axes_panels:
             return
-        self._inspector_stack.insertWidget(
-            max(0, min(handle.index, self._inspector_stack.count())),
-            handle.panel,
-        )
+        handle.panel.setParent(self._owner_root)
         self._axes_panels[handle.component_id] = handle.panel
         if handle.was_current:
-            self._inspector_stack.setCurrentWidget(handle.panel)
+            self.show_axes_inspector(handle.panel)
 
     @staticmethod
     def finalize_axes_inspector_removal(
@@ -542,24 +541,34 @@ class FigureInspectorPanel(QFrame):
     ) -> None:
         """Show the Axes component itself in its Axes panel."""
 
-        self._inspector_stack.setCurrentWidget(axes_inspector)
-        axes_inspector.show_component(
-            axes_inspector.axes_controller.component_id
-        )
+        with inspector_page_switch_batch(self):
+            axes_inspector.show_component(
+                axes_inspector.axes_controller.component_id
+            )
+            self._present_leaf(
+                axes_inspector.inspector(
+                    axes_inspector.axes_controller.component_id
+                )
+            )
+            self._component_shown(axes_inspector.axes_controller.component_id)
 
     def show_component(self, component_id: str) -> bool:
         """Show one exact Component Inspector using Registry ancestry."""
+
+        with inspector_page_switch_batch(self):
+            return self._show_component_impl(component_id)
+
+    def _show_component_impl(self, component_id: str) -> bool:
 
         component_id = str(component_id)
         registry = self.context.registry
         if component_id not in registry:
             return False
         if component_id == self.root_component_id:
-            self._inspector_stack.setCurrentWidget(self.root_inspector)
+            self._present_leaf(self.root_inspector)
             self._component_shown(component_id)
             return True
         controller = registry.get(component_id)
-        state = controller.state
         profile = self.context.editor_manager.editor_registry.resolve_profile(
             controller
         )
@@ -567,13 +576,13 @@ class FigureInspectorPanel(QFrame):
             raise ValueError(
                 f"Component {component_id!r} has no registered Editor profile."
             )
-        if state.parent_id == self.root_component_id:
+        if controller.parent_id == self.root_component_id:
             if (
                 profile.placement is EditorPlacement.ELEMENT
                 and self._figure_elements_panel.show_component(component_id)
             ):
-                self._inspector_stack.setCurrentWidget(
-                    self._figure_elements_panel
+                self._present_leaf(
+                    self._figure_elements_panel.inspector(component_id)
                 )
                 self._component_shown(component_id)
                 return True
@@ -586,7 +595,7 @@ class FigureInspectorPanel(QFrame):
         panel = self._axes_panels.get(axes_controller.component_id)
         if panel is None or not panel.show_component(component_id):
             return False
-        self._inspector_stack.setCurrentWidget(panel)
+        self._present_leaf(panel.inspector(component_id))
         self._component_shown(component_id)
         return True
 
@@ -598,6 +607,46 @@ class FigureInspectorPanel(QFrame):
             return
         self._shown_component_id = component_id
         self.componentShown.emit(component_id)
+
+    def _present_leaf(self, inspector) -> None:
+        """Show one leaf Inspector without hiding owner containers."""
+
+        present_inspector_page(self._inspector_stack, inspector)
+
+    def _withdraw_leaf(self, inspector) -> None:
+        """Remove a presented leaf from the visible stack."""
+
+        target = inspector
+        if target is None or target is self.root_inspector:
+            return
+        if self._inspector_stack.indexOf(target) < 0:
+            return
+        was_current = self._inspector_stack.currentWidget() is target
+        self._inspector_stack.removeWidget(target)
+        if was_current and self._inspector_stack.currentWidget() is None:
+            self._present_leaf(self.root_inspector)
+
+    def _withdraw_panel_leaves(self, panel: AxesInspectorPanel) -> None:
+        """Detach presented leaves owned by one Axes panel."""
+
+        from mygui.widgets.fig_control_window.component_editors.inspector import (
+            ComponentInspector,
+        )
+
+        for inspector in panel.findChildren(ComponentInspector):
+            self._withdraw_leaf(inspector)
+
+    def _axes_owns_shown(self, axes_id: str) -> bool:
+        shown = str(self._shown_component_id or "")
+        if shown == str(axes_id):
+            return True
+        if shown not in self.context.registry:
+            return False
+        ancestor = self.context.registry.ancestor(
+            shown,
+            kind=ComponentKind.AXES,
+        )
+        return ancestor is not None and ancestor.component_id == str(axes_id)
 
     def ensure_component(self, component_id: str):
         """Prepare one Inspector without changing the currently visible panel."""
@@ -617,7 +666,7 @@ class FigureInspectorPanel(QFrame):
                 f"Component {component_id!r} has no registered Editor profile."
             )
         if (
-            controller.state.parent_id == self.root_component_id
+            controller.parent_id == self.root_component_id
             and profile.placement is EditorPlacement.ELEMENT
         ):
             return self._figure_elements_panel.ensure_component(component_id)
@@ -662,18 +711,26 @@ class FigureInspectorPanel(QFrame):
         component_id = str(component_id)
         if component_id == self.root_component_id:
             return False
+        removed = False
         if self._figure_elements_panel.remove_component(component_id):
-            return True
-        axes_controller = self.context.registry.ancestor(
-            component_id,
-            kind=ComponentKind.AXES,
-        )
-        panel = (
-            self._axes_panels.get(axes_controller.component_id)
-            if axes_controller is not None
-            else None
-        )
-        return panel.remove_component(component_id) if panel is not None else False
+            removed = True
+        else:
+            axes_controller = self.context.registry.ancestor(
+                component_id,
+                kind=ComponentKind.AXES,
+            )
+            panel = (
+                self._axes_panels.get(axes_controller.component_id)
+                if axes_controller is not None
+                else None
+            )
+            removed = (
+                panel.remove_component(component_id) if panel is not None else False
+            )
+        if removed and self._inspector_stack.currentWidget() is None:
+            self._present_leaf(self.root_inspector)
+            self._component_shown(self.root_component_id)
+        return removed
 
     def take_component_inspector(
         self,
@@ -701,11 +758,18 @@ class FigureInspectorPanel(QFrame):
         inspector = owner.inspector(component_id)
         if inspector is None:
             return None
+        from_visible_stack = self._inspector_stack.indexOf(inspector) >= 0
+        self._withdraw_leaf(inspector)
         handle = owner.take_inspector(inspector)
         if handle is None:
             return None
         self.context.editor_manager.release(inspector)
-        return ComponentInspectorRemoval(component_id, owner, handle)
+        return ComponentInspectorRemoval(
+            component_id,
+            owner,
+            handle,
+            from_visible_stack,
+        )
 
     def restore_component_inspector(
         self,
@@ -719,6 +783,12 @@ class FigureInspectorPanel(QFrame):
             removal.handle.inspector,
             remover=removal.owner.remove_inspector,
         )
+        inspector = removal.handle.inspector
+        if removal.from_visible_stack:
+            if str(removal.component_id) == str(self._shown_component_id):
+                self._present_leaf(inspector)
+            elif self._inspector_stack.indexOf(inspector) < 0:
+                self._inspector_stack.addWidget(inspector)
 
     @staticmethod
     def finalize_component_inspector_removal(
@@ -737,17 +807,26 @@ class FigureInspectorPanel(QFrame):
             notify_empty()
 
     def current_panel(self):
+        shown = str(self._shown_component_id or "")
+        if shown == self.root_component_id:
+            return self.root_inspector
+        if self._figure_elements_panel.inspector(shown) is not None:
+            return self._figure_elements_panel
+        if shown in self._axes_panels:
+            return self._axes_panels[shown]
+        if shown in self.context.registry:
+            axes_controller = self.context.registry.ancestor(
+                shown,
+                kind=ComponentKind.AXES,
+            )
+            if axes_controller is not None:
+                panel = self._axes_panels.get(axes_controller.component_id)
+                if panel is not None:
+                    return panel
         return self._inspector_stack.currentWidget()
 
     def current_component_id(self) -> str | None:
-        current = self._inspector_stack.currentWidget()
-        if current is self.root_inspector:
-            return self.root_component_id
-        if current is self._figure_elements_panel:
-            return self._figure_elements_panel.current_component_id()
-        if isinstance(current, AxesInspectorPanel):
-            return current.current_component_id()
-        return None
+        return self._shown_component_id
 
     def dispose(self) -> None:
         """Recursively release every Inspector in this Figure panel."""
@@ -813,12 +892,26 @@ class FigureInspectorHost(QFrame):
             parent=self._figure_stack,
         )
         self._figure_stack.addWidget(self.empty_state)
+        self._figure_stack.attach_switch_host(self)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._figure_stack)
         self._disposed = False
         subscribe_theme_window(self)
+
+    def register_switch_viewports(
+        self,
+        *,
+        inspector_scroll=None,
+        tree_view=None,
+    ) -> None:
+        """Register viewports flushed after a component selection."""
+
+        self._figure_stack.register_switch_viewports(
+            inspector_scroll=inspector_scroll,
+            tree_view=tree_view,
+        )
 
     def add_figure_inspector(
         self,

@@ -674,7 +674,10 @@ class Tier2BoundaryAndCornerCaseTests(_E2EBaseTestCase):
 
         # Delete column 1 (y_ref)
         table_view.setCurrentIndex(table_view.table_model.index(0, 1))
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
+        ):
             table_view.delete_column()
         self._process_events()
 
@@ -908,7 +911,10 @@ class Tier3CrossFeatureInteractionTests(_E2EBaseTestCase):
 
         table_view.setCurrentIndex(table_view.table_model.index(0, 0))
         with patch.object(QInputDialog, "getItem", return_value=("text", True)), \
-                patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                patch(
+                    "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+                    return_value=True,
+                ):
             table_view.change_column_type()
         self._process_events()
 

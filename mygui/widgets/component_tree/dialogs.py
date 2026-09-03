@@ -20,6 +20,12 @@ from PySide6.QtWidgets import (
 
 
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiVariant,
+    annotate_form_fields,
+    apply_ui_style,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +94,8 @@ class ComponentBatchDeleteDialog(QDialog):
         selection_bar = QHBoxLayout()
         select_all_button = QPushButton("Select All", self)
         clear_all_button = QPushButton("Clear All", self)
+        apply_ui_style(select_all_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(clear_all_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
         selection_bar.addWidget(select_all_button)
         selection_bar.addWidget(clear_all_button)
         selection_bar.addStretch()
@@ -127,6 +135,12 @@ class ComponentBatchDeleteDialog(QDialog):
         self.delete_button = self.buttons.addButton(
             "Delete", QDialogButtonBox.AcceptRole
         )
+        apply_ui_style(
+            self.delete_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.DESTRUCTIVE,
+        )
+        annotate_form_fields(self)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)

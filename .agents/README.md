@@ -41,6 +41,7 @@ it is the rule-loss audit for the split.
 | New Figure Component Checklist | `component-system.md`; add-component Skill |
 | Verification Baseline | `testing-map.md`; shared checks; `fix-ci` Skill |
 | Application settings / theme | `application-settings.md`; `application-theme.md`; modify-application-setting Skill |
+| UI component system | `architecture/ui-components.md`; modernize-ui-components Skill |
 
 Global summaries remain in `AGENTS.md`; the catalog destinations hold detailed
 normative text and implementation maps. Update the root only for bootstrap

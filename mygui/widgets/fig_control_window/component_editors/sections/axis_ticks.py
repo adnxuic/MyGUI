@@ -26,6 +26,15 @@ from PySide6.QtWidgets import (
 from mygui import status_messages
 from mygui.application_theme import bind_widget_qss
 from mygui.widgets.english_buttons import english_ok_cancel
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiTextRole,
+    UiVariant,
+    annotate_sections,
+    apply_text_style,
+    apply_ui_style,
+    style_button,
+)
 from mygui.figuremodify.component_services import (
     AxisTickPreviewRenderer,
     AxisTickSettingsDraft,
@@ -39,6 +48,7 @@ from mygui.figuremodify.components import (
 from ..base import ComponentEditorBase
 from ..context import perform_editor_action
 from ..inspector import EditorSection
+from ..inspector_layout import apply_expanding_field
 from ..spec_editors import AxisFormatterEditor, AxisLocatorEditor
 
 
@@ -190,11 +200,16 @@ class _TickLevelPage(QWidget):
             QAbstractItemView.SelectionBehavior.SelectRows
         )
         positions_layout.addWidget(self.fixed_table)
+        apply_ui_style(self.fixed_table, role=UiRole.TABLE)
         table_buttons = QHBoxLayout()
         self.add_row_button = QPushButton("Add", positions)
+        style_button(self.add_row_button, variant=UiVariant.OUTLINE)
         self.remove_row_button = QPushButton("Remove", positions)
+        style_button(self.remove_row_button, variant=UiVariant.DESTRUCTIVE)
         self.move_up_button = QPushButton("Move Up", positions)
+        style_button(self.move_up_button, variant=UiVariant.GHOST)
         self.move_down_button = QPushButton("Move Down", positions)
+        style_button(self.move_down_button, variant=UiVariant.GHOST)
         for button in (
             self.add_row_button,
             self.remove_row_button,
@@ -517,11 +532,16 @@ class AxisTickSettingsDialog(QDialog):
             self.tabs.addTab(scroll, title)
         root.addWidget(self.tabs, 1)
 
+        apply_ui_style(self.tabs, role=UiRole.TABS)
         actions = QHBoxLayout()
         self.copy_to_minor_button = QPushButton("Major → Minor", self)
+        style_button(self.copy_to_minor_button, variant=UiVariant.OUTLINE)
         self.copy_to_major_button = QPushButton("Minor → Major", self)
+        style_button(self.copy_to_major_button, variant=UiVariant.OUTLINE)
         self.restore_button = QPushButton("Restore Opening Snapshot", self)
+        style_button(self.restore_button, variant=UiVariant.GHOST)
         self.defaults_button = QPushButton("Scale Defaults", self)
+        style_button(self.defaults_button, variant=UiVariant.GHOST)
         for button in (
             self.copy_to_minor_button,
             self.copy_to_major_button,
@@ -534,10 +554,12 @@ class AxisTickSettingsDialog(QDialog):
         self.error_label = QLabel(self)
         self.error_label.setObjectName("chrome_error_label")
         self.error_label.setWordWrap(True)
+        apply_text_style(self.error_label, UiTextRole.CAPTION, tone="error")
         self.error_label.hide()
         root.addWidget(self.error_label)
         self.buttons = english_ok_cancel(self)
         root.addWidget(self.buttons)
+        annotate_sections(self)
 
         self.preview_timer = QTimer(self)
         self.preview_timer.setSingleShot(True)
@@ -683,7 +705,10 @@ class AxisTickSettingsSection(QWidget, EditorSection):
         layout.setContentsMargins(0, 0, 0, 0)
         self.summary_label = QLabel(self)
         self.summary_label.setWordWrap(True)
+        apply_text_style(self.summary_label, UiTextRole.VALUE)
         self.configure_button = QPushButton("Configure Ticks & Labels…", self)
+        style_button(self.configure_button, variant=UiVariant.OUTLINE)
+        apply_expanding_field(self.configure_button)
         self.configure_button.clicked.connect(self.open_dialog)
         layout.addWidget(self.summary_label)
         layout.addWidget(self.configure_button)

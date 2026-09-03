@@ -15,11 +15,16 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
+from mygui.widgets.ui_components import UiVariant, style_button
 
 from ..common import FocusAwareDoubleSpinBox
 from ..context import perform_editor_action
 from ..inspector import EditorSection
-from ..inspector_layout import apply_expanding_field, configure_inspector_form
+from ..inspector_layout import (
+    add_labeled_form_row,
+    apply_expanding_field,
+    configure_inspector_form,
+)
 from .property import PropertySection
 
 class AxesLimitsSection(QWidget, EditorSection):
@@ -182,13 +187,17 @@ class AxesLayoutSection(QWidget, EditorSection):
         grid_layout.setContentsMargins(0, 0, 0, 0)
 
         self.edit_button = QPushButton("Edit Layout Geometry…", self.grid_container)
+        style_button(self.edit_button, variant=UiVariant.OUTLINE)
         self.edit_button.clicked.connect(self.edit_layout)
+        apply_expanding_field(self.edit_button)
         grid_layout.addWidget(self.edit_button)
 
         self.switch_manual_button = QPushButton(
             "Switch to Manual Position…", self.grid_container
         )
+        style_button(self.switch_manual_button, variant=UiVariant.OUTLINE)
         self.switch_manual_button.clicked.connect(self.switch_to_manual)
+        apply_expanding_field(self.switch_manual_button)
         grid_layout.addWidget(self.switch_manual_button)
 
         layout.addWidget(self.grid_container)
@@ -206,34 +215,36 @@ class AxesLayoutSection(QWidget, EditorSection):
         self.left_spin.setDecimals(6)
         self.left_spin.setSingleStep(0.01)
         apply_expanding_field(self.left_spin)
-        form_layout.addRow("Left:", self.left_spin)
+        add_labeled_form_row(form_layout, "Left", self.left_spin)
 
         self.bottom_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.bottom_spin.setRange(0.0, 1.0)
         self.bottom_spin.setDecimals(6)
         self.bottom_spin.setSingleStep(0.01)
         apply_expanding_field(self.bottom_spin)
-        form_layout.addRow("Bottom:", self.bottom_spin)
+        add_labeled_form_row(form_layout, "Bottom", self.bottom_spin)
 
         self.width_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.width_spin.setRange(0.000001, 1.0)
         self.width_spin.setDecimals(6)
         self.width_spin.setSingleStep(0.01)
         apply_expanding_field(self.width_spin)
-        form_layout.addRow("Width:", self.width_spin)
+        add_labeled_form_row(form_layout, "Width", self.width_spin)
 
         self.height_spin = FocusAwareDoubleSpinBox(self.manual_container)
         self.height_spin.setRange(0.000001, 1.0)
         self.height_spin.setDecimals(6)
         self.height_spin.setSingleStep(0.01)
         apply_expanding_field(self.height_spin)
-        form_layout.addRow("Height:", self.height_spin)
+        add_labeled_form_row(form_layout, "Height", self.height_spin)
 
         self.right_label = QLabel("0.000000", self.manual_container)
-        form_layout.addRow("Right (computed):", self.right_label)
+        self.right_label.setWordWrap(True)
+        add_labeled_form_row(form_layout, "Right (computed)", self.right_label)
 
         self.top_label = QLabel("0.000000", self.manual_container)
-        form_layout.addRow("Top (computed):", self.top_label)
+        self.top_label.setWordWrap(True)
+        add_labeled_form_row(form_layout, "Top (computed)", self.top_label)
 
         manual_layout.addLayout(form_layout)
 
@@ -243,13 +254,17 @@ class AxesLayoutSection(QWidget, EditorSection):
         self.return_grid_button = QPushButton(
             "Return to Grid Layout", self.manual_container
         )
+        style_button(self.return_grid_button, variant=UiVariant.OUTLINE)
         self.return_grid_button.clicked.connect(self.return_to_grid)
+        apply_expanding_field(self.return_grid_button)
         manual_layout.addWidget(self.return_grid_button)
 
         self.reset_button = QPushButton(
             "Reset Position", self.manual_container
         )
+        style_button(self.reset_button, variant=UiVariant.DESTRUCTIVE)
         self.reset_button.clicked.connect(self.reset_position)
+        apply_expanding_field(self.reset_button)
         manual_layout.addWidget(self.reset_button)
 
         layout.addWidget(self.manual_container)

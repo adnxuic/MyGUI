@@ -1569,7 +1569,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
                 "mygui.project_io.os.replace",
                 side_effect=PermissionError("destination is locked"),
             ),
-            mock.patch.object(QMessageBox, "warning"),
+            mock.patch("mygui.widgets.title_bar.py_title_menu.present_error"),
         ):
             self.assertFalse(self.window.close_project_from_tab(0))
 

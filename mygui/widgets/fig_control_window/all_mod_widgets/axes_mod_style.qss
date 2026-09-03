@@ -14,24 +14,3 @@ QLabel, QCheckBox, QRadioButton, QGroupBox
 {
     color: {{COLOR_TEXT_PRIMARY}};
 }
-
-QDoubleSpinBox {
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_MD}}px;
-    width: 50px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-}
-QDoubleSpinBox::up-button {
-    subcontrol-origin: border;
-    subcontrol-position: top right;
-    width: 16px;
-    border-width: 1px;
-}
-QDoubleSpinBox::down-button {
-    subcontrol-origin: border;
-    subcontrol-position: bottom right;
-    width: 16px;
-    border-width: 1px;
-    border-top-width: 0;
-}

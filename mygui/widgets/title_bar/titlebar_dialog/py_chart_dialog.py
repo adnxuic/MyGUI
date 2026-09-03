@@ -11,11 +11,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
 
+from mygui.widgets.ui_components import annotate_sections, present_warning, set_validation_state, style_accept_cancel
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import ColorChoiceWidget
 from mygui.widgets.fig_control_window.component_editors import (
@@ -252,6 +252,7 @@ class PyCurveDialog(QDialog):
         # OK and Cancel buttons
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -260,6 +261,7 @@ class PyCurveDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
 
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def accept(self):
@@ -267,12 +269,12 @@ class PyCurveDialog(QDialog):
         """Validate the inputs and accept the dialog when they are usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            present_warning(self, 'Warning', 'Please add an axes first!')
             return
 
         # Warn if current axes is empty
         if not self.figure_window.current_canva.has_current_axes:
-            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            present_warning(self, 'Warning', 'Please select an axes first!')
             return
 
         session = CreationDialogSession(self, self.figure_window)
@@ -292,9 +294,12 @@ class PyCurveDialog(QDialog):
                 markeredgewidth=self._resolved_line.markeredgewidth,
             ),
             errors=ValueError,
-            on_error=lambda exc: QMessageBox.warning(
-                self, 'Invalid Expression', str(exc)
-            ),
+            on_error=lambda exc: (
+                set_validation_state(
+                    self.expression_edit, invalid=True, message=str(exc)
+                ),
+                present_warning(self, "Invalid Expression", str(exc)),
+            )[-1],
         )
         if not outcome:
             return
@@ -358,6 +363,7 @@ class PyPlotDialog(QDialog):
         # OK and Cancel buttons
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -373,6 +379,7 @@ class PyPlotDialog(QDialog):
         )
         _update_batch_button(self.ok_button, self.data_reference_input)
 
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def accept(self):
@@ -380,12 +387,12 @@ class PyPlotDialog(QDialog):
         """Validate the inputs and accept the dialog when they are usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            present_warning(self, 'Warning', 'Please add an axes first!')
             return
 
         # Warn if current axes is empty
         if not self.figure_window.current_canva.has_current_axes:
-            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            present_warning(self, 'Warning', 'Please select an axes first!')
             return
 
         session = CreationDialogSession(self, self.figure_window)
@@ -485,6 +492,7 @@ class PyScatterDialog(QDialog):
         # OK and Cancel buttons
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -500,6 +508,7 @@ class PyScatterDialog(QDialog):
         )
         _update_batch_button(self.ok_button, self.data_reference_input)
 
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def accept(self):
@@ -507,12 +516,12 @@ class PyScatterDialog(QDialog):
         """Validate the inputs and accept the dialog when they are usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            present_warning(self, 'Warning', 'Please add an axes first!')
             return
 
         # Warn if current axes is empty
         if not self.figure_window.current_canva.has_current_axes:
-            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            present_warning(self, 'Warning', 'Please select an axes first!')
             return
 
         session = CreationDialogSession(self, self.figure_window)
@@ -601,6 +610,7 @@ class PyFitDialog(QDialog):
         # OK and Cancel buttons
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -609,6 +619,7 @@ class PyFitDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
 
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def accept(self):
@@ -616,12 +627,12 @@ class PyFitDialog(QDialog):
         """Validate the inputs and accept the dialog when they are usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            present_warning(self, 'Warning', 'Please add an axes first!')
             return
 
         # Warn if current axes is empty
         if not self.figure_window.current_canva.has_current_axes:
-            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            present_warning(self, 'Warning', 'Please select an axes first!')
             return
 
         session = CreationDialogSession(self, self.figure_window)
@@ -721,6 +732,7 @@ class PyInterpolationDialog(QDialog):
         self.button_bar = QFrame()
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
 
@@ -739,6 +751,7 @@ class PyInterpolationDialog(QDialog):
         )
         _update_batch_button(self.ok_button, self.data_reference_input)
 
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def change_method(self):
@@ -760,12 +773,12 @@ class PyInterpolationDialog(QDialog):
         """Validate the inputs and accept the dialog when they are usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            present_warning(self, 'Warning', 'Please add an axes first!')
             return
 
         # Warn if current axes is empty
         if not self.figure_window.current_canva.has_current_axes:
-            QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+            present_warning(self, 'Warning', 'Please select an axes first!')
             return
 
         options = self.options_input.options()
@@ -846,6 +859,7 @@ class _Field2DDialog(QDialog):
         layout.addWidget(self._options)
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         buttons = QHBoxLayout()
@@ -853,6 +867,7 @@ class _Field2DDialog(QDialog):
         buttons.addWidget(self.ok_button)
         buttons.addWidget(self.cancel_button)
         layout.addLayout(buttons)
+        annotate_sections(self)
         self.setLayout(layout)
 
     def _populate_role_options(self) -> None:
@@ -864,7 +879,7 @@ class _Field2DDialog(QDialog):
     def accept(self):
         canvas = getattr(self.figure_window, "current_canva", None)
         if canvas is None or canvas.current_axes is None:
-            QMessageBox.warning(
+            present_warning(
                 self,
                 f"Could not create {self.DISPLAY_NAME}",
                 f"Select an Axes before creating a {self.DISPLAY_NAME}.",
@@ -874,7 +889,12 @@ class _Field2DDialog(QDialog):
         y_ref = self.data_reference_input.get_y_ref()
         z_ref = self.data_reference_input.get_z_ref()
         if x_ref is None or y_ref is None or z_ref is None:
-            QMessageBox.warning(
+            set_validation_state(
+                self.data_reference_input,
+                invalid=True,
+                message="Please select numeric X, Y, and Z columns from the same worksheet.",
+            )
+            present_warning(
                 self,
                 f"Could not create {self.DISPLAY_NAME}",
                 "Please select numeric X, Y, and Z columns from the same worksheet.",
@@ -884,7 +904,7 @@ class _Field2DDialog(QDialog):
         session = CreationDialogSession(self, self.figure_window)
         outcome = session.run(
             lambda: adder(x_ref, y_ref, z_ref, self._role_properties()),
-            on_error=lambda exc: QMessageBox.warning(
+            on_error=lambda exc: present_warning(
                 self,
                 f"Could not create {self.DISPLAY_NAME}",
                 str(exc),

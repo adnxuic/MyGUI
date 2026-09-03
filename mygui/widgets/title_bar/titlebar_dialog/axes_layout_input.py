@@ -39,6 +39,7 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
 from mygui.widgets.theme import COLORS
+from mygui.widgets.ui_components import UiRole, apply_ui_style
 
 
 _ICON_DIRECTORY = icon_directory("layout_images")
@@ -390,6 +391,7 @@ class AxesLayoutInput(QWidget):
             root.addWidget(layout_page)
         else:
             self.tabs = QTabWidget(self)
+            apply_ui_style(self.tabs, role=UiRole.TABS)
             self.tabs.addTab(layout_page, "Layout")
             axes_page = QWidget(self.tabs)
             self._build_axes_page(axes_page, default_view)

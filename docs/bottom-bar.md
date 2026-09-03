@@ -7,12 +7,17 @@ status indicators.
 
 Business code publishes through `mygui.status_messages`; it does not retain a
 widget reference. Supported levels are `info`, `error`, `warning`, and
-`success`. Unknown levels render as `info`. The active bound-method handler is
-held weakly, and a presentation exception is logged, contained, and detaches
-that handler so a completed business operation cannot be reported as failed.
+`success`. Unknown levels render as `info`. Visible text includes
+`Success —`, `Warning —`, and `Error —` prefixes in the same label so the
+level is not color-only. Long messages elide in the current width and keep
+the full text as a tooltip. Messages remain until the next result or an
+explicit clear. The active bound-method handler is held weakly, and a
+presentation exception is logged, contained, and detaches that handler so a
+completed business operation cannot be reported as failed.
 
-One user action should emit at most one Message Bar result. Modal dialogs are
-reserved for choices that require user input.
+One user action should emit at most one Message Bar result. File and storage
+failures use a modal error box instead of duplicating the same text in the
+bar. Other modal dialogs are reserved for choices that require user input.
 
 Process-level font diagnostics also appear here as yellow warnings. MyGUI
 recognizes Matplotlib missing-glyph warnings and math-text log records, plus

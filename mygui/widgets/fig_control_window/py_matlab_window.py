@@ -1,8 +1,9 @@
 """Configure and connect the optional MATLAB integration."""
 
-from PySide6.QtWidgets import QFrame, QLabel, QMessageBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout
 
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.ui_components import UiVariant, present_error, set_busy_state, style_button
 
 from mygui import status_messages
 from mygui.database import matlab_adapter
@@ -45,6 +46,7 @@ class PyMatlabWindow(QFrame):
     def _show_connect_button(self):
         self._clear_layout()
         self.matlab_isconnect = QPushButton("Connect Matlab")
+        style_button(self.matlab_isconnect, variant=UiVariant.PRIMARY)
         self.matlab_isconnect.setMinimumSize(120, 30)
         self.matlab_isconnect.clicked.connect(self.matlab_connect_click)
         self.layout.addWidget(self.matlab_isconnect)
@@ -70,8 +72,7 @@ class PyMatlabWindow(QFrame):
         request_id = self._connect_request_id
         started_at = time.monotonic()
         matlab_adapter.matlab_logger().info("MATLAB connect request started request_id=%s", request_id)
-        self.matlab_isconnect.setEnabled(False)
-        self.matlab_isconnect.setText("Connecting...")
+        set_busy_state(self.matlab_isconnect, True, busy_text="Connecting…")
         start_matlab_task(
             self,
             matlab_adapter.ensure_matlab_available_isolated,
@@ -113,8 +114,7 @@ class PyMatlabWindow(QFrame):
             message,
         )
         self.reset_to_connect_button()
-        status_messages.show_error(message)
-        QMessageBox.warning(self, "Connect Matlab", message)
+        present_error(self, "Connect Matlab", message)
 
     def reset_to_connect_button(self):
         """Reset to connect button."""

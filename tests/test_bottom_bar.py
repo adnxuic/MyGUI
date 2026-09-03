@@ -206,13 +206,25 @@ class BottomBarMessageFlowTests(unittest.TestCase):
         try:
             status_messages.set_status_handler(bottom_bar.show_message)
             status_messages.show_error("boom")
-            self.assertEqual(bottom_bar.message_bar.message_label.text(), "boom")
+            self.assertEqual(
+                bottom_bar.message_bar.message_label.toolTip(),
+                "Error — boom",
+            )
+            self.assertEqual(bottom_bar.message_bar.full_message, "boom")
             self.assertEqual(bottom_bar.message_bar.property("level"), "error")
             status_messages.show_success("ok")
-            self.assertEqual(bottom_bar.message_bar.message_label.text(), "ok")
+            self.assertEqual(
+                bottom_bar.message_bar.message_label.toolTip(),
+                "Success — ok",
+            )
+            self.assertEqual(bottom_bar.message_bar.full_message, "ok")
             self.assertEqual(bottom_bar.message_bar.property("level"), "success")
             status_messages.show_warning("careful")
-            self.assertEqual(bottom_bar.message_bar.message_label.text(), "careful")
+            self.assertEqual(
+                bottom_bar.message_bar.message_label.toolTip(),
+                "Warning — careful",
+            )
+            self.assertEqual(bottom_bar.message_bar.full_message, "careful")
             self.assertEqual(bottom_bar.message_bar.property("level"), "warning")
             self.assertEqual(bottom_bar.message_bar.message_label.styleSheet(), "")
         finally:

@@ -705,7 +705,11 @@ class ComponentRuntimeIntegrationTests(unittest.TestCase):
             [("Bottom spine visibility updated.", "success")],
         )
         self.assertEqual(
-            self.window.bottom_bar.message_bar.message_label.text(),
+            self.window.bottom_bar.message_bar.message_label.toolTip(),
+            "Success — Bottom spine visibility updated.",
+        )
+        self.assertEqual(
+            self.window.bottom_bar.message_bar.full_message,
             "Bottom spine visibility updated.",
         )
         self.assertEqual(

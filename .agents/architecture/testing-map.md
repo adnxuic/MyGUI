@@ -11,7 +11,7 @@ subprocesses through their current `sys.executable`. Qt tests run with
 | --- | --- |
 | Package/resources/global Matplotlib | `test_package_boundary`, `test_resource_locator`, `test_matplotlib_boundaries` |
 | Controller/value/exposure contracts | `test_component_controllers`, `test_matplotlib_property_contract` |
-| Inspector/editor lifecycle | `test_component_inspector`, `test_component_editors` |
+| Inspector/editor lifecycle | `test_component_inspector`, `test_component_editors`, `test_inspector_geometry` |
 | Tree/selection | `test_component_tree` |
 | Registration/services | `test_component_services`, `test_component_runtime_integration` |
 | Canvas host/batch/restore | `test_py_figure_canvas`, `test_batch_chart_creation`, `test_canvas_popout`, `test_in_axes` |
@@ -21,7 +21,26 @@ subprocesses through their current `sys.executable`. Qt tests run with
 | Optional TeX/MATLAB/font paths | `test_optional_dependencies`, `test_font_diagnostics`, `test_scipy_fit_adapter` |
 | Application settings / dual-slot storage | `test_application_settings_storage`, `test_application_settings_service`, `test_application_settings_session`, `test_application_settings_contracts`, `test_application_settings_new_figure`, `test_application_settings_pages`, `test_application_settings_center`, `test_application_settings_center_c`, `test_application_settings_components`, `test_application_settings_axes_components`, `test_application_settings_component_creation`, `test_application_settings_axes_creation`, `test_color_library`, `test_figure_export`, `test_gui_layout` |
 | Application theme / QSS / chrome | `test_application_theme`, `test_application_theme_transactions`, `test_application_theme_chrome`, `test_application_theme_qss` |
+| UI component facade / component QSS | `test_ui_components`, `test_ui_layout_signatures`, `test_gui_layout`, `test_command_gallery`, `test_color_picker`, `test_component_inspector` |
 | MkDocs component contract | `test_component_documentation` |
+
+`test_inspector_geometry` is the real Inspector geometry matrix, not a
+structure-only check. It hosts each of the 34 profiles in a 240/320/480 px
+scroll area across 8/9/16 pt, three densities, Light/Dark, and default /
+per-group / all-expanded folds. Visible sibling section rects must not
+intersect. Buddy field labels keep a readable natural width without internal
+word wrap; `QFormLayout.WrapLongRows` moves the editor below the label when
+the row is tight. Same-layout siblings are compared without treating
+parent/child containment as overlap. GroupBox title and indicator
+subcontrols stay inside the frame and do not cover section contents.
+Desktop smoke maps every control rectangle into the Inspector host, fails
+on unreadably narrow labels, sibling overlap, or style-subcontrol overflow,
+and keeps targeted shots for Function Curve Expression/X range, Tick Label
+Advanced, and fold bands. After expanding every collapsible group and
+restoring the default folds, it measures cached leaf-Inspector switches.
+Offscreen MainWindow warm-median construct is ≤150 ms outside coverage
+tracing; native construct is ≤300 ms in desktop smoke. Offscreen Qt does
+not cover native dialogs, DPI, or System theme.
 
 Refactored dispatch stays table-driven: `ComponentEditorBase._create_editor`
 and the Legend, In-Axes, and Secondary Axis `_read_property` /
@@ -105,16 +124,43 @@ not claimed by offscreen automation.
 
 ## Desktop smoke walk
 
-`.agents/checks/verify_desktop_smoke.py` is a local Windows check. It opens
+`verify_desktop_smoke.py` is a local Windows check. It opens
 the real MainWindow, clicks controls, and writes PNG plus `summary.json` under
 `build/agent-results/desktop-smoke/`. Groups (`--only`) are `settings`,
 `templates`, `field_2d`, `charts_1d`, `elements`, `inspectors`,
-`layouts_xrd`, `axes_smoke`, `deletion_history`, and `project_lifecycle`. Settings includes
-the Templates page (Restore disabled, isolated empty library). The templates
-group extracts, duplicates, and applies a chart template without native file
-dialogs. Inspectors walk all 34 production `(ComponentKind, ComponentRole)`
-profiles. Native file dialogs, drag/drop, multi-monitor DPI, and live
-TeX/MATLAB remain on the manual smoke page. It is **not** part of
+`layouts_xrd`, `axes_smoke`, `deletion_history`, `project_lifecycle`, and
+`styles`. Settings includes the Templates page (Restore disabled, isolated
+empty library). The templates group extracts, duplicates, and applies a chart
+template without native file dialogs. Inspectors walk all 34 production
+`(ComponentKind, ComponentRole)` profiles, expand every collapsible section
+group, and write screenshots plus control rectangles mapped into the Inspector
+host. Geometry failures (unreadably narrow buddy labels, sibling overlap, or
+GroupBox title/indicator overflow) fail the walk. Qt `Negative sizes`
+warnings also fail the walk. Native Inspector/theme
+timings use the desktop smoke frame probe with 3 warmup frames and 20 samples
+(`dispatch_ms` / `first_paint_ms` / `settle_ms`). Cached Inspector switch
+gates are dispatch p95 ≤16 ms, first paint p95 ≤100 ms, and settle p95
+≤150 ms, with 0 `ComponentState` clones, 0 Matplotlib redraws, and 0
+full-window polish. Theme preview and rollback settle p95 must be ≤1000 ms
+and at least 30% faster than the phase-0 native baseline (1500 ms / 2200 ms).
+The styles group opens Style Dialogs (default: `default`, `dark_background`, `seaborn-v0_8-colorblind`);
+`--all-styles` adds the styles group if needed and visits every visible
+Matplotlib Style Dialog (26), excluding Apply Template and hidden styles.
+Each Style Dialog is opened, screenshotted, and Rejected; Figure, selection,
+Settings, and history must stay unchanged. Count mismatches fail. Style walks
+run after other performance scenarios.
+
+`summary.json` uses `timingSchemaVersion: 2`. Frame probes record `dispatch_ms`,
+`first_paint_ms`, and `settle_ms` (3 warmup + 20 samples, raw/median/P95) without
+a fixed-duration `pump()` inside the timed interval; timeout is 2 s. Existing
+aggregate keys remain compatibility aliases. Timings cover MainWindow construct (native ≤300 ms),
+Appearance Dark preview/rollback, first versus cached Settings page open, lazy
+Gallery first create versus cached open, cached component Inspector switch, and
+100 same-tone Message Bar updates. Cached Inspector switch also records the
+paint region. Native file dialogs, drag/drop, multi-monitor DPI, and live
+TeX/MATLAB remain on the manual smoke page. DPI 100/125/150/200%, mixed-DPI
+dual-monitor migration, and OS System Light→Dark→Light are marked verified only
+after a real walk; missing hardware is unverified. It is **not** part of
 `APPLICATION_TEST_MODULES` or `verify_full`. Do not set
 `QT_QPA_PLATFORM=offscreen`. Pixel-golden comparison is not used; assertions
 are structural.

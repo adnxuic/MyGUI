@@ -6,52 +6,10 @@ QFrame#table
     margin: 0px;
 }
 
-QTableView
-{
-    background-color: {{COLOR_SURFACE}};
-    alternate-background-color: {{COLOR_SURFACE_ALT}};
-    gridline-color: {{COLOR_HOVER_LIGHT}};
-    selection-background-color: {{COLOR_ACCENT}};
-    selection-color: {{COLOR_TEXT_ON_DARK}};
-    border: 0px;
-}
-
-QTableView:focus
-{
-    border: 2px solid {{COLOR_FOCUS}};
-}
-
-QHeaderView::section
-{
-    background-color: {{COLOR_SURFACE_ALT}};
-    color: {{COLOR_TEXT_PRIMARY}};
-    border: 0px;
-    border-right: 1px solid {{COLOR_BORDER}};
-    border-bottom: 1px solid {{COLOR_BORDER}};
-    padding: 3px;
-}
-
 QToolBar#table_toolbar
 {
     background-color: {{COLOR_SURFACE}};
     border: 0px;
     border-bottom: 1px solid {{COLOR_BORDER}};
     spacing: 2px;
-}
-
-QToolBar#table_toolbar QToolButton
-{
-    border: 2px solid transparent;
-    border-radius: {{RADIUS_SM}}px;
-    padding: 2px {{SPACE_XS}}px;
-}
-
-QToolBar#table_toolbar QToolButton:hover
-{
-    background-color: {{COLOR_HOVER_LIGHT}};
-}
-
-QToolBar#table_toolbar QToolButton:focus
-{
-    border-color: {{COLOR_FOCUS}};
 }

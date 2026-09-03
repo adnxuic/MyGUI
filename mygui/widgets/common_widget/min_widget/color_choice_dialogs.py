@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QListView,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QTabWidget,
@@ -30,6 +29,14 @@ from mygui import status_messages
 from mygui.widgets.english_buttons import (
     apply_english_dialog_buttons,
     ask_yes_no,
+)
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiVariant,
+    annotate_form_fields,
+    apply_ui_style,
+    present_warning,
+    set_validation_state,
 )
 from mygui.figuremodify.style_base.color_models import (
     ColorSelection,
@@ -87,6 +94,15 @@ class CustomPaletteDialog(QDialog):
             self.down_button,
         ):
             row.addWidget(button)
+        apply_ui_style(self.add_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(self.edit_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(
+            self.remove_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.DESTRUCTIVE,
+        )
+        apply_ui_style(self.up_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(self.down_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
         layout.addLayout(row)
 
         self.add_button.clicked.connect(self.add_color)
@@ -104,6 +120,7 @@ class CustomPaletteDialog(QDialog):
         initial_colors = palette.colors if palette else ("#1F77B4", "#FF7F0E")
         for color in initial_colors:
             self._append_color(color)
+        annotate_form_fields(self)
 
     def _append_color(self, color) -> None:
         normalized = normalize_color(color)
@@ -176,8 +193,10 @@ class CustomPaletteDialog(QDialog):
                     self.palette.id, self.name_input.text(), colors
                 )
         except ValueError as exc:
-            status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "Invalid Palette", str(exc))
+            set_validation_state(
+                self.name_input, invalid=True, message=str(exc)
+            )
+            present_warning(self, "Invalid Palette", str(exc))
             return
         status_messages.show_success(
             f'Saved custom palette "{self.result_palette.name}".'
@@ -283,6 +302,26 @@ class ColorPickerDialog(QDialog):
         palette_buttons.addWidget(self.new_palette_button)
         palette_buttons.addWidget(self.edit_palette_button)
         palette_buttons.addWidget(self.delete_palette_button)
+        apply_ui_style(
+            self.favorite_palette_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.GHOST,
+        )
+        apply_ui_style(
+            self.new_palette_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.PRIMARY,
+        )
+        apply_ui_style(
+            self.edit_palette_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
+        apply_ui_style(
+            self.delete_palette_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.DESTRUCTIVE,
+        )
         palette_layout.addLayout(palette_buttons)
         self.tabs.addTab(self.palette_page, "Palettes")
 
@@ -342,6 +381,24 @@ class ColorPickerDialog(QDialog):
         self._refresh_models()
         if mode == self.COLOR_MODE:
             self._sync_current_controls()
+        apply_ui_style(self.tabs, role=UiRole.TABS)
+        if hasattr(self, "custom_color_button"):
+            apply_ui_style(
+                self.custom_color_button,
+                role=UiRole.BUTTON,
+                variant=UiVariant.OUTLINE,
+            )
+            apply_ui_style(
+                self.copy_color_button,
+                role=UiRole.BUTTON,
+                variant=UiVariant.GHOST,
+            )
+            apply_ui_style(
+                self.favorite_color_button,
+                role=UiRole.BUTTON,
+                variant=UiVariant.GHOST,
+            )
+        annotate_form_fields(self)
 
     def _add_color_tab(self, title: str, model: ColorGridModel) -> QListView:
         view = QListView(self)

@@ -22,7 +22,6 @@ For workflow guides and text element positioning, see [Text Element](../../text-
 | --- | --- | --- | --- | --- |
 | Position | Position editor | Text anchor coordinates `(x, y)` in the selected coordinate system. | Tuple of 2 numbers; default `[0.0, 0.0]` | `properties.position` |
 | Visible | Checkbox | Shows or hides the text artist. | `true` or `false`; default `true` | `properties.visible` |
-| Zorder | Number | Stacking order of the text artist. | Finite number; default `3.0` | `properties.zorder` |
 | Coordinate System | Dropdown | Coordinate reference frame: `data`, `axes`, or `figure`. | `data`, `axes`, `figure`; default `data` | `properties.coordinate_system` |
 
 ## Rendering

@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
-    QMessageBox,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -30,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from mygui.application_theme import bind_widget_qss, current_qss_tokens, watch_qss_tokens
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.widgets.ui_components import present_warning, set_validation_state
 from mygui.database import ColumnRef, ColumnType, SheetDocument, TableChangeSet, TableMutationCommand
 from mygui.database.table_document import DEFAULT_ROWS, infer_column_type, new_id, validate_component_name
 from mygui.resource_limits import load_resource_limits
@@ -175,6 +175,16 @@ class ExcelSheetPreview(QWidget):
         self.rebuild()
         watch_qss_tokens(self, lambda _tokens: self._refresh_sample_chrome())
 
+    def _clear_validation(self) -> None:
+        set_validation_state(self.target_name, invalid=False)
+        set_validation_state(self.include, invalid=False)
+        for column in range(self.columns.columnCount()):
+            editor = self.columns.cellWidget(self.NAME_ROW, column)
+            if isinstance(editor, QLineEdit):
+                set_validation_state(editor, invalid=False)
+            if column < len(self._column_include_boxes):
+                set_validation_state(self._column_include_boxes[column], invalid=False)
+
     def _chrome_color(self, token: str) -> QColor:
         return QColor(current_qss_tokens()[token])
 
@@ -316,9 +326,14 @@ class ExcelSheetPreview(QWidget):
     def spec(self) -> ExcelSheetSpec | None:
         """Return the current spec."""
 
+        self._clear_validation()
         if not self.include.isChecked():
             return None
-        target_name = validate_component_name(self.target_name.text(), "Sheet name")
+        try:
+            target_name = validate_component_name(self.target_name.text(), "Sheet name")
+        except ValueError as exc:
+            set_validation_state(self.target_name, invalid=True, message=str(exc))
+            raise
         names = set()
         columns = []
         for column in range(self.columns.columnCount()):
@@ -326,15 +341,29 @@ class ExcelSheetPreview(QWidget):
                 continue
             name = self.column_name_editor(column).text().strip()
             if not name:
-                raise ValueError(f"Column {column + 1} in {self.sheet.name} has no name.")
+                message = f"Column {column + 1} in {self.sheet.name} has no name."
+                set_validation_state(
+                    self.column_name_editor(column),
+                    invalid=True,
+                    message=message,
+                )
+                raise ValueError(message)
             if name.casefold() in names:
-                raise ValueError(f"Duplicate column name in {self.sheet.name}: {name}")
+                message = f"Duplicate column name in {self.sheet.name}: {name}"
+                set_validation_state(
+                    self.column_name_editor(column),
+                    invalid=True,
+                    message=message,
+                )
+                raise ValueError(message)
             names.add(name.casefold())
             type_combo = self.column_type_editor(column)
             values = _column_values(self.sheet.rows, column, self.header.isChecked())
             columns.append(ExcelColumnSpec(name, ColumnType(type_combo.currentText()), values))
         if not columns and self.columns.columnCount() > 0:
-            raise ValueError(f"Select at least one column to import from {self.sheet.name}.")
+            message = f"Select at least one column to import from {self.sheet.name}."
+            set_validation_state(self.include, invalid=True, message=message)
+            raise ValueError(message)
         return ExcelSheetSpec(self.sheet.name, target_name, columns)
 
 
@@ -366,12 +395,15 @@ class ExcelImportDialog(QDialog):
         layout.addWidget(buttons)
 
     def _validate_and_accept(self):
+        set_validation_state(self.tabs, invalid=False)
         try:
             specs = self.specs()
             if not specs:
-                raise ValueError("Select at least one sheet to import.")
+                message = "Select at least one sheet to import."
+                set_validation_state(self.tabs, invalid=True, message=message)
+                raise ValueError(message)
         except ValueError as exc:
-            QMessageBox.warning(self, "Import Excel", str(exc))
+            present_warning(self, "Import Excel", str(exc))
             return
         self.accept()
 
@@ -386,7 +418,9 @@ class ExcelImportDialog(QDialog):
                 continue
             normalized = spec.target_name.casefold()
             if normalized in target_names:
-                raise ValueError(f"Duplicate target sheet name: {spec.target_name}")
+                message = f"Duplicate target sheet name: {spec.target_name}"
+                set_validation_state(page.target_name, invalid=True, message=message)
+                raise ValueError(message)
             target_names.add(normalized)
             result.append(spec)
         return result

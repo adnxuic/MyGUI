@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pandas as pd
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
@@ -165,7 +165,10 @@ class ReferenceMarksTableRuntimeTests(unittest.TestCase):
             position_ref=self.ref,
         )
         self.view.setCurrentIndex(self.view.table_model.index(0, 0))
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
+        ):
             self.view.delete_column()
         self.assertNotIn("dependent-marks", self.canvas.component_registry)
         self.assertFalse(self.canvas.repository.has_ref(self.ref))

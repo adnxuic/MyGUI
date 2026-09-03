@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QLabel
 
 from mygui import status_messages
 from mygui.application_settings.models import (
@@ -369,8 +369,9 @@ class FigureExportDialogTests(unittest.TestCase):
         target.write_bytes(b"original-bytes")
         dialog = self._dialog()
         dialog.path_edit.setText(str(target))
-        with patch.object(
-            QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+        with patch(
+            "mygui.widgets.title_bar.titlebar_dialog.figure_export_dialog.ask_confirmation",
+            return_value=False,
         ):
             dialog._export()
         self.assertEqual(target.read_bytes(), b"original-bytes")

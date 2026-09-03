@@ -198,6 +198,20 @@ class AgentEngineeringTests(unittest.TestCase):
                 "normalize_v22_figure",
                 {"CORE-PERSISTENCE-V23"},
             ),
+            "mygui/widgets/helper.py": (
+                "stack = getattr(host, '_figure_stack', None)\n"
+                "host._element_stack.show()\n"
+                "_SWITCH_DEPTH = 0\n"
+                "_OUTER_HOST = host\n",
+                {
+                    "ARCH-PRIVATE-CONTAINER-ACCESS",
+                    "ARCH-INSPECTOR-SWITCH-ISOLATION",
+                },
+            ),
+            "mygui/application_theme/example.py": (
+                "root.findChildren(QWidget)",
+                {"ARCH-THEME-UNBOUNDED-SCAN"},
+            ),
         }
         for path, (source, expected) in fixtures.items():
             with self.subTest(path=path):
@@ -1109,6 +1123,25 @@ class AgentEngineeringTests(unittest.TestCase):
         extra = result()
         extra["legacyField"] = True
         self.assertTrue(list(validator.iter_errors(extra)))
+
+    def test_desktop_smoke_all_styles_contract_is_enforced(self) -> None:
+        catalog = (ROOT / ".agents" / "desktop_smoke" / "catalog.py").read_text(
+            encoding="utf-8"
+        )
+        runner = (ROOT / ".agents" / "desktop_smoke" / "runner.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"styles"', catalog)
+        self.assertNotIn("_ = all_styles", runner)
+        self.assertIn("run_styles_scenarios", runner)
+        self.assertIn("expectedStyleDialogs", runner)
+        self.assertIn("visitedStyleDialogs", runner)
+        self.assertIn("missingStyleDialogs", runner)
+        self.assertIn("timingSchemaVersion", runner)
+        from mygui.widgets.title_bar.style_gallery import visible_matplotlib_style_names
+
+        self.assertEqual(len(visible_matplotlib_style_names()), 26)
+        self.assertNotIn("Apply Template", visible_matplotlib_style_names())
 
 
 if __name__ == "__main__":

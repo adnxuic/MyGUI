@@ -34,6 +34,12 @@ from mygui.excel_io import import_excel_into_workspace, is_supported_excel_workb
 from mygui.resources import resource_path
 from mygui.text_io import import_text_into_workspace
 from mygui.widgets.bottom_bar.py_bottom_bar import PyBottomBar
+from mygui.widgets.ui_components import (
+    UiTone,
+    ask_confirmation,
+    present_error,
+    style_message_box,
+)
 from mygui.widgets.component_tree import ComponentTreeHost
 from mygui.widgets.fig_control_window.py_fig_control_window import PyFigControlWindow
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
@@ -65,6 +71,7 @@ from mygui.application_theme import (
     current_density_metrics,
     default_theme_runtime,
     subscribe_theme_window,
+    theme_construction_batch,
 )
 from mygui.widgets.settings_center import compose_settings_center
 from mygui.widgets.template_workflow import TemplateWorkflow
@@ -228,6 +235,12 @@ class MainWindow(QMainWindow):
     def setup_ui(self):
         """Build the main window and connect its shared application services."""
 
+        with theme_construction_batch():
+            self._setup_ui_body()
+
+    def _setup_ui_body(self):
+        """Construct chrome while theme subscribers only register."""
+
         self.setObjectName("MainWindow")
         bind_widget_qss(self, MAINWINDOW_QSS_RESOURCE)
 
@@ -262,6 +275,9 @@ class MainWindow(QMainWindow):
         )
         self.fig_control_window = PyFigControlWindow()
         self.fig_control_window.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.fig_control_window.figure_inspector_host.register_switch_viewports(
+            tree_view=self.component_tree_host.tree,
+        )
         new_figure_defaults = None
         component_defaults = None
         if self.settings_service is not None:
@@ -611,15 +627,13 @@ class MainWindow(QMainWindow):
             )
 
     def _confirm_reset_workspace_layout(self) -> bool:
-        answer = QMessageBox.question(
+        return ask_confirmation(
             self,
             "Reset workspace layout",
             "Reset splitter sizes and Explorer visibility to the default "
             "layout now?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            destructive=True,
         )
-        return answer == QMessageBox.Yes
 
     def _apply_default_workspace_layout_ui(self) -> None:
         self._workspace_layout_restored = False
@@ -778,8 +792,7 @@ class MainWindow(QMainWindow):
             else:
                 self.import_text_file(str(paths[0]))
         except Exception as exc:
-            status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "Import Data", str(exc))
+            present_error(self, "Import Data", str(exc))
 
     def _project_close_choice(self, canvas):
         """Ask how to handle one dirty project."""
@@ -797,6 +810,13 @@ class MainWindow(QMainWindow):
             QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
         )
         dialog.setDefaultButton(QMessageBox.Save)
+        dialog.setEscapeButton(dialog.button(QMessageBox.Cancel))
+        style_message_box(
+            dialog,
+            tone=UiTone.WARNING,
+            primary=dialog.button(QMessageBox.Save),
+            destructive=dialog.button(QMessageBox.Discard),
+        )
         choice = dialog.exec()
         dialog.deleteLater()
         return choice

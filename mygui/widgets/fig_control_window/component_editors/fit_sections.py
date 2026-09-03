@@ -14,17 +14,25 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 from mygui.figuremodify.components import FitCurveController, FitEngine
+from mygui.widgets.ui_components import UiVariant, annotate_sections, set_busy_state, style_button
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from .common import RangeEditor
 from .context import EditorContext, perform_editor_action
 from .inspector import EditorSection
+from .inspector_layout import (
+    apply_expanding_field,
+    configure_inspector_result_table,
+    inspector_formula_height,
+    labeled_form_row,
+    set_inspector_table_text,
+    size_inspector_result_table,
+)
 from .lifecycle import CallbackLifecycle
 
 from mygui import status_messages
@@ -80,14 +88,22 @@ class FitDomainSection(QFrame):
         self.engine_layout = QHBoxLayout(self.engine_widget)
         self.engine_layout.setContentsMargins(0, 0, 0, 0)
         self.scipy_button = QPushButton("SciPy", self.engine_widget)
+        style_button(self.scipy_button, variant=UiVariant.OUTLINE)
+        apply_expanding_field(self.scipy_button)
         self.matlab_button = QPushButton("Matlab", self.engine_widget)
+        style_button(self.matlab_button, variant=UiVariant.OUTLINE)
+        apply_expanding_field(self.matlab_button)
         self.scipy_button.clicked.connect(
             lambda: self.open_fit_window(FitEngine.PYTHON)
         )
         self.matlab_button.clicked.connect(
             lambda: self.open_fit_window(FitEngine.MATLAB)
         )
-        self.engine_layout.addWidget(QLabel("Engine:"))
+        self.engine_layout.addWidget(
+            labeled_form_row(
+                "Engine:", buddy=self.scipy_button, parent=self.engine_widget
+            )
+        )
         self.engine_layout.addWidget(self.scipy_button)
         self.engine_layout.addWidget(self.matlab_button)
         self.engine_layout.addStretch()
@@ -114,19 +130,19 @@ class FitDomainSection(QFrame):
         self.result_model_label = QLabel("Model: -")
         self.result_formula_input = QPlainTextEdit(self)
         self.result_formula_input.setReadOnly(True)
-        self.result_formula_input.setFixedHeight(55)
+        self.result_formula_input.setFixedHeight(inspector_formula_height())
 
         self.result_coeff_table = QTableWidget(self)
         self.result_coeff_table.setColumnCount(4)
         self.result_coeff_table.setHorizontalHeaderLabels(["Coefficient", "Value", "Lower", "Upper"])
         self.result_coeff_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.result_coeff_table.horizontalHeader().setStretchLastSection(True)
+        configure_inspector_result_table(self.result_coeff_table)
 
         self.result_goodness_table = QTableWidget(self)
         self.result_goodness_table.setColumnCount(2)
         self.result_goodness_table.setHorizontalHeaderLabels(["Metric", "Value"])
         self.result_goodness_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.result_goodness_table.horizontalHeader().setStretchLastSection(True)
+        configure_inspector_result_table(self.result_goodness_table)
 
         self.result_layout.addWidget(self.result_engine_label)
         self.result_layout.addWidget(self.result_model_label)
@@ -158,6 +174,7 @@ class FitDomainSection(QFrame):
         self.layout.addStretch()
 
         self.setLayout(self.layout)
+        annotate_sections(self)
         if isinstance(data["fit_result"], dict):
             self._populate_fit_result(data["fit_result"])
             show_expression = str(
@@ -318,12 +335,15 @@ class FitDomainSection(QFrame):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         dialog.fit_button = QPushButton("Fit", dialog)
+        style_button(dialog.fit_button, variant=UiVariant.PRIMARY)
         dialog.close_button = QPushButton("Close", dialog)
+        style_button(dialog.close_button, variant=UiVariant.OUTLINE)
         dialog.fit_button.clicked.connect(lambda: self._start_fit_from_dialog(dialog, engine))
         dialog.close_button.clicked.connect(dialog.close)
         button_layout.addWidget(dialog.fit_button)
         button_layout.addWidget(dialog.close_button)
         dialog_layout.addLayout(button_layout)
+        annotate_sections(dialog)
 
         self._fit_dialogs.append(dialog)
         subscribe_theme_window(dialog)
@@ -359,8 +379,7 @@ class FitDomainSection(QFrame):
             dialog._fit_request_id = request_id
         except RuntimeError:
             pass
-        dialog.fit_button.setEnabled(False)
-        dialog.fit_button.setText("Fitting...")
+        set_busy_state(dialog.fit_button, True, busy_text="Fitting…")
         if selected.excluded_count and pair.excluded_count:
             status_messages.show_warning(
                 f"{display_engine} fitting started; preprocessing excluded "
@@ -441,8 +460,7 @@ class FitDomainSection(QFrame):
             return False
         try:
             if hasattr(dialog, "fit_button"):
-                dialog.fit_button.setEnabled(True)
-                dialog.fit_button.setText("Fit")
+                set_busy_state(dialog.fit_button, False)
         except RuntimeError:
             return False
         return True
@@ -509,9 +527,12 @@ class FitDomainSection(QFrame):
         return f"{number:.4f}"
 
     def _set_table_item(self, table, row, column, value):
-        item = QTableWidgetItem(self._format_result_number(value))
-        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-        table.setItem(row, column, item)
+        set_inspector_table_text(
+            table,
+            row,
+            column,
+            self._format_result_number(value),
+        )
 
     def _populate_fit_result(self, fit_result):
         state_engine = _controller_data(
@@ -533,12 +554,16 @@ class FitDomainSection(QFrame):
         coefficients = list(fit_result.get("coefficients") or [])
         self.result_coeff_table.setRowCount(len(coefficients))
         for row, coefficient in enumerate(coefficients):
-            name_item = QTableWidgetItem(str(coefficient.get("name", "")))
-            name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            self.result_coeff_table.setItem(row, 0, name_item)
+            set_inspector_table_text(
+                self.result_coeff_table,
+                row,
+                0,
+                str(coefficient.get("name", "")),
+            )
             self._set_table_item(self.result_coeff_table, row, 1, coefficient.get("value"))
             self._set_table_item(self.result_coeff_table, row, 2, coefficient.get("lower"))
             self._set_table_item(self.result_coeff_table, row, 3, coefficient.get("upper"))
+        size_inspector_result_table(self.result_coeff_table)
 
         goodness = fit_result.get("goodness") or {}
         labels = [
@@ -550,10 +575,9 @@ class FitDomainSection(QFrame):
         ]
         self.result_goodness_table.setRowCount(len(labels))
         for row, (label, key) in enumerate(labels):
-            label_item = QTableWidgetItem(label)
-            label_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            self.result_goodness_table.setItem(row, 0, label_item)
+            set_inspector_table_text(self.result_goodness_table, row, 0, label)
             self._set_table_item(self.result_goodness_table, row, 1, goodness.get(key))
+        size_inspector_result_table(self.result_goodness_table)
 
     def update_curve(
         self,

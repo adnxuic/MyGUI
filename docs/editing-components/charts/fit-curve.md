@@ -21,7 +21,7 @@ For details on fitting algorithms, initial parameters, and fit evaluation, see [
 
 | Inspector field | Control | Meaning | Values / default | Persisted / runtime key |
 | --- | --- | --- | --- | --- |
-| Fit Result | Read-only summary | Fitted model parameters, uncertainties, R-squared goodness-of-fit, and covariance matrix. | Fit result dictionary | `data.fit_result` |
+| Fit Result | Read-only summary | Fitted model parameters, uncertainties, R-squared goodness-of-fit, and covariance matrix. In a 240 px Inspector the table stretches columns, shows truncated cells as a tooltip, and scrolls internally only after six content rows. | Fit result dictionary | `data.fit_result` |
 | Expression | Read-only text | Mathematical formula representing the fitted parametric function. | Math expression string | `data.expression` |
 
 ## Display range

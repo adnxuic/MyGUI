@@ -253,6 +253,8 @@ def _scenario_apply(harness: SmokeHarness) -> None:
     harness.grab(dialog, "templates-09-apply-mapping")
 
     dialog.next_button.click()
+    harness.pump(80)
+    harness.grab(dialog, "feedback-template-busy")
     deadline = time.perf_counter() + 30.0
     while time.perf_counter() < deadline:
         harness.pump(200)

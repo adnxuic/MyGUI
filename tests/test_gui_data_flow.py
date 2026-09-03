@@ -10,7 +10,7 @@ import numpy as np
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QInputDialog
 
 from mygui.database import ColumnRef
 from mygui.figuremodify.components import ComponentRole
@@ -112,7 +112,10 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         canvas.add_plot(pair.x, pair.y, "-", 2, "black", "plot", x_ref, y_ref)
         view.setCurrentIndex(view.table_model.index(0, 0))
 
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
+        ):
             view.delete_column()
         self.assertEqual(
             len(canvas.component_registry.query(role=ComponentRole.DATA_PLOT)),
@@ -145,7 +148,10 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         undo_stack = self.window.repository.undo_stack(canvas.project_id)
         original_count = undo_stack.count()
 
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes), patch.object(
+        with patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
+        ), patch.object(
             canvas,
             "remove_data_dependents",
             return_value=False,
@@ -163,7 +169,10 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         view.setCurrentIndex(view.table_model.index(0, 0))
 
         with patch.object(QInputDialog, "getItem", return_value=("text", True)), \
-                patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                patch(
+                    "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+                    return_value=True,
+                ):
             view.change_column_type()
         self.assertEqual(view.table_model.sheet.column(x_ref.column_id).type.value, "text")
         self.assertEqual(
@@ -197,10 +206,9 @@ class GuiDataFlowV4Tests(unittest.TestCase):
             QInputDialog,
             "getItem",
             return_value=("datetime", True),
-        ), patch.object(
-            QMessageBox,
-            "question",
-            return_value=QMessageBox.Yes,
+        ), patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
         ):
             view.change_column_type()
 
@@ -225,7 +233,10 @@ class GuiDataFlowV4Tests(unittest.TestCase):
         pair = self.window.repository.line_pair(x_ref, y_ref)
         canvas.add_plot(pair.x, pair.y, "-", 2, "black", "sheet plot", x_ref, y_ref)
 
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
+        ):
             subtable.delete_sheet(1)
         self.assertFalse(self.window.repository.has_ref(x_ref))
         self.assertEqual(

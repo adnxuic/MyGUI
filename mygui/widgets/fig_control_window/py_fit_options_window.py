@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
     QTableWidget,
     QTableWidgetItem,
@@ -21,6 +20,7 @@ from typing import Any
 
 from mygui.database import FitInputRangeSpec, matlab_adapter, scipy_fit_adapter
 from mygui.widgets.fig_control_window.background_task import start_matlab_task
+from mygui.widgets.ui_components import present_error
 
 import numpy as np
 import time
@@ -562,7 +562,7 @@ class PyMatlabFitOptionsWidget(_FitOptionsWidgetBase):
             elapsed,
             message,
         )
-        QMessageBox.warning(self, "Matlab Fit", message)
+        present_error(self, "Matlab Fit", message)
 
     def _advanced_fit_parameters(self, fit_type_order):
         self.get_coef_limit()

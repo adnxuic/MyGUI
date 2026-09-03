@@ -7,6 +7,7 @@ from mygui.widgets.fig_control_window.background_task import (
     cancel_background_tasks,
     start_background_task,
 )
+from mygui.widgets.ui_components import UiRole, UiVariant, annotate_sections, apply_ui_style, set_busy_state, style_button
 from mygui import tex_config
 from mygui import status_messages
 
@@ -30,6 +31,7 @@ class PyTexWindow(QFrame):
 
         # 设置是否用latex引擎
         self.latex_engine = QCheckBox("Use Latex Engine")
+        apply_ui_style(self.latex_engine, role=UiRole.CHECKBOX)
         self.latex_engine.setChecked(runtime.enabled)
         self.latex_engine.checkStateChanged.connect(self.use_latex_engine)
         self.layout.addWidget(self.latex_engine)
@@ -41,16 +43,19 @@ class PyTexWindow(QFrame):
 
         # 设置默认导入的包
         self.preamble_input = QPlainTextEdit()
+        apply_ui_style(self.preamble_input, role=UiRole.TEXTAREA)
         self.preamble_input.setPlainText(runtime.preamble)
 
         self.preamble_layout.addWidget(self.preamble_input)
 
         # 更新设置按钮
         self.update_btn = QPushButton("Update")
+        style_button(self.update_btn, variant=UiVariant.PRIMARY)
         self.update_btn.clicked.connect(self.update_preamble)
         self.preamble_layout.addWidget(self.update_btn)
 
         self.layout.addWidget(self.preamble_box)
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def use_latex_engine(self, state):
@@ -99,8 +104,15 @@ class PyTexWindow(QFrame):
         )
 
     def _set_validation_busy(self, busy: bool) -> None:
-        self.latex_engine.setEnabled(not busy)
-        self.update_btn.setEnabled(not busy)
+        set_busy_state(
+            self.update_btn,
+            busy,
+            busy_text="Validating…" if busy else None,
+        )
+        try:
+            self.latex_engine.setEnabled(not busy)
+        except RuntimeError:
+            pass
 
     def _finish_enable_request(
         self,

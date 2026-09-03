@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from functools import partial
 from typing import Any, Optional
-from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtCore import QTimer, Qt, Signal, QEvent, QObject
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mygui.application_theme import isolate_matplotlib_canvas
 from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorPanel,
 )
@@ -192,6 +193,25 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
+
+
+class _IgnoreChromePolishFilter(QObject):
+    """Keep application theme polish from invalidating Matplotlib pixels."""
+
+    _EVENTS = frozenset(
+        {
+            QEvent.Type.StyleChange,
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.FontChange,
+            QEvent.Type.ApplicationFontChange,
+            QEvent.Type.Polish,
+            QEvent.Type.PolishRequest,
+        }
+    )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        return event.type() in self._EVENTS
 
 
 class _ControllerAwareFigureCanvas(FigureCanvasQTAgg):
@@ -445,6 +465,9 @@ class PyFigureCanvas(QWidget):
             self.fig,
             before_draw=self._synchronize_before_draw,
         )
+        isolate_matplotlib_canvas(self.canva)
+        self._canvas_chrome_filter = _IgnoreChromePolishFilter(self.canva)
+        self.canva.installEventFilter(self._canvas_chrome_filter)
         size_inches = self.fig.get_size_inches()
         self.canva.setFixedSize(
             round(float(size_inches[0]) * self._document_dpi),

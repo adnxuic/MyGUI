@@ -35,7 +35,13 @@ sheet view and south tabs. They read and mutate only through
 `ColorChoiceWidget` in `py_colorchoice_widgets.py` remains the public color
 editor. Dialogs live in `color_choice_dialogs.py` and list/grid models in
 `color_choice_model.py`. They require the injected `ColorLibrary` and must
-not create a private library.
+not create a private library. The 52×52 `ColorSwatch` has no layout, so its
+`minimumSizeHint()` is invalid `(-1, -1)` and must not be treated as pixels.
+Wrap width reads `minimumSize().width()`; host height reads
+`minimumSize().height()`. A stacked favorite row adds spacing plus the
+favorite button's effective height. Favorite-button participation uses
+`allow_favorite` and `isHidden()`, not ancestor visibility, so a cached
+Inspector page matches the layout it has after it is shown.
 
 `mygui.figuremodify.matplotlib_adapter` owns style/catalog contexts;
 `mygui.tex_config` owns TeX rcParams. These boundaries are enforced by

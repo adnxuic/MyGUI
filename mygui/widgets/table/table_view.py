@@ -58,6 +58,9 @@ class TableView(QTableView):
         self.setSortingEnabled(False)
         self._disposed = False
         self.setObjectName("sheet_table_view")
+        from mygui.widgets.ui_components import UiRole, apply_ui_style
+
+        apply_ui_style(self, role=UiRole.TABLE)
 
         horizontal = self.horizontalHeader()
         horizontal.setMinimumSectionSize(60)
@@ -485,6 +488,9 @@ class SheetTabWidget(QTabWidget):
         tab_bar.setContextMenuPolicy(Qt.CustomContextMenu)
         tab_bar.customContextMenuRequested.connect(self._context_menu)
         self.tabBarDoubleClicked.connect(self.subtable.rename_sheet)
+        from mygui.widgets.ui_components import UiRole, apply_ui_style
+
+        apply_ui_style(self, role=UiRole.TABS)
 
     def _context_menu(self, position):
         index = self.tabBar().tabAt(position)

@@ -9,7 +9,7 @@ from tests.axes_helpers import create_regular_axes
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow
 
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
@@ -119,7 +119,9 @@ class GuiFileFlowTests(unittest.TestCase):
         target = Path(self.directory.name) / "skip.png"
         empty = MainWindow()
         try:
-            with patch.object(QMessageBox, "warning") as warning:
+            with patch(
+                "mygui.widgets.title_bar.py_title_menu.status_messages.show_warning"
+            ) as warning:
                 empty.title_bar.menu_bar.export_current_figure()
             warning.assert_called_once()
             self.assertFalse(target.exists())
@@ -153,10 +155,9 @@ class GuiFileFlowTests(unittest.TestCase):
         )
         try:
             dialog.path_edit.setText(str(target))
-            with patch.object(
-                QMessageBox,
-                "question",
-                return_value=QMessageBox.StandardButton.No,
+            with patch(
+                "mygui.widgets.title_bar.titlebar_dialog.figure_export_dialog.ask_confirmation",
+                return_value=False,
             ):
                 dialog._export()
         finally:
@@ -170,11 +171,10 @@ class GuiFileFlowTests(unittest.TestCase):
         empty = MainWindow()
         try:
             menu = empty.title_bar.menu_bar
-            with patch.object(QMessageBox, "warning") as warning:
-                with patch.object(status_messages, "show_error"):
-                    self.assertFalse(menu.save_file())
-                    self.assertFalse(menu.save_file_as())
-            self.assertGreaterEqual(warning.call_count, 2)
+            with patch.object(status_messages, "show_error") as show_error:
+                self.assertFalse(menu.save_file())
+                self.assertFalse(menu.save_file_as())
+            self.assertGreaterEqual(show_error.call_count, 2)
             self.assertFalse(menu.save_canvas(None))
             self.assertTrue(
                 menu._project_save_path("plain").endswith(".mygui.json")
@@ -200,7 +200,9 @@ class GuiFileFlowTests(unittest.TestCase):
             from types import SimpleNamespace
 
             with patch.object(self.menu, "figure_window", None):
-                with patch.object(QMessageBox, "warning") as library_warning:
+                with patch(
+                    "mygui.widgets.title_bar.py_title_menu.present_error"
+                ) as library_warning:
                     self.menu.export_canvas(
                         SimpleNamespace(color_library=None)
                     )
@@ -222,7 +224,7 @@ class GuiFileFlowTests(unittest.TestCase):
         host.close()
         selector = self.window.title_bar.selector_menu_bar
         selector.apply_theme_metrics(current_density_metrics())
-        with patch("mygui.widgets.title_bar.py_title_menu.QMessageBox.warning"):
+        with patch("mygui.widgets.title_bar.py_title_menu.status_messages.show_warning"):
             selector.the_button_was_toggled(False)
             selector.chart_button.setChecked(True)
             selector.element_button.setChecked(True)

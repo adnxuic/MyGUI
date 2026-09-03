@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -31,6 +30,14 @@ from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiVariant,
+    apply_ui_style,
+    present_warning,
+    set_validation_state,
+    style_button,
+)
 from mygui.figuremodify.in_axes import (
     ImageInAxesCreateSpec,
     InAxesCreateSpec,
@@ -43,6 +50,7 @@ from .common import (
     FocusAwareSpinBox,
     LineStyleEditor,
 )
+from .inspector_layout import labeled_form_row
 
 class LineAppearanceInput(QFrame):
     """Unbound line appearance input for chart creation dialogs."""
@@ -198,6 +206,7 @@ class InAxesInput(QFrame):
         layout.addLayout(frame_row)
 
         self.mode_tabs = QTabWidget(self)
+        apply_ui_style(self.mode_tabs, role=UiRole.TABS)
         self.zoom_page = QWidget(self.mode_tabs)
         self.image_page = QWidget(self.mode_tabs)
         self.mode_tabs.addTab(self.zoom_page, "Zoom")
@@ -274,6 +283,7 @@ class InAxesInput(QFrame):
         self.image_path_input = QLineEdit(self.image_page)
         self.image_path_input.setReadOnly(True)
         self.image_button = QPushButton("Choose image…", self.image_page)
+        style_button(self.image_button, variant=UiVariant.OUTLINE)
         self.image_button.clicked.connect(self.choose_image)
         source_row.addWidget(self.image_path_input, 1)
         source_row.addWidget(self.image_button)
@@ -321,7 +331,10 @@ class InAxesInput(QFrame):
             if image.isNull():
                 raise ValueError("The selected image could not be previewed.")
         except Exception as exc:
-            QMessageBox.warning(self, "Invalid image", str(exc))
+            set_validation_state(
+                self.image_path_input, invalid=True, message=str(exc)
+            )
+            present_warning(self, "Invalid image", str(exc))
             return False
         self._image_data = data
         self.image_path_input.setText(filename)
@@ -399,17 +412,27 @@ class InterpolationOptionsInput(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.method_input = QComboBox(self)
-        for method in interpolate_dict:
-            self.method_input.addItem(interpolation_method_label(method), method)
-        layout.addWidget(QLabel("Interpolation Method:", self))
+        for method_key in interpolate_dict:
+            self.method_input.addItem(
+                interpolation_method_label(method_key),
+                method_key,
+            )
+        apply_ui_style(self.method_input, role=UiRole.SELECT)
+        layout.addWidget(
+            labeled_form_row(
+                "Interpolation Method:", buddy=self.method_input, parent=self
+            )
+        )
         layout.addWidget(self.method_input)
 
         samples_row = QHBoxLayout()
-        samples_row.addWidget(QLabel("Samples:", self))
         self.samples_input = FocusAwareSpinBox(self)
         self.samples_input.setRange(
             MIN_INTERPOLATION_SAMPLES,
             MAX_INTERPOLATION_SAMPLES,
+        )
+        samples_row.addWidget(
+            labeled_form_row("Samples:", buddy=self.samples_input, parent=self)
         )
         samples_row.addWidget(self.samples_input)
         layout.addLayout(samples_row)
@@ -417,9 +440,11 @@ class InterpolationOptionsInput(QFrame):
         self.k_widget = QFrame(self)
         k_layout = QHBoxLayout(self.k_widget)
         k_layout.setContentsMargins(0, 0, 0, 0)
-        k_layout.addWidget(QLabel("Order k:", self.k_widget))
         self.k_input = FocusAwareSpinBox(self.k_widget)
         self.k_input.setRange(1, 5)
+        k_layout.addWidget(
+            labeled_form_row("Order k:", buddy=self.k_input, parent=self.k_widget)
+        )
         k_layout.addWidget(self.k_input)
         layout.addWidget(self.k_widget)
 
@@ -432,11 +457,15 @@ class InterpolationOptionsInput(QFrame):
         )
         lambda_layout.addWidget(self.lambda_auto_input)
         lambda_row = QHBoxLayout()
-        lambda_row.addWidget(QLabel("Lambda:", self.lambda_widget))
         self.lambda_value_input = FocusAwareDoubleSpinBox(self.lambda_widget)
         self.lambda_value_input.setRange(0.0, 1e12)
         self.lambda_value_input.setDecimals(6)
         self.lambda_value_input.setSingleStep(0.1)
+        lambda_row.addWidget(
+            labeled_form_row(
+                "Lambda:", buddy=self.lambda_value_input, parent=self.lambda_widget
+            )
+        )
         lambda_row.addWidget(self.lambda_value_input)
         lambda_layout.addLayout(lambda_row)
         layout.addWidget(self.lambda_widget)

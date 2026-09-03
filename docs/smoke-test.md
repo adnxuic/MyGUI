@@ -9,7 +9,14 @@ writes PNG evidence plus `summary.json`. Groups are selected with `--only`.
 The walk covers Settings Center (including Templates), NEXT_USE creation
 defaults, Chart Templates extract/apply, 1D charts including Error Bar, Field 2D, Elements, all 34
 Inspector profiles, shared X/Y ticker synchronization, layout templates, XRD
-import, deletion/history, and project save/restore, export, and Canvas popout. Native file dialogs, drag and
+import, deletion/history, and project save/restore, export, and Canvas popout.
+Inspector rectangles are mapped into the Inspector host; unreadably narrow
+field labels, sibling overlap, GroupBox title/indicator overflow, or Qt
+`Negative sizes` warnings fail the
+walk instead of only writing screenshots. Targeted shots cover Function Curve
+Expression and X Start/X Stop, Tick Label Advanced, and fold bands at the
+top, middle, and bottom of the Inspector, plus Light/Dark × 8/9/16 pt ×
+Compact/Standard/Comfortable chrome. Native file dialogs, drag and
 drop, multi-monitor DPI, and live TeX/MATLAB remain on the interactive checks
 below. Offscreen Qt tests still do not cover those.
 
@@ -21,8 +28,10 @@ E:\PycharmProjects\ven\pyside6_env\Scripts\python.exe .agents/checks/verify_desk
 ```
 
 Available groups: `settings`, `templates`, `field_2d`, `charts_1d`, `elements`,
-`inspectors`, `layouts_xrd`, `axes_smoke`, `deletion_history`, `project_lifecycle`.
-`--all-styles` is ignored. Evidence lands under
+`inspectors`, `layouts_xrd`, `axes_smoke`, `deletion_history`, `project_lifecycle`,
+`styles`. `--all-styles` adds the styles group if needed and visits every
+visible Matplotlib Style Dialog (26), excluding Apply Template and hidden
+styles. Style walks run last. Evidence lands under
 `build/agent-results/desktop-smoke/`. Do not set `QT_QPA_PLATFORM=offscreen`.
 This check is local-only and is not part of `verify_full`. Remaining Start,
 Window, Core Workflow, and integration checks on this page stay manual.

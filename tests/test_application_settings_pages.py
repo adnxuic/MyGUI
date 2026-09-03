@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
     QLabel,
-    QMessageBox,
     QPushButton,
     QWidget,
 )
@@ -297,7 +296,7 @@ class WorkspacePageTests(SettingsPagesCase):
                 layout_port=port,
             )
         )
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes) as ask:
+        with patch("mygui.widgets.settings_pages.workspace.ask_confirmation", return_value=True) as ask:
             page.reset_button.click()
         reset_now.assert_called_once_with()
         port.save_layout.assert_not_called()
@@ -331,7 +330,7 @@ class WorkspacePageTests(SettingsPagesCase):
     def test_reset_confirm_no_does_not_reset(self) -> None:
         reset_now = Mock()
         page = self._track(WorkspaceSettingsPage(reset_layout_now=reset_now))
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.No):
+        with patch("mygui.widgets.settings_pages.workspace.ask_confirmation", return_value=False):
             self.assertFalse(page.reset_workspace_layout_now())
         reset_now.assert_not_called()
 
@@ -339,7 +338,7 @@ class WorkspacePageTests(SettingsPagesCase):
         port = Mock()
         page = self._track(WorkspaceSettingsPage(layout_port=port))
         self.assertEqual(page.reset_button.text(), RESET_BUTTON_TEXT)
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch("mygui.widgets.settings_pages.workspace.ask_confirmation", return_value=True):
             self.assertTrue(page.reset_workspace_layout_now())
         port.save_layout.assert_called_once()
 

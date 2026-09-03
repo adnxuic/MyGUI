@@ -492,7 +492,9 @@ def create_editor_widget(host: Any, key: str, spec: Any, value: Any) -> QWidget:
         raise ComponentValidationError(
             f"Property {key!r} declares unsupported editor {kind.value!r}."
         ) from exc
-    return factory(host, key, spec, value)
+    from mygui.widgets.ui_components import annotate_inspector_control
+
+    return annotate_inspector_control(factory(host, key, spec, value))
 
 
 EDITOR_FACTORIES: dict[EditorKind, EditorFactory] = {}

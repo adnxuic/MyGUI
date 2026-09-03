@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from types import MappingProxyType
 from typing import Any
 
@@ -18,7 +19,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -31,11 +31,26 @@ from mygui.application_settings.errors import SettingsValidationError
 from mygui.application_settings.keys import PAGE_WORKSPACE
 from mygui.application_settings.registry import SettingsRegistry, production_settings_registry
 from mygui.application_settings.service import ApplicationSettingsService
-from mygui.application_theme import bind_widget_qss, subscribe_theme_window
+from mygui.application_theme import (
+    QssResourceBundle,
+    bind_widget_qss,
+    subscribe_theme_window,
+)
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiTextRole,
+    UiVariant,
+    annotate_form_fields,
+    annotate_sections,
+    apply_text_style,
+    apply_ui_style,
+    ask_confirmation,
+)
 from mygui.application_theme.binder import apply_committed_appearance
 from mygui.application_theme.errors import ThemeApplyError, ThemeRollbackError
 from mygui.application_theme.service import ThemeService
 from mygui.resources import icon_path
+from mygui.widgets.settings_pages.page import QSS_RESOURCE as SETTINGS_PAGES_QSS_RESOURCE
 
 from .geometry import (
     INITIAL_HEIGHT,
@@ -58,11 +73,40 @@ from .pages import (
 from .session_glue import MessageCallback, SettingsCenterSession
 
 SETTINGS_CENTER_QSS_RESOURCE = "mygui/widgets/settings_center/style.qss"
+SETTINGS_CENTER_QSS_BUNDLE = QssResourceBundle(
+    (
+        SETTINGS_CENTER_QSS_RESOURCE,
+        SETTINGS_PAGES_QSS_RESOURCE,
+    )
+)
 READ_ONLY_STATUS = (
     "Settings storage is read-only. Open Maintenance to reset incompatible storage."
 )
 
 ImmediateConfirm = Callable[[str, str], bool]
+
+
+@contextmanager
+def _batch_toplevel_updates() -> Iterator[None]:
+    """Hide Settings and restore theme without intermediate top-level paints."""
+
+    app = QApplication.instance()
+    previous: list[tuple[QWidget, bool]] = []
+    if app is not None:
+        for widget in app.topLevelWidgets():
+            try:
+                previous.append((widget, widget.updatesEnabled()))
+                widget.setUpdatesEnabled(False)
+            except RuntimeError:
+                continue
+    try:
+        yield
+    finally:
+        for widget, enabled in previous:
+            try:
+                widget.setUpdatesEnabled(enabled)
+            except RuntimeError:
+                continue
 
 
 class SettingsCenterWindow(QDialog):
@@ -111,7 +155,7 @@ class SettingsCenterWindow(QDialog):
         self.resize(INITIAL_WIDTH, INITIAL_HEIGHT)
         self.setMinimumSize(MINIMUM_WIDTH, MINIMUM_HEIGHT)
 
-        bind_widget_qss(self, SETTINGS_CENTER_QSS_RESOURCE)
+        bind_widget_qss(self, SETTINGS_CENTER_QSS_BUNDLE)
         self._build_chrome()
         self._connect_chrome()
         subscribe_theme_window(self)
@@ -288,14 +332,12 @@ class SettingsCenterWindow(QDialog):
     def confirm_immediate_command(self, title: str, text: str) -> bool:
         if self._confirm_immediate is not None:
             return bool(self._confirm_immediate(title, text))
-        reply = QMessageBox.question(
+        return ask_confirmation(
             self,
             title,
             text,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            destructive=True,
         )
-        return reply == QMessageBox.StandardButton.Yes
 
     def emit_message(self, text: str, level: str = "info") -> None:
         """Forward one Message Bar result. Later calls in the same action are dropped."""
@@ -324,16 +366,18 @@ class SettingsCenterWindow(QDialog):
 
     def closeEvent(self, event) -> None:  # noqa: N802 — Qt
         accepted = int(self.result()) == int(QDialog.Accepted)
-        if not self._complete_session(accepted):
-            event.ignore()
-            return
-        super().closeEvent(event)
+        with _batch_toplevel_updates():
+            if not self._complete_session(accepted):
+                event.ignore()
+                return
+            super().closeEvent(event)
 
     def done(self, result: int) -> None:  # noqa: N802 — Qt
         accepted = int(result) == int(QDialog.Accepted)
-        if not self._complete_session(accepted):
-            return
-        super().done(result)
+        with _batch_toplevel_updates():
+            if not self._complete_session(accepted):
+                return
+            super().done(result)
 
     def reject(self) -> None:
         super().reject()
@@ -389,6 +433,7 @@ class SettingsCenterWindow(QDialog):
         self._nav = QListWidget()
         self._nav.setObjectName("settings_nav")
         self._nav.setAccessibleName("Settings pages")
+        apply_ui_style(self._nav, role=UiRole.TREE)
         self._nav.setSelectionMode(QAbstractItemView.SingleSelection)
         self._nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         nav_layout.addWidget(self._nav, 1)
@@ -401,8 +446,10 @@ class SettingsCenterWindow(QDialog):
 
         self._title = QLabel()
         self._title.setObjectName("settings_page_title")
+        apply_text_style(self._title, UiTextRole.PAGE_TITLE)
         self._description = QLabel()
         self._description.setObjectName("settings_page_description")
+        apply_text_style(self._description, UiTextRole.BODY)
         self._description.setWordWrap(True)
         right_layout.addWidget(self._title)
         right_layout.addWidget(self._description)
@@ -425,6 +472,7 @@ class SettingsCenterWindow(QDialog):
 
         self._status = QLabel()
         self._status.setObjectName("settings_status")
+        apply_text_style(self._status, UiTextRole.CAPTION)
         self._status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         footer_layout.addWidget(self._status, 1)
 
@@ -441,12 +489,35 @@ class SettingsCenterWindow(QDialog):
         self._ok_button.setAccessibleName("OK")
         self._ok_button.setDefault(False)
         self._ok_button.setAutoDefault(False)
+        apply_ui_style(
+            self._restore_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.GHOST,
+        )
+        apply_ui_style(
+            self._cancel_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
+        apply_ui_style(
+            self._apply_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.PRIMARY,
+        )
+        apply_ui_style(
+            self._ok_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.PRIMARY,
+        )
+        apply_ui_style(self._search, role=UiRole.INPUT)
         footer_layout.addWidget(self._cancel_button)
         footer_layout.addWidget(self._apply_button)
         footer_layout.addWidget(self._ok_button)
         right_layout.addWidget(footer)
         root.addWidget(right, 1)
 
+        annotate_form_fields(self)
+        annotate_sections(self)
         self._relink_tab_order(None)
 
     def _connect_chrome(self) -> None:

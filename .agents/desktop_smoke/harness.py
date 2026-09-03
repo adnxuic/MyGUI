@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import tempfile
+import time
 from typing import Any, Callable
 
-from PySide6.QtCore import QCoreApplication, QEventLoop, Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QCoreApplication, QEventLoop, Qt, QTimer, qInstallMessageHandler
+from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QInputDialog,
@@ -69,7 +70,15 @@ class SmokeHarness:
     _tempdir: tempfile.TemporaryDirectory[str] | None = None
     settings_path: Path | None = None
     _backend: Any = None
-    timings: dict[str, float] = field(default_factory=dict)
+    timings: dict[str, Any] = field(default_factory=dict)
+    all_styles: bool = False
+    expected_style_dialogs: list[str] = field(default_factory=list)
+    visited_style_dialogs: list[str] = field(default_factory=list)
+    missing_style_dialogs: list[str] = field(default_factory=list)
+    platform_evidence: dict[str, Any] = field(default_factory=dict)
+    qt_negative_sizes: list[str] = field(default_factory=list)
+    _prev_qt_handler: Any = None
+    _qt_handler_installed: bool = False
 
     def start(self) -> None:
         """Create an isolated settings file, ThemeService, and visible MainWindow."""
@@ -93,20 +102,70 @@ class SmokeHarness:
             runtime_applier=compose_theme_runtime_applier(self._theme),
         )
         apply_committed_appearance(self._theme, service.snapshot())
+        self._prev_qt_handler = qInstallMessageHandler(self._qt_message_handler)
+        self._qt_handler_installed = True
 
         from main import MainWindow
 
+        started = time.perf_counter()
         self.window = MainWindow(
             settings_backend=self._backend,
             settings_service=service,
             theme_service=self._theme,
         )
+        self.timings["mainwindow_construct_ms"] = (
+            time.perf_counter() - started
+        ) * 1000
         self.window._skip_close_confirmation = True
         self._isolate_template_library()
         self.window.showMaximized()
         self.pump(200)
         if not self.window.isVisible():
             raise SmokeError("MainWindow did not become visible.")
+        self.platform_evidence = self._collect_platform_evidence()
+
+    def _collect_platform_evidence(self) -> dict[str, Any]:
+        """Record real screens/DPR. Do not claim unverified DPI or dual-monitor walks."""
+
+        app = self.app or QApplication.instance() or QGuiApplication.instance()
+        screens = list(QGuiApplication.screens()) if app is not None else []
+        dprs = []
+        names = []
+        for screen in screens:
+            dprs.append(round(float(screen.devicePixelRatio()), 3))
+            names.append(str(screen.name()))
+        observed = sorted(set(dprs))
+        known = {1.0, 1.25, 1.5, 2.0}
+        verified = [scale for scale in known if any(abs(item - scale) < 0.02 for item in observed)]
+        unverified = [scale for scale in (1.0, 1.25, 1.5, 2.0) if scale not in verified]
+        return {
+            "screenCount": len(screens),
+            "screenNames": names,
+            "observedDpr": observed,
+            "dpiScalesVerified": verified,
+            "dpiScalesUnverified": unverified,
+            "dualMonitorVerified": False,
+            "dualMonitorAvailable": len(screens) >= 2,
+            "systemThemeWalkVerified": False,
+            "notes": (
+                "This session recorded observed screen DPR and marked matching "
+                "100/125/150/200% scales as verified. Unlisted scales, mixed-DPI "
+                "dual-monitor migration, and OS System Light→Dark→Light remain unverified."
+            ),
+        }
+
+    def _qt_message_handler(self, mode, context, message) -> None:
+        text = str(message)
+        if "Negative sizes" in text:
+            self.qt_negative_sizes.append(text)
+        previous = self._prev_qt_handler
+        if callable(previous):
+            previous(mode, context, message)
+
+    def require_no_negative_sizes(self, label: str) -> None:
+        if self.qt_negative_sizes:
+            preview = "; ".join(self.qt_negative_sizes[:5])
+            raise SmokeError(f"{label}: Qt negative-size warnings: {preview}")
 
     def _isolate_template_library(self) -> None:
         """Redirect the shared TemplateLibrary away from the repository template/."""
@@ -121,6 +180,10 @@ class SmokeHarness:
     def shutdown(self) -> None:
         """Close windows and drop the temporary settings file."""
 
+        if self._qt_handler_installed:
+            qInstallMessageHandler(self._prev_qt_handler)
+            self._qt_handler_installed = False
+            self._prev_qt_handler = None
         dialog = self.settings_dialog()
         if dialog is not None:
             try:
@@ -291,7 +354,13 @@ class SmokeHarness:
         if not widget.isEnabled():
             raise SmokeError(f"Widget {widget.objectName()!r} is disabled.")
         widget.click()
-        self.pump(wait_ms)
+        if wait_ms > 0:
+            self.pump(wait_ms)
+
+    def click_nowait(self, widget: QWidget | None) -> None:
+        """Click without a fixed-duration pump. Frame probes use this."""
+
+        self.click(widget, wait_ms=0)
 
     def click_and_dismiss_confirm(self, button: QPushButton) -> None:
         """Click a command that opens Yes/No or Cancel confirmation; always dismiss."""
@@ -323,11 +392,28 @@ class SmokeHarness:
             if not visible:
                 continue
             yes_button = widget.button(QMessageBox.StandardButton.Yes)
-            if yes_button is not None:
-                yes_button.click()
+            ok_button = widget.button(QMessageBox.StandardButton.Ok)
+            target = yes_button or ok_button
+            if target is not None:
+                target.click()
             else:
                 widget.accept()
         self.pump(20)
+
+    def grab_visible_message_box(self, name: str) -> Path:
+        app = self.app or QApplication.instance()
+        if app is None:
+            raise SmokeError("QApplication is missing.")
+        for widget in list(app.topLevelWidgets()):
+            if not isinstance(widget, QMessageBox):
+                continue
+            try:
+                visible = widget.isVisible()
+            except RuntimeError:
+                continue
+            if visible:
+                return self.grab(widget, name)
+        raise SmokeError(f"No visible confirmation box for {name!r}.")
 
     def accept_input_dialog(self) -> None:
         """Accept a visible QInputDialog without waiting for keyboard focus."""

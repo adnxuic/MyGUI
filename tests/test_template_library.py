@@ -995,7 +995,6 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_extract_dialog_inserts_tokens_and_rejects_empty_names(self):
-        from PySide6.QtWidgets import QMessageBox
 
         dialog = TemplateExtractDialog(self.template)
         try:
@@ -1008,7 +1007,9 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             self.assertTrue(dialog.text_table.item(0, 2).text().startswith(before))
             dialog._insert_token()
             dialog.name_edit.setText("   ")
-            with mock.patch.object(QMessageBox, "warning") as warning:
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ) as warning:
                 dialog._validate_and_accept()
             warning.assert_called_once()
             self.assertNotEqual(dialog.result(), QDialog.DialogCode.Accepted)
@@ -1016,7 +1017,6 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             dialog.close()
 
     def test_apply_dialog_guards_steps_and_empty_project_name(self):
-        from PySide6.QtWidgets import QMessageBox
 
         dialog = TemplateApplyDialog(self.window.template_workflow)
         try:
@@ -1039,14 +1039,18 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             dialog._filter_templates("")
             dialog._next()
             self.assertEqual(dialog.steps.currentIndex(), 1)
-            with mock.patch.object(QMessageBox, "warning") as warning:
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ) as warning:
                 dialog._next()
             warning.assert_called_once()
             self.assertIn("preview", warning.call_args[0][2].casefold())
             dialog._back()
             self.assertEqual(dialog.steps.currentIndex(), 0)
             dialog._template = None
-            with mock.patch.object(QMessageBox, "warning") as warning:
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ) as warning:
                 dialog._next()
             warning.assert_called_once()
             dialog._populate_templates()
@@ -1056,7 +1060,9 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             dialog.project_name_edit.clear()
             dialog._source_file = Path("data.csv")
             dialog._specs = imported_specs()
-            with mock.patch.object(QMessageBox, "warning") as warning:
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ) as warning:
                 dialog._start_processing()
             warning.assert_called_once()
             self.assertIn("project name", warning.call_args[0][2].casefold())
@@ -1068,26 +1074,28 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             dialog.close()
 
     def test_extract_reports_extractor_failures_without_saving(self):
-        from PySide6.QtWidgets import QMessageBox
 
         with mock.patch.object(
             self.window.template_workflow.extractor,
             "extract",
             side_effect=ValueError("cannot extract"),
         ):
-            with mock.patch.object(QMessageBox, "warning") as warning:
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ) as warning:
                 result = self.window.template_workflow.open_extract(self.window)
         self.assertIsNone(result)
         warning.assert_called_once()
         self.assertIn("cannot extract", warning.call_args[0][2])
 
     def test_workflow_requires_a_figure_before_extract(self):
-        from PySide6.QtWidgets import QMessageBox
 
         empty = MainWindow()
         try:
             empty.template_workflow.library = self.library
-            with mock.patch.object(QMessageBox, "warning") as warning:
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ) as warning:
                 result = empty.template_workflow.open_extract(empty)
             self.assertIsNone(result)
             warning.assert_called_once()
@@ -1096,7 +1104,6 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             self.app.processEvents()
 
     def test_apply_dialog_mapping_prepare_and_publish_paths(self):
-        from PySide6.QtWidgets import QMessageBox
 
         dialog = TemplateApplyDialog(
             self.window.template_workflow,
@@ -1105,7 +1112,9 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
         csv_path = Path(self.temp.name) / "source.csv"
         csv_path.write_text("X,Y\n1,2\n", encoding="utf-8")
         try:
-            with mock.patch.object(QMessageBox, "warning"):
+            with mock.patch(
+                "mygui.widgets.template_workflow.present_warning"
+            ):
                 self.assertIsNotNone(dialog.template_list.currentItem())
                 dialog._filter_templates("workflow")
                 dialog._filter_templates("")
@@ -1239,7 +1248,7 @@ class TemplateWorkflowDialogTests(unittest.TestCase):
             "result_template",
             side_effect=ValueError("bad save"),
         ), mock.patch(
-            "mygui.widgets.template_workflow.QMessageBox.warning"
+            "mygui.widgets.template_workflow.present_warning"
         ):
             self.assertIsNone(workflow.open_extract(self.window))
 

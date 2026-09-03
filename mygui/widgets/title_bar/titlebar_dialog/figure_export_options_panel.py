@@ -43,6 +43,7 @@ from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     ColorChoiceWidget,
 )
+from mygui.widgets.ui_components import UiRole, apply_ui_style
 
 _PANEL_WIDGET_NAMES = (
     "format_combo",
@@ -131,6 +132,7 @@ class FigureExportOptionsPanel(QWidget):
 
         self.tabs = QTabWidget(self)
         self.tabs.setObjectName("export_tabs")
+        apply_ui_style(self.tabs, role=UiRole.TABS)
         self.tabs.addTab(self._build_output_page(show_size_preview), "Output")
         self.tabs.addTab(self._build_encoding_page(), "Encoding")
         self.tabs.addTab(self._build_metadata_page(), "Metadata")

@@ -33,6 +33,8 @@ _BRAND_NAMES = frozenset({"matlab.svg", "app_icon.ico"})
 _CHROME_TINT_TOKEN = "COLOR_TEXT_PRIMARY"
 _ON_COMMAND_TOKEN = "COLOR_TEXT_ON_DARK"
 _ON_ACCENT_TOKEN = "COLOR_TEXT_ON_DARK"
+_ICON_ROOT: Path | None = None
+_CLASSIFY_CACHE: dict[str, IconRole] = {}
 
 
 class IconRole(StrEnum):
@@ -63,10 +65,34 @@ def normalize_icon_source(source: str) -> str:
     return str(source).replace("\\", "/")
 
 
+def _bundled_icon_root() -> Path:
+    global _ICON_ROOT
+    if _ICON_ROOT is None:
+        _ICON_ROOT = icon_directory().resolve()
+    return _ICON_ROOT
+
+
+def clear_icon_classify_cache_for_tests() -> None:
+    """Drop bundled-icon classification cache. Tests only."""
+
+    global _ICON_ROOT
+    _ICON_ROOT = None
+    _CLASSIFY_CACHE.clear()
+
+
 def classify_icon_source(source: str) -> IconRole:
     """Classify a path as chrome (recolor) or original-color."""
 
     posix = normalize_icon_source(source)
+    cached = _CLASSIFY_CACHE.get(posix)
+    if cached is not None:
+        return cached
+    role = _classify_icon_source_uncached(posix)
+    _CLASSIFY_CACHE[posix] = role
+    return role
+
+
+def _classify_icon_source_uncached(posix: str) -> IconRole:
     name = Path(posix).name.lower()
     if name in _BRAND_NAMES:
         return IconRole.BRAND
@@ -74,13 +100,17 @@ def classify_icon_source(source: str) -> IconRole:
     if any(folder in lowered for folder in _PREVIEW_FOLDERS):
         return IconRole.PREVIEW
     try:
-        root = icon_directory().resolve()
-        path = Path(posix)
-        if path.is_absolute() and root not in path.resolve().parents and path.resolve() != root:
-            return IconRole.USER_DATA
+        root = _bundled_icon_root()
     except FileNotFoundError:
         return IconRole.USER_DATA
-    return IconRole.CHROME
+    path = Path(posix)
+    if not path.is_absolute():
+        return IconRole.CHROME
+    root_posix = root.as_posix().replace("\\", "/").lower()
+    candidate = lowered
+    if candidate == root_posix or candidate.startswith(root_posix + "/"):
+        return IconRole.CHROME
+    return IconRole.USER_DATA
 
 
 def resolve_device_pixel_ratio(widget: QWidget | None = None) -> float:
@@ -264,7 +294,6 @@ class CachingThemeIconProvider:
         runtime = default_theme_runtime()
         runtime.snapshot = snapshot
         registry = default_window_registry()
-        registry.apply_palette(snapshot.palette)
         registry.apply_icons(snapshot, self)
 
     def capture(self) -> object:
@@ -347,6 +376,27 @@ class CachingThemeIconProvider:
         return QIcon(pixmap)
 
 
+def apply_icons_to_one_widget(
+    widget: QWidget,
+    snapshot: ThemeSnapshot,
+    provider: CachingThemeIconProvider,
+) -> None:
+    """Refresh icons on ``widget`` only. Does not walk descendants."""
+
+    method = getattr(widget, "apply_theme_icons", None)
+    if callable(method):
+        method(snapshot, provider)
+    window_icon_source = widget.property("themeChromeWindowIcon")
+    if window_icon_source:
+        widget.setWindowIcon(
+            provider.icon(
+                str(window_icon_source),
+                snapshot=snapshot,
+                widget=widget,
+            )
+        )
+
+
 def apply_icons_to_widget(
     widget: QWidget,
     snapshot: ThemeSnapshot,
@@ -354,26 +404,8 @@ def apply_icons_to_widget(
 ) -> None:
     """Ask a subscribed chrome widget and themed children to refresh icons."""
 
-    seen: set[int] = set()
+    from .windows import iter_widget_tree
 
-    def visit(target: QWidget) -> None:
-        key = id(target)
-        if key in seen:
-            return
-        seen.add(key)
-        method = getattr(target, "apply_theme_icons", None)
-        if callable(method):
-            method(snapshot, provider)
-        window_icon_source = target.property("themeChromeWindowIcon")
-        if window_icon_source:
-            target.setWindowIcon(
-                provider.icon(
-                    str(window_icon_source),
-                    snapshot=snapshot,
-                    widget=target,
-                )
-            )
-        for child in target.findChildren(QWidget):
-            visit(child)
-
-    visit(widget)
+    visited: set[int] = set()
+    for target in iter_widget_tree([widget], visited):
+        apply_icons_to_one_widget(target, snapshot, provider)

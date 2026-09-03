@@ -23,6 +23,12 @@ from mygui.application_theme import current_density_metrics, subscribe_theme_win
 from mygui.application_theme.icons import IconRole, classify_icon_source
 from mygui.application_theme.runtime import default_theme_runtime
 from mygui.widgets.title_bar.style_gallery import LAYOUT_BUTTON_MIN_WIDTH
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiVariant,
+    apply_elided_text,
+    apply_ui_style,
+)
 
 if TYPE_CHECKING:
     from mygui.application_theme.icons import CachingThemeIconProvider
@@ -31,6 +37,7 @@ if TYPE_CHECKING:
 DialogFactory = Callable[[QWidget | None], QDialog]
 IconSource = str | QIcon | Path
 QWIDGETSIZE_MAX = 16777215
+_FILE_ICON_CACHE: dict[str, QIcon] = {}
 
 
 class LazyDialogAction(QAction):
@@ -75,7 +82,12 @@ class LazyDialogAction(QAction):
                     snapshot=snapshot,
                     widget=widget,
                 )
-        return QIcon(source)
+        cached = _FILE_ICON_CACHE.get(source)
+        if cached is not None:
+            return QIcon(cached)
+        resolved = QIcon(source)
+        _FILE_ICON_CACHE[source] = QIcon(resolved)
+        return resolved
 
     @property
     def dialog(self) -> QDialog | None:
@@ -126,6 +138,7 @@ class ResponsiveActionGallery(QFrame):
         self._overflow_timer = QTimer(self)
         self._overflow_timer.setSingleShot(True)
         self._overflow_timer.timeout.connect(self._sync_overflow_reservation)
+        self._overflow_syncing = False
 
         self.action_dict: dict[str, LazyDialogAction] = {}
 
@@ -150,6 +163,7 @@ class ResponsiveActionGallery(QFrame):
                 button.setMaximumWidth(QWIDGETSIZE_MAX)
             button.setMinimumHeight(0)
             button.setMaximumHeight(metrics.gallery)
+        self._schedule_overflow_reservation()
 
     def apply_theme_icons(
         self,
@@ -169,6 +183,7 @@ class ResponsiveActionGallery(QFrame):
                             widget=self,
                         )
                     )
+        self._schedule_overflow_reservation()
 
     def showEvent(self, event):
         """Refresh the widget when Qt makes it visible."""
@@ -180,9 +195,15 @@ class ResponsiveActionGallery(QFrame):
         """Reflow child controls after the widget is resized."""
 
         super().resizeEvent(event)
+        if self._overflow_syncing:
+            return
+        if event.size() == event.oldSize():
+            return
         self._schedule_overflow_reservation()
 
     def _schedule_overflow_reservation(self):
+        if self._overflow_timer.isActive() or self._overflow_syncing:
+            return
         self._overflow_timer.start(0)
 
     def _sync_overflow_reservation(self):
@@ -191,25 +212,40 @@ class ResponsiveActionGallery(QFrame):
         if button is None:
             return
 
-        reserved_by_style = self.toolbar.style().pixelMetric(
-            QStyle.PM_ToolBarExtensionExtent,
-            None,
-            self.toolbar,
-        )
-        required_margin = (
-            max(0, button.width() - reserved_by_style)
-            if button.isVisible()
-            else 0
-        )
-        margins = self.toolbar.contentsMargins()
-        if margins.right() == required_margin:
-            return
-        self.toolbar.setContentsMargins(
-            margins.left(),
-            margins.top(),
-            required_margin,
-            margins.bottom(),
-        )
+        self._overflow_syncing = True
+        try:
+            reserved_by_style = self.toolbar.style().pixelMetric(
+                QStyle.PM_ToolBarExtensionExtent,
+                None,
+                self.toolbar,
+            )
+            required_margin = (
+                max(0, button.width() - reserved_by_style)
+                if button.isVisible()
+                else 0
+            )
+            margins = self.toolbar.contentsMargins()
+            if margins.right() != required_margin:
+                self.toolbar.setContentsMargins(
+                    margins.left(),
+                    margins.top(),
+                    required_margin,
+                    margins.bottom(),
+                )
+            self._elide_gallery_labels()
+        finally:
+            self._overflow_syncing = False
+
+    def _elide_gallery_labels(self) -> None:
+        """Elide visible gallery labels inside existing button widths."""
+
+        for action in self.action_dict.values():
+            button = self.toolbar.widgetForAction(action)
+            if button is None or button.width() < 24:
+                continue
+            full = str(action.toolTip() or action.text())
+            apply_elided_text(button, full, padding=16)
+            button.setToolTip(full)
 
     def add_dialog_action(
         self,
@@ -239,4 +275,9 @@ class ResponsiveActionGallery(QFrame):
             accessible = tooltip if tooltip is not None else name
             button.setAccessibleName(accessible)
             button.setToolTip(accessible)
+            apply_ui_style(
+                button,
+                role=UiRole.BUTTON,
+                variant=UiVariant.GHOST,
+            )
         return action

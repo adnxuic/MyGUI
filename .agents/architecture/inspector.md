@@ -69,12 +69,52 @@ The production hierarchy is `FigureInspectorHost` → `FigureInspectorPanel` →
 `AxesInspectorPanel` → semantic/chart/element stacks. Host owns project
 mapping, Figure panel owns Figure/Axes selection, Axes panel routes by profile
 placement, Stack switches toolboxes, ToolBox owns visible Inspectors, Section
-edits a component, and Input is Controller-free.
+edits a component, and Input is Controller-free. Nested
+`CurrentPageStackedWidget` switches in one selection submit one outermost
+`updateGeometry()`, then update the Component Tree viewport, Inspector
+viewport, and needed scrollbars. The visible Figure Inspector stack presents
+only the current leaf Inspector. Axes panels, Chart/Element stacks, and
+toolboxes remain on a hidden owner root so selection never hides a container
+that still holds every cached Inspector. Cached pages skip `layout.activate()` when
+width and theme generation are unchanged; hidden pages freeze their layout so
+a later show at the same generation does not relayout. `sizeHint()`, scroll reset, and
+`componentShown` stay as they are. Batch depth, dirty flags, and registered
+viewports live on each `CurrentPageStackedWidget` instance. Hosts call
+`attach_switch_host` and `register_switch_viewports`; they do not probe
+`_figure_stack` or scan `findChildren` across a window. Collapse and hide
+activate the current page once and request one outermost geometry refresh.
+`ARCH-INSPECTOR-SWITCH-ISOLATION` forbids module-level `_SWITCH_DEPTH` /
+`_OUTER_HOST`. Field labels stay single-line at their natural font width with
+`Preferred`/`Fixed` size policy. `labeled_form_row()` /
+`add_labeled_form_row()` create those labels with buddy, tooltip, and
+accessible name. `QFormLayout.WrapLongRows` moves the editor below the label
+when the 240 px Inspector cannot fit both on one row; labels are not shrunk
+to 1 px and do not wrap word-by-word. Description, error, and summary labels
+may still wrap. `ComponentInspector` and `InspectorSectionGroup` report a 1 px
+minimum width so the scroll area can size to the viewport; editors and
+buttons shrink through `apply_expanding_field()` at creation. Section Group
+title and indicator subcontrols stay inside the GroupBox, use `UI_CARD` to
+cover the border, size the indicator from `SIZE_INDICATOR`, and keep at least
+`SPACE_XS` between the title band and section contents.
+Fit Result tables stretch columns, expose truncated
+text through tooltip/accessible text, and enable internal vertical scrolling
+only after six content rows.
+`test_inspector_geometry` covers all 34 profiles at 240/320/480 px, 8/9/16 pt,
+Compact/Standard/Comfortable, Light/Dark, and default / per-group / all-expanded
+fold states. Visible sibling section rects must not intersect, same-layout
+siblings are compared without treating parent/child containment as overlap,
+buddy labels keep a readable width, GroupBox title/indicator stay inside the
+frame, content must stay in bounds, the bottom must be reachable, and the
+Inspector must not grow a horizontal scrollbar. Color editors size the 52×52
+swatch host from `minimumSize()`, not an invalid `minimumSizeHint()`, so
+creation and switch must not emit Qt `Negative sizes`.
 
 Callers use public add/find/show/remove/clear/toolbox APIs. Access to
 `_figure_stack`, `_inspector_stack`, `_toolboxes`, `_chart_stack`,
 `_element_stack`, or other private container layout state violates
-`ARCH-PRIVATE-CONTAINER-ACCESS`. Manager tracking is released before Section
+`ARCH-PRIVATE-CONTAINER-ACCESS`. The scanner allows only
+`figure_inspector.py` and `containers.py` to read those attributes.
+Manager tracking is released before Section
 cleanup; partial construction unwinds in reverse order and cleanup exceptions
 are isolated as structured `CleanupFailure` records. Those records are logged
 by default, remaining objects continue to dispose, `dispose()` stays
@@ -99,6 +139,17 @@ dedicated naming task.
 `ComponentNodeKey`/`GroupNodeKey` through `NODE_KEY_ROLE`; virtual groups never
 use component IDs or enter persisted state. Build and validate a complete
 candidate projection before atomic replacement.
+
+`ComponentTreeModel` takes one `Registry.states()` snapshot and derives a
+private `_ComponentPresentation` per component: id, kind, role, display
+label, tooltip, and search text. It does not cache `properties` and is not a
+second business-state source (`CORE-COMPONENT-STATE`). `data()`, `flags()`,
+search, and paint read only that UI projection. Registry events build and
+validate a candidate first; unchanged topology atomically replaces derived
+copy and emits precise `dataChanged`. Structure changes keep the existing
+full atomic publish. Search and Canvas selection stay as they are
+(`CORE-SELECTION-AUTHORITY`). The projection is runtime-only and never
+persisted.
 
 Labels, grouping, previews, ordering, and editor placement come from the
 profile's UI-only `TreePresentationSpec`; tree/container code has no

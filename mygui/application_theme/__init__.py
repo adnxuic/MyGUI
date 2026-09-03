@@ -1,8 +1,8 @@
 """Application chrome theme. Not Matplotlib Figure style.
 
 ``ThemeService`` publishes font, QPalette, QSS tokens, density, and icon roles.
-``bind_qss`` (SubAgent B) retokenizes widgets. Palette/metrics/icons (SubAgent C)
-are the injectable transaction step-4 appliers.
+``bind_qss`` retokenizes widgets. Palette, metrics, and icons are the
+injectable transaction step-4 appliers.
 """
 
 from mygui.application_settings.runtime import APPEARANCE_LIVE_KEYS
@@ -46,17 +46,22 @@ from .ports import (
 from .qss import (
     APPLICATION_QSS_RESOURCE,
     BundledQssRenderer,
+    COMPONENT_QSS_RESOURCE,
     DIALOG_QSS_RESOURCE,
     MAINWINDOW_QSS_RESOURCE,
+    QssResourceBundle,
     QssThemeBinding,
     bind_qss,
     bind_qss_text,
     bind_widget_qss,
     binding_count,
+    compose_component_stylesheet,
     current_qss_tokens,
     current_theme_binding,
     default_qss_binding,
     install_theme_binding,
+    isolate_matplotlib_canvas,
+    qss_bind_key,
     rebind_qss_bindings,
     render_application_stylesheet,
     render_resource_stylesheet,
@@ -95,7 +100,7 @@ from .tokens import (
     contrast_ratio,
     qss_tokens_for_scheme,
 )
-from .windows import subscribe_theme_window
+from .windows import subscribe_theme_window, theme_construction_batch
 
 QssThemeBindingPort = ThemeBindingPort
 
@@ -104,6 +109,7 @@ __all__ = [
     "APPLICATION_QSS_RESOURCE",
     "APPLY_STEPS",
     "BundledQssRenderer",
+    "COMPONENT_QSS_RESOURCE",
     "AppearancePreferences",
     "CONTRAST_BOUNDARY_PAIRS",
     "CONTRAST_PAIRS_BODY",
@@ -138,6 +144,7 @@ __all__ = [
     "PlaceholderQssRenderer",
     "QSS_TOKEN_NAMES",
     "QssDocumentRenderer",
+    "QssResourceBundle",
     "QssThemeBinding",
     "QssThemeBindingPort",
     "RecordingThemeBindingPort",
@@ -163,6 +170,7 @@ __all__ = [
     "bind_widget_qss",
     "binding_count",
     "build_density_metrics",
+    "compose_component_stylesheet",
     "compose_theme_runtime_applier",
     "compose_theme_service",
     "compose_theme_snapshot",
@@ -174,8 +182,10 @@ __all__ = [
     "default_qss_binding",
     "default_theme_runtime",
     "install_theme_binding",
+    "isolate_matplotlib_canvas",
     "preferences_from_appearance",
     "preferences_from_snapshot",
+    "qss_bind_key",
     "qss_tokens_for_scheme",
     "rebind_qss_bindings",
     "render_application_stylesheet",
@@ -184,5 +194,6 @@ __all__ = [
     "resolve_effective_scheme",
     "scheme_from_palette",
     "subscribe_theme_window",
+    "theme_construction_batch",
     "watch_qss_tokens",
 ]

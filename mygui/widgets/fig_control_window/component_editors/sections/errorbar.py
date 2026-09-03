@@ -10,6 +10,9 @@ from ..inspector import EditorSection
 
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from mygui.widgets.ui_components import UiTextRole, UiVariant, apply_text_style, style_button
+from ..inspector_layout import apply_expanding_field
+
 
 class ErrorBarDataSection(QWidget, EditorSection):
     """Hold a full data draft and submit it atomically via Apply.
@@ -48,13 +51,18 @@ class ErrorBarDataSection(QWidget, EditorSection):
         self.hint_label = QLabel("", self)
         self.hint_label.setObjectName("errorbar_data_hint")
         self.hint_label.setWordWrap(True)
+        apply_text_style(self.hint_label, UiTextRole.CAPTION)
         layout.addWidget(self.hint_label)
 
         button_layout = QHBoxLayout()
         self.apply_button = QPushButton("Apply", self)
         self.apply_button.setObjectName("errorbar_data_apply")
+        style_button(self.apply_button, variant=UiVariant.PRIMARY)
+        apply_expanding_field(self.apply_button)
         self.reset_button = QPushButton("Reset", self)
         self.reset_button.setObjectName("errorbar_data_reset")
+        style_button(self.reset_button, variant=UiVariant.DESTRUCTIVE)
+        apply_expanding_field(self.reset_button)
         button_layout.addStretch(1)
         button_layout.addWidget(self.apply_button)
         button_layout.addWidget(self.reset_button)

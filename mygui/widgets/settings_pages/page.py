@@ -24,7 +24,7 @@ from mygui.application_settings.registry import (
     SettingsRegistry,
     production_settings_registry,
 )
-from mygui.application_theme import bind_widget_qss
+from mygui.widgets.ui_components import UiRole, UiTextRole, apply_text_style, apply_ui_style
 
 QSS_RESOURCE = "mygui/widgets/settings_pages/style.qss"
 
@@ -118,6 +118,7 @@ def make_hint_label(text: str, parent: QWidget | None = None) -> QLabel:
     label.setTextInteractionFlags(Qt.TextSelectableByMouse)
     label.setFocusPolicy(Qt.NoFocus)
     label.setAccessibleName(text.split(".", 1)[0] if text else "Hint")
+    apply_text_style(label, UiTextRole.MUTED)
     return label
 
 
@@ -130,6 +131,7 @@ def make_intro_label(text: str, parent: QWidget | None = None) -> QLabel:
     label.setTextInteractionFlags(Qt.TextSelectableByMouse)
     label.setFocusPolicy(Qt.NoFocus)
     label.setAccessibleName("Page description")
+    apply_text_style(label, UiTextRole.BODY)
     return label
 
 
@@ -161,6 +163,7 @@ def add_buddy_row(
     label = QLabel(text)
     label.setObjectName("settings_page_field_label")
     label.setBuddy(editor)
+    apply_text_style(label, UiTextRole.LABEL)
     if not editor.accessibleName():
         editor.setAccessibleName(text)
     editor.setFocusPolicy(Qt.StrongFocus)
@@ -176,6 +179,7 @@ class FocusSpinBox(QSpinBox):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.setKeyboardTracking(False)
+        apply_ui_style(self, role=UiRole.NUMBER)
 
     def wheelEvent(self, event) -> None:  # noqa: N802 — Qt override
         if not self.hasFocus():
@@ -192,6 +196,7 @@ class FocusDoubleSpinBox(QDoubleSpinBox):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.setKeyboardTracking(False)
+        apply_ui_style(self, role=UiRole.NUMBER)
 
     def wheelEvent(self, event) -> None:  # noqa: N802 — Qt override
         if not self.hasFocus():
@@ -249,7 +254,6 @@ class SettingsPageWidget(QWidget):
         self._staging = False
         self._buddy_labels: dict[str, QLabel] = {}
         self.setObjectName(f"settings_page_{self.PAGE_ID}")
-        bind_widget_qss(self, QSS_RESOURCE)
 
     @classmethod
     def page_spec(cls) -> SettingsUiPageSpec:

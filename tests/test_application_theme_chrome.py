@@ -33,6 +33,7 @@ from mygui.application_theme import (
     ThemeSnapshot,
     compose_theme_snapshot,
     contrast_ratio,
+    current_density_metrics,
     current_qss_tokens,
     subscribe_theme_window,
 )
@@ -741,6 +742,88 @@ class ThemeDarkPreviewRevertTests(unittest.TestCase):
         cached_dialog.deleteLater()
         late_widget.deleteLater()
         self.app.processEvents()
+
+
+class ThemePropagateLinearizationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = _qapp()
+
+    def setUp(self) -> None:
+        reset_theme_runtime_for_tests()
+        from mygui.application_theme.windows import reset_window_registry_for_tests
+
+        reset_window_registry_for_tests()
+
+    def tearDown(self) -> None:
+        reset_qss_bindings_for_tests()
+        reset_theme_runtime_for_tests()
+
+    def test_overlapping_registered_roots_visit_each_widget_once(self) -> None:
+        from mygui.application_theme.windows import default_window_registry, subscribe_theme_window
+
+        parent = QWidget()
+        child = QWidget(parent)
+        grandchild = QWidget(child)
+        subscribe_theme_window(parent)
+        subscribe_theme_window(child)
+        registry = default_window_registry()
+        registry.apply_palette(self.app.palette())
+        self.assertEqual(registry.max_visits("palette"), 1)
+        self.assertEqual(registry.last_stage_visits["palette"].get(id(parent), 0), 1)
+        self.assertEqual(registry.last_stage_visits["palette"].get(id(child), 0), 0)
+        self.assertEqual(registry.last_stage_visits["palette"].get(id(grandchild), 0), 0)
+        registry.apply_metrics(current_density_metrics())
+        self.assertEqual(registry.max_visits("metrics"), 1)
+        self.assertEqual(registry.last_stage_visits["metrics"].get(id(grandchild), 0), 0)
+        self.assertGreaterEqual(registry.last_stage_visits["metrics"].get(id(parent), 0), 1)
+        self.assertGreaterEqual(registry.last_stage_visits["metrics"].get(id(child), 0), 1)
+        parent.deleteLater()
+        self.app.processEvents()
+
+    def test_construction_batch_defers_sync_until_exit(self) -> None:
+        from mygui.application_theme import (
+            AppearancePreferences,
+            ThemeMode,
+            compose_theme_service,
+            theme_construction_batch,
+        )
+        from mygui.application_theme.windows import subscribe_theme_window
+
+        theme = compose_theme_service(self.app)
+        theme.apply_committed(AppearancePreferences(mode=ThemeMode.DARK))
+        expected = theme.snapshot().palette.color(QPalette.ColorRole.Window).name().lower()
+        widget = QWidget()
+        origin = widget.palette().color(QPalette.ColorRole.Window).name().lower()
+        with theme_construction_batch():
+            subscribe_theme_window(widget)
+            self.assertEqual(
+                widget.palette().color(QPalette.ColorRole.Window).name().lower(),
+                origin,
+            )
+        self.assertEqual(
+            widget.palette().color(QPalette.ColorRole.Window).name().lower(),
+            expected,
+        )
+        widget.deleteLater()
+        theme.shutdown()
+        self.app.processEvents()
+
+    def test_classify_icon_source_caches_absolute_user_paths(self) -> None:
+        from mygui.application_theme.icons import (
+            classify_icon_source,
+            clear_icon_classify_cache_for_tests,
+        )
+
+        clear_icon_classify_cache_for_tests()
+        user = "E:/not-bundled/custom.svg"
+        first = classify_icon_source(user)
+        second = classify_icon_source(user)
+        self.assertEqual(first, IconRole.USER_DATA)
+        self.assertEqual(second, IconRole.USER_DATA)
+        bundled = icon_path("setting.svg")
+        self.assertEqual(classify_icon_source(bundled), IconRole.CHROME)
+        self.assertEqual(classify_icon_source(bundled), IconRole.CHROME)
 
 
 if __name__ == "__main__":

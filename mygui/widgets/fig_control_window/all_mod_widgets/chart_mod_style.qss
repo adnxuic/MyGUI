@@ -10,13 +10,6 @@ QLabel, QCheckBox, QRadioButton, QGroupBox
     color: {{COLOR_TEXT_PRIMARY}};
 }
 
-QPlainTextEdit
-{
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-    border-radius: {{RADIUS_SM}}px;
-}
-
 QToolBox::tab
 {
     background-color: {{COLOR_SURFACE_ALT}};
@@ -29,18 +22,4 @@ QToolBox::tab:selected
     background-color: {{COLOR_ACCENT}};
     color: {{COLOR_TEXT_ON_DARK}};
     font-weight: 600;
-}
-
-QDoubleSpinBox
-{
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_SM}}px;
-    width: 50px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-}
-
-QDoubleSpinBox:hover
-{
-    border-color: {{COLOR_ACCENT}};
 }

@@ -28,6 +28,7 @@ from mygui.application_theme.system import (
     resolve_effective_scheme,
     scheme_from_palette,
 )
+from mygui.widgets.ui_components import UiRole, apply_ui_style
 
 from .page import (
     FocusSpinBox,
@@ -270,6 +271,7 @@ class AppearanceSettingsPage(SettingsPageWidget):
         radio.setObjectName(f"appearance_theme_{mode.value}")
         radio.setFocusPolicy(Qt.StrongFocus)
         radio.setAccessibleName(caption)
+        apply_ui_style(radio, role=UiRole.RADIO)
         self.theme_group.addButton(radio)
         self._theme_radios[mode] = radio
         layout.addWidget(radio)
@@ -285,6 +287,7 @@ class AppearanceSettingsPage(SettingsPageWidget):
         radio.setObjectName(f"appearance_density_{density.value}")
         radio.setFocusPolicy(Qt.StrongFocus)
         radio.setAccessibleName(caption)
+        apply_ui_style(radio, role=UiRole.RADIO)
         self.density_group.addButton(radio)
         self._density_radios[density] = radio
         layout.addWidget(radio)

@@ -6,8 +6,14 @@ or **Ctrl+,**. The window is created on first use, reused, and uses English
 labels. UI theme is not Matplotlib Figure style.
 
 Theme, UI font size, and density change application chrome through
-`ThemeService`. They do not change a Figure's Matplotlib `style`,
-`axes.prop_cycle`, or export appearance. Figure style is chosen when a
+`ThemeService`. Dialogs, Settings, Inspector, and workbench controls share one
+component stylesheet. Page titles are slightly larger than body text; helper
+copy is caption-sized and muted. Grouped fields use a low-contrast rounded
+section, not a heavy 3D frame. Create / OK / Apply / Export are primary
+actions, Cancel / Browse / Configure are outline, Restore page defaults is a
+ghost action, and Delete / Clear / reset library or preferences are
+destructive. They do not change a Figure's Matplotlib
+`style`, `axes.prop_cycle`, or export appearance. Figure style is chosen when a
 project is created. See [Style Creation Defaults](style-creation-defaults.md).
 
 Settings values never enter `.mygui.json`, Undo/Redo, project dirty
@@ -16,7 +22,10 @@ uses the persisted schema-v23 tree.
 
 Apply saves the current draft and keeps Settings open. OK saves and closes.
 Cancel, Esc, and the window close button discard an uncommitted draft,
-including a live Appearance preview. Restore page defaults changes only the
+including a live Appearance preview. Immediate commands that delete, clear,
+reset, or overwrite ask for confirmation: Continue is destructive and Cancel
+is the default, so Esc and closing the box do nothing. Ordinary confirms
+default-focus Continue. Restore page defaults changes only the
 draft and, on Workspace, only `workspace.remember_layout` (hidden
 `workspace.layout` is restored only by Reset workspace layout now). Immediate
 commands (workspace layout reset, incompatible storage reset, color-library

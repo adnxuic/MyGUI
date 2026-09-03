@@ -101,6 +101,7 @@ tasks:
       - tests.test_gui_layout
       - tests.test_component_tree
       - tests.test_component_inspector
+      - tests.test_inspector_geometry
       - tests.test_background_task
     documentation: []
     manual_smoke: true
@@ -192,3 +193,30 @@ tasks:
       - tests.test_architecture_rule_evolution
     documentation: []
     manual_smoke: false
+  modernize_ui_components:
+    skill: .agents/skills/modernize-ui-components/SKILL.md
+    architecture:
+      - .agents/architecture/ui-components.md
+      - .agents/architecture/application-theme.md
+      - .agents/architecture/ui-state-boundaries.md
+      - .agents/architecture/runtime-boundaries.md
+      - .agents/architecture/inspector.md
+      - .agents/architecture/testing-map.md
+    checks: [verify_fast, verify_architecture]
+    scanners: [mygui.architecture-boundaries]
+    focused_tests:
+      - tests.test_ui_components
+      - tests.test_ui_layout_signatures
+      - tests.test_application_theme
+      - tests.test_application_theme_transactions
+      - tests.test_application_theme_chrome
+      - tests.test_application_theme_qss
+      - tests.test_gui_layout
+      - tests.test_command_gallery
+      - tests.test_color_picker
+      - tests.test_component_inspector
+      - tests.test_inspector_geometry
+    documentation:
+      - docs/settings.md
+      - docs/workbench.md
+    manual_smoke: true

@@ -8,7 +8,6 @@
 | Parse Math | Checkbox | Enables Matplotlib Mathtext equation parser for dollar expressions. | `true` or `false`; default `true` | `properties.parse_math` |
 | Alpha | Number | Text opacity from 0 (transparent) to 1 (opaque). | Finite `0 <= alpha <= 1` or None; default None | `properties.alpha` |
 | Zorder | Number | Stacking order of the text artist. | Finite number; default `3.0` | `properties.zorder` |
-| Coordinate System | Dropdown | Free-text position coordinate system. Hidden for Title and Axis labels. | `axes_fraction` or `data`; default `axes_fraction` | `properties.coordinate_system` |
 | Bbox | Text box editor | Bounding background box and frame styling behind text. | Bbox spec; default `{'enabled': False}` | `properties.bbox` |
 | Antialiased | Checkbox | Enables antialiased text rendering. | `true` or `false`; default `true` | `properties.antialiased` |
 | Label | Text | Display and lookup label for the text artist. | Text; default empty | `properties.label` |

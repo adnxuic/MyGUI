@@ -20,7 +20,7 @@ from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 
 from .context import EditorContext
 from .inspector import EditorPlacement
-from .inspector_layout import CurrentPageStackedWidget
+from .inspector_layout import CurrentPageStackedWidget, remove_from_parent_stack
 
 
 @dataclass(slots=True)
@@ -58,6 +58,7 @@ class AxesSemanticInspectorPanel(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.inspector_stack)
+        self.inspector_stack.attach_switch_host(self)
 
     def ensure_inspector(self, component_id: str):
         """Create a semantic Inspector on first selection and then cache it."""
@@ -127,7 +128,7 @@ class AxesSemanticInspectorPanel(QFrame):
         if component_id is None:
             return False
         self._inspectors.pop(component_id, None)
-        self.inspector_stack.removeWidget(inspector)
+        remove_from_parent_stack(inspector)
         inspector.setParent(None)
         owner = type(self).__name__
         isolate_cleanup_steps(
@@ -155,9 +156,15 @@ class AxesSemanticInspectorPanel(QFrame):
         if component_id is None:
             return None
         index = self.inspector_stack.indexOf(inspector)
-        was_current = self.inspector_stack.currentWidget() is inspector
+        if index < 0:
+            index = 0
+        parent = inspector.parentWidget()
+        was_current = (
+            isinstance(parent, CurrentPageStackedWidget)
+            and parent.currentWidget() is inspector
+        )
         self._inspectors.pop(component_id)
-        self.inspector_stack.removeWidget(inspector)
+        remove_from_parent_stack(inspector)
         if was_current and self._inspectors:
             self.inspector_stack.setCurrentWidget(next(iter(self._inspectors.values())))
         return InspectorRemoval(component_id, inspector, index, was_current)
@@ -202,6 +209,13 @@ class AxesSemanticInspectorPanel(QFrame):
         for component_id, inspector in self._inspectors.items():
             if inspector is current:
                 return component_id
+        for component_id, inspector in self._inspectors.items():
+            parent = inspector.parentWidget()
+            if (
+                isinstance(parent, CurrentPageStackedWidget)
+                and parent.currentWidget() is inspector
+            ):
+                return component_id
         return None
 
     def remove_component(self, component_id: str) -> bool:
@@ -245,6 +259,7 @@ class InspectorToolBox(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.inspector_stack)
+        self.inspector_stack.attach_switch_host(self)
 
     def set_empty_callback(self, callback) -> None:
         """Set the callback invoked after the final Inspector is removed."""
@@ -303,8 +318,12 @@ class InspectorToolBox(QFrame):
             return False
         component_id, _candidate = self._entries.pop(index)
         self._entry_by_id.pop(component_id, None)
-        was_current = self.inspector_stack.currentWidget() is inspector
-        self.inspector_stack.removeWidget(inspector)
+        parent = inspector.parentWidget()
+        was_current = (
+            isinstance(parent, CurrentPageStackedWidget)
+            and parent.currentWidget() is inspector
+        )
+        remove_from_parent_stack(inspector)
         inspector.setParent(None)
         owner = type(self).__name__
         target = str(component_id)
@@ -349,11 +368,17 @@ class InspectorToolBox(QFrame):
             return None
         component_id, _candidate = self._entries.pop(index)
         self._entry_by_id.pop(component_id, None)
-        was_current = self.inspector_stack.currentWidget() is inspector
-        self.inspector_stack.removeWidget(inspector)
+        parent = inspector.parentWidget()
+        was_current = (
+            isinstance(parent, CurrentPageStackedWidget)
+            and parent.currentWidget() is inspector
+        )
+        remove_from_parent_stack(inspector)
         if was_current and self._entries:
             next_index = min(index, len(self._entries) - 1)
-            self.inspector_stack.setCurrentWidget(self._entries[next_index][1])
+            self.inspector_stack.setCurrentWidget(
+                self._entries[next_index][1]
+            )
         return InspectorRemoval(component_id, inspector, index, was_current)
 
     def restore_inspector(self, handle: InspectorRemoval) -> None:
@@ -389,7 +414,17 @@ class InspectorToolBox(QFrame):
         return -1
 
     def currentWidget(self):
-        return self.inspector_stack.currentWidget()
+        current = self.inspector_stack.currentWidget()
+        if current is not None:
+            return current
+        for _component_id, inspector in self._entries:
+            parent = inspector.parentWidget()
+            if (
+                isinstance(parent, CurrentPageStackedWidget)
+                and parent.currentWidget() is inspector
+            ):
+                return inspector
+        return None
 
     def currentIndex(self) -> int:
         return self.indexOf(self.currentWidget())
@@ -455,6 +490,7 @@ class _ComponentInspectorStack(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.toolbox_stack)
+        self.toolbox_stack.attach_switch_host(self)
 
     def ensure_toolbox(self, key):
         toolbox = self._toolboxes.get(key)

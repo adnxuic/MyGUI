@@ -3,7 +3,7 @@
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFrame, QScrollArea, QSizePolicy, QStackedLayout
 
-from mygui.application_theme import bind_widget_qss
+from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 from mygui.widgets.fig_control_window.figure_inspector import (
     FigureInspectorHost,
 )
@@ -42,6 +42,9 @@ class PyFigControlWindow(QFrame):
         self.figure_inspector_host.componentShown.connect(
             self.reset_figure_inspector_scroll
         )
+        self.figure_inspector_host.register_switch_viewports(
+            inspector_scroll=self.figure_inspector_scroll_area,
+        )
         self.layout.setCurrentIndex(0)
 
     def reset_figure_inspector_scroll(self, *_args) -> None:
@@ -67,4 +70,5 @@ class PyFigControlWindow(QFrame):
         scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         page.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         scroll_area.setWidget(page)
+        subscribe_theme_window(scroll_area)
         return scroll_area

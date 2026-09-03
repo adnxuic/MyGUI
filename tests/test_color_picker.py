@@ -1,12 +1,29 @@
+from contextlib import contextmanager
 import os
 import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QEvent, QModelIndex, QRect, QSize, Qt
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEvent,
+    QModelIndex,
+    QRect,
+    QSize,
+    Qt,
+    qInstallMessageHandler,
+)
 from PySide6.QtGui import QAction, QColor, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QColorDialog, QDialog, QMessageBox, QStyle, QStyleOptionViewItem
+from PySide6.QtWidgets import (
+    QApplication,
+    QBoxLayout,
+    QColorDialog,
+    QDialog,
+    QStyle,
+    QStyleOptionViewItem,
+    QWidget,
+)
 
 from mygui import status_messages
 from mygui.figuremodify.style_base.color_models import (
@@ -31,6 +48,24 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     qcolor_to_color,
 )
 from mygui.widgets.common_widget.min_widget import color_choice_dialogs
+
+
+@contextmanager
+def _capture_negative_size_warnings():
+    captured: list[str] = []
+
+    def handler(mode, context, message):
+        text = str(message)
+        if "Negative sizes" in text:
+            captured.append(text)
+        if callable(previous):
+            previous(mode, context, message)
+
+    previous = qInstallMessageHandler(handler)
+    try:
+        yield captured
+    finally:
+        qInstallMessageHandler(previous)
 
 
 class ColorPickerWidgetTests(unittest.TestCase):
@@ -95,6 +130,9 @@ class ColorPickerWidgetTests(unittest.TestCase):
         from PySide6.QtGui import QFocusEvent
         swatch.focusInEvent(QFocusEvent(QEvent.FocusIn))
         swatch.focusOutEvent(QFocusEvent(QEvent.FocusOut))
+        self.assertEqual(swatch.minimumSize(), QSize(52, 52))
+        self.assertLess(swatch.minimumSizeHint().width(), 0)
+        self.assertLess(swatch.minimumSizeHint().height(), 0)
         swatch.deleteLater()
 
 
@@ -194,7 +232,7 @@ class ColorPickerWidgetTests(unittest.TestCase):
 
         # Save and accept: empty name failure
         dialog.name_input.setText("")
-        with patch.object(QMessageBox, "warning"):
+        with patch("mygui.widgets.common_widget.min_widget.color_choice_dialogs.present_warning"):
             dialog._save_and_accept()
         self.assertIsNone(dialog.result_palette)
 
@@ -318,6 +356,83 @@ class ColorPickerWidgetTests(unittest.TestCase):
 
         dialog.close()
         dialog.deleteLater()
+
+    def test_swatch_host_keeps_explicit_height_without_negative_sizes(self):
+        library = ColorLibrary()
+        hidden_host = QWidget()
+        with _capture_negative_size_warnings() as warnings:
+            widget = ColorChoiceWidget(
+                "black",
+                color_library=library,
+                parent=hidden_host,
+            )
+            self.assertFalse(widget.isVisible())
+            self.assertGreaterEqual(widget._swatch_host.minimumHeight(), 52)
+
+            hidden_host.show()
+            self.app.processEvents()
+            self.assertGreaterEqual(widget._swatch_host.minimumHeight(), 52)
+
+            last_height = None
+            for width in (40, 200, 40, 80, 200, 40):
+                widget.resize(width, 160)
+                widget._adapt_swatch_row()
+                self.app.processEvents()
+                last_height = widget._swatch_host.minimumHeight()
+                self.assertGreaterEqual(last_height, 52)
+            widget._adapt_swatch_row()
+            self.assertEqual(widget._swatch_host.minimumHeight(), last_height)
+
+            widget.resize(40, 160)
+            widget._adapt_swatch_row()
+            self.app.processEvents()
+            self.assertEqual(
+                widget._swatch_row.direction(),
+                QBoxLayout.Direction.TopToBottom,
+            )
+            self.assertGreater(widget._swatch_host.minimumHeight(), 52)
+            self.assertFalse(
+                widget._swatch_host.geometry().intersects(widget.color_button.geometry())
+            )
+
+            widget.resize(240, 160)
+            widget._adapt_swatch_row()
+            self.app.processEvents()
+            self.assertEqual(
+                widget._swatch_row.direction(),
+                QBoxLayout.Direction.LeftToRight,
+            )
+            self.assertEqual(widget._swatch_host.minimumHeight(), 52)
+            self.assertFalse(
+                widget._swatch_host.geometry().intersects(widget.color_button.geometry())
+            )
+
+            without_favorite = ColorChoiceWidget(
+                "black",
+                color_library=library,
+                allow_favorite=False,
+            )
+            without_favorite.resize(40, 160)
+            without_favorite._adapt_swatch_row()
+            self.app.processEvents()
+            self.assertTrue(without_favorite.favorite_button.isHidden())
+            self.assertEqual(
+                without_favorite._swatch_row.direction(),
+                QBoxLayout.Direction.LeftToRight,
+            )
+            self.assertEqual(without_favorite._swatch_host.minimumHeight(), 52)
+            without_favorite.resize(240, 160)
+            without_favorite._adapt_swatch_row()
+            self.app.processEvents()
+            self.assertEqual(
+                without_favorite._swatch_row.direction(),
+                QBoxLayout.Direction.LeftToRight,
+            )
+            self.assertEqual(without_favorite._swatch_host.minimumHeight(), 52)
+            without_favorite.deleteLater()
+        self.assertEqual(warnings, [])
+        widget.deleteLater()
+        hidden_host.deleteLater()
 
     def test_initialization_is_silent_and_does_not_create_actions(self):
         emissions = []

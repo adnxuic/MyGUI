@@ -8,9 +8,9 @@ MyGUI uses one native desktop window with a full-width application command bar, 
 - The command bar spans the window. Its first row selects style, layout, chart, or element; the second row shows the corresponding action gallery.
 - workspace_splitter divides the left workspace from the figure workspace. Its first-run ratio is approximately 45/55 and the figure workspace keeps at least 400 logical pixels when space permits.
 - explorer_control_splitter divides the active Explorer page from the figure inspector. Its first-run sizes are 420/240 logical pixels.
-- The activity rails are 44 logical pixels wide. The bottom Message/State Bar is 28 logical pixels high.
+- The activity rails are 44 logical pixels wide. The bottom Message/State Bar is 28 logical pixels high. Status text uses `Success —`, `Warning —`, and `Error —` prefixes in the existing message label so the level is not color-only; long messages elide and keep the full text as a tooltip. Messages stay until the next result or an explicit clear. One user action reports at most one Message Bar result; file and storage failures use a modal error box instead of duplicating the same text in the bar.
 - Table and Components buttons switch the shared Explorer page. Clicking the active button again hides the Explorer; opening either page restores its last visible width.
-- Inspector sections remain independently scrollable when a restored or narrow window cannot show the complete form. TeX and MATLAB pages use the same bounded-scroll behavior, so switching tools does not resize the shell.
+- Inspector sections remain independently scrollable when a restored or narrow window cannot show the complete form. The Inspector’s minimum useful width is 240 logical pixels: field labels stay on one line when space allows, and a tight panel wraps the whole label–editor row instead of squeezing the label. Collapsed Advanced groups hide their fields without disabling them. Section titles and field labels use the shared typography roles; selected tree rows, table cells, tabs, and gallery commands combine background, border, and weight so the active item is not color-only. TeX and MATLAB pages use the same bounded-scroll behavior, so switching tools does not resize the shell.
 - Every project tab shows a matplotlib navigation toolbar (Home, Back, Forward, Pan, Zoom, Subplots, Save) plus the project's shared Undo/Redo actions above its canvas. The rightmost Canvas Window button moves the same live canvas into a maximized, non-modal window containing only the canvas viewport; the project tab shows a placeholder until the window closes, and closing the window with its system close button or Esc returns the canvas with its scroll position and focus. Because that window hosts the one live canvas, edits made in the main window appear in it immediately. The view keeps the project's fixed Figure size and uses scroll bars when needed instead of scaling or changing its document DPI. Each project can have one such window, so canvases from different projects can be viewed together. Toolbar buttons, mouse pan/zoom, and keyboard shortcuts are listed in [Keyboard and Mouse Reference](keyboard-and-mouse-reference.md), [Project Undo and Redo](undo-redo.md), and the [matplotlib navigation guide](https://matplotlib.org/3.9.0/users/explain/figure/interactive.html).
 - Component editing uses one profile-driven Inspector shell. Line charts share the same appearance groups; Text, Title, and Axis Labels share the same text sections; Legend keeps its Controller-specific layout and frame sections.
 
@@ -40,7 +40,7 @@ Save, open, restore, and export semantics are documented in [Project Files](proj
 
 - With no project, the figure workspace explains that a style must be selected to create a project; the Style workflow remains the creation path.
 - With a project but no Axes, the Figure root Inspector remains available.
-- Style, Layout, Chart, and Element use action toolbars. Qt moves actions that do not fit into the toolbar overflow menu.
+- Style, Layout, Chart, and Element use action toolbars. Qt moves actions that do not fit into the toolbar overflow menu. Labels that do not fit inside a gallery button are elided and keep a full tooltip; the command bar itself is not widened.
 - Style and Settings dialogs are created on first use, parented to the main window, and reused. Layout, Chart, and Element creation dialogs are recreated so their Figure, Axes, and data choices reflect the current project.
 - The Components tree is the only Component navigation. It opens one exact stable-ID Inspector at a time; every Inspector binds its Controller directly.
 - Chart creation dialogs reuse controller-free line appearance, data reference, and interpolation-option inputs. Plot, Scatter, and Interpolation use a compact shared-X/multi-Y dropdown with visible X/Y preprocessing expressions and publish all selected curves through one Canvas registration transaction. Fit retains its single-pair input. Accepting a dialog still delegates component creation to the active canvas.
@@ -63,7 +63,7 @@ Workspace remember/restore still covers the workbench splitters and Explorer
 page. Window geometry is not stored because every application launch starts
 maximized. Missing, malformed, or unusable layout values fall back to the
 first-run sizes. Resetting workspace layout is a confirmed immediate command,
-not an Apply draft. If Settings storage is read-only, remember-layout cannot
+not an Apply draft. The confirm box defaults to Cancel. If Settings storage is read-only, remember-layout cannot
 be turned off until Maintenance resets incompatible storage.
 
 After the first successful dual-slot commit, leftover `workspaceLayout`,

@@ -322,7 +322,7 @@ class ComponentRegistry:
         kind_value = ComponentKind(kind) if kind is not None else None
         cursor: str | None = str(component_id)
         if not include_self:
-            cursor = self.get(cursor).state.parent_id
+            cursor = self.get(cursor).parent_id
         visited: set[str] = set()
         while cursor is not None:
             if cursor in visited:
@@ -333,9 +333,9 @@ class ComponentRegistry:
             controller = self._controllers.get(cursor)
             if controller is None:
                 return None
-            if kind_value is None or controller.state.kind is kind_value:
+            if kind_value is None or controller.kind is kind_value:
                 return controller
-            cursor = controller.state.parent_id
+            cursor = controller.parent_id
         return None
 
     def query(
@@ -368,8 +368,8 @@ class ComponentRegistry:
         return self._ordered(
             controller
             for controller in candidates
-            if (kind_value is None or controller.state.kind is kind_value)
-            and (role_value is None or controller.state.role is role_value)
+            if (kind_value is None or controller.kind is kind_value)
+            and (role_value is None or controller.role is role_value)
             and required.issubset(controller.capabilities())
         )
 
@@ -396,7 +396,7 @@ class ComponentRegistry:
                 controller
                 for controller in matches
                 if all(
-                    controller.state.selector.get(key) == value
+                    controller.selector.get(key) == value
                     for key, value in expected.items()
                 )
             ]

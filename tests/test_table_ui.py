@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QDateTimeEdit,
     QInputDialog,
     QLineEdit,
-    QMessageBox,
 )
 
 from mygui import status_messages
@@ -560,7 +559,10 @@ class TableUiTests(unittest.TestCase):
         self.subtable.redo()
         with patch.object(QInputDialog, "getText", return_value=("RenamedCurrent", True)):
             self.subtable.rename_current_sheet()
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        with patch(
+            "mygui.widgets.figure_canvas.py_figure_window.ask_confirmation",
+            return_value=True,
+        ):
             self.subtable.delete_current_sheet()
 
         # Context menu on sheet tab bar

@@ -13,4 +13,5 @@ GROUPS: tuple[str, ...] = (
     "axes_smoke",
     "deletion_history",
     "project_lifecycle",
+    "styles",
 )

@@ -1,4 +1,4 @@
-"""Theme binding ports. SubAgent B fills real QSS; C registers hidden widgets."""
+"""Theme binding ports for QSS, icons, density metrics, and hidden hosts."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class ThemeBindingPort(Protocol):
 
 @runtime_checkable
 class QssDocumentRenderer(Protocol):
-    """Pre-render QSS with no widget side effects. B supplies real documents."""
+    """Pre-render QSS with no widget side effects from snapshot tokens."""
 
     def render_application(self, snapshot: ThemeSnapshot) -> str:
         """Return the application stylesheet for ``snapshot``."""
@@ -32,7 +32,7 @@ class QssDocumentRenderer(Protocol):
 
 @runtime_checkable
 class ThemeIconProvider(Protocol):
-    """Monochrome chrome icons. C implements DPR/scheme/density caching."""
+    """Monochrome chrome icons with DPR, scheme, and density caching."""
 
     def prerender(self, snapshot: ThemeSnapshot) -> object:
         """Build icon artifacts with no widget side effects."""
@@ -62,7 +62,11 @@ class MetricsBindingPort(Protocol):
 
 
 class PlaceholderQssRenderer:
-    """Expand bundled QSS from snapshot tokens. Missing resources keep apply markers."""
+    """Default renderer: expand bundled QSS from snapshot tokens.
+
+    Missing resources keep ThemeService apply markers so the QSS step stays
+    complete. This is production rendering, not a staged stub.
+    """
 
     def render_application(self, snapshot: ThemeSnapshot) -> str:
         from .qss import render_application_stylesheet
@@ -119,7 +123,9 @@ class ThemeBindingRegistry:
 
         rendered = try_render_bound_resource(path)
         if rendered is not None:
-            widget.setStyleSheet(rendered)
+            from .qss import apply_widget_stylesheet
+
+            apply_widget_stylesheet(widget, rendered)
 
     def iter_bindings(self) -> Iterator[tuple[QWidget, str]]:
         dead: list[int] = []
@@ -139,20 +145,29 @@ class ThemeBindingRegistry:
         return captured
 
     def restore_stylesheets(self, captured: Mapping[int, str]) -> None:
+        from .qss import apply_widget_stylesheet
+
         for widget, _resource in self.iter_bindings():
             key = id(widget)
-            if key in captured:
-                widget.setStyleSheet(captured[key])
+            if key not in captured:
+                continue
+            stylesheet = captured[key]
+            if widget.styleSheet() == stylesheet:
+                continue
+            apply_widget_stylesheet(widget, stylesheet)
 
     def apply_stylesheets(self, rendered_by_resource: Mapping[str, str]) -> None:
+        from .qss import apply_widget_stylesheet
+
         for widget, resource in self.iter_bindings():
             stylesheet = rendered_by_resource.get(resource)
-            if stylesheet is not None:
-                widget.setStyleSheet(stylesheet)
+            if stylesheet is None or widget.styleSheet() == stylesheet:
+                continue
+            apply_widget_stylesheet(widget, stylesheet)
 
 
 class RecordingThemeBindingPort(ThemeBindingRegistry):
-    """Registry that records bind/apply for tests and for C's hidden hosts."""
+    """Registry that records bind/apply for tests and hidden theme hosts."""
 
     def __init__(self) -> None:
         super().__init__()

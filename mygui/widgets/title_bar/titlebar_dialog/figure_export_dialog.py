@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
@@ -35,6 +34,15 @@ from mygui.figure_export import (
     with_format_extension,
 )
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.ui_components import (
+    UiRole,
+    UiVariant,
+    annotate_form_fields,
+    annotate_sections,
+    apply_ui_style,
+    ask_confirmation,
+    style_accept_cancel,
+)
 from mygui.resources import icon_path
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.title_bar.titlebar_dialog.figure_export_options_panel import (
@@ -128,6 +136,19 @@ class FigureExportDialog(QDialog):
         self.export_button.setDefault(True)
         self.cancel_button = QPushButton("Cancel", self)
         self.cancel_button.setObjectName("export_cancel_button")
+        apply_ui_style(
+            self.restore_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.GHOST,
+        )
+        apply_ui_style(
+            self.browse_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
+        style_accept_cancel(self.export_button, self.cancel_button)
+        annotate_form_fields(self)
+        annotate_sections(self)
         buttons.addWidget(self.restore_button)
         buttons.addStretch(1)
         buttons.addWidget(self.export_button)
@@ -281,14 +302,12 @@ class FigureExportDialog(QDialog):
             return
         request = self._build_request()
         if request.path.exists():
-            answer = QMessageBox.question(
+            if not ask_confirmation(
                 self,
                 "Export Current Figure",
                 f"Overwrite existing file?\n{request.path}",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
+                destructive=True,
+            ):
                 return
         try:
             self._export_callable(request)

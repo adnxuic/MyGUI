@@ -9,7 +9,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -27,6 +26,7 @@ from mygui.application_settings.storage.types import (
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
 from mygui.widgets.settings_center.pages import SettingsPageHost
 from mygui.widgets.settings_center.specs import maintenance_page_spec
+from mygui.widgets.ui_components import UiTextRole, UiVariant, apply_text_style, ask_confirmation, style_button
 
 ConfirmFn = Callable[[str, str], bool]
 HealthProvider = Callable[[], DocumentHealth]
@@ -106,10 +106,12 @@ class MaintenanceSettingsPage(QWidget):
             "Application preferences health"
         )
         self.application_health_label.setWordWrap(True)
+        apply_text_style(self.application_health_label, UiTextRole.BODY)
         self.color_health_label = QLabel(health_box)
         self.color_health_label.setObjectName("color_library_health_label")
         self.color_health_label.setAccessibleName("Color library health")
         self.color_health_label.setWordWrap(True)
+        apply_text_style(self.color_health_label, UiTextRole.BODY)
         health_layout.addWidget(self.application_health_label)
         health_layout.addWidget(self.color_health_label)
         root.addWidget(health_box)
@@ -124,6 +126,7 @@ class MaintenanceSettingsPage(QWidget):
         self.reset_all_button.setAccessibleName("Reset all application preferences")
         self.reset_all_button.setAutoDefault(False)
         self.reset_all_button.setDefault(False)
+        style_button(self.reset_all_button, variant=UiVariant.DESTRUCTIVE)
         self.reset_all_button.clicked.connect(self.reset_all_preferences)
         self.reset_incompatible_button = QPushButton(
             "Reset incompatible storage now…",
@@ -137,6 +140,7 @@ class MaintenanceSettingsPage(QWidget):
         )
         self.reset_incompatible_button.setAutoDefault(False)
         self.reset_incompatible_button.setDefault(False)
+        style_button(self.reset_incompatible_button, variant=UiVariant.DESTRUCTIVE)
         self.reset_incompatible_button.clicked.connect(
             self.reset_incompatible_storage
         )
@@ -155,12 +159,14 @@ class MaintenanceSettingsPage(QWidget):
         self.clear_recent_button.setAccessibleName("Clear recent colors")
         self.clear_recent_button.setAutoDefault(False)
         self.clear_recent_button.setDefault(False)
+        style_button(self.clear_recent_button, variant=UiVariant.DESTRUCTIVE)
         self.clear_recent_button.clicked.connect(self.clear_recent_colors)
         self.reset_library_button = QPushButton("Reset color library…", color_box)
         self.reset_library_button.setObjectName("reset_color_library_button")
         self.reset_library_button.setAccessibleName("Reset color library")
         self.reset_library_button.setAutoDefault(False)
         self.reset_library_button.setDefault(False)
+        style_button(self.reset_library_button, variant=UiVariant.DESTRUCTIVE)
         self.reset_library_button.clicked.connect(self.reset_color_library)
         self.reset_color_storage_button = QPushButton(
             "Reset color library storage now…",
@@ -174,6 +180,7 @@ class MaintenanceSettingsPage(QWidget):
         )
         self.reset_color_storage_button.setAutoDefault(False)
         self.reset_color_storage_button.setDefault(False)
+        style_button(self.reset_color_storage_button, variant=UiVariant.DESTRUCTIVE)
         self.reset_color_storage_button.clicked.connect(
             self.reset_color_library_storage
         )
@@ -181,6 +188,8 @@ class MaintenanceSettingsPage(QWidget):
         self.color_diagnostics_label.setObjectName("color_library_diagnostics_label")
         self.color_diagnostics_label.setAccessibleName("Color library diagnostics")
         self.color_diagnostics_label.setWordWrap(True)
+        apply_text_style(self.color_diagnostics_label, UiTextRole.CAPTION)
+        apply_text_style(self.color_counts_label, UiTextRole.CAPTION)
         color_layout.addWidget(self.color_counts_label)
         color_layout.addWidget(self.color_diagnostics_label)
         color_layout.addWidget(self.clear_recent_button)
@@ -514,11 +523,9 @@ class MaintenanceSettingsPage(QWidget):
     def _ask(self, title: str, text: str) -> bool:
         if self._confirm is not None:
             return bool(self._confirm(title, text))
-        answer = QMessageBox.question(
+        return ask_confirmation(
             self,
             title,
             text,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            destructive=True,
         )
-        return answer == QMessageBox.StandardButton.Yes

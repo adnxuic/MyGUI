@@ -24,7 +24,7 @@ REQUIRED_TASKS = {
     "add_figure_component", "modify_component_property", "schema_migration",
     "project_io_change", "debug_gui_regression", "architecture_audit",
     "evolve_architecture_rule", "fix_ci", "modify_application_setting",
-    "maintain_agent_core",
+    "maintain_agent_core", "modernize_ui_components",
 }
 KNOWN_CHECKS = {
     "verify_agent_core", "verify_fast", "verify_component_contracts",

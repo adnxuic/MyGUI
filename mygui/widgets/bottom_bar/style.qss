@@ -27,17 +27,20 @@ QLabel#bottom_bar_message
     color: {{COLOR_TEXT_ON_DARK}};
 }
 
-QLabel#bottom_bar_message[level="success"]
+QLabel#bottom_bar_message[level="success"],
+QLabel#bottom_bar_message[uiTone="success"]
 {
     color: {{COLOR_SUCCESS}};
 }
 
-QLabel#bottom_bar_message[level="warning"]
+QLabel#bottom_bar_message[level="warning"],
+QLabel#bottom_bar_message[uiTone="warning"]
 {
     color: {{COLOR_WARNING}};
 }
 
-QLabel#bottom_bar_message[level="error"]
+QLabel#bottom_bar_message[level="error"],
+QLabel#bottom_bar_message[uiTone="error"]
 {
     color: {{COLOR_ERROR}};
 }

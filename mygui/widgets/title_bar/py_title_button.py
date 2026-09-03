@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QPushButton
 from mygui.resources import icon_path
 from mygui.application_theme import current_qss_tokens
 from mygui.application_theme.runtime import default_theme_runtime
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style
 
 
 class ChangeButton(QPushButton):
@@ -18,6 +19,7 @@ class ChangeButton(QPushButton):
         self.setToolTip("Switch command menu")
         self.setAccessibleName("Switch command menu")
         self.setCheckable(True)
+        apply_ui_style(self, role=UiRole.BUTTON, variant=UiVariant.GHOST)
         self.clicked.connect(self.change)
         self.rotated = False
         self._apply_change_icon()
@@ -73,6 +75,7 @@ class SelectMenuButton(QPushButton):
         self.IconName = IconName
         self.setIcon(QIcon(IconName))
         self.setCheckable(True)
+        apply_ui_style(self, role=UiRole.BUTTON, variant=UiVariant.GHOST)
         self.toggled.connect(self.the_button_was_toggled)
 
     def the_button_was_toggled(self, checked):
@@ -116,6 +119,7 @@ class MenuButton(QPushButton):
         self.IconName = IconName
         self.setToolTip(button_name.capitalize())
         self.setAccessibleName(button_name.capitalize())
+        apply_ui_style(self, role=UiRole.BUTTON, variant=UiVariant.GHOST)
         self._set_dark_bar_icon(IconName)
 
     def _set_dark_bar_icon(self, icon_name):

@@ -33,7 +33,9 @@ def apply_english_dialog_buttons(box: QDialogButtonBox) -> QDialogButtonBox:
         button = box.button(role)
         if button is not None:
             button.setText(text)
-    return box
+    from mygui.widgets.ui_components import style_dialog_button_box
+
+    return style_dialog_button_box(box)
 
 
 def english_ok_cancel(parent: QWidget | None = None) -> QDialogButtonBox:
@@ -59,14 +61,14 @@ def apply_english_message_buttons(box: QMessageBox) -> QMessageBox:
 
 
 def ask_yes_no(parent: QWidget | None, title: str, text: str) -> bool:
-    """Ask a Yes/No question with English button labels."""
+    """Forward Yes/No questions to the shared confirmation facade."""
 
-    box = QMessageBox(parent)
-    box.setIcon(QMessageBox.Icon.Question)
-    box.setWindowTitle(title)
-    box.setText(text)
-    box.setStandardButtons(
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+    from mygui.widgets.ui_components import ask_confirmation
+
+    return ask_confirmation(
+        parent,
+        title,
+        text,
+        confirm_text="Yes",
+        cancel_text="No",
     )
-    apply_english_message_buttons(box)
-    return box.exec() == QMessageBox.StandardButton.Yes

@@ -40,6 +40,8 @@ from .common import (
     parse_number_sequence,
 )
 from .inline_spec_editors import OptionalColorEditor
+from .inspector_layout import add_labeled_form_row
+
 from .spec_editor_base import (
     _NORM_FIELDS,
     _StructuredValueEditor,
@@ -99,11 +101,11 @@ class _ColorMapSpecDialog(QDialog):
         self.over_input = OptionalColorEditor(
             spec["over"], color_library=color_library, parent=self
         )
-        form.addRow("Colormap", self.cmap_input)
-        form.addRow("Normalization", self.norm_input)
-        form.addRow("Bad color", self.bad_input)
-        form.addRow("Under color", self.under_input)
-        form.addRow("Over color", self.over_input)
+        add_labeled_form_row(form, "Colormap", self.cmap_input)
+        add_labeled_form_row(form, "Normalization", self.norm_input)
+        add_labeled_form_row(form, "Bad color", self.bad_input)
+        add_labeled_form_row(form, "Under color", self.under_input)
+        add_labeled_form_row(form, "Over color", self.over_input)
         layout.addLayout(form)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
@@ -179,8 +181,8 @@ class _GridEdgeSpecDialog(QDialog):
         self.color_input = ColorChoiceWidget(
             initial_color, color_library=color_library, parent=self
         )
-        form.addRow("Mode", self.kind_input)
-        form.addRow("Color", self.color_input)
+        add_labeled_form_row(form, "Mode", self.kind_input)
+        add_labeled_form_row(form, "Color", self.color_input)
         layout.addLayout(form)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
@@ -261,9 +263,9 @@ class _ContourLevelsSpecDialog(QDialog):
         self.values_input = QPlainTextEdit(self)
         if spec["kind"] == "values":
             self.values_input.setPlainText(format_number_sequence(spec["values"]))
-        form.addRow("Mode", self.kind_input)
-        form.addRow("Count", self.count_input)
-        form.addRow("Values", self.values_input)
+        add_labeled_form_row(form, "Mode", self.kind_input)
+        add_labeled_form_row(form, "Count", self.count_input)
+        add_labeled_form_row(form, "Values", self.values_input)
         layout.addLayout(form)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)
@@ -357,11 +359,11 @@ class _ContourLabelSpecDialog(QDialog):
         self.spacing_input.setRange(0.0, 100.0)
         self.spacing_input.setDecimals(1)
         self.spacing_input.setValue(float(spec["inline_spacing"]))
-        form.addRow("Format", self.fmt_input)
-        form.addRow("Font size", self.fontsize_input)
-        form.addRow("Color", self.color_input)
-        form.addRow("Inline", self.inline_input)
-        form.addRow("Inline spacing", self.spacing_input)
+        add_labeled_form_row(form, "Format", self.fmt_input)
+        add_labeled_form_row(form, "Font size", self.fontsize_input)
+        add_labeled_form_row(form, "Color", self.color_input)
+        add_labeled_form_row(form, "Inline", self.inline_input)
+        add_labeled_form_row(form, "Inline spacing", self.spacing_input)
         layout.addWidget(self.details)
         self.error_label = _chrome_error_label(self)
         layout.addWidget(self.error_label)

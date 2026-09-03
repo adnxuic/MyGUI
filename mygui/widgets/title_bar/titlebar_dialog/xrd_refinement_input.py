@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui.widgets.english_buttons import english_ok_cancel
+from mygui.widgets.ui_components import UiVariant, annotate_sections, style_button
 from mygui.fullprof_prf import FullProfPrfResult, parse_fullprof_prf
 from mygui.xrd_refinement import (
     XrdAppearanceConfig,
@@ -87,6 +88,7 @@ class XrdRefinementInput(QWidget):
         self.file_input.setObjectName("xrd_refinement_file")
         self.browse_button = QPushButton("Browse...", file_group)
         self.browse_button.setObjectName("xrd_refinement_browse")
+        style_button(self.browse_button, variant=UiVariant.OUTLINE)
         file_layout.addWidget(self.file_input, 1)
         file_layout.addWidget(self.browse_button)
         contents_layout.addWidget(file_group)
@@ -165,6 +167,7 @@ class XrdRefinementInput(QWidget):
             self.reflection_property_button,
             self.residual_property_button,
         ):
+            style_button(button, variant=UiVariant.OUTLINE)
             property_layout.addWidget(button)
         contents_layout.addWidget(property_group)
         self.observed_property_button.clicked.connect(self._edit_observed_appearance)
@@ -197,6 +200,7 @@ class XrdRefinementInput(QWidget):
             checkbox.toggled.connect(self.refresh_validation)
         self._import_toggled(False)
         self._sync_residual_controls()
+        annotate_sections(self)
 
     @staticmethod
     def _path_key(value: str) -> str:

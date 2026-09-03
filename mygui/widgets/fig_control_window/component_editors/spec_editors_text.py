@@ -28,6 +28,8 @@ from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
 )
 
 from .common import FocusAwareDoubleSpinBox, NullableDoubleEditor
+from .inspector_layout import add_labeled_form_row
+
 from .spec_editor_base import (
     TEXT_BOX_STYLES,
     _StructuredValueEditor,
@@ -78,13 +80,13 @@ class _FontSpecDialog(QDialog):
         self.color_input = ColorChoiceWidget(
             spec["color"], color_library=color_library, parent=self
         )
-        form.addRow("Families", self.family_input)
-        form.addRow("Size (pt)", self.size_input)
-        form.addRow("Weight", self.weight_input)
-        form.addRow("Style", self.style_input)
-        form.addRow("Stretch", self.stretch_input)
-        form.addRow("Variant", self.variant_input)
-        form.addRow("Color", self.color_input)
+        add_labeled_form_row(form, "Families", self.family_input)
+        add_labeled_form_row(form, "Size (pt)", self.size_input)
+        add_labeled_form_row(form, "Weight", self.weight_input)
+        add_labeled_form_row(form, "Style", self.style_input)
+        add_labeled_form_row(form, "Stretch", self.stretch_input)
+        add_labeled_form_row(form, "Variant", self.variant_input)
+        add_labeled_form_row(form, "Color", self.color_input)
         layout.addLayout(form)
 
         self.error_label = _chrome_error_label(self)
@@ -203,15 +205,15 @@ class _TextBoxDialog(QDialog):
         self.pad_input.setRange(0.0, 1e6)
         self.pad_input.setDecimals(3)
         self.pad_input.setValue(float(spec["pad"]))
-        form.addRow("Box style", self.boxstyle_input)
-        form.addRow("Background", self.facecolor_input)
-        form.addRow("Border", self.edgecolor_input)
-        form.addRow("Border width", self.linewidth_input)
-        form.addRow("Border pattern", self.line_pattern_input)
-        form.addRow("Opacity", self.alpha_input)
-        form.addRow("Filled", self.fill_input)
-        form.addRow("Hatch", self.hatch_input)
-        form.addRow("Pad", self.pad_input)
+        add_labeled_form_row(form, "Box style", self.boxstyle_input)
+        add_labeled_form_row(form, "Background", self.facecolor_input)
+        add_labeled_form_row(form, "Border", self.edgecolor_input)
+        add_labeled_form_row(form, "Border width", self.linewidth_input)
+        add_labeled_form_row(form, "Border pattern", self.line_pattern_input)
+        add_labeled_form_row(form, "Opacity", self.alpha_input)
+        add_labeled_form_row(form, "Filled", self.fill_input)
+        add_labeled_form_row(form, "Hatch", self.hatch_input)
+        add_labeled_form_row(form, "Pad", self.pad_input)
         layout.addWidget(self.details)
 
         self.error_label = _chrome_error_label(self)
@@ -349,12 +351,12 @@ class _AnnotationBoxDialog(QDialog):
         self.padding_input.setRange(0.0, 1e6)
         self.padding_input.setDecimals(3)
         self.padding_input.setValue(float(spec["padding"]))
-        form.addRow("Box style", self.style_input)
-        form.addRow("Background", self.facecolor_input)
-        form.addRow("Border", self.edgecolor_input)
-        form.addRow("Border width", self.linewidth_input)
-        form.addRow("Opacity", self.alpha_input)
-        form.addRow("Padding", self.padding_input)
+        add_labeled_form_row(form, "Box style", self.style_input)
+        add_labeled_form_row(form, "Background", self.facecolor_input)
+        add_labeled_form_row(form, "Border", self.edgecolor_input)
+        add_labeled_form_row(form, "Border width", self.linewidth_input)
+        add_labeled_form_row(form, "Opacity", self.alpha_input)
+        add_labeled_form_row(form, "Padding", self.padding_input)
         layout.addWidget(self.details)
 
         self.error_label = _chrome_error_label(self)

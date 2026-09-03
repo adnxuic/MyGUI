@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -27,6 +26,7 @@ from mygui.figuremodify.style_base.creation_preferences import (
     resolve_axes_appearance,
 )
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
+from mygui.widgets.ui_components import annotate_form_fields, annotate_sections, present_warning, set_validation_state, style_accept_cancel
 from mygui.resources import icon_path
 from mygui.widgets.figure_canvas.py_figure_window import PyFigureWindow
 from mygui.widgets.theme import COLORS
@@ -89,6 +89,7 @@ class PyStyleDialog(QDialog):
 
         self.ok_button = QPushButton("Create")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         buttons = QHBoxLayout()
@@ -97,6 +98,8 @@ class PyStyleDialog(QDialog):
         buttons.addWidget(self.cancel_button)
         self.layout.addLayout(buttons)
         self.setLayout(self.layout)
+        annotate_form_fields(self)
+        annotate_sections(self)
         subscribe_theme_window(self)
 
     def _new_figure_provider(self) -> NewFigureDefaultsProvider | None:
@@ -131,7 +134,27 @@ class PyStyleDialog(QDialog):
                 canva_name=self.canva_name_line.text(),
             )
         except Exception as exc:
-            QMessageBox.warning(self, "Create Project", str(exc))
+            message = str(exc)
+            lowered = message.casefold()
+            targets = []
+            if "name" in lowered:
+                targets.append(self.canva_name_line)
+            if "width" in lowered:
+                targets.append(self.width_line)
+            if "height" in lowered:
+                targets.append(self.height_line)
+            if "dpi" in lowered:
+                targets.append(self.dpi_line)
+            if not targets:
+                targets = [
+                    self.width_line,
+                    self.height_line,
+                    self.dpi_line,
+                    self.canva_name_line,
+                ]
+            for field in targets:
+                set_validation_state(field, invalid=True, message=message)
+            present_warning(self, "Create Project", message)
             return
         super().accept()
 
@@ -282,6 +305,7 @@ class PyLayoutDialog(QDialog):
 
         self.ok_button = QPushButton("Apply" if self.layout_id else "Create")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.input.validity_changed.connect(self._layout_validity_changed)
@@ -291,6 +315,8 @@ class PyLayoutDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
         self.setLayout(self.layout)
+        annotate_form_fields(self)
+        annotate_sections(self)
         subscribe_theme_window(self)
         self.input.geometry_group.toggled.connect(self._adapt_dialog_size)
         if self.input.tabs is not None:

@@ -98,6 +98,11 @@ def build_density_metrics(density: Density, font_height: int) -> DensityMetrics:
     def height(value: int) -> int:
         return max(value, floor)
 
+    font_px = int(math.ceil(font_height))
+    indicator = max(band.spacing_lg, font_px)
+    title_top = band.spacing_xs
+    title_left = band.spacing_sm + indicator + band.spacing_xs
+    title_band = max(indicator, font_px)
     return DensityMetrics(
         spacing_xs=band.spacing_xs,
         spacing_sm=band.spacing_sm,
@@ -109,11 +114,16 @@ def build_density_metrics(density: Density, font_height: int) -> DensityMetrics:
         bottom=height(band.bottom),
         command=height(band.command),
         gallery=height(band.gallery),
-        gallery_icon=max(band.gallery_icon, int(math.ceil(font_height))),
+        gallery_icon=max(band.gallery_icon, font_px),
         table_row=height(band.table_row),
         table_header=height(band.table_header),
         tree=height(band.tree),
         control=height(band.control),
         vertical_padding=band.vertical_padding,
-        font_height=int(math.ceil(font_height)),
+        font_height=font_px,
+        indicator=indicator,
+        scrollbar=max(band.spacing_sm + 2, int(math.ceil(font_height * 0.5))),
+        section_title_top=title_top,
+        section_title_left=title_left,
+        section_margin_top=title_top + title_band + band.spacing_xs,
     )

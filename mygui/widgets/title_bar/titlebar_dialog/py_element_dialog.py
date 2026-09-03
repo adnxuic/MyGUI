@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QRadioButton,
     QStyledItemDelegate,
@@ -40,6 +39,7 @@ from mygui.widgets.fig_control_window.component_editors import (
 )
 
 from mygui.application_theme import bind_widget_qss
+from mygui.widgets.ui_components import annotate_sections, present_warning, style_accept_cancel
 from mygui.widgets.title_bar.titlebar_dialog.creation_dialog_support import (
     CreationDialogSession,
 )
@@ -152,6 +152,7 @@ class PyTextDialog(QDialog):
         # 确定和取消按钮
         self.ok_button = QPushButton("OK")
         self.cancel_button = QPushButton("Cancel")
+        style_accept_cancel(self.ok_button, self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.button_layout = QHBoxLayout()
@@ -160,6 +161,7 @@ class PyTextDialog(QDialog):
         self.button_layout.addWidget(self.cancel_button)
         self.layout.addLayout(self.button_layout)
 
+        annotate_sections(self)
         self.setLayout(self.layout)
 
     def accept(self):
@@ -167,13 +169,13 @@ class PyTextDialog(QDialog):
         """Validate the inputs and accept the dialog when they are usable."""
 
         if self.figure_window.current_canva is None:
-            QMessageBox.warning(self, 'Warning', 'Please add an axes first!')
+            present_warning(self, 'Warning', 'Please add an axes first!')
             return
 
         # 如果current_axes为空，弹出警告
         if self.local_button.isChecked():
             if not self.figure_window.current_canva.has_current_axes:
-                QMessageBox.warning(self, 'Warning', 'Please select an axes first!')
+                present_warning(self, 'Warning', 'Please select an axes first!')
                 return
             self.figure_window.current_canva.add_text(
                 text=self.text_edit.text(),
@@ -298,7 +300,7 @@ class PyInAxesDialog(QDialog):
 
         canvas = getattr(self.figure_window, "current_canva", None)
         if canvas is None or not canvas.has_current_axes:
-            QMessageBox.warning(
+            present_warning(
                 self,
                 "No Axes selected",
                 "Select an Axes before creating an in_axes Element.",
@@ -307,7 +309,7 @@ class PyInAxesDialog(QDialog):
         session = CreationDialogSession(self, self.figure_window)
         outcome = session.run(
             lambda: session.canvas.add_in_axes(self.input.spec()),
-            on_error=lambda exc: QMessageBox.warning(
+            on_error=lambda exc: present_warning(
                 self, "Could not create in_axes", str(exc)
             ),
         )

@@ -1,4 +1,4 @@
-"""QPalette, QFont, and placeholder QSS used by the theme transaction."""
+"""QPalette, QFont, and fallback QSS used by the theme transaction."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def build_palette(tokens: Mapping[str, str]) -> QPalette:
 
 
 def render_placeholder_application_qss(snapshot: ThemeSnapshot) -> str:
-    """Minimal app stylesheet so this phase can apply palette/font/QSS tokens."""
+    """Minimal application stylesheet with scheme markers for ThemeService apply."""
 
     content = snapshot.tokens["COLOR_CONTENT_BACKGROUND"]
     text = snapshot.tokens["COLOR_TEXT_PRIMARY"]
@@ -81,6 +81,6 @@ def render_placeholder_application_qss(snapshot: ThemeSnapshot) -> str:
 
 
 def render_placeholder_resource_qss(resource: str, snapshot: ThemeSnapshot) -> str:
-    """Placeholder local QSS. SubAgent B replaces this with bundled documents."""
+    """Fallback marker used when a bundled regional QSS resource is missing."""
 
     return f"/* mygui-theme-resource:{resource}:{snapshot.scheme.value} */"

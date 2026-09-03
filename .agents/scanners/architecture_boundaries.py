@@ -25,6 +25,18 @@ _SERVICE_PRIVATE_MEMBERS = frozenset({
     "_validate_controller_state",
     "_validate_replacement",
 })
+_PRIVATE_CONTAINER_ATTRS = frozenset({
+    "_figure_stack",
+    "_inspector_stack",
+    "_toolboxes",
+    "_chart_stack",
+    "_element_stack",
+})
+_CONTAINER_OWNERS = frozenset({
+    "mygui/widgets/fig_control_window/figure_inspector.py",
+    "mygui/widgets/fig_control_window/component_editors/containers.py",
+})
+_SWITCH_STATE_NAMES = frozenset({"_SWITCH_DEPTH", "_OUTER_HOST"})
 
 
 def _fingerprint(rule_id: str, file: str, line: int, title: str) -> str:
@@ -177,7 +189,106 @@ def _scan_tree(relative: str, tree: ast.AST) -> list[dict[str, Any]]:
                     reason="AxesGeometryService is the sole geometry policy owner.",
                     suggested_action="Submit the geometry change to AxesGeometryService.",
                 ))
+
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr in _PRIVATE_CONTAINER_ATTRS
+            and relative not in _CONTAINER_OWNERS
+        ):
+            findings.append(_finding(
+                rule_id="ARCH-PRIVATE-CONTAINER-ACCESS",
+                file=relative,
+                line=node.lineno,
+                title="Inspector host private container accessed outside owner",
+                evidence=f"access to .{node.attr}",
+                reason=(
+                    "Callers must use public Inspector host APIs instead of "
+                    "private stacked-container attributes."
+                ),
+                suggested_action="Use public add/find/show/remove/register_switch_viewports APIs.",
+            ))
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value in _PRIVATE_CONTAINER_ATTRS
+            and relative not in _CONTAINER_OWNERS
+        ):
+            findings.append(_finding(
+                rule_id="ARCH-PRIVATE-CONTAINER-ACCESS",
+                file=relative,
+                line=node.lineno,
+                title="Inspector host private container probed with getattr",
+                evidence=f"getattr(..., {node.args[1].value!r})",
+                reason=(
+                    "Private stacked-container probing is forbidden outside "
+                    "the container owner modules."
+                ),
+                suggested_action="Register the stack with attach_switch_host().",
+            ))
+        if isinstance(node, ast.Name) and node.id in _SWITCH_STATE_NAMES:
+            findings.append(_finding(
+                rule_id="ARCH-INSPECTOR-SWITCH-ISOLATION",
+                file=relative,
+                line=node.lineno,
+                title="Module-level Inspector switch batch state",
+                evidence=node.id,
+                reason=(
+                    "Switch depth and dirty flags belong on each "
+                    "CurrentPageStackedWidget instance."
+                ),
+                suggested_action="Keep batch state on the outermost stacked widget.",
+            ))
+        if (
+            relative.startswith("mygui/application_theme/")
+            and _unbounded_widget_find_children(node)
+        ):
+            findings.append(_finding(
+                rule_id="ARCH-THEME-UNBOUNDED-SCAN",
+                file=relative,
+                line=node.lineno,
+                title="Theme path scans an unbounded QWidget tree",
+                evidence="findChildren(QWidget) without FindDirectChildrenOnly",
+                reason=(
+                    "Theme palette, metrics, and icons must use explicit "
+                    "window/participant sets instead of full-tree scans."
+                ),
+                suggested_action="Register explicit participants or iterate direct children.",
+            ))
     return findings
+
+
+def _mentions_direct_children_only(node: ast.AST) -> bool:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Attribute) and child.attr == "FindDirectChildrenOnly":
+            return True
+        if isinstance(child, ast.Name) and child.id == "FindDirectChildrenOnly":
+            return True
+    return False
+
+
+def _is_qwidget_type(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Name) and node.id == "QWidget"
+    ) or (
+        isinstance(node, ast.Attribute) and node.attr == "QWidget"
+    )
+
+
+def _unbounded_widget_find_children(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if not isinstance(func, ast.Attribute) or func.attr != "findChildren":
+        return False
+    if not node.args or not _is_qwidget_type(node.args[0]):
+        return False
+    for keyword in node.keywords:
+        if keyword.arg == "options" and _mentions_direct_children_only(keyword.value):
+            return False
+    return not any(_mentions_direct_children_only(arg) for arg in node.args[1:])
 
 
 def scan(root: Path) -> dict[str, Any]:

@@ -35,6 +35,7 @@ from mygui.widgets.settings_pages.page import (
     make_intro_label,
     make_tab_scroll,
 )
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style, style_button
 
 AXES_COMPONENTS_INTRO = (
     "These defaults apply to ordinary Axes created after Apply. They do not "
@@ -87,6 +88,7 @@ class AxesComponentsSettingsPage(SettingsPageWidget):
 
         tabs = QTabWidget(self)
         tabs.setObjectName("settings_axes_components_tabs")
+        apply_ui_style(tabs, role=UiRole.TABS)
         self._tabs = tabs
         self._pending_tab_builders: dict[int, Callable[[], QWidget]] = {}
         self._connected_keys: set[str] = set()
@@ -265,6 +267,7 @@ class AxesComponentsSettingsPage(SettingsPageWidget):
         )
         copy_axis.setObjectName(f"settings_axes_copy_{axis}_to_{other}")
         copy_axis.setAccessibleName(copy_axis.text())
+        style_button(copy_axis, variant=UiVariant.OUTLINE)
         copy_axis.clicked.connect(
             lambda: self._copy_prefix(
                 f"components.axes.{axis}.",
@@ -274,6 +277,7 @@ class AxesComponentsSettingsPage(SettingsPageWidget):
         copy_major = QPushButton("Copy Major → Minor", bar)
         copy_major.setObjectName(f"settings_axes_copy_{axis}_major_to_minor")
         copy_major.setAccessibleName(copy_major.text())
+        style_button(copy_major, variant=UiVariant.OUTLINE)
         copy_major.clicked.connect(
             lambda: self._copy_prefix(
                 f"components.axes.{axis}.major.",
@@ -283,6 +287,7 @@ class AxesComponentsSettingsPage(SettingsPageWidget):
         copy_minor = QPushButton("Copy Minor → Major", bar)
         copy_minor.setObjectName(f"settings_axes_copy_{axis}_minor_to_major")
         copy_minor.setAccessibleName(copy_minor.text())
+        style_button(copy_minor, variant=UiVariant.OUTLINE)
         copy_minor.clicked.connect(
             lambda: self._copy_prefix(
                 f"components.axes.{axis}.minor.",

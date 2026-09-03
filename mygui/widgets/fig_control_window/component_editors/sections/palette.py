@@ -19,7 +19,9 @@ from mygui.figuremodify.style_base.color_models import PaletteSource
 from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
     choose_palette,
 )
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style, style_button
 
+from ..inspector_layout import apply_expanding_field, labeled_form_row
 from ..context import perform_editor_action
 from ..inspector import EditorSection
 from ..lifecycle import CallbackLifecycle
@@ -43,11 +45,13 @@ class PaletteSection(QWidget, EditorSection):
 
         current_layout = QHBoxLayout()
         current_layout.setContentsMargins(0, 0, 0, 0)
-        current_layout.addWidget(QLabel("Current:", self))
         self.current_palette_label = QLabel(self)
         self.current_palette_label.setWordWrap(True)
         self.current_palette_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        current_layout.addWidget(
+            labeled_form_row("Current:", buddy=self.current_palette_label, parent=self)
         )
         current_layout.addWidget(self.current_palette_label, 1)
         self.layout.addLayout(current_layout)
@@ -57,7 +61,6 @@ class PaletteSection(QWidget, EditorSection):
 
         controls_layout = QHBoxLayout()
         controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.addWidget(QLabel("Source:", self))
         self.source_input = QComboBox(self)
         self.source_input.setAccessibleName("Axes palette source")
         self.source_input.addItem("Style default", self.STYLE_MODE)
@@ -65,12 +68,18 @@ class PaletteSection(QWidget, EditorSection):
         self.source_input.currentIndexChanged.connect(
             self._source_changed
         )
+        source_label = labeled_form_row("Source:", buddy=self.source_input, parent=self)
+        controls_layout.addWidget(source_label)
         controls_layout.addWidget(self.source_input, 1)
+        apply_ui_style(self.source_input, role=UiRole.SELECT)
+        apply_expanding_field(self.source_input)
         self.button = QPushButton("Choose…", self)
         self.button.setAccessibleName(
             "Choose and apply a user color palette to axes"
         )
+        style_button(self.button, variant=UiVariant.OUTLINE)
         self.button.clicked.connect(self.choose_and_apply_palette)
+        apply_expanding_field(self.button)
         controls_layout.addWidget(self.button)
         self.layout.addLayout(controls_layout)
 

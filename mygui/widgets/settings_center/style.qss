@@ -11,21 +11,6 @@ QFrame#settings_nav_pane
     border-right: 1px solid {{COLOR_BORDER}};
 }
 
-QLineEdit#settings_search
-{
-    min-height: 28px;
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_SM}}px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-    padding: 2px {{SPACE_SM}}px;
-}
-
-QLineEdit#settings_search:focus
-{
-    border: 2px solid {{COLOR_FOCUS}};
-}
-
 QListWidget#settings_nav
 {
     background-color: transparent;
@@ -81,57 +66,6 @@ QFrame#settings_footer
 {
     background-color: {{COLOR_SURFACE}};
     border-top: 1px solid {{COLOR_BORDER}};
-}
-
-QPushButton#settings_restore_defaults,
-QPushButton#settings_cancel,
-QPushButton#settings_apply,
-QPushButton#settings_ok
-{
-    min-height: 32px;
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_SM}}px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-    padding: 0px {{SPACE_MD}}px;
-}
-
-QPushButton#settings_ok
-{
-    background-color: {{COLOR_ACCENT}};
-    color: {{COLOR_TEXT_ON_DARK}};
-    border-color: {{COLOR_ACCENT}};
-}
-
-QPushButton#settings_restore_defaults:hover,
-QPushButton#settings_cancel:hover,
-QPushButton#settings_apply:hover
-{
-    border-color: {{COLOR_ACCENT}};
-}
-
-QPushButton#settings_ok:hover
-{
-    background-color: {{COLOR_ACCENT_HOVER}};
-    border-color: {{COLOR_ACCENT_HOVER}};
-}
-
-QPushButton#settings_restore_defaults:focus,
-QPushButton#settings_cancel:focus,
-QPushButton#settings_apply:focus,
-QPushButton#settings_ok:focus
-{
-    border: 2px solid {{COLOR_FOCUS}};
-}
-
-QPushButton#settings_restore_defaults:disabled,
-QPushButton#settings_cancel:disabled,
-QPushButton#settings_apply:disabled,
-QPushButton#settings_ok:disabled
-{
-    color: {{COLOR_BORDER_STRONG}};
-    background-color: {{COLOR_SURFACE_ALT}};
-    border-color: {{COLOR_BORDER}};
 }
 
 QListWidget#settings_template_list
@@ -242,94 +176,6 @@ QPlainTextEdit#template_notes_edit
     background-color: {{COLOR_SURFACE}};
     color: {{COLOR_TEXT_PRIMARY}};
     padding: {{SPACE_XS}}px {{SPACE_SM}}px;
-}
-
-QPlainTextEdit#template_notes_edit:focus
-{
-    border: 1px solid {{COLOR_FOCUS}};
-}
-
-QPushButton#template_apply_button
-{
-    background-color: {{COLOR_ACCENT}};
-    color: {{COLOR_TEXT_ON_DARK}};
-    border: 1px solid {{COLOR_ACCENT}};
-    border-radius: {{RADIUS_SM}}px;
-    padding: 4px {{SPACE_MD}}px;
-    font-weight: 600;
-    font-size: 12px;
-    min-height: 28px;
-}
-
-QPushButton#template_apply_button:hover
-{
-    background-color: {{COLOR_ACCENT_HOVER}};
-    border-color: {{COLOR_ACCENT_HOVER}};
-}
-
-QPushButton#template_apply_button:focus
-{
-    border: 2px solid {{COLOR_FOCUS}};
-}
-
-QPushButton#template_apply_button:disabled
-{
-    color: {{COLOR_BORDER_STRONG}};
-    background-color: {{COLOR_SURFACE_ALT}};
-    border-color: {{COLOR_BORDER}};
-}
-
-QPushButton#template_update_button,
-QPushButton#template_rename_button,
-QPushButton#template_duplicate_button,
-QPushButton#template_export_button,
-QPushButton#template_notes_save_button,
-QPushButton#template_import_button,
-QPushButton#template_empty_import_button,
-QPushButton#template_folder_button,
-QPushButton#template_refresh_button,
-QPushButton#template_delete_button
-{
-    min-height: 26px;
-    padding: 2px {{SPACE_SM}}px;
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_SM}}px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-}
-
-QPushButton#template_update_button:hover,
-QPushButton#template_rename_button:hover,
-QPushButton#template_duplicate_button:hover,
-QPushButton#template_export_button:hover,
-QPushButton#template_notes_save_button:hover:!disabled,
-QPushButton#template_import_button:hover,
-QPushButton#template_empty_import_button:hover,
-QPushButton#template_folder_button:hover,
-QPushButton#template_refresh_button:hover
-{
-    border-color: {{COLOR_ACCENT}};
-    background-color: {{COLOR_SURFACE_ALT}};
-}
-
-
-QPushButton#template_delete_button:hover:!disabled
-{
-    border-color: {{COLOR_ERROR}};
-    color: {{COLOR_TEXT_DANGER}};
-    background-color: {{COLOR_ERROR_SOFT}};
-}
-
-QPushButton#template_update_button:disabled,
-QPushButton#template_rename_button:disabled,
-QPushButton#template_duplicate_button:disabled,
-QPushButton#template_export_button:disabled,
-QPushButton#template_notes_save_button:disabled,
-QPushButton#template_delete_button:disabled
-{
-    color: {{COLOR_BORDER_STRONG}};
-    background-color: {{COLOR_SURFACE_ALT}};
-    border-color: {{COLOR_BORDER}};
 }
 
 QFrame#template_error_box

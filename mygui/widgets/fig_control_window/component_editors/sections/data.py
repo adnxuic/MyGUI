@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from mygui import status_messages
 from mygui.database import ColumnRef, ColumnType, TableChangeSet
 from mygui.figuremodify.in_axes import embedded_image_data
+from mygui.widgets.ui_components import UiVariant, style_button
 
 from ..common import (
     format_number_sequence,
@@ -29,6 +30,7 @@ from ..common import (
 from ..context import perform_editor_action
 from ..inputs import DataReferenceInput, Field2DDataReferenceInput
 from ..inspector import EditorSection
+from ..inspector_layout import apply_expanding_field, labeled_form_row
 from ._types import ApplyReferences
 from .property import PropertySection
 
@@ -155,9 +157,15 @@ class RawXYDataSection(QWidget, EditorSection):
         self.x_input.setPlaceholderText("X JSON array, for example [0, 1, 2]")
         self.y_input.setPlaceholderText("Y JSON array, for example [1, 4, 9]")
         self.apply_button = QPushButton("Apply X/Y data", self)
-        layout.addWidget(QLabel("X values", self))
+        style_button(self.apply_button, variant=UiVariant.PRIMARY)
+        apply_expanding_field(self.apply_button)
+        layout.addWidget(
+            labeled_form_row("X values", buddy=self.x_input, parent=self)
+        )
         layout.addWidget(self.x_input)
-        layout.addWidget(QLabel("Y values", self))
+        layout.addWidget(
+            labeled_form_row("Y values", buddy=self.y_input, parent=self)
+        )
         layout.addWidget(self.y_input)
         layout.addWidget(self.apply_button)
         self.apply_button.clicked.connect(self.apply_data)
@@ -234,9 +242,13 @@ class ReferenceMarksDataSection(QWidget, EditorSection):
         )
         self.position_ref_input = QComboBox(self)
         self.apply_button = QPushButton("Apply data", self)
+        style_button(self.apply_button, variant=UiVariant.PRIMARY)
+        apply_expanding_field(self.apply_button)
         self.placement_label = QLabel(self)
         self.placement_label.setWordWrap(True)
         self.convert_button = QPushButton("Convert to fixed position", self)
+        style_button(self.convert_button, variant=UiVariant.OUTLINE)
+        apply_expanding_field(self.convert_button)
         layout.addWidget(self.positions_input)
         layout.addWidget(self.position_ref_input)
         layout.addWidget(self.apply_button)
@@ -402,9 +414,15 @@ class ScatterMappingSection(QWidget, EditorSection):
         size_row = QHBoxLayout()
         self.color_input = QComboBox(self)
         self.size_input = QComboBox(self)
-        color_row.addWidget(QLabel("Color data:", self))
+        apply_expanding_field(self.color_input)
+        apply_expanding_field(self.size_input)
+        color_row.addWidget(
+            labeled_form_row("Color data:", buddy=self.color_input, parent=self)
+        )
         color_row.addWidget(self.color_input)
-        size_row.addWidget(QLabel("Size data:", self))
+        size_row.addWidget(
+            labeled_form_row("Size data:", buddy=self.size_input, parent=self)
+        )
         size_row.addWidget(self.size_input)
         layout.addLayout(color_row)
         layout.addLayout(size_row)
@@ -659,6 +677,8 @@ class ImageInAxesSourceSection(QWidget, EditorSection):
         )
         layout.addWidget(self.filename_label)
         self.replace_button = QPushButton("Replace image…", self)
+        style_button(self.replace_button, variant=UiVariant.OUTLINE)
+        apply_expanding_field(self.replace_button)
         self.replace_button.clicked.connect(self.replace_image)
         layout.addWidget(self.replace_button)
         self.sync_from_controller()

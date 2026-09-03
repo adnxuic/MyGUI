@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -27,6 +26,7 @@ from .page import (
     make_hint_label,
     make_intro_label,
 )
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style, ask_confirmation
 
 WORKSPACE_INTRO = (
     "Remember workspace layout saves splitter sizes, Explorer mode, and "
@@ -78,6 +78,7 @@ class WorkspaceSettingsPage(SettingsPageWidget):
         self.remember_box.setAccessibleName(remember_label_text)
         self.remember_box.setChecked(bool(remember_spec.default))
         self.remember_box.setFocusPolicy(Qt.StrongFocus)
+        apply_ui_style(self.remember_box, role=UiRole.CHECKBOX)
         remember_label = QLabel(remember_label_text, self)
         remember_label.setObjectName("settings_page_field_label")
         remember_label.setBuddy(self.remember_box)
@@ -93,6 +94,11 @@ class WorkspaceSettingsPage(SettingsPageWidget):
         self.reset_button.setAutoDefault(False)
         self.reset_button.setDefault(False)
         self.reset_button.setFocusPolicy(Qt.StrongFocus)
+        apply_ui_style(
+            self.reset_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
         self.reset_button.clicked.connect(self.reset_workspace_layout_now)
         root.addWidget(self.reset_button, alignment=Qt.AlignLeft)
         root.addStretch(1)
@@ -195,14 +201,12 @@ class WorkspaceSettingsPage(SettingsPageWidget):
         return False
 
     def _confirm_reset(self) -> bool:
-        answer = QMessageBox.question(
+        return ask_confirmation(
             self,
             RESET_DIALOG_TITLE,
             RESET_DIALOG_TEXT,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            destructive=True,
         )
-        return answer == QMessageBox.Yes
 
     def _host_storage_writable(self) -> bool:
         host = self._host

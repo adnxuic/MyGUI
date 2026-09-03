@@ -201,7 +201,11 @@ class FontDiagnosticBridgeTests(unittest.TestCase):
             )
             self.assertIn(
                 '"System"',
-                window.bottom_bar.message_bar.message_label.text(),
+                window.bottom_bar.message_bar.message_label.toolTip(),
+            )
+            self.assertIn(
+                '"System"',
+                window.bottom_bar.message_bar.full_message,
             )
         finally:
             if window is not None:

@@ -23,3 +23,10 @@ rollback before changing code.
 Fix the owning layer only. Add a focused regression test that proves the
 original symptom and authoritative state, then run the routed checks. Complete
 the relevant interactive smoke path when native behavior is involved.
+Native Inspector/theme timings use the desktop smoke frame probe
+(`dispatch_ms`, `first_paint_ms`, `settle_ms`); do not insert a fixed-duration
+`pump()` in the timed interval, and do not count Matplotlib canvas paints as
+chrome settle.
+Tree/Inspector refresh regressions must keep `PyFigureCanvas.current_component_id`
+as selection authority and must not turn a UI projection into a second
+`ComponentState` store.

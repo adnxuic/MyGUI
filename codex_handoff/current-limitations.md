@@ -62,4 +62,16 @@
   separate fit-to-window preview.
 - Automated GUI tests use Qt offscreen. Multi-monitor scaling, native file
   dialogs, real TeX/MATLAB runtimes, and interactive drag/drop require the
-  Windows desktop smoke checklist.
+  Windows desktop smoke checklist. Offscreen layout-signature and chrome
+  inspection tests do not prove native DPI, dual-monitor placement, or OS
+  System-theme title bars.
+- Command-bar and activity-rail tools stay ghost buttons rather than square
+  icon-buttons, so gallery labels are not width-capped. Editable and
+  checkable data-reference ComboBoxes are not auto-tagged as `select`.
+  Runtime chrome inspection also skips Qt tab-bar scroll buttons, line-edit
+  clear buttons, and `QTableWidget` corner `QAbstractButton`s; those are not
+  production command buttons.
+- Desktop smoke for feedback chrome (Message Bar tones, destructive confirm,
+  form validation, template/Fit busy) is captured at the session DPI. Offscreen
+  tests and a single-monitor smoke walk do not prove 100/125/150/200% DPI,
+  dual-monitor placement, or OS System-theme title bars.

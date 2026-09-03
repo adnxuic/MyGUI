@@ -27,6 +27,12 @@ from PySide6.QtWidgets import (
 
 from mygui.application_theme import bind_widget_qss
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.widgets.ui_components import (
+    UiTextRole,
+    UiVariant,
+    apply_text_style,
+    style_button,
+)
 
 from .common import (
     FocusAwareDoubleSpinBox,
@@ -35,7 +41,12 @@ from .common import (
     format_number_sequence,
     parse_number_sequence,
 )
-from .inspector_layout import apply_expanding_field, configure_inspector_form
+from .inspector_layout import (
+    SAFE_MIN_WIDTH,
+    add_labeled_form_row,
+    apply_expanding_field,
+    configure_inspector_form,
+)
 
 _DIALOG_QSS = "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
 
@@ -350,13 +361,15 @@ def _set_path(mapping: dict[str, Any], path: str, value: Any) -> None:
 class _OptionalIntEditor(QWidget):
     def __init__(self, value: int | None, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         self.enabled_input = QCheckBox("Set", self)
         self.value_input = FocusAwareSpinBox(self)
         self.value_input.setRange(-2_147_483_647, 2_147_483_647)
+        apply_expanding_field(self.value_input)
         layout.addWidget(self.enabled_input)
-        layout.addWidget(self.value_input, 1)
+        layout.addWidget(self.value_input)
         self.enabled_input.toggled.connect(self.value_input.setEnabled)
         self.set_value(value)
 
@@ -393,7 +406,7 @@ class _ParameterForm(QWidget):
                 editor.setToolTip(field.tooltip)
                 editor.setAccessibleDescription(field.tooltip)
             self._inputs[field.path] = editor
-            layout.addRow(field.label, editor)
+            add_labeled_form_row(layout, field.label, editor, tooltip=field.tooltip)
 
     def _create_input(self, field: _Field, value: Any) -> QWidget:
         if field.kind == "bool":
@@ -573,17 +586,19 @@ class _StructuredValueEditor(QWidget):
         self.summary = QLabel(self)
         self.summary.setWordWrap(True)
         self.summary.setMinimumWidth(1)
+        apply_text_style(self.summary, UiTextRole.VALUE)
         self.summary.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         self.edit_button = QPushButton("Configure…", self)
         self.edit_button.setAccessibleName(f"Configure {title}")
-        self.edit_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        style_button(self.edit_button, variant=UiVariant.OUTLINE)
+        apply_expanding_field(self.edit_button)
         layout.addWidget(self.summary)
         layout.addWidget(self.edit_button)
         self.setFocusProxy(self.edit_button)
+        self.setMinimumWidth(SAFE_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.edit_button.clicked.connect(self._open_dialog)
         self.set_value(value)
 

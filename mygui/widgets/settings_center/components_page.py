@@ -42,6 +42,7 @@ from mygui.widgets.settings_pages.page import (
     make_intro_label,
     make_tab_scroll,
 )
+from mygui.widgets.ui_components import UiRole, apply_ui_style
 
 COMPONENTS_INTRO = (
     "These defaults apply to components created after Apply. They do not "
@@ -109,6 +110,7 @@ class ComponentsSettingsPage(SettingsPageWidget):
 
         tabs = QTabWidget(self)
         tabs.setObjectName("settings_components_tabs")
+        apply_ui_style(tabs, role=UiRole.TABS)
         tabs.addTab(
             self._tab_page("Line", _LINE_KEYS, color_library),
             "Line",

@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -34,6 +33,15 @@ from PySide6.QtWidgets import (
 from mygui import status_messages
 from mygui.application_theme import bind_widget_qss, subscribe_theme_window
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.widgets.ui_components import (
+    UiTone,
+    UiVariant,
+    present_warning,
+    set_busy_state,
+    set_validation_state,
+    style_button,
+    style_progress_bar,
+)
 from mygui.excel_io import (
     EXCEL_FILE_FILTER,
     ExcelImportDialog,
@@ -62,9 +70,7 @@ _DIALOG_QSS = "mygui/widgets/title_bar/titlebar_dialog/dialog_style.qss"
 
 
 def _display_error(parent, title: str, error: Exception | str) -> None:
-    message = str(error)
-    status_messages.show_error(message)
-    QMessageBox.warning(parent, title, message)
+    present_warning(parent, title, str(error))
 
 
 class TemplateExtractDialog(QDialog):
@@ -132,6 +138,7 @@ class TemplateExtractDialog(QDialog):
         for token in sorted(allowed_tokens(template.data_contract)):
             self.token_combo.addItem(f"{{{{{token}}}}}", token)
         insert_button = QPushButton("Insert variable", self)
+        style_button(insert_button, variant=UiVariant.OUTLINE)
         insert_button.clicked.connect(self._insert_token)
         token_row = QHBoxLayout()
         token_row.addWidget(self.token_combo, 1)
@@ -190,7 +197,8 @@ class TemplateExtractDialog(QDialog):
         try:
             self.result_template()
         except Exception as exc:
-            QMessageBox.warning(self, self.windowTitle(), str(exc))
+            set_validation_state(self.name_edit, invalid=True, message=str(exc))
+            present_warning(self, self.windowTitle(), str(exc))
             return
         self.accept()
 
@@ -238,8 +246,11 @@ class TemplateApplyDialog(QDialog):
         self.steps.addWidget(self._progress_page())
 
         self.back_button = QPushButton("Back", self)
+        style_button(self.back_button, variant=UiVariant.GHOST)
         self.next_button = QPushButton("Next", self)
+        style_button(self.next_button, variant=UiVariant.PRIMARY)
         self.cancel_button = QPushButton("Cancel", self)
+        style_button(self.cancel_button, variant=UiVariant.OUTLINE)
         self.back_button.clicked.connect(self._back)
         self.next_button.clicked.connect(self._next)
         self.cancel_button.clicked.connect(self.reject)
@@ -276,6 +287,7 @@ class TemplateApplyDialog(QDialog):
         self.source_edit = QLineEdit(page)
         self.source_edit.setReadOnly(True)
         browse = QPushButton("Choose and preview data…", page)
+        style_button(browse, variant=UiVariant.OUTLINE)
         browse.clicked.connect(self._choose_data)
         row = QHBoxLayout()
         row.addWidget(self.source_edit, 1)
@@ -312,6 +324,7 @@ class TemplateApplyDialog(QDialog):
         self.progress_label.setWordWrap(True)
         self.progress_bar = QProgressBar(page)
         self.progress_bar.setRange(0, 0)
+        style_progress_bar(self.progress_bar, tone=UiTone.INFO)
         layout = QVBoxLayout(page)
         layout.addWidget(QLabel("4. Processing", page))
         layout.addWidget(self.progress_label)
@@ -458,11 +471,16 @@ class TemplateApplyDialog(QDialog):
         index = self.steps.currentIndex()
         if index == 0:
             if self._template is None:
-                QMessageBox.warning(self, "Apply Template", "Select a valid template.")
+                set_validation_state(
+                    self.template_list,
+                    invalid=True,
+                    message="Select a valid template.",
+                )
+                present_warning(self, "Apply Template", "Select a valid template.")
                 return
         elif index == 1:
             if not self._prepare_mapping():
-                QMessageBox.warning(self, "Apply Template", "Choose and preview one data file.")
+                present_warning(self, "Apply Template", "Choose and preview one data file.")
                 return
         elif index == 2:
             self._start_processing()
@@ -481,7 +499,12 @@ class TemplateApplyDialog(QDialog):
         assert self._template is not None and self._source_file is not None
         project_name = self.project_name_edit.text().strip()
         if not project_name:
-            QMessageBox.warning(self, "Apply Template", "Project name must not be empty.")
+            set_validation_state(
+                self.project_name_edit,
+                invalid=True,
+                message="Project name must not be empty.",
+            )
+            present_warning(self, "Apply Template", "Project name must not be empty.")
             return
         mapping = self._explicit_mapping()
         try:
@@ -494,12 +517,15 @@ class TemplateApplyDialog(QDialog):
                     or "Each template Sheet requires a distinct compatible imported Sheet."
                 )
         except Exception as exc:
-            QMessageBox.warning(self, "Apply Template", str(exc))
+            present_warning(self, "Apply Template", str(exc))
             return
         self._processing = True
         self._cancelled.clear()
+        set_busy_state(self.next_button, True, busy_text="Validating…")
         self.steps.setCurrentIndex(3)
         self._sync_buttons()
+        style_progress_bar(self.progress_bar, tone=UiTone.INFO)
+        self.progress_bar.setRange(0, 0)
         self.progress_label.setText(
             "Validating data, applying preprocessing, and running automatic fits…"
         )
@@ -519,6 +545,7 @@ class TemplateApplyDialog(QDialog):
 
     def _prepared(self, plan) -> None:
         if self._cancelled.is_set():
+            set_busy_state(self.next_button, False)
             return
         try:
             self.workflow.apply_service.publish(
@@ -530,8 +557,10 @@ class TemplateApplyDialog(QDialog):
             self._prepare_failed(str(exc))
             return
         self._processing = False
+        set_busy_state(self.next_button, False)
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(1)
+        style_progress_bar(self.progress_bar, tone=UiTone.SUCCESS)
         self.progress_label.setText("Template applied successfully.")
         status_messages.show_success(
             f"Template applied: {self._template.metadata.name}"
@@ -540,10 +569,13 @@ class TemplateApplyDialog(QDialog):
 
     def _prepare_failed(self, message: str) -> None:
         if self._cancelled.is_set():
+            set_busy_state(self.next_button, False)
             return
         self._processing = False
+        set_busy_state(self.next_button, False)
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
+        style_progress_bar(self.progress_bar, tone=UiTone.ERROR)
         self.progress_label.setText(message)
         self.back_button.setEnabled(True)
         self.cancel_button.setText("Close")
@@ -553,6 +585,7 @@ class TemplateApplyDialog(QDialog):
         self._cancelled.set()
         cancel_background_tasks(self)
         self._processing = False
+        set_busy_state(self.next_button, False)
         super().reject()
 
 

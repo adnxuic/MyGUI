@@ -1,0 +1,956 @@
+/*
+ * Shared workbench component rules. ThemeService composes this document into
+ * the application stylesheet and every regional bind_qss sheet.
+ * Heights and spacing come from DensityMetrics tokens.
+ */
+
+/* --- Buttons --- */
+QPushButton[uiRole="button"],
+QPushButton[uiRole="icon-button"]
+{
+    min-height: {{SIZE_BUTTON}}px;
+    min-width: 0px;
+    padding: 0px {{SPACE_MD}}px;
+    border: 1px solid {{UI_INPUT}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+}
+
+QPushButton[uiRole="button"]:hover,
+QPushButton[uiRole="icon-button"]:hover
+{
+    border-color: {{UI_PRIMARY}};
+    background-color: {{UI_SECONDARY}};
+}
+
+QPushButton[uiRole="button"]:pressed,
+QPushButton[uiRole="icon-button"]:pressed
+{
+    background-color: {{UI_ACCENT}};
+    border-color: {{UI_PRIMARY}};
+}
+
+QPushButton[uiRole="button"]:focus,
+QPushButton[uiRole="icon-button"]:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QPushButton[uiRole="button"]:disabled,
+QPushButton[uiRole="icon-button"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+    background-color: {{UI_MUTED}};
+    border-color: {{UI_BORDER}};
+}
+
+QPushButton[uiVariant="primary"]
+{
+    background-color: {{UI_PRIMARY}};
+    color: {{UI_PRIMARY_FOREGROUND}};
+    border-color: {{UI_PRIMARY}};
+}
+
+QPushButton[uiVariant="primary"]:hover
+{
+    background-color: {{UI_PRIMARY_HOVER}};
+    border-color: {{UI_PRIMARY_HOVER}};
+}
+
+QPushButton[uiVariant="primary"]:pressed
+{
+    background-color: {{UI_PRIMARY_HOVER}};
+}
+
+QPushButton[uiVariant="primary"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+    background-color: {{UI_MUTED}};
+    border-color: {{UI_BORDER}};
+}
+
+QPushButton[uiVariant="secondary"]
+{
+    background-color: {{UI_SECONDARY}};
+    color: {{UI_SECONDARY_FOREGROUND}};
+    border-color: {{UI_BORDER}};
+}
+
+QPushButton[uiVariant="ghost"],
+QPushButton[uiRole="icon-button"]
+{
+    background-color: transparent;
+    border-color: transparent;
+    color: {{UI_FOREGROUND}};
+}
+
+QPushButton[uiVariant="ghost"]:hover,
+QPushButton[uiRole="icon-button"]:hover
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+    border-color: transparent;
+}
+
+QPushButton[uiVariant="ghost"]:checked,
+QPushButton[uiRole="icon-button"]:checked
+{
+    background-color: {{UI_ACCENT}};
+    border-color: {{UI_PRIMARY}};
+    font-weight: 600;
+}
+
+QPushButton[uiVariant="ghost"]:disabled,
+QPushButton[uiRole="icon-button"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+    background-color: transparent;
+}
+
+QPushButton[uiVariant="destructive"]
+{
+    background-color: {{UI_DESTRUCTIVE}};
+    color: {{UI_DESTRUCTIVE_FOREGROUND}};
+    border-color: {{UI_DESTRUCTIVE}};
+}
+
+QPushButton[uiVariant="destructive"]:hover
+{
+    background-color: {{UI_DESTRUCTIVE_SOFT}};
+    color: {{COLOR_TEXT_DANGER}};
+    border-color: {{UI_DESTRUCTIVE}};
+}
+
+QPushButton[uiSize="small"]
+{
+    min-height: {{SIZE_BUTTON_SMALL}}px;
+    padding: 0px {{SPACE_SM}}px;
+}
+
+QPushButton[uiSize="large"]
+{
+    min-height: {{SIZE_BUTTON_LARGE}}px;
+    padding: 0px {{SPACE_LG}}px;
+}
+
+QPushButton[uiSize="icon"],
+QPushButton[uiRole="icon-button"]
+{
+    min-width: {{SIZE_ICON_BUTTON}}px;
+    max-width: {{SIZE_ICON_BUTTON}}px;
+    min-height: {{SIZE_ICON_BUTTON}}px;
+    max-height: {{SIZE_ICON_BUTTON}}px;
+    padding: 0px;
+}
+
+QToolButton[uiRole="button"],
+QToolButton[uiRole="icon-button"]
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid transparent;
+    border-radius: {{RADIUS_SM}}px;
+    padding: {{SPACE_XS}}px;
+    background-color: transparent;
+    color: {{UI_FOREGROUND}};
+}
+
+QToolButton[uiRole="button"]:hover,
+QToolButton[uiRole="icon-button"]:hover
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QToolButton[uiRole="button"]:focus,
+QToolButton[uiRole="icon-button"]:focus
+{
+    border-color: {{UI_RING}};
+}
+
+QToolButton[uiRole="button"]:pressed,
+QToolButton[uiRole="button"]:checked,
+QToolButton[uiRole="icon-button"]:pressed,
+QToolButton[uiRole="icon-button"]:checked
+{
+    background-color: {{UI_ACCENT}};
+    border-color: {{UI_PRIMARY}};
+    font-weight: 600;
+}
+
+QToolButton[uiRole="button"]:disabled,
+QToolButton[uiRole="icon-button"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+/* --- Inputs --- */
+QLineEdit[uiRole="input"],
+QPlainTextEdit[uiRole="textarea"],
+QTextEdit[uiRole="textarea"],
+QSpinBox[uiRole="number"],
+QDoubleSpinBox[uiRole="number"],
+QAbstractSpinBox[uiRole="number"]
+{
+    min-height: {{SIZE_CONTROL}}px;
+    padding: 2px {{SPACE_SM}}px;
+    border: 1px solid {{UI_INPUT}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    selection-background-color: {{UI_ACCENT}};
+    selection-color: {{UI_FOREGROUND}};
+}
+
+QLineEdit[uiRole="input"]:hover,
+QPlainTextEdit[uiRole="textarea"]:hover,
+QTextEdit[uiRole="textarea"]:hover,
+QSpinBox[uiRole="number"]:hover,
+QDoubleSpinBox[uiRole="number"]:hover,
+QAbstractSpinBox[uiRole="number"]:hover
+{
+    border-color: {{UI_PRIMARY}};
+}
+
+QLineEdit[uiRole="input"]:focus,
+QPlainTextEdit[uiRole="textarea"]:focus,
+QTextEdit[uiRole="textarea"]:focus,
+QSpinBox[uiRole="number"]:focus,
+QDoubleSpinBox[uiRole="number"]:focus,
+QAbstractSpinBox[uiRole="number"]:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QLineEdit[uiRole="input"]:read-only,
+QPlainTextEdit[uiRole="textarea"]:read-only,
+QTextEdit[uiRole="textarea"]:read-only
+{
+    background-color: {{UI_MUTED}};
+    color: {{UI_MUTED_FOREGROUND}};
+}
+
+/* Combo body chrome is opt-in. Generic QComboBox rules on a parent sheet
+ * reset currentIndex and break checkable/editable data-reference combos. */
+QComboBox[uiRole="select"]
+{
+    min-height: {{SIZE_CONTROL}}px;
+    padding: 2px {{SPACE_SM}}px;
+    border: 1px solid {{UI_INPUT}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    selection-background-color: {{UI_ACCENT}};
+    selection-color: {{UI_FOREGROUND}};
+}
+
+QComboBox[uiRole="select"]:hover
+{
+    border-color: {{UI_PRIMARY}};
+}
+
+QComboBox[uiRole="select"]:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QComboBox[uiRole="select"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+    background-color: {{UI_MUTED}};
+    border-color: {{UI_BORDER}};
+}
+
+QComboBox[uiRole="select"] QLineEdit
+{
+    min-height: 0px;
+    padding: 0px;
+    border: 0px;
+    background-color: transparent;
+    color: {{UI_FOREGROUND}};
+}
+
+QLineEdit[uiRole="input"]:disabled,
+QPlainTextEdit[uiRole="textarea"]:disabled,
+QTextEdit[uiRole="textarea"]:disabled,
+QSpinBox[uiRole="number"]:disabled,
+QDoubleSpinBox[uiRole="number"]:disabled,
+QAbstractSpinBox[uiRole="number"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+    background-color: {{UI_MUTED}};
+    border-color: {{UI_BORDER}};
+}
+
+QLineEdit[uiInvalid="true"],
+QPlainTextEdit[uiInvalid="true"],
+QComboBox[uiInvalid="true"],
+QAbstractSpinBox[uiInvalid="true"]
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_ERROR}};
+    background-color: {{UI_DESTRUCTIVE_SOFT}};
+}
+
+/* Popup views stay on the application sheet. Local QComboBox QAbstractItemView
+ * rules isolate the popup from the parent dialog and break checkable combos. */
+
+/* --- Check / radio --- */
+QCheckBox[uiRole="checkbox"],
+QRadioButton[uiRole="radio"]
+{
+    color: {{UI_FOREGROUND}};
+    spacing: {{SPACE_SM}}px;
+}
+
+QCheckBox[uiRole="checkbox"]:disabled,
+QRadioButton[uiRole="radio"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QCheckBox[uiRole="checkbox"]::indicator,
+QRadioButton[uiRole="radio"]::indicator
+{
+    width: {{SIZE_INDICATOR}}px;
+    height: {{SIZE_INDICATOR}}px;
+    border: 1px solid {{UI_INPUT}};
+    background-color: {{UI_CARD}};
+}
+
+QCheckBox[uiRole="checkbox"]::indicator
+{
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QRadioButton[uiRole="radio"]::indicator
+{
+    border-radius: {{SIZE_RADIO_RADIUS}}px;
+}
+
+QCheckBox[uiRole="checkbox"]::indicator:hover,
+QRadioButton[uiRole="radio"]::indicator:hover
+{
+    border-color: {{UI_PRIMARY}};
+}
+
+QCheckBox[uiRole="checkbox"]::indicator:checked,
+QRadioButton[uiRole="radio"]::indicator:checked
+{
+    background-color: {{UI_PRIMARY}};
+    border-color: {{UI_PRIMARY}};
+}
+
+QCheckBox[uiRole="checkbox"]::indicator:checked
+{
+    image: url({{ICON_CHECK}});
+}
+
+QCheckBox[uiRole="checkbox"]::indicator:indeterminate
+{
+    background-color: {{UI_PRIMARY}};
+    border-color: {{UI_PRIMARY}};
+    image: url({{ICON_CHECK_INDETERMINATE}});
+}
+
+QCheckBox[uiRole="checkbox"]::indicator:disabled,
+QRadioButton[uiRole="radio"]::indicator:disabled
+{
+    background-color: {{UI_MUTED}};
+    border-color: {{UI_BORDER}};
+}
+
+QCheckBox[uiRole="checkbox"]:focus,
+QRadioButton[uiRole="radio"]:focus
+{
+    outline: none;
+}
+
+QCheckBox[uiRole="checkbox"]::indicator:focus,
+QRadioButton[uiRole="radio"]::indicator:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+/* --- Tabs --- */
+QTabWidget[uiRole="tabs"]::pane
+{
+    border: 0px;
+    background-color: {{UI_CARD}};
+    color: {{UI_CARD_FOREGROUND}};
+}
+
+QTabWidget[uiRole="tabs"] QTabBar::tab
+{
+    background-color: transparent;
+    color: {{UI_MUTED_FOREGROUND}};
+    padding: {{SPACE_XS}}px {{SPACE_MD}}px;
+    border: 0px;
+    border-bottom: 2px solid transparent;
+    min-height: {{SIZE_CONTROL}}px;
+}
+
+QTabWidget[uiRole="tabs"] QTabBar::tab:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+    color: {{UI_FOREGROUND}};
+}
+
+QTabWidget[uiRole="tabs"] QTabBar::tab:selected
+{
+    color: {{UI_FOREGROUND}};
+    font-weight: 600;
+    border-bottom: 2px solid {{UI_PRIMARY}};
+    background-color: {{UI_CARD}};
+}
+
+QTabWidget[uiRole="tabs"] QTabBar::tab:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QTabWidget[uiRole="tabs"] QTabBar::tab:focus
+{
+    border-bottom-color: {{UI_RING}};
+}
+
+/* --- Card / alert / badge / empty --- */
+QFrame[uiRole="card"]
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_CARD_FOREGROUND}};
+    border: 1px solid {{UI_BORDER}};
+    border-radius: {{RADIUS_MD}}px;
+}
+
+QLabel[uiRole="alert"]
+{
+    padding: {{SPACE_SM}}px {{SPACE_MD}}px;
+    border-radius: {{RADIUS_SM}}px;
+    border: 1px solid {{UI_BORDER}};
+    background-color: {{UI_SECONDARY}};
+    color: {{UI_FOREGROUND}};
+}
+
+QLabel[uiRole="alert"][uiTone="info"]
+{
+    color: {{UI_INFO}};
+    border-color: {{UI_INFO}};
+}
+
+QLabel[uiRole="alert"][uiTone="success"]
+{
+    color: {{UI_SUCCESS}};
+    border-color: {{UI_SUCCESS}};
+}
+
+QLabel[uiRole="alert"][uiTone="warning"]
+{
+    color: {{COLOR_TEXT_MUTED}};
+    background-color: {{UI_SECONDARY}};
+    border-color: {{UI_WARNING}};
+}
+
+QLabel[uiRole="alert"][uiTone="error"]
+{
+    color: {{COLOR_TEXT_DANGER}};
+    background-color: {{UI_DESTRUCTIVE_SOFT}};
+    border-color: {{UI_ERROR}};
+}
+
+QLabel[uiRole="badge"]
+{
+    padding: 1px {{SPACE_SM}}px;
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{UI_SECONDARY}};
+    color: {{UI_MUTED_FOREGROUND}};
+}
+
+QLabel[uiRole="badge"][uiTone="info"] { color: {{UI_INFO}}; }
+QLabel[uiRole="badge"][uiTone="success"] { color: {{UI_SUCCESS}}; }
+QLabel[uiRole="badge"][uiTone="warning"] { color: {{COLOR_TEXT_MUTED}}; }
+QLabel[uiRole="badge"][uiTone="error"] { color: {{COLOR_TEXT_DANGER}}; }
+
+QFrame[uiRole="empty-state"],
+QFrame#empty_state
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_CARD_FOREGROUND}};
+}
+
+QLabel#empty_state_title
+{
+    color: {{UI_FOREGROUND}};
+    font-weight: 600;
+}
+
+QLabel#empty_state_detail
+{
+    color: {{UI_MUTED_FOREGROUND}};
+}
+
+/* --- Typography --- */
+QLabel[uiTextRole="page-title"]
+{
+    font-size: {{FONT_PT_PAGE_TITLE}}pt;
+    font-weight: {{FONT_WEIGHT_TITLE}};
+    color: {{UI_FOREGROUND}};
+}
+
+QLabel[uiTextRole="section-title"]
+{
+    font-size: {{FONT_PT_SECTION_TITLE}}pt;
+    font-weight: {{FONT_WEIGHT_TITLE}};
+    color: {{UI_FOREGROUND}};
+}
+
+QLabel[uiTextRole="label"]
+{
+    font-size: {{FONT_PT_BODY}}pt;
+    font-weight: {{FONT_WEIGHT_TITLE}};
+    color: {{UI_FOREGROUND}};
+}
+
+QLabel[uiTextRole="body"]
+{
+    font-size: {{FONT_PT_BODY}}pt;
+    font-weight: {{FONT_WEIGHT_BODY}};
+    color: {{UI_FOREGROUND}};
+}
+
+QLabel[uiTextRole="muted"],
+QLabel[uiTextRole="caption"]
+{
+    font-size: {{FONT_PT_CAPTION}}pt;
+    font-weight: {{FONT_WEIGHT_BODY}};
+    color: {{UI_MUTED_FOREGROUND}};
+}
+
+QLabel[uiTextRole="value"]
+{
+    font-size: {{FONT_PT_BODY}}pt;
+    font-weight: {{FONT_WEIGHT_BODY}};
+    color: {{UI_FOREGROUND}};
+}
+
+QLabel[uiTextRole="muted"][uiTone="error"],
+QLabel[uiTextRole="caption"][uiTone="error"],
+QLabel[uiTextRole="body"][uiTone="error"]
+{
+    color: {{COLOR_TEXT_DANGER}};
+}
+
+/* --- Sections --- */
+QGroupBox[uiRole="section"]
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    border: 1px solid {{UI_BORDER}};
+    border-radius: {{RADIUS_MD}}px;
+    margin-top: {{SIZE_SECTION_MARGIN_TOP}}px;
+    padding: {{SPACE_SM}}px {{SPACE_SM}}px {{SPACE_XS}}px {{SPACE_SM}}px;
+    font-weight: {{FONT_WEIGHT_TITLE}};
+}
+
+QGroupBox[uiRole="section"]::title
+{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: {{SPACE_SM}}px;
+    top: {{SIZE_SECTION_TITLE_TOP}}px;
+    padding: 0px {{SPACE_XS}}px;
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    font-weight: {{FONT_WEIGHT_TITLE}};
+}
+
+QGroupBox[uiRole="section"]:checked::title,
+QGroupBox[uiRole="section"]:unchecked::title
+{
+    left: {{SIZE_SECTION_TITLE_LEFT}}px;
+}
+
+QGroupBox[uiRole="section"]::indicator
+{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: {{SPACE_SM}}px;
+    top: {{SIZE_SECTION_TITLE_TOP}}px;
+    width: {{SIZE_INDICATOR}}px;
+    height: {{SIZE_INDICATOR}}px;
+}
+
+QGroupBox[uiRole="section"]:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+/* --- Tree / table --- */
+QTreeView[uiRole="tree"]
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    alternate-background-color: {{UI_BACKGROUND}};
+    outline: 0px;
+    border: 0px;
+}
+
+QTreeView[uiRole="tree"]::item
+{
+    min-height: {{SIZE_TREE}}px;
+    padding: 1px {{SPACE_XS}}px;
+}
+
+QTreeView[uiRole="tree"]::item:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QTreeView[uiRole="tree"]::item:selected
+{
+    background-color: {{UI_PRIMARY}};
+    color: {{UI_PRIMARY_FOREGROUND}};
+    border-radius: {{RADIUS_SM}}px;
+    font-weight: 600;
+}
+
+QTreeView[uiRole="tree"]::item:selected:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QTreeView[uiRole="tree"]::item:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QTableView[uiRole="table"]
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    alternate-background-color: {{UI_SECONDARY}};
+    gridline-color: {{COLOR_HOVER_LIGHT}};
+    selection-background-color: {{UI_PRIMARY}};
+    selection-color: {{UI_PRIMARY_FOREGROUND}};
+    border: 0px;
+    outline: 0px;
+}
+
+QTableView[uiRole="table"]:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QTableView[uiRole="table"] QHeaderView::section,
+QTreeView[uiRole="tree"] QHeaderView::section
+{
+    background-color: {{UI_SECONDARY}};
+    color: {{UI_FOREGROUND}};
+    min-height: {{SIZE_TABLE_HEADER}}px;
+    border: 0px;
+    border-right: 1px solid {{UI_BORDER}};
+    border-bottom: 1px solid {{UI_BORDER}};
+    padding: {{SPACE_XS}}px;
+}
+
+QTableView[uiRole="table"]::item
+{
+    min-height: {{SIZE_TABLE_ROW}}px;
+}
+
+QTableView[uiRole="table"]::item:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QTableView[uiRole="table"]::item:selected
+{
+    background-color: {{UI_PRIMARY}};
+    color: {{UI_PRIMARY_FOREGROUND}};
+    font-weight: 600;
+}
+
+QTableView[uiRole="table"]::item:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QTableView[uiRole="table"]::item:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QListWidget[uiRole="tree"]
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    outline: 0px;
+    border: 0px;
+}
+
+QListWidget[uiRole="tree"]::item:hover:!selected
+{
+    background-color: {{COLOR_HOVER_LIGHT}};
+}
+
+QListWidget[uiRole="tree"]::item:selected
+{
+    background-color: {{UI_PRIMARY}};
+    color: {{UI_PRIMARY_FOREGROUND}};
+    border-radius: {{RADIUS_SM}}px;
+    font-weight: 600;
+}
+
+QListWidget[uiRole="tree"]::item:selected:focus
+{
+    border: {{SIZE_FOCUS_BORDER}}px solid {{UI_RING}};
+}
+
+QPushButton[uiRole="button"]:checked,
+QPushButton[uiRole="icon-button"]:checked
+{
+    background-color: {{UI_ACCENT}};
+    border-color: {{UI_PRIMARY}};
+    font-weight: 600;
+}
+
+/* --- Status, progress, menus, tooltips, scrollbars --- */
+QLabel[uiRole="status"][uiTone="info"],
+QFrame[uiRole="status"][uiTone="info"]
+{
+    color: {{UI_INFO}};
+}
+
+QLabel[uiRole="status"][uiTone="success"],
+QFrame[uiRole="status"][uiTone="success"]
+{
+    color: {{UI_SUCCESS}};
+}
+
+QLabel[uiRole="status"][uiTone="warning"],
+QFrame[uiRole="status"][uiTone="warning"]
+{
+    color: {{UI_WARNING}};
+}
+
+QLabel[uiRole="status"][uiTone="error"],
+QFrame[uiRole="status"][uiTone="error"]
+{
+    color: {{UI_ERROR}};
+}
+
+QProgressBar[uiRole="progress"]
+{
+    border: 1px solid {{UI_BORDER}};
+    border-radius: {{RADIUS_SM}}px;
+    background-color: {{UI_MUTED}};
+    text-align: center;
+    min-height: {{SIZE_PROGRESS_MIN}}px;
+    max-height: {{SIZE_PROGRESS_MAX}}px;
+}
+
+QProgressBar[uiRole="progress"]::chunk
+{
+    background-color: {{UI_PRIMARY}};
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QProgressBar[uiRole="progress"][uiTone="success"]::chunk
+{
+    background-color: {{UI_SUCCESS}};
+}
+
+QProgressBar[uiRole="progress"][uiTone="warning"]::chunk
+{
+    background-color: {{UI_WARNING}};
+}
+
+QProgressBar[uiRole="progress"][uiTone="error"]::chunk
+{
+    background-color: {{UI_ERROR}};
+}
+
+QProgressBar[uiRole="progress"]:disabled
+{
+    background-color: {{UI_MUTED}};
+    border-color: {{UI_BORDER}};
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QProgressBar[uiRole="progress"]:disabled::chunk
+{
+    background-color: {{COLOR_BORDER_STRONG}};
+}
+
+QMenu
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+    border: 1px solid {{UI_BORDER}};
+    border-radius: {{RADIUS_MD}}px;
+    padding: {{SPACE_XS}}px;
+}
+
+QMenu::item
+{
+    padding: {{SIZE_MENU_ITEM_PAD_V}}px {{SIZE_MENU_ITEM_PAD_H}}px {{SIZE_MENU_ITEM_PAD_V}}px {{SIZE_MENU_ITEM_PAD_H}}px;
+    border-radius: {{RADIUS_SM}}px;
+    background-color: transparent;
+}
+
+QMenu::item:selected,
+QMenu::item:focus
+{
+    background-color: {{UI_ACCENT}};
+    color: {{UI_FOREGROUND}};
+}
+
+QMenu::item:disabled
+{
+    color: {{COLOR_TEXT_MUTED}};
+}
+
+QMenu::separator
+{
+    height: 1px;
+    background-color: {{UI_BORDER}};
+    margin: {{SPACE_XS}}px {{SPACE_SM}}px;
+}
+
+QToolTip
+{
+    background-color: {{COLOR_COMMAND_BACKGROUND}};
+    color: {{COLOR_TEXT_ON_DARK}};
+    border: 1px solid {{COLOR_COMMAND_BACKGROUND}};
+    border-radius: {{RADIUS_SM}}px;
+    padding: {{SPACE_XS}}px {{SPACE_SM}}px;
+}
+
+QScrollArea QScrollBar:vertical,
+QTreeView[uiRole="tree"] QScrollBar:vertical,
+QTableView[uiRole="table"] QScrollBar:vertical,
+QPlainTextEdit QScrollBar:vertical,
+QTextEdit QScrollBar:vertical
+{
+    background-color: transparent;
+    width: {{SIZE_SCROLLBAR}}px;
+    margin: {{SPACE_XS}}px;
+}
+
+QScrollArea QScrollBar::handle:vertical,
+QTreeView[uiRole="tree"] QScrollBar::handle:vertical,
+QTableView[uiRole="table"] QScrollBar::handle:vertical,
+QPlainTextEdit QScrollBar::handle:vertical,
+QTextEdit QScrollBar::handle:vertical
+{
+    background-color: {{UI_BORDER}};
+    min-height: {{SIZE_SCROLLBAR_HANDLE}}px;
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QScrollArea QScrollBar::handle:vertical:hover,
+QTreeView[uiRole="tree"] QScrollBar::handle:vertical:hover,
+QTableView[uiRole="table"] QScrollBar::handle:vertical:hover,
+QPlainTextEdit QScrollBar::handle:vertical:hover,
+QTextEdit QScrollBar::handle:vertical:hover
+{
+    background-color: {{COLOR_BORDER_STRONG}};
+}
+
+QScrollArea QScrollBar::add-line:vertical,
+QScrollArea QScrollBar::sub-line:vertical,
+QTreeView[uiRole="tree"] QScrollBar::add-line:vertical,
+QTreeView[uiRole="tree"] QScrollBar::sub-line:vertical,
+QTableView[uiRole="table"] QScrollBar::add-line:vertical,
+QTableView[uiRole="table"] QScrollBar::sub-line:vertical,
+QPlainTextEdit QScrollBar::add-line:vertical,
+QPlainTextEdit QScrollBar::sub-line:vertical,
+QTextEdit QScrollBar::add-line:vertical,
+QTextEdit QScrollBar::sub-line:vertical
+{
+    height: 0px;
+    border: 0px;
+    background-color: transparent;
+}
+
+QScrollArea QScrollBar::add-page:vertical,
+QScrollArea QScrollBar::sub-page:vertical,
+QTreeView[uiRole="tree"] QScrollBar::add-page:vertical,
+QTreeView[uiRole="tree"] QScrollBar::sub-page:vertical,
+QTableView[uiRole="table"] QScrollBar::add-page:vertical,
+QTableView[uiRole="table"] QScrollBar::sub-page:vertical,
+QPlainTextEdit QScrollBar::add-page:vertical,
+QPlainTextEdit QScrollBar::sub-page:vertical,
+QTextEdit QScrollBar::add-page:vertical,
+QTextEdit QScrollBar::sub-page:vertical
+{
+    background-color: transparent;
+}
+
+QScrollArea QScrollBar:horizontal,
+QTreeView[uiRole="tree"] QScrollBar:horizontal,
+QTableView[uiRole="table"] QScrollBar:horizontal,
+QPlainTextEdit QScrollBar:horizontal,
+QTextEdit QScrollBar:horizontal
+{
+    background-color: transparent;
+    height: {{SIZE_SCROLLBAR}}px;
+    margin: {{SPACE_XS}}px;
+}
+
+QScrollArea QScrollBar::handle:horizontal,
+QTreeView[uiRole="tree"] QScrollBar::handle:horizontal,
+QTableView[uiRole="table"] QScrollBar::handle:horizontal,
+QPlainTextEdit QScrollBar::handle:horizontal,
+QTextEdit QScrollBar::handle:horizontal
+{
+    background-color: {{UI_BORDER}};
+    min-width: {{SIZE_SCROLLBAR_HANDLE}}px;
+    border-radius: {{RADIUS_SM}}px;
+}
+
+QScrollArea QScrollBar::handle:horizontal:hover,
+QTreeView[uiRole="tree"] QScrollBar::handle:horizontal:hover,
+QTableView[uiRole="table"] QScrollBar::handle:horizontal:hover,
+QPlainTextEdit QScrollBar::handle:horizontal:hover,
+QTextEdit QScrollBar::handle:horizontal:hover
+{
+    background-color: {{COLOR_BORDER_STRONG}};
+}
+
+QScrollArea QScrollBar::add-line:horizontal,
+QScrollArea QScrollBar::sub-line:horizontal,
+QTreeView[uiRole="tree"] QScrollBar::add-line:horizontal,
+QTreeView[uiRole="tree"] QScrollBar::sub-line:horizontal,
+QTableView[uiRole="table"] QScrollBar::add-line:horizontal,
+QTableView[uiRole="table"] QScrollBar::sub-line:horizontal,
+QPlainTextEdit QScrollBar::add-line:horizontal,
+QPlainTextEdit QScrollBar::sub-line:horizontal,
+QTextEdit QScrollBar::add-line:horizontal,
+QTextEdit QScrollBar::sub-line:horizontal
+{
+    width: 0px;
+    border: 0px;
+    background-color: transparent;
+}
+
+QScrollArea QScrollBar::add-page:horizontal,
+QScrollArea QScrollBar::sub-page:horizontal,
+QTreeView[uiRole="tree"] QScrollBar::add-page:horizontal,
+QTreeView[uiRole="tree"] QScrollBar::sub-page:horizontal,
+QTableView[uiRole="table"] QScrollBar::add-page:horizontal,
+QTableView[uiRole="table"] QScrollBar::sub-page:horizontal,
+QPlainTextEdit QScrollBar::add-page:horizontal,
+QPlainTextEdit QScrollBar::sub-page:horizontal,
+QTextEdit QScrollBar::add-page:horizontal,
+QTextEdit QScrollBar::sub-page:horizontal
+{
+    background-color: transparent;
+}
+
+QMessageBox[uiRole="status"]
+{
+    background-color: {{UI_CARD}};
+    color: {{UI_FOREGROUND}};
+}
+
+QMessageBox[uiRole="status"] QPushButton
+{
+    min-width: {{SIZE_BUTTON}}px;
+}

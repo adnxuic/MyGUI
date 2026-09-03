@@ -29,23 +29,6 @@ QLabel, QCheckBox, QRadioButton, QGroupBox
     color: {{COLOR_TEXT_PRIMARY}};
 }
 
-QFrame#empty_state
-{
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-}
-
-QLabel#empty_state_title
-{
-    color: {{COLOR_TEXT_PRIMARY}};
-    font-weight: 600;
-}
-
-QLabel#empty_state_detail
-{
-    color: {{COLOR_TEXT_MUTED}};
-}
-
 QLabel#axes_twin_hint
 {
     color: {{COLOR_TEXT_MUTED}};
@@ -55,53 +38,4 @@ QLabel#axes_twin_hint
 QLabel#errorbar_data_hint
 {
     color: {{COLOR_TEXT_DANGER}};
-}
-
-QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox, QFontComboBox
-{
-    min-width: 1px;
-    min-height: 28px;
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_SM}}px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-}
-
-QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus,
-QSpinBox:focus, QDoubleSpinBox:focus
-{
-    border: 2px solid {{COLOR_FOCUS}};
-}
-
-QPushButton
-{
-    min-height: 30px;
-    border: 1px solid {{COLOR_BORDER_STRONG}};
-    border-radius: {{RADIUS_SM}}px;
-    background-color: {{COLOR_SURFACE}};
-    color: {{COLOR_TEXT_PRIMARY}};
-    padding: 0px {{SPACE_SM}}px;
-}
-
-QPushButton:hover
-{
-    border-color: {{COLOR_ACCENT}};
-}
-
-QPushButton:focus
-{
-    border: 2px solid {{COLOR_FOCUS}};
-}
-
-QPushButton:pressed
-{
-    background-color: {{COLOR_ACCENT_SOFT}};
-    border-color: {{COLOR_ACCENT}};
-}
-
-QPushButton:disabled
-{
-    color: {{COLOR_BORDER_STRONG}};
-    background-color: {{COLOR_SURFACE_ALT}};
-    border-color: {{COLOR_BORDER}};
 }

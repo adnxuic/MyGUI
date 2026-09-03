@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QObject, QSettings, Qt
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from mygui.figuremodify.components import ComponentRole
 from mygui.widgets.fig_control_window.component_editors import (
@@ -35,6 +35,7 @@ from mygui.application_settings.storage import (
     LEGACY_WORKSPACE_GROUP,
     create_settings_backend,
 )
+from mygui.widgets.settings_center.pages import SHELL_PAGE_ORDER
 from main import MainWindow
 
 
@@ -747,8 +748,9 @@ class GuiLayoutSettingsTests(unittest.TestCase):
             window.workspace_splitter.setSizes([640, 640])
             self.app.processEvents()
             before = window.workspace_splitter.sizes()
-            with patch.object(
-                QMessageBox, "question", return_value=QMessageBox.No
+            with patch(
+                "main.ask_confirmation",
+                return_value=False,
             ):
                 self.assertFalse(window.reset_workspace_layout())
             self.assertEqual(window.workspace_splitter.sizes(), before)
@@ -845,6 +847,52 @@ class GuiLayoutSettingsTests(unittest.TestCase):
                     window.color_library._document,
                     backend.color_library_settings_port(),
                 )
+            finally:
+                self._close(window)
+
+    def test_full_settings_local_qss_roots_at_most_thirteen(self) -> None:
+        from mygui.application_theme.ports import binding_iter
+        from mygui.application_theme.runtime import default_theme_runtime
+
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(settings=self._settings(Path(directory) / "settings.ini"))
+            try:
+                host = window.settings_center
+                self.assertIsNotNone(host)
+                dialog = host.present()
+                self.app.processEvents()
+                for page_id in SHELL_PAGE_ORDER:
+                    host.present(page_id)
+                    self.app.processEvents()
+                live_ids = {id(window), id(dialog)}
+                live_ids.update(id(child) for child in window.findChildren(QWidget))
+                live_ids.update(id(child) for child in dialog.findChildren(QWidget))
+                roots = [
+                    (widget, resource)
+                    for widget, resource in binding_iter(default_theme_runtime().binding_port)
+                    if id(widget) in live_ids
+                ]
+                page_only = [
+                    (widget, resource)
+                    for widget, resource in roots
+                    if resource == "mygui/widgets/settings_pages/style.qss"
+                ]
+                self.assertEqual(
+                    page_only,
+                    [],
+                    msg="Settings pages must not bind local QSS after the center bundle",
+                )
+                self.assertLessEqual(
+                    len(roots),
+                    13,
+                    msg="local QSS roots="
+                    + ", ".join(
+                        f"{widget.objectName() or type(widget).__name__}:{resource}"
+                        for widget, resource in roots
+                    ),
+                )
+                self.assertIn("settings_page_appearance", dialog.styleSheet() or "")
+                self.assertIn("settings_nav_pane", dialog.styleSheet() or "")
             finally:
                 self._close(window)
 

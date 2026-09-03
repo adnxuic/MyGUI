@@ -24,6 +24,7 @@ from ..common import (
 )
 from ..context import perform_editor_action
 from ..inspector import EditorSection
+from ..inspector_layout import labeled_form_row
 
 class LegendLocationSection(QWidget, EditorSection):
     """Provide the legend location section Qt widget."""
@@ -64,15 +65,17 @@ class LegendLocationSection(QWidget, EditorSection):
             editor.setRange(-1e6, 1e6)
             editor.setDecimals(6)
             editor.setSingleStep(0.01)
-        row.addWidget(QLabel("X:", self))
+        row.addWidget(labeled_form_row("X:", buddy=self.legend_x_pos, parent=self))
         row.addWidget(self.legend_x_pos)
-        row.addWidget(QLabel("Y:", self))
+        row.addWidget(labeled_form_row("Y:", buddy=self.legend_y_pos, parent=self))
         row.addWidget(self.legend_y_pos)
 
         ncols_row = QHBoxLayout()
         self.ncols_input = FocusAwareSpinBox(self)
         self.ncols_input.setRange(1, 1000)
-        ncols_row.addWidget(QLabel("Columns:", self))
+        ncols_row.addWidget(
+            labeled_form_row("Columns:", buddy=self.ncols_input, parent=self)
+        )
         ncols_row.addWidget(self.ncols_input)
 
         self.layout.addWidget(self.visible_input)

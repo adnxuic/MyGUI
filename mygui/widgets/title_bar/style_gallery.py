@@ -9,6 +9,12 @@ HIDDEN_STYLE_NAMES = frozenset(
         "_mpl-gallery-nogrid",
     }
 )
+APPLY_TEMPLATE_ACTION = "Apply Template"
+DEFAULT_STYLE_DIALOG_NAMES = (
+    "default",
+    "dark_background",
+    "seaborn-v0_8-colorblind",
+)
 
 STYLE_TOOLBAR_LABELS = {
     "default": "Default",
@@ -51,3 +57,14 @@ def style_toolbar_label(style_name: str) -> str:
     text = str(style_name).replace("seaborn-v0_8-", "").replace("seaborn-v0_8", "Seaborn")
     text = text.replace("_", " ").replace("-", " ").strip()
     return " ".join(part.capitalize() for part in text.split()) or str(style_name)
+
+
+def visible_matplotlib_style_names() -> tuple[str, ...]:
+    """Return Style gallery Matplotlib keys, excluding Apply Template and hidden styles."""
+
+    from mygui.resources import load_json_resource
+
+    names = load_json_resource("mygui/widgets/title_bar/available_styles.json")
+    return tuple(
+        str(name) for name in names if str(name) not in HIDDEN_STYLE_NAMES
+    )

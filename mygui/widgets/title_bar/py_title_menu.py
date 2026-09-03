@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QMenu,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
@@ -16,6 +15,11 @@ from PySide6.QtWidgets import (
 
 from mygui.widgets.table.py_table import PyTable
 from mygui.widgets.title_bar.py_title_button import MenuButton, SelectMenuButton
+from mygui.widgets.ui_components import (
+    UiVariant,
+    present_error,
+    style_button,
+)
 from mygui.widgets.title_bar.py_action_gallery import ResponsiveActionGallery
 from mygui.widgets.title_bar.titlebar_dialog.py_title_bar_dialog import PyStyleDialog, PyLayoutDialog
 from mygui.widgets.title_bar.titlebar_dialog.figure_export_dialog import FigureExportDialog
@@ -46,8 +50,8 @@ from pathlib import Path
 class SelectorMenuBar(QFrame):
     """Provide the selector title-bar menu."""
 
-    def __init__(self, stacklayout_bottom=None, figure_window=None):
-        super().__init__()
+    def __init__(self, stacklayout_bottom=None, figure_window=None, parent=None):
+        super().__init__(parent)
 
         self.setObjectName("selector_menu_bar")
 
@@ -92,7 +96,7 @@ class SelectorMenuBar(QFrame):
         if not self.style_button.isChecked() and (
             self.figure_window is None or self.figure_window.current_canva is None
         ):
-            QMessageBox.warning(self, "Figure Required", "Please create a figure from Style first.")
+            status_messages.show_warning("Please create a figure from Style first.")
             self.style_button.setChecked(True)
             self.stacklayout_bottom.setCurrentIndex(0)
             return
@@ -100,24 +104,45 @@ class SelectorMenuBar(QFrame):
         if (self.chart_button.isChecked() or self.element_button.isChecked()) and (
             not self.figure_window.current_canva.has_current_axes
         ):
-            QMessageBox.warning(self, "Axes Required", "Please add a layout before using chart or element tools.")
+            status_messages.show_warning(
+                "Please add a layout before using chart or element tools."
+            )
             self.layout_button.setChecked(True)
-            self.stacklayout_bottom.setCurrentIndex(1)
+            self._activate_gallery_index(1)
             return
 
         if self.style_button.isChecked():
             self.stacklayout_bottom.setCurrentIndex(0)
         elif self.layout_button.isChecked():
-            self.stacklayout_bottom.setCurrentIndex(1)
+            self._activate_gallery_index(1)
         elif self.chart_button.isChecked():
-            self.stacklayout_bottom.setCurrentIndex(2)
+            self._activate_gallery_index(2)
         elif self.element_button.isChecked():
-            self.stacklayout_bottom.setCurrentIndex(3)
+            self._activate_gallery_index(3)
+
+    def _activate_gallery_index(self, index: int) -> None:
+        ensure = getattr(self, "_ensure_gallery_at", None)
+        if callable(ensure):
+            ensure(index)
+        self.stacklayout_bottom.setCurrentIndex(index)
 
     def apply_theme_metrics(self, metrics) -> None:
         """Apply command-row height from the published density metrics."""
 
         self.setFixedHeight(metrics.command)
+
+    def apply_theme_icons(self, snapshot, provider) -> None:
+        """Retint the four selector glyphs for the published scheme."""
+
+        for button in (
+            self.style_button,
+            self.layout_button,
+            self.chart_button,
+            self.element_button,
+        ):
+            apply = getattr(button, "apply_theme_icons", None)
+            if callable(apply):
+                apply(snapshot, provider)
 
 
 def load_excel_into_table(file_name: str, table: PyTable, figure_window=None, parent=None):
@@ -145,8 +170,9 @@ class MenuBar(QFrame):
         figure_window=None,
         export_preferences=None,
         template_workflow=None,
+        parent=None,
     ):
-        super().__init__()
+        super().__init__(parent)
 
         self.table = table
         self.figure_window = figure_window
@@ -174,6 +200,7 @@ class MenuBar(QFrame):
         self.edit_button.setObjectName('menu_button')
         self.edit_button.setToolTip("Edit")
         self.edit_button.setAccessibleName("Edit")
+        style_button(self.edit_button, variant=UiVariant.GHOST)
         self.edit_button.clicked.connect(lambda: self.show_menu(self.edit_menu, self.edit_button))
         self.layout.addWidget(self.edit_button)
 
@@ -298,15 +325,13 @@ class MenuBar(QFrame):
 
         canvas = explicit_canvas
         if canvas is None:
-            QMessageBox.warning(
-                self, "Export Current Figure", "Please select a figure canvas first."
-            )
+            status_messages.show_warning("Please select a figure canvas first.")
             return
         color_library = getattr(canvas, "color_library", None)
         if color_library is None and self.figure_window is not None:
             color_library = getattr(self.figure_window, "color_library", None)
         if color_library is None:
-            QMessageBox.warning(
+            present_error(
                 self, "Export Current Figure", "The shared color library is unavailable."
             )
             return
@@ -330,7 +355,7 @@ class MenuBar(QFrame):
             canvas = self.figure_window.current_canva
             export_database_snapshot(file_name, self.table.repository, canvas.project_id)
         except Exception as exc:
-            QMessageBox.warning(self, "Export Data", str(exc))
+            present_error(self, "Export Data", str(exc))
 
     def open_file(self):
         """Open file."""
@@ -347,8 +372,7 @@ class MenuBar(QFrame):
                 return
             status_messages.show_success(f"Excel imported: {Path(file_name).name}")
         except Exception as exc:
-            status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "Open Excel", str(exc))
+            present_error(self, "Open Excel", str(exc))
 
     def open_project(self):
         """Open project."""
@@ -362,8 +386,7 @@ class MenuBar(QFrame):
             restore_project_snapshot(file_name, table=self.table, figure_window=self.figure_window)
             status_messages.show_success(f"Project opened: {Path(file_name).name}")
         except Exception as exc:
-            status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "Open Project", str(exc))
+            present_error(self, "Open Project", str(exc))
 
     def open_text_file(self):
         """Open text file."""
@@ -384,8 +407,7 @@ class MenuBar(QFrame):
                 return
             status_messages.show_success(f"Text data imported: {Path(file_name).name}")
         except Exception as exc:
-            status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "Open Text Data", str(exc))
+            present_error(self, "Open Text Data", str(exc))
 
     def save_file(self):
         """Save file."""
@@ -393,7 +415,6 @@ class MenuBar(QFrame):
         if self.figure_window is None or self.figure_window.current_canva is None:
             message = "Please create or open a project before saving."
             status_messages.show_error(message)
-            QMessageBox.warning(self, "Save Project", message)
             return False
         return self.save_canvas(self.figure_window.current_canva)
 
@@ -403,7 +424,6 @@ class MenuBar(QFrame):
         if self.figure_window is None or self.figure_window.current_canva is None:
             message = "Please create or open a project before saving."
             status_messages.show_error(message)
-            QMessageBox.warning(self, "Save Project", message)
             return False
         return self.save_canvas(
             self.figure_window.current_canva,
@@ -473,8 +493,7 @@ class MenuBar(QFrame):
                 )
             return True
         except Exception as exc:
-            status_messages.show_error(str(exc))
-            QMessageBox.warning(self, "Save Project", str(exc))
+            present_error(self, "Save Project", str(exc))
             return False
 
 
@@ -518,8 +537,8 @@ class ControlBar(QFrame):
 class SelectorStyleMenuBar(ResponsiveActionGallery):
     """Provide the selector style title-bar menu."""
 
-    def __init__(self, figure_window=None, template_workflow=None):
-        super().__init__()
+    def __init__(self, figure_window=None, template_workflow=None, parent=None):
+        super().__init__(parent)
         self.available_styles_dict = load_json_resource(
             "mygui/widgets/title_bar/available_styles.json"
         )
@@ -552,8 +571,8 @@ class SelectorStyleMenuBar(ResponsiveActionGallery):
 class SelectorLayoutMenuBar(ResponsiveActionGallery):
     """Provide the selector layout title-bar menu."""
 
-    def __init__(self, figure_window=None):
-        super().__init__()
+    def __init__(self, figure_window=None, parent=None):
+        super().__init__(parent)
         self.available_layout_dict = {
             preset.key: preset for preset in axes_layout_presets()
         }
@@ -584,8 +603,8 @@ class SelectorLayoutMenuBar(ResponsiveActionGallery):
 class SelectorChartMenuBar(ResponsiveActionGallery):
     """Provide the selector chart title-bar menu."""
 
-    def __init__(self, figure_window=None):
-        super().__init__()
+    def __init__(self, figure_window=None, parent=None):
+        super().__init__(parent)
         for name, dialog_type in chart_dialog_dict.items():
             self.add_dialog_action(
                 name,
@@ -602,8 +621,8 @@ class SelectorChartMenuBar(ResponsiveActionGallery):
 class SelectorElementMenuBar(ResponsiveActionGallery):
     """Provide the selector element title-bar menu."""
 
-    def __init__(self, figure_window=None):
-        super().__init__()
+    def __init__(self, figure_window=None, parent=None):
+        super().__init__(parent)
         for name, spec in element_action_specs.items():
             self.add_dialog_action(
                 name,

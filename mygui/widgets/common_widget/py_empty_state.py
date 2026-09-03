@@ -50,6 +50,14 @@ class PyEmptyState(QFrame):
             self.primary_button = QPushButton(primary_text, self)
             self.primary_button.setObjectName("empty_state_primary_button")
             self.primary_button.setAccessibleName(primary_text)
+            from mygui.widgets.ui_components.apply import apply_ui_style
+            from mygui.widgets.ui_components.models import UiRole, UiVariant
+
+            apply_ui_style(
+                self.primary_button,
+                role=UiRole.BUTTON,
+                variant=UiVariant.PRIMARY,
+            )
             self.primary_button.clicked.connect(self.primaryRequested)
             button_row = QHBoxLayout()
             button_row.addStretch(1)
@@ -58,6 +66,10 @@ class PyEmptyState(QFrame):
             layout.addLayout(button_row)
 
         layout.addStretch(1)
+        from mygui.widgets.ui_components.apply import apply_ui_style
+        from mygui.widgets.ui_components.models import UiRole
+
+        apply_ui_style(self, role=UiRole.EMPTY_STATE)
 
     def hasHeightForWidth(self) -> bool:
         return True

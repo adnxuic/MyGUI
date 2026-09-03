@@ -6,17 +6,7 @@ QFrame#component_tree_host
 
 QLineEdit#component_tree_search
 {
-    min-height: 28px;
-    padding: 0px 8px;
-    color: {{COLOR_TEXT_PRIMARY}};
     background-color: {{COLOR_CONTENT_BACKGROUND}};
-    border: 1px solid {{COLOR_BORDER}};
-    border-radius: {{RADIUS_SM}}px;
-}
-
-QLineEdit#component_tree_search:focus
-{
-    border: {{SIZE_FOCUS_BORDER}}px solid {{COLOR_FOCUS}};
 }
 
 QTreeView#component_tree_view
@@ -30,7 +20,7 @@ QTreeView#component_tree_view
 
 QTreeView#component_tree_view::item
 {
-    min-height: 26px;
+    min-height: {{SIZE_TREE}}px;
     padding: 1px 4px;
 }
 

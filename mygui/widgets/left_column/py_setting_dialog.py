@@ -3,6 +3,7 @@
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout
 from mygui.widgets.english_buttons import apply_english_dialog_buttons
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style
 from mygui.application_theme import bind_widget_qss
 from mygui.resources import icon_path
 from mygui.application_theme import subscribe_theme_window
@@ -30,6 +31,11 @@ class PySettingDialog(QDialog):
 
         self.reset_layout_button = QPushButton("Reset workspace layout")
         self.reset_layout_button.setEnabled(reset_layout_callback is not None)
+        apply_ui_style(
+            self.reset_layout_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
         self.reset_layout_button.clicked.connect(self.reset_workspace_layout)
         layout.addWidget(self.reset_layout_button)
 

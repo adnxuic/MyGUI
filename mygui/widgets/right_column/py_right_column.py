@@ -10,6 +10,7 @@ from mygui.application_theme import (
 )
 from mygui.application_theme.icons import IconRole
 from mygui.application_theme.runtime import default_theme_runtime
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style
 
 
 class PyRightColumn(QFrame):
@@ -34,6 +35,7 @@ class PyRightColumn(QFrame):
         self.tex_button.setAccessibleName("Toggle TeX panel")
         self.tex_button.setCheckable(True)
         self.tex_button.setChecked(False)
+        apply_ui_style(self.tex_button, role=UiRole.BUTTON, variant=UiVariant.GHOST)
         self.tex_button.toggled.connect(self.tex_show)
         self.layout.addWidget(self.tex_button)
 
@@ -43,6 +45,7 @@ class PyRightColumn(QFrame):
         self.matlab_button.setAccessibleName("Toggle MATLAB panel")
         self.matlab_button.setCheckable(True)
         self.matlab_button.setChecked(False)
+        apply_ui_style(self.matlab_button, role=UiRole.BUTTON, variant=UiVariant.GHOST)
         self.matlab_button.toggled.connect(self.matlab_show)
         self.layout.addWidget(self.matlab_button)
         subscribe_theme_window(self)

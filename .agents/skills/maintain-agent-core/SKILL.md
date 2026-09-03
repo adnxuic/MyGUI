@@ -16,6 +16,14 @@ task procedure belongs in Skills; routing belongs only in `task-map.yaml`.
 Preserve TaskResult v1 and stable rule IDs unless the task is an explicit
 contract or rule migration.
 
+Desktop smoke `--all-styles` is a runner contract: it must add the `styles`
+group, walk every visible Matplotlib Style Dialog (26), write
+`allStyles` / `expectedStyleDialogs` / `visitedStyleDialogs` /
+`missingStyleDialogs`, and fail on count mismatch. Do not ignore the flag.
+Frame probes use `timingSchemaVersion: 2` (`dispatch_ms` / `first_paint_ms` /
+`settle_ms`) with a 2 s timeout and no fixed-duration `pump()` inside the
+timed interval. Document that contract in `testing-map.md`.
+
 Before moving rules, prove the old and new CORE ID sets are identical and add
 semantic validation before deleting duplicated prose. Validate new or changed
 Skills, keep evidence under ignored `build/agent-results/`, and run

@@ -981,7 +981,7 @@ class OptionalDependencyTests(unittest.TestCase):
             with patch.object(matlab_adapter, "_LOG_TO_FILE", False), \
                     patch.object(matlab_adapter, "_LOG_TO_STDERR", False), \
                     self.assertLogs(matlab_adapter.LOGGER_NAME, level="INFO") as logs:
-                with patch.object(matlab_window_module.QMessageBox, "warning") as warning, \
+                with patch.object(matlab_window_module, "present_error") as warning, \
                         patch.object(
                             matlab_window_module.matlab_adapter,
                             "ensure_matlab_available_isolated",
@@ -1009,7 +1009,7 @@ class OptionalDependencyTests(unittest.TestCase):
             window._show_connected_description = Mock()
             window.reset_to_connect_button = Mock()
 
-            with patch.object(matlab_window_module.QMessageBox, "warning") as warning:
+            with patch.object(matlab_window_module, "present_error") as warning:
                 window._matlab_connect_succeeded(1, time.monotonic(), matlab_adapter.MatlabStatus(True))
                 window._matlab_connect_failed(1, time.monotonic(), "MATLAB runtime unavailable")
 
@@ -1039,7 +1039,7 @@ class OptionalDependencyTests(unittest.TestCase):
                 fit_window = PyMatlabFitOptionsWidget()
                 try:
                     self.wait_until(lambda: fit_window.expression_input.toPlainText() == "a*x+b")
-                    with patch.object(fit_options_module.QMessageBox, "warning") as warning:
+                    with patch.object(fit_options_module, "present_error") as warning:
                         fit_window.expression_change("poly2")
                         self.wait_until(lambda: warning.called)
 
@@ -1186,8 +1186,9 @@ class OptionalDependencyTests(unittest.TestCase):
         )
         dialog = QDialog(widget)
         dialog.fit_button = QPushButton("Fit", dialog)
-        dialog.fit_button.setEnabled(False)
-        dialog.fit_button.setText("Fitting...")
+        from mygui.widgets.ui_components import set_busy_state
+
+        set_busy_state(dialog.fit_button, True, busy_text="Fitting…")
         request_id = fit.context.fitting.next_request(
             controller.component_id
         )

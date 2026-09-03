@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from mygui import status_messages
+from mygui.widgets.ui_components import set_validation_state
 from mygui.figuremodify.components import (
     ComponentValidationError,
     EditorKind,
@@ -35,7 +36,7 @@ from .inline_spec_editors import InlineValueEditor
 from .inspector_layout import (
     apply_expanding_field,
     configure_inspector_form,
-    labeled_form_row,
+    add_labeled_form_row,
 )
 from .property_labels import inspector_label, inspector_tooltip
 from .spec_editors import StructuredValueEditor
@@ -137,6 +138,10 @@ class ComponentEditorBase(QWidget):
         return result
 
     def _state_properties(self) -> Mapping[str, Any]:
+        live = getattr(self.controller, "_state", None)
+        properties = getattr(live, "properties", None) if live is not None else None
+        if isinstance(properties, Mapping):
+            return properties
         reader = getattr(self.controller, "read_state", None)
         state = reader() if callable(reader) else getattr(self.controller, "state", None)
         if isinstance(state, Mapping):
@@ -164,7 +169,9 @@ class ComponentEditorBase(QWidget):
             if tooltip:
                 editor.setToolTip(tooltip)
                 editor.setAccessibleDescription(tooltip)
-            self.form_layout.addRow(labeled_form_row(label, tooltip=tooltip), editor)
+            add_labeled_form_row(
+                self.form_layout, label, editor, tooltip=tooltip
+            )
 
     def editor(self, key: str) -> QWidget:
         """Return the editor widget used for the property."""
@@ -267,6 +274,9 @@ class ComponentEditorBase(QWidget):
         formatter,
     ) -> QLineEdit:
         editor = QLineEdit(formatter(value), self)
+        from mygui.widgets.ui_components import UiRole, apply_ui_style
+
+        apply_ui_style(editor, role=UiRole.INPUT)
         result_presenter = None
         messages = getattr(self.context, "messages", None)
         if callable(getattr(messages, "present", None)):
@@ -310,8 +320,7 @@ class ComponentEditorBase(QWidget):
         perform = getattr(self.context, "perform", None)
         if not callable(perform):
             return operation()
-        state = self.controller.state
-        role = str(getattr(state.role, "value", state.role)).replace("_", " ").title()
+        role = str(getattr(self.controller.role, "value", self.controller.role)).replace("_", " ").title()
         label = _display_label(self._specs.get(key, {}), key)
         return perform(
             f"Change {role} {label}",
@@ -330,6 +339,7 @@ class ComponentEditorBase(QWidget):
             result = self._set_controller_property(key, value)
         except Exception as exc:
             self._set_editor_value(key, old_value)
+            self._set_property_validation(key, True, str(exc))
             status_messages.show_error(str(exc))
             self.propertyRejected.emit(key, value)
             return False
@@ -357,12 +367,24 @@ class ComponentEditorBase(QWidget):
                     status_messages.show_error(message)
         if not succeeded:
             self._set_editor_value(key, old_value)
+            self._set_property_validation(
+                key,
+                True,
+                modification_message(result) or "Value was rejected.",
+            )
             self.propertyRejected.emit(key, value)
             return False
+        self._set_property_validation(key, False)
         actual_value = self._state_properties().get(key, value)
         self._set_editor_value(key, actual_value)
         self.propertyChanged.emit(key, actual_value)
         return True
+
+    def _set_property_validation(self, key: str, invalid: bool, message: str = "") -> None:
+        editor = self._editors.get(key)
+        if editor is None:
+            return
+        set_validation_state(editor, invalid=invalid, message=message)
 
     def _set_editor_value(self, key: str, value: Any) -> None:
         editor = self._editors.get(key)
@@ -405,6 +427,7 @@ class ComponentEditorBase(QWidget):
         """Refresh controls from authoritative Controller state."""
 
         properties = self._state_properties()
-        for key in self._editors:
+        for key, editor in self._editors.items():
+            set_validation_state(editor, invalid=False)
             if key in properties:
                 self._set_editor_value(key, properties[key])

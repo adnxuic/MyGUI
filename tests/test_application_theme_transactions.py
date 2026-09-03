@@ -231,7 +231,10 @@ class ThemeTransactionTests(unittest.TestCase):
         theme.preview(
             AppearancePreferences(mode=ThemeMode.DARK, font_pt=9, density=Density.STANDARD)
         )
-        self.assertEqual(theme.last_applied_steps, ("palette", "qss", "icons"))
+        # Scheme color lives on QPalette and regional sheets. The process-global
+        # popup sheet is scheme-identical, so the qss step is skipped when no
+        # bound regional documents change.
+        self.assertEqual(theme.last_applied_steps, ("palette", "icons"))
         theme.cancel_preview()
 
         theme.preview(
@@ -326,9 +329,26 @@ class ThemeTransactionTests(unittest.TestCase):
         hidden = QWidget()
         hidden.hide()
         self.assertTrue(filt.eventFilter(hidden, font_event))
+        style_event = QEvent(QEvent.Type.StyleChange)
+        self.assertTrue(filt.eventFilter(hidden, style_event))
+        layout_event = QEvent(QEvent.Type.LayoutRequest)
+        self.assertTrue(filt.eventFilter(hidden, layout_event))
         with patch.object(hidden, "isVisible", side_effect=RuntimeError("deleted")):
             self.assertTrue(filt.eventFilter(hidden, font_event))
         hidden.deleteLater()
+        visible = QWidget()
+        visible.show()
+        self.assertFalse(filt.eventFilter(visible, layout_event))
+        blocking = _SkipHiddenFontFilter(self.app, block_layout=True)
+        self.assertTrue(blocking.eventFilter(visible, layout_event))
+        visible.deleteLater()
+        class FigureCanvasProbe(QWidget):
+            pass
+
+        canvas = FigureCanvasProbe()
+        canvas.show()
+        self.assertTrue(filt.eventFilter(canvas, style_event))
+        canvas.deleteLater()
 
 
 if __name__ == "__main__":

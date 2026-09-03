@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
@@ -31,6 +30,7 @@ from mygui.application_settings.keys import PAGE_TEMPLATES
 from mygui.template_library import TEMPLATE_FILE_SUFFIX, template_content_summary
 from mygui.template_library.models import TemplateDataContract
 from mygui.widgets.settings_center.pages import standard_page_spec
+from mygui.widgets.ui_components import UiRole, UiVariant, apply_ui_style, ask_confirmation
 
 TEMPLATES_PAGE_DESCRIPTION = (
     "Template files are written immediately under the repository-root template "
@@ -165,6 +165,7 @@ class TemplatesSettingsPage(QWidget):
 
         self.list = QListWidget(left)
         self.list.setObjectName("settings_template_list")
+        apply_ui_style(self.list, role=UiRole.TREE)
 
         self.import_button = QPushButton("Import…", left)
         self.import_button.setObjectName("template_import_button")
@@ -177,6 +178,8 @@ class TemplatesSettingsPage(QWidget):
         self.refresh_button.setAutoDefault(False)
         for button in (self.import_button, self.folder_button, self.refresh_button):
             button.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
+            apply_ui_style(button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(self.search, role=UiRole.INPUT)
 
         buttons = QWidget(left)
         buttons.setObjectName("templates_library_buttons")
@@ -242,6 +245,11 @@ class TemplatesSettingsPage(QWidget):
         self.apply_button.setObjectName("template_apply_button")
         self.apply_button.setAutoDefault(False)
         self.apply_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        apply_ui_style(
+            self.apply_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.PRIMARY,
+        )
 
         title_row.addWidget(self.name_title, 1)
         title_row.addWidget(self.apply_button, 0, Qt.AlignTop)
@@ -284,6 +292,23 @@ class TemplatesSettingsPage(QWidget):
         self.delete_button = QPushButton("Delete…", header_card)
         self.delete_button.setObjectName("template_delete_button")
         self.delete_button.setAutoDefault(False)
+        apply_ui_style(self.update_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(self.rename_button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
+        apply_ui_style(
+            self.duplicate_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
+        apply_ui_style(
+            self.export_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
+        apply_ui_style(
+            self.delete_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.DESTRUCTIVE,
+        )
 
         secondary.addWidget(self.duplicate_button)
         secondary.addWidget(self.export_button)
@@ -316,6 +341,12 @@ class TemplatesSettingsPage(QWidget):
         self.notes_button.setObjectName("template_notes_save_button")
         self.notes_button.setAutoDefault(False)
         self.notes_button.setEnabled(False)
+        apply_ui_style(
+            self.notes_button,
+            role=UiRole.BUTTON,
+            variant=UiVariant.OUTLINE,
+        )
+        apply_ui_style(self.notes, role=UiRole.TEXTAREA)
 
         notes_footer.addStretch(1)
         notes_footer.addWidget(self.notes_button)
@@ -488,6 +519,7 @@ class TemplatesSettingsPage(QWidget):
             button = QPushButton("Import…", frame)
             button.setObjectName("template_empty_import_button")
             button.setAutoDefault(False)
+            apply_ui_style(button, role=UiRole.BUTTON, variant=UiVariant.OUTLINE)
             layout.addWidget(button, 0, Qt.AlignHCenter)
         layout.addStretch(1)
         return frame, title_label, desc_label, button
@@ -744,13 +776,12 @@ class TemplatesSettingsPage(QWidget):
             try:
                 imported = self.library.import_template(filename)
             except FileExistsError:
-                if QMessageBox.question(
+                if not ask_confirmation(
                     self,
                     "Replace Template",
                     "A template with the same stable ID exists. Replace it?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
-                ) != QMessageBox.Yes:
+                    destructive=True,
+                ):
                     return
                 imported = self.library.import_template(filename, replace_same_id=True)
             self.refresh(imported.metadata.id)

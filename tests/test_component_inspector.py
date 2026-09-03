@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QTimer, qInstallMessageHandler
+from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
@@ -45,6 +45,9 @@ from mygui.figuremodify.components import (
     register_figure_components,
 )
 from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+from mygui.widgets.common_widget.min_widget.py_colorchoice_widgets import (
+    ColorChoiceWidget,
+)
 from mygui.widgets.fig_control_window.component_editors.cleanup import (
     CleanupFailure,
     drain_cleanup_failures,
@@ -444,6 +447,105 @@ class ComponentInspectorTests(unittest.TestCase):
             first.close()
             self.assertIsNone(context.editor_manager.editor(first_id))
         finally:
+            for inspector in inspectors:
+                inspector.close()
+            context.editor_manager.close()
+
+    def test_color_inspectors_create_and_switch_without_negative_sizes(self):
+        captured: list[str] = []
+
+        def handler(mode, context, message):
+            text = str(message)
+            if "Negative sizes" in text:
+                captured.append(text)
+            if callable(previous):
+                previous(mode, context, message)
+
+        previous = qInstallMessageHandler(handler)
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
+        axes.plot([0.0, 1.0], [1.0, 2.0])
+        figure.text(0.5, 0.5, "note")
+        registry = register_figure_components(figure)
+        extra, = axes.plot([0.0, 1.0], [0.0, 1.0])
+        registry.register(
+            FunctionCurveController(
+                ComponentState(
+                    id="func-curve",
+                    kind=ComponentKind.LINE,
+                    role=ComponentRole.FUNCTION_CURVE,
+                    order=99,
+                    selector={"object_id": "func-curve"},
+                    properties={},
+                    data={
+                        "expression": "x",
+                        "x_start": 0.0,
+                        "x_stop": 1.0,
+                    },
+                )
+            ),
+            target=extra,
+            require_parent=False,
+        )
+        context = _context(registry, TableRepository(), ColorLibrary())
+        inspectors = []
+        host = QWidget()
+        layout = QVBoxLayout(host)
+        try:
+            targets = (
+                registry.find_one(kind=ComponentKind.FIGURE),
+                registry.find_one(kind=ComponentKind.AXES),
+                registry.find_one(
+                    kind=ComponentKind.LINE,
+                    role=ComponentRole.LINE,
+                ),
+                registry.find_one(
+                    kind=ComponentKind.TEXT,
+                    role=ComponentRole.TEXT,
+                ),
+                registry.find_one(
+                    kind=ComponentKind.LINE,
+                    role=ComponentRole.FUNCTION_CURVE,
+                ),
+            )
+            for controller in targets:
+                inspector = context.editor_manager.create(
+                    controller,
+                    context=context,
+                )
+                inspectors.append(inspector)
+                layout.addWidget(inspector)
+                inspector.hide()
+            host.resize(240, 900)
+            self.app.processEvents()
+            seen = []
+            for inspector in inspectors:
+                inspector.show()
+                inspector.resize(240, 700)
+                self.app.processEvents()
+                widgets = list(inspector.findChildren(ColorChoiceWidget))
+                seen.extend(widgets)
+                for widget in widgets:
+                    self.assertGreaterEqual(widget._swatch_host.minimumHeight(), 52)
+                inspector.resize(480, 700)
+                self.app.processEvents()
+                for widget in inspector.findChildren(ColorChoiceWidget):
+                    self.assertGreaterEqual(widget._swatch_host.minimumHeight(), 52)
+                inspector.hide()
+                self.app.processEvents()
+            for inspector in inspectors:
+                inspector.show()
+                self.app.processEvents()
+                inspector.hide()
+            self.assertTrue(seen)
+            curve = inspectors[-1]
+            self.assertTrue(curve.findChildren(ColorChoiceWidget))
+            self.assertEqual(captured, [])
+        finally:
+            qInstallMessageHandler(previous)
+            host.close()
+            host.deleteLater()
             for inspector in inspectors:
                 inspector.close()
             context.editor_manager.close()

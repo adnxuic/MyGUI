@@ -7,6 +7,25 @@ from pathlib import Path
 from typing import Any
 
 from desktop_smoke.catalog import GROUPS
+from desktop_smoke.frame_probe import TIMING_SCHEMA_VERSION
+from desktop_smoke.gates import assert_construct_gate
+
+
+def _select_groups(groups: list[str] | None, *, all_styles: bool) -> list[str]:
+    selected = list(GROUPS) if not groups else list(groups)
+    if all_styles and "styles" not in selected:
+        selected.append("styles")
+    if "styles" in selected:
+        selected = [name for name in selected if name != "styles"] + ["styles"]
+    unknown = [name for name in selected if name not in GROUPS]
+    if unknown:
+        raise ValueError(
+            "Unknown desktop smoke group(s): "
+            + ", ".join(unknown)
+            + ". Available: "
+            + ", ".join(GROUPS)
+        )
+    return selected
 
 
 def run_smoke(
@@ -16,11 +35,10 @@ def run_smoke(
 ) -> dict[str, Any]:
     """Open the real MainWindow, walk selected groups, and capture screenshots.
 
-    ``all_styles`` is accepted for the verify entrypoint and ignored: this walk
-    does not open Style galleries.
+    ``all_styles`` adds the ``styles`` group and walks every visible Matplotlib
+    Style Action. Style Dialogs run after other performance scenarios.
     """
 
-    _ = all_styles
     import matplotlib
 
     matplotlib.use("QtAgg")
@@ -39,17 +57,10 @@ def run_smoke(
         run_project_lifecycle_scenarios,
     )
     from desktop_smoke.scenarios.settings import run_settings_scenarios
+    from desktop_smoke.scenarios.styles import run_styles_scenarios
     from desktop_smoke.scenarios.templates import run_templates_scenarios
 
-    selected = list(GROUPS) if not groups else list(groups)
-    unknown = [name for name in selected if name not in GROUPS]
-    if unknown:
-        raise ValueError(
-            "Unknown desktop smoke group(s): "
-            + ", ".join(unknown)
-            + ". Available: "
-            + ", ".join(GROUPS)
-        )
+    selected = _select_groups(groups, all_styles=all_styles)
 
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -58,6 +69,7 @@ def run_smoke(
     status = "passed"
     try:
         harness.start()
+        assert_construct_gate(harness.timings)
         if "settings" in selected:
             scenario_results.extend(run_settings_scenarios(harness))
         if "templates" in selected:
@@ -78,6 +90,10 @@ def run_smoke(
             scenario_results.extend(run_deletion_history_scenarios(harness))
         if "project_lifecycle" in selected:
             scenario_results.extend(run_project_lifecycle_scenarios(harness))
+        if "styles" in selected:
+            scenario_results.extend(
+                run_styles_scenarios(harness, all_styles=all_styles)
+            )
     except Exception as exc:  # noqa: BLE001 — required check surfaces the failure
         status = "failed"
         scenario_results.append(
@@ -87,6 +103,18 @@ def run_smoke(
                 "error": f"{type(exc).__name__}: {exc}",
             }
         )
+    else:
+        try:
+            harness.require_no_negative_sizes("desktop_smoke")
+        except Exception as exc:  # noqa: BLE001 — required check surfaces the failure
+            status = "failed"
+            scenario_results.append(
+                {
+                    "id": "qt_negative_sizes",
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
     finally:
         try:
             harness.shutdown()
@@ -102,6 +130,23 @@ def run_smoke(
 
     if any(item.get("status") == "failed" for item in scenario_results):
         status = "failed"
+    if "styles" in selected:
+        expected = list(harness.expected_style_dialogs)
+        visited = list(harness.visited_style_dialogs)
+        missing = list(harness.missing_style_dialogs)
+        if len(visited) != len(expected) or missing:
+            status = "failed"
+            scenario_results.append(
+                {
+                    "id": "styles.contract",
+                    "status": "failed",
+                    "error": (
+                        "Style Dialog contract failed: "
+                        f"expected={len(expected)} visited={len(visited)} "
+                        f"missing={missing}."
+                    ),
+                }
+            )
     summary = {
         "status": status,
         "screenshotCount": len(harness.screenshots),
@@ -116,6 +161,12 @@ def run_smoke(
         ],
         "scenarios": scenario_results,
         "timingsMs": dict(harness.timings),
+        "timingSchemaVersion": TIMING_SCHEMA_VERSION,
+        "allStyles": bool(all_styles),
+        "expectedStyleDialogs": list(harness.expected_style_dialogs),
+        "visitedStyleDialogs": list(harness.visited_style_dialogs),
+        "missingStyleDialogs": list(harness.missing_style_dialogs),
+        "platformEvidence": dict(harness.platform_evidence),
         "outputDir": str(destination),
         "groups": selected,
     }

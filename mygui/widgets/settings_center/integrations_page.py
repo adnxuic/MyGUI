@@ -21,6 +21,7 @@ from mygui.widgets.settings_center.integrations_status import (
 )
 from mygui.widgets.settings_center.pages import SettingsPageHost
 from mygui.widgets.settings_center.specs import integrations_page_spec
+from mygui.widgets.ui_components import UiTextRole, UiVariant, apply_text_style, style_button
 
 TexStatusProvider = Callable[[], IntegrationStatus]
 MatlabStatusProvider = Callable[[], IntegrationStatus]
@@ -63,6 +64,7 @@ class IntegrationsSettingsPage(QWidget):
         )
         intro.setObjectName("integrations_intro")
         intro.setWordWrap(True)
+        apply_text_style(intro, UiTextRole.BODY)
         root.addWidget(intro)
 
         self.tex_group = self._build_tex_group()
@@ -106,6 +108,7 @@ class IntegrationsSettingsPage(QWidget):
         self.open_tex_panel_button.setAccessibleName("Open TeX panel")
         self.open_tex_panel_button.setAutoDefault(False)
         self.open_tex_panel_button.setDefault(False)
+        style_button(self.open_tex_panel_button, variant=UiVariant.OUTLINE)
         self.open_tex_panel_button.clicked.connect(self.openTexPanelRequested.emit)
         form.addRow("Availability", self.tex_availability)
         form.addRow("Session", self.tex_session)
@@ -131,6 +134,7 @@ class IntegrationsSettingsPage(QWidget):
         self.open_matlab_panel_button.setAccessibleName("Open MATLAB panel")
         self.open_matlab_panel_button.setAutoDefault(False)
         self.open_matlab_panel_button.setDefault(False)
+        style_button(self.open_matlab_panel_button, variant=UiVariant.OUTLINE)
         self.open_matlab_panel_button.clicked.connect(
             self.openMatlabPanelRequested.emit
         )

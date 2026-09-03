@@ -26,6 +26,7 @@ from mygui.figuremodify.components.property_values import DEFAULT_NORM
 from .common import (
     FocusAwareDoubleSpinBox,
 )
+from .inspector_layout import apply_expanding_field, labeled_form_row
 
 class DataReferenceInput(QFrame):
     """Controller-free X/Y column selector shared by create and edit UIs."""
@@ -52,6 +53,10 @@ class DataReferenceInput(QFrame):
         self.y_data_input = QComboBox(self)
         self.x_expression_input = QLineEdit("x", self)
         self.y_expression_input = QLineEdit("y", self)
+        apply_expanding_field(self.x_data_input)
+        apply_expanding_field(self.y_data_input)
+        apply_expanding_field(self.x_expression_input)
+        apply_expanding_field(self.y_expression_input)
         expression_tooltip = (
             "Safe preprocessing expression using the original x and y data. "
             "Examples: 1/x, log10(y), y/x."
@@ -60,13 +65,21 @@ class DataReferenceInput(QFrame):
         self.y_expression_input.setToolTip(expression_tooltip)
         self.x_expression_input.setMinimumWidth(0)
         self.y_expression_input.setMinimumWidth(0)
-        self.x_layout.addWidget(QLabel("X Data:", self))
+        self.x_layout.addWidget(
+            labeled_form_row("X Data:", buddy=self.x_data_input, parent=self)
+        )
         self.x_layout.addWidget(self.x_data_input)
-        self.x_layout.addWidget(QLabel("fx:", self))
+        self.x_layout.addWidget(
+            labeled_form_row("fx:", buddy=self.x_expression_input, parent=self)
+        )
         self.x_layout.addWidget(self.x_expression_input)
-        self.y_layout.addWidget(QLabel("Y Data:", self))
+        self.y_layout.addWidget(
+            labeled_form_row("Y Data:", buddy=self.y_data_input, parent=self)
+        )
         self.y_layout.addWidget(self.y_data_input)
-        self.y_layout.addWidget(QLabel("fx:", self))
+        self.y_layout.addWidget(
+            labeled_form_row("fx:", buddy=self.y_expression_input, parent=self)
+        )
         self.y_layout.addWidget(self.y_expression_input)
         layout.addLayout(self.x_layout)
         layout.addLayout(self.y_layout)
@@ -605,11 +618,17 @@ class MultiSeriesDataReferenceInput(QFrame):
         self.x_layout = QHBoxLayout()
         self.x_data_input = QComboBox(self)
         self.x_expression_input = QLineEdit("x", self)
+        apply_expanding_field(self.x_data_input)
+        apply_expanding_field(self.x_expression_input)
         self.x_expression_input.setPlaceholderText("e.g. x, 1/x")
         self.x_expression_input.setMinimumWidth(0)
-        self.x_layout.addWidget(QLabel("X Data:", self))
+        self.x_layout.addWidget(
+            labeled_form_row("X Data:", buddy=self.x_data_input, parent=self)
+        )
         self.x_layout.addWidget(self.x_data_input, 1)
-        self.x_layout.addWidget(QLabel("X fx:", self))
+        self.x_layout.addWidget(
+            labeled_form_row("X fx:", buddy=self.x_expression_input, parent=self)
+        )
         self.x_layout.addWidget(self.x_expression_input, 1)
         layout.addLayout(self.x_layout)
 
@@ -617,11 +636,17 @@ class MultiSeriesDataReferenceInput(QFrame):
         self.y_data_input = _CheckableColumnComboBox(self)
         self.y_data_input.setObjectName("multi_series_y_combo")
         self.y_expression_input = QLineEdit("y", self)
+        apply_expanding_field(self.y_data_input)
+        apply_expanding_field(self.y_expression_input)
         self.y_expression_input.setPlaceholderText("e.g. y, log10(y)")
         self.y_expression_input.setMinimumWidth(0)
-        self.y_layout.addWidget(QLabel("Y Data:", self))
+        self.y_layout.addWidget(
+            labeled_form_row("Y Data:", buddy=self.y_data_input, parent=self)
+        )
         self.y_layout.addWidget(self.y_data_input, 1)
-        self.y_layout.addWidget(QLabel("Y fx:", self))
+        self.y_layout.addWidget(
+            labeled_form_row("Y fx:", buddy=self.y_expression_input, parent=self)
+        )
         self.y_layout.addWidget(self.y_expression_input, 1)
         layout.addLayout(self.y_layout)
 
@@ -830,14 +855,23 @@ class Field2DDataReferenceInput(QFrame):
         self.x_data_input = QComboBox(self)
         self.y_data_input = QComboBox(self)
         self.z_data_input = QComboBox(self)
+        apply_expanding_field(self.x_data_input)
+        apply_expanding_field(self.y_data_input)
+        apply_expanding_field(self.z_data_input)
         x_row = QHBoxLayout()
         y_row = QHBoxLayout()
         z_row = QHBoxLayout()
-        x_row.addWidget(QLabel("X Data:", self))
+        x_row.addWidget(
+            labeled_form_row("X Data:", buddy=self.x_data_input, parent=self)
+        )
         x_row.addWidget(self.x_data_input)
-        y_row.addWidget(QLabel("Y Data:", self))
+        y_row.addWidget(
+            labeled_form_row("Y Data:", buddy=self.y_data_input, parent=self)
+        )
         y_row.addWidget(self.y_data_input)
-        z_row.addWidget(QLabel("Z Data:", self))
+        z_row.addWidget(
+            labeled_form_row("Z Data:", buddy=self.z_data_input, parent=self)
+        )
         z_row.addWidget(self.z_data_input)
         layout.addLayout(x_row)
         layout.addLayout(y_row)

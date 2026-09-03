@@ -95,12 +95,43 @@ rail, button, tree, and control heights.
 Standard matches the historical first-run chrome sizes. Compact and
 Comfortable scale that grammar rather than inventing a second layout system.
 
+Section Group title geometry is published from the same `DensityMetrics`:
+`section_title_top` (`SPACE_XS`), `section_title_left`
+(`SPACE_SM + SIZE_INDICATOR + SPACE_XS`), and `section_margin_top`
+(title top + max(indicator, font height) + `SPACE_XS`). QSS tokens
+`SIZE_SECTION_TITLE_TOP`, `SIZE_SECTION_TITLE_LEFT`, and
+`SIZE_SECTION_MARGIN_TOP` consume those values. Do not keep a second
+Inspector-only style table.
+
 ## QSS binding
 
 Production widgets style through `ThemeBindingPort.bind_qss(widget, resource)`.
+When `ThemeService` is wired, `ThemeBindingRegistry` is the only QSS bind
+registry. `bind_widget_qss()` registers on that table and applies the sheet
+once; it does not also record the widget on the module-level fallback used
+before the service exists.
+
 Bindings hold weak references and detach on `destroyed`, so hidden Settings
 and Style dialogs, Inspector hosts, live Fit dialogs, and parentless Canvas
-popouts still retokenize.
+popouts still retokenize. Shared control rules live in
+`mygui/widgets/ui_components/style.qss` and are composed into every regional
+`bind_qss` sheet. The application stylesheet is only the small
+`app_style.qss` popup, combo-view, and `QMessageBox` document; it uses sizes
+and icon URLs, not scheme colors, so Light/Dark skips `QApplication.setStyleSheet`.
+Repeating the component rules there would polish the workbench twice because Qt local
+stylesheets isolate bound subtrees. This is still
+`ThemeService` output, not a second theme owner. See
+`ui-components.md`.
+
+Each `ThemeSnapshot` expands shared component QSS once. Regional documents are
+cached by token fingerprint plus bundled resource, with a bounded LRU. The
+cache resolves QSS only through `mygui.resources` and does not depend on CWD
+(`CORE-RESOURCE-BOUNDARY`). `QssResourceBundle` binds several bundled paths as
+one local stylesheet without copying rule text. Settings Center binds
+`settings_center/style.qss` and `settings_pages/style.qss` once on the dialog
+root; Settings pages do not each attach the same page QSS. After all Settings
+pages exist, a theme switch still applies one application stylesheet plus at
+most 13 changed regional roots.
 
 `mygui.resources.load_qss_resource` only resolves a bundled QSS resource and
 expands the token mapping it is given. Callers pass `ThemeSnapshot` tokens
@@ -114,8 +145,29 @@ variant (rotation / checked). Brand (`matlab.svg`, `app_icon.ico`), preview
 user-data icons stay original color. Scheme changes replace the cache table.
 
 `ThemeWindowRegistry` holds weak `QWidget` references and drops them on
-`destroyed`. Cached Settings/Style/Layout/Fit dialogs, Inspector hosts, and
-parentless Canvas popouts call `subscribe_theme_window`. They must not store
+`destroyed`. Independent top-level windows (and a closed set of named style
+roots such as `MainWindow`, cached dialogs, and Canvas popouts) are window
+roots. Nested chrome, Inspector pages, scroll viewports, and icon/density
+hosts join explicit weak participant sets. Palette apply sets the snapshot
+palette on window roots and extra palette participants only; ordinary
+descendants inherit. Metrics and icons call `apply_theme_metrics` /
+`apply_theme_icons` on the participant set and do not DFS nested trees.
+Direct-child iteration remains available for one-window icon DPR refresh
+and for `iter_widget_tree` helpers that use `FindDirectChildrenOnly`.
+Hidden dialogs stay subscribed. `theme_construction_batch()` lets
+MainWindow construction only register subscribers; exiting the batch syncs
+final top-level roots once. Icon apply does not replay palette; palette stays
+on the ThemeService palette step. Top-level windows listen for `screenChanged`
+/ DPR changes and refresh that window's icon cache only. ThemeService records
+`last_step_timings_ms` / `last_rollback_timings_ms` for font, palette, QSS
+(app and local), metrics, and icons. Identical stylesheets skip
+`setStyleSheet`. Checkable combo restoration writes only changed rows.
+
+`ARCH-THEME-UNBOUNDED-SCAN` forbids `findChildren(QWidget)` without
+`FindDirectChildrenOnly` under `mygui/application_theme/`.
+
+Cached Settings/Style/Layout/Fit dialogs, Inspector hosts, and parentless Canvas
+popouts call `subscribe_theme_window`. They must not store
 `ComponentState`, selection IDs, or color-cycle cursors. Python-side chrome
 sizes are limited to the `SIZE_PARTICIPANTS` object names; do not apply density
 metrics to an arbitrary `QTableView` or `QTreeView`.
@@ -133,8 +185,15 @@ ancestor and application `color` rules. Production sheets that set
 and Canvas are styled and receive the snapshot palette without
 `WA_SetPalette`.
 
-After local QSS replay, the `qss` step unpolish/polish bound widgets and
-subscribed windows so native Qt styles drop the previous scheme's cache.
+The `qss` step publishes tokens separately from widget replay:
+`publish_qss_tokens()` updates the token table and watchers without calling
+`setStyleSheet` on bound widgets. Each theme transaction applies the
+application stylesheet at most once and each changed regional root at most
+once; identical strings are skipped. Success and rollback rely on the
+`StyleChange` produced by `setStyleSheet`. They do not walk the widget tree
+for a blanket unpolish/polish. Dynamic property changes still call
+directed `refresh_ui_style()` on that one control. ComboBox index and
+check-state snapshots are restored after a real stylesheet write.
 `current_qss_tokens()` follows the in-flight hub snapshot for the rest of
 the transaction; rollback restores the captured hub snapshot.
 
@@ -151,8 +210,12 @@ are chosen from the actual delta after pre-render:
 3. Capture mementos for `QApplication`, each bound widget, structural sizes,
    and icons.
 4. On the GUI thread apply only the steps that changed. The font step
-   filters `FontChange` on hidden widgets so cached Settings pages are not
-   polished during a 1 pt preview:
+filters `FontChange`, `StyleChange`, `LayoutRequest`, `UpdateRequest`, and
+`Paint` on hidden widgets so cached Settings pages, stacked galleries, and
+hidden Inspector pages are not polished during preview. Color-only palette/QSS/icon
+transactions also drop `LayoutRequest` on visible chrome because Light/Dark
+tokens do not change control sizes. Visible Matplotlib canvases are frozen
+for the same transaction so application QSS does not redraw Figure pixels:
    - A 1 pt font change is always the font step only, even when high-DPI
      font metrics would move the size floor by a pixel. Larger jumps also
      run QSS and density metrics when the font-metric size floor actually
@@ -185,7 +248,10 @@ palettes, Artist colors, and `CORE-MATPLOTLIB-BOUNDARY` catalogs stay on
 leave Registry trees, selection, history, and project JSON byte-identical.
 
 Do not use theme tokens as Figure defaults. Do not use Figure style as
-application QSS.
+application QSS. `isolate_matplotlib_canvas()` is the ThemeService-owned
+one-time local sheet that blocks inherited workbench QSS on a Figure
+canvas. It is not a `bind_qss` participant, so theme preview/rollback
+does not rewrite it.
 
 ## Completion checklist
 
@@ -207,7 +273,9 @@ application QSS.
 - Figure/Registry/selection/history/project JSON are unchanged across theme
   transactions.
 - Full Windows DPI, dual-monitor, and OS System-theme smoke is the
-  hardening/acceptance gate. Offscreen tests do not claim that coverage.
+  hardening/acceptance gate and may be marked supported only after a real
+  walk. Offscreen tests do not claim that coverage. Missing dual-monitor or
+  multi-DPI hardware is recorded as unverified.
 
 The composition root applies `ThemeSnapshot` after settings load and before
 any `QWidget`. Appearance `SettingSpec`s stay on `application_settings`;

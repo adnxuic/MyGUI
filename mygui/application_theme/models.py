@@ -103,6 +103,11 @@ class DensityMetrics:
     control: int
     vertical_padding: int
     font_height: int
+    indicator: int
+    scrollbar: int
+    section_title_top: int
+    section_title_left: int
+    section_margin_top: int
 
 
 @dataclass(frozen=True, slots=True)

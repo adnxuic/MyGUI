@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
-    QLabel,
     QStackedWidget,
     QVBoxLayout,
 )
@@ -18,6 +17,7 @@ from mygui.database import ColumnRef, ColumnType, TableChangeSet, TableRepositor
 from mygui.figuremodify.components.property_values import DEFAULT_ERROR_SPEC
 
 from .data_inputs import DataReferenceInput
+from .inspector_layout import labeled_form_row
 
 
 class ErrorSpecInput(QFrame):
@@ -47,12 +47,14 @@ class ErrorSpecInput(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel(f"{label}:", self))
         self.mode_input = QComboBox(self)
         self.mode_input.addItem("None", self._MODE_NONE)
         self.mode_input.addItem("Constant", self._MODE_CONSTANT)
         self.mode_input.addItem("Symmetric Column", self._MODE_SYMMETRIC)
         self.mode_input.addItem("Asymmetric Columns", self._MODE_ASYMMETRIC)
+        mode_layout.addWidget(
+            labeled_form_row(f"{label}:", buddy=self.mode_input, parent=self)
+        )
         mode_layout.addWidget(self.mode_input)
         mode_layout.addStretch(1)
         layout.addLayout(mode_layout)
@@ -63,34 +65,54 @@ class ErrorSpecInput(QFrame):
         self.constant_page = QFrame(self.page_stack)
         constant_layout = QHBoxLayout(self.constant_page)
         constant_layout.setContentsMargins(0, 0, 0, 0)
-        constant_layout.addWidget(QLabel("Minus:", self.constant_page))
         self.minus_input = QDoubleSpinBox(self.constant_page)
         self.minus_input.setDecimals(4)
         self.minus_input.setMinimum(0.0)
         self.minus_input.setMaximum(1e12)
+        constant_layout.addWidget(
+            labeled_form_row("Minus:", buddy=self.minus_input, parent=self.constant_page)
+        )
         constant_layout.addWidget(self.minus_input)
-        constant_layout.addWidget(QLabel("Plus:", self.constant_page))
         self.plus_input = QDoubleSpinBox(self.constant_page)
         self.plus_input.setDecimals(4)
         self.plus_input.setMinimum(0.0)
         self.plus_input.setMaximum(1e12)
+        constant_layout.addWidget(
+            labeled_form_row("Plus:", buddy=self.plus_input, parent=self.constant_page)
+        )
         constant_layout.addWidget(self.plus_input)
 
         self.symmetric_page = QFrame(self.page_stack)
         symmetric_layout = QHBoxLayout(self.symmetric_page)
         symmetric_layout.setContentsMargins(0, 0, 0, 0)
-        symmetric_layout.addWidget(QLabel("Column:", self.symmetric_page))
         self.symmetric_input = QComboBox(self.symmetric_page)
+        symmetric_layout.addWidget(
+            labeled_form_row(
+                "Column:", buddy=self.symmetric_input, parent=self.symmetric_page
+            )
+        )
         symmetric_layout.addWidget(self.symmetric_input)
 
         self.asymmetric_page = QFrame(self.page_stack)
         asymmetric_layout = QHBoxLayout(self.asymmetric_page)
         asymmetric_layout.setContentsMargins(0, 0, 0, 0)
-        asymmetric_layout.addWidget(QLabel("Minus Column:", self.asymmetric_page))
         self.asymmetric_minus_input = QComboBox(self.asymmetric_page)
+        asymmetric_layout.addWidget(
+            labeled_form_row(
+                "Minus Column:",
+                buddy=self.asymmetric_minus_input,
+                parent=self.asymmetric_page,
+            )
+        )
         asymmetric_layout.addWidget(self.asymmetric_minus_input)
-        asymmetric_layout.addWidget(QLabel("Plus Column:", self.asymmetric_page))
         self.asymmetric_plus_input = QComboBox(self.asymmetric_page)
+        asymmetric_layout.addWidget(
+            labeled_form_row(
+                "Plus Column:",
+                buddy=self.asymmetric_plus_input,
+                parent=self.asymmetric_page,
+            )
+        )
         asymmetric_layout.addWidget(self.asymmetric_plus_input)
         for page in (
             self.none_page,
