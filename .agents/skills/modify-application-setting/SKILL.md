@@ -108,3 +108,7 @@ affected Settings page plus Cancel/Apply restore. The full 100/125/150/200%
 DPI, dual-monitor, OS System-theme, 8/16 pt × three densities, cached window,
 native dialog, and missing TeX/MATLAB matrix is the hardening/acceptance
 gate; offscreen tests do not claim it.
+
+Appearance or cached Settings-page changes must also pass the mandatory theme
+roundtrip acceptance in `.agents/architecture/testing-map.md`, including Figure toolbar glyphs and
+hidden page backgrounds after returning to the committed style.

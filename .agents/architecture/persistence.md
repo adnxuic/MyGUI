@@ -58,7 +58,10 @@ publication to commit as one registration transaction.
 Controller and Registry publication, Locator bindings, lazy Inspector
 insertion, tree lifecycle, selection, pending refresh state, redraw/events,
 allocated IDs, and color-cycle consumption. User-visible effects happen after
-commit only.
+commit only. Ordinary dynamic creation queues one coalesced Canvas redraw after
+commit; a canonical component snapshot synchronously settles an already pending
+draw before serialization. Render-validation services and structural Axes
+creation keep their explicit synchronous validation draws.
 
 Every runtime-created persisted component declares a restore phase and one
 exact materializer. `ComponentMaterializerRegistry.validate_complete()` rejects

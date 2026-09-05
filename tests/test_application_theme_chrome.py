@@ -7,13 +7,14 @@ import math
 import os
 from pathlib import Path
 import unittest
+from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QScrollArea, QWidget
 
 from mygui.application_settings import APPEARANCE_THEME_MODE, ApplicationSettingsService
 from mygui.application_settings.models import Density, ThemeMode
@@ -504,8 +505,11 @@ class ThemeDarkToLightChromeTests(unittest.TestCase):
         self.assertNotEqual(content, "#0f172a")
 
         host = self.window.fig_control_window.figure_inspector_host
-        host_sheet = host.styleSheet().lower()
-        self.assertIn(text, host_sheet)
+        workbench_sheet = self.window.styleSheet().lower()
+        self.assertIn(text, workbench_sheet)
+        self.assertIn(content, workbench_sheet)
+        self.assertIn(surface_alt, workbench_sheet)
+        self.assertEqual(host.styleSheet(), "")
         labels = [
             label
             for label in host.findChildren(QLabel)
@@ -513,12 +517,6 @@ class ThemeDarkToLightChromeTests(unittest.TestCase):
             and label.objectName() not in {"empty_state_title", "empty_state_detail"}
         ]
         self.assertTrue(labels)
-        ancestor_sheets = [
-            widget.styleSheet().lower()
-            for widget in (host, *host.findChildren(QWidget))
-            if widget.styleSheet()
-        ]
-        self.assertTrue(any(text in sheet for sheet in ancestor_sheets))
         for label in labels:
             window_text = label.palette().color(QPalette.ColorRole.WindowText).name().lower()
             if contrast_ratio(window_text, surface) < 4.5:
@@ -532,18 +530,16 @@ class ThemeDarkToLightChromeTests(unittest.TestCase):
             else:
                 self.assertGreaterEqual(contrast_ratio(window_text, surface), 4.5)
 
-        figure_sheet = self.window.figure_window.styleSheet().lower()
-        self.assertIn(content, figure_sheet)
-        self.assertNotIn("#0f172a", figure_sheet)
+        self.assertEqual(self.window.figure_window.styleSheet(), "")
+        self.assertNotIn("#0f172a", workbench_sheet)
         viewport = canvas.scroArea.viewport()
         self.assertEqual(
             viewport.palette().color(QPalette.ColorRole.Window).name().lower(),
             content,
         )
 
-        right_sheet = self.window.right_column.styleSheet().lower()
-        self.assertIn(surface_alt, right_sheet)
-        self.assertNotIn("#0b1220", right_sheet)
+        self.assertEqual(self.window.right_column.styleSheet(), "")
+        self.assertNotIn("#0b1220", workbench_sheet)
         self.assertLess(
             _opaque_icon_value(self.window.right_column.tex_button.icon()),
             120,
@@ -617,6 +613,11 @@ class ThemeDarkPreviewRevertTests(unittest.TestCase):
         reset_theme_runtime_for_tests()
 
     def _assert_light_icons(self) -> None:
+        for name, action in self.canvas.navigation_toolbar._actions.items():
+            self.assertLess(
+                _opaque_icon_value(action.icon()), 120,
+                f"Figure toolbar {name} should be dark on the restored Light surface",
+            )
         self.assertLess(
             _opaque_icon_value(self.window.left_column.setting_button.icon()),
             120,
@@ -654,6 +655,11 @@ class ThemeDarkPreviewRevertTests(unittest.TestCase):
         )
 
     def _assert_dark_preview_icons(self) -> None:
+        for name, action in self.canvas.navigation_toolbar._actions.items():
+            self.assertGreater(
+                _opaque_icon_value(action.icon()), 200,
+                f"Figure toolbar {name} should be bright on the Dark surface",
+            )
         self.assertGreater(
             _opaque_icon_value(self.window.left_column.setting_button.icon()),
             200,
@@ -743,6 +749,237 @@ class ThemeDarkPreviewRevertTests(unittest.TestCase):
         late_widget.deleteLater()
         self.app.processEvents()
 
+    def test_toolbar_both_scheme_roundtrips_in_popout_preserve_project_state(self) -> None:
+        self.window.show()
+        self.canvas.popout_action.trigger()
+        self.app.processEvents()
+        toolbar = self.canvas.navigation_toolbar
+        state = self.canvas.component_snapshot()
+        selected = self.canvas.current_component_id
+        stack = self.canvas.repository.undo_stack(self.canvas.project_id)
+        history = (stack.index(), stack.count())
+        checked = {name: action.isChecked() for name, action in toolbar._actions.items()}
+        try:
+            for origin, preview in ((ThemeMode.LIGHT, ThemeMode.DARK), (ThemeMode.DARK, ThemeMode.LIGHT)):
+                self.service.commit_patch(
+                    self.service.begin_session(), {APPEARANCE_THEME_MODE: origin},
+                )
+                self.theme.apply_committed(AppearancePreferences(mode=origin))
+                dialog = self.window.settings_center.present()
+                self.app.processEvents()
+                for _ in range(2):
+                    dialog.stage_value(APPEARANCE_THEME_MODE, preview)
+                    self.app.processEvents()
+                    dialog.stage_value(APPEARANCE_THEME_MODE, origin)
+                    self.app.processEvents()
+                    for name, action in toolbar._actions.items():
+                        brightness = _opaque_icon_value(action.icon())
+                        if origin is ThemeMode.LIGHT:
+                            self.assertLess(brightness, 120, name)
+                        else:
+                            self.assertGreater(brightness, 200, name)
+                dialog.reject()
+            self.assertEqual(self.canvas.component_snapshot(), state)
+            self.assertEqual(self.canvas.current_component_id, selected)
+            self.assertEqual((stack.index(), stack.count()), history)
+            self.assertEqual({name: action.isChecked() for name, action in toolbar._actions.items()}, checked)
+        finally:
+            self.canvas._canvas_popout_window.close()
+            self.app.processEvents()
+
+
+class ThemeSettingsPaletteRestoreTests(unittest.TestCase):
+    """Real cached pages must restore painted colors, not just theme tokens."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = _qapp()
+
+    def setUp(self) -> None:
+        from mygui.application_settings import MemorySettingsDocumentPort
+        from mygui.widgets.common_widget.min_widget.color_library import ColorLibrary
+        from mygui.widgets.settings_center import compose_settings_center
+
+        self.original = (self.app.font(), self.app.palette(), self.app.styleSheet())
+        reset_theme_runtime_for_tests()
+        reset_qss_bindings_for_tests()
+        self.theme = ThemeService(self.app, style_hints=FakeStyleHints(Qt.ColorScheme.Light))
+        self.theme.apply_committed(AppearancePreferences(mode=ThemeMode.LIGHT))
+        self.port = MemorySettingsDocumentPort()
+        self.service = ApplicationSettingsService(document=self.port)
+        self.service.commit_patch(
+            self.service.begin_session(), {APPEARANCE_THEME_MODE: ThemeMode.LIGHT},
+        )
+        self.messages = []
+        self.host = compose_settings_center(
+            None, settings_service=self.service, theme_service=self.theme,
+            color_library=ColorLibrary(), reset_layout_now=lambda: None,
+            on_message=lambda *args: self.messages.append(args),
+        )
+        self.dialog = self.host.present("new_figure")
+        self.app.processEvents()
+
+    def tearDown(self) -> None:
+        self.theme._fault_hooks = None
+        self.dialog.reject()
+        self.dialog.deleteLater()
+        self.theme.shutdown()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        self.app.processEvents()
+        self.app.setFont(self.original[0])
+        self.app.setPalette(self.original[1])
+        self.app.setStyleSheet(self.original[2])
+        reset_qss_bindings_for_tests()
+        reset_theme_runtime_for_tests()
+
+    def _select_page(self, page_id: str) -> None:
+        from mygui.widgets.settings_center import SHELL_PAGE_ORDER
+
+        self.dialog.nav_list.setCurrentRow(list(SHELL_PAGE_ORDER).index(page_id))
+        self.app.processEvents()
+
+    def _page_colors(self):
+        page = self.dialog.findChild(QWidget, "settings_page_new_figure")
+        scroll = self.dialog.findChild(QScrollArea, "settings_page_scroll_new_figure")
+        label = page.findChild(QLabel, "settings_page_field_label")
+        self.assertIsNotNone(label)
+        roles = (QPalette.Window, QPalette.WindowText, QPalette.Base, QPalette.Text)
+        return tuple(
+            tuple(widget.palette().color(role).rgba() for role in roles)
+            for widget in (self.dialog, scroll, scroll.viewport(), page, label)
+        )
+
+    def _assert_surface(self) -> None:
+        page = self.dialog.findChild(QWidget, "settings_page_new_figure")
+        image = page.grab().toImage()
+        background = image.pixelColor(image.width() - 4, image.height() - 4)
+        self.assertEqual(background.name(), self.theme.snapshot().tokens["COLOR_SURFACE"].lower())
+        label = page.findChild(QLabel, "settings_page_field_label")
+        self.assertGreaterEqual(
+            contrast_ratio(label.palette().color(QPalette.WindowText).name(), background.name()),
+            4.5,
+        )
+
+    def test_cached_page_reselect_roundtrip_in_both_schemes(self) -> None:
+        for origin, preview in ((ThemeMode.LIGHT, ThemeMode.DARK), (ThemeMode.DARK, ThemeMode.LIGHT)):
+            with self.subTest(origin=origin):
+                self.dialog.reject()
+                self.service.commit_patch(
+                    self.service.begin_session(), {APPEARANCE_THEME_MODE: origin},
+                )
+                self.theme.apply_committed(AppearancePreferences(mode=origin))
+                self.dialog = self.host.present("new_figure")
+                self.app.processEvents()
+                before = self._page_colors()
+                for _ in range(3):
+                    self._select_page("appearance")
+                    self.dialog.stage_value(APPEARANCE_THEME_MODE, preview)
+                    self.app.processEvents()
+                    self.dialog.stage_value(APPEARANCE_THEME_MODE, origin)
+                    self.app.processEvents()
+                    self._select_page("new_figure")
+                    self.assertEqual(self._page_colors(), before)
+                    self._assert_surface()
+
+    def test_cancel_escape_close_and_storage_failure_restore_cached_page(self) -> None:
+        before = self._page_colors()
+        for action in ("cancel", "escape", "close", "storage"):
+            with self.subTest(action=action):
+                self._select_page("appearance")
+                self.dialog.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+                self.app.processEvents()
+                if action == "cancel":
+                    self.dialog.cancel_button.click()
+                elif action == "escape":
+                    QTest.keyClick(self.dialog, Qt.Key_Escape)
+                elif action == "close":
+                    self.dialog.close()
+                else:
+                    self.port.fail_commit = True
+                    self.dialog.apply_button.click()
+                    self.port.fail_commit = False
+                    self.assertEqual(len(self.messages), 1)
+                self.app.processEvents()
+                self.dialog = self.host.present("new_figure")
+                self.app.processEvents()
+                self.assertEqual(self._page_colors(), before)
+                self._assert_surface()
+
+    def test_fault_before_qss_and_after_partial_qss_restore_actual_palettes(self) -> None:
+        from mygui.application_theme import ThemeApplyError, ThemeFaultHooks
+        from mygui.application_theme import service as service_module
+        from mygui.application_theme.qss import apply_widget_stylesheet
+
+        before = self._page_colors()
+        snapshot = self.theme.snapshot()
+        events = []
+        self.theme.subscribe(lambda *args: events.append(args))
+        for step in ("qss", "icons"):
+            with self.subTest(step=step):
+                self.theme._fault_hooks = ThemeFaultHooks(fail_apply_step=step)
+                with self.assertRaises(ThemeApplyError):
+                    self.theme.preview(AppearancePreferences(mode=ThemeMode.DARK))
+                self.app.processEvents()
+                self.assertEqual(self._page_colors(), before)
+                self.assertIs(self.theme.snapshot(), snapshot)
+        self.theme._fault_hooks = None
+
+        def partial_apply(port, rendered):
+            widget, resource = next(port.iter_bindings())
+            apply_widget_stylesheet(widget, rendered[resource])
+            raise RuntimeError("QSS participant failed after first write")
+
+        with mock.patch.object(service_module, "binding_apply", partial_apply):
+            with self.assertRaises(ThemeApplyError):
+                self.theme.preview(AppearancePreferences(mode=ThemeMode.DARK))
+        self.app.processEvents()
+        self.assertEqual(self._page_colors(), before)
+        self.assertIs(self.theme.snapshot(), snapshot)
+        self.assertEqual(events, [])
+        self._assert_surface()
+
+    def test_late_page_and_independent_root_restore_once(self) -> None:
+        from mygui.application_theme import bind_widget_qss
+        from mygui.application_theme import qss
+
+        before = self._page_colors()
+        self._select_page("appearance")
+        self.dialog.stage_value(APPEARANCE_THEME_MODE, ThemeMode.DARK)
+        self._select_page("workspace")
+        late = QWidget()
+        late.setObjectName("fig_control_window")
+        bind_widget_qss(late, "mygui/widgets/fig_control_window/style.qss")
+        subscribe_theme_window(late)
+        late.hide()
+        writes = []
+        original_write = QWidget.setStyleSheet
+
+        def record(widget, sheet):
+            writes.append(id(widget))
+            return original_write(widget, sheet)
+
+        with (
+            mock.patch.object(QWidget, "setStyleSheet", record),
+            mock.patch.object(QApplication, "setStyleSheet", wraps=self.app.setStyleSheet) as app_write,
+            mock.patch("mygui.application_theme.windows._polish_widget_tree") as polish,
+        ):
+            self.dialog.stage_value(APPEARANCE_THEME_MODE, ThemeMode.LIGHT)
+        self.app.processEvents()
+        app_write.assert_not_called()
+        polish.assert_not_called()
+        self.assertEqual(len(writes), len(set(writes)))
+        self.assertIn(id(late), writes)
+        self.assertEqual(late.styleSheet(), qss.render_resource_stylesheet(
+            "mygui/widgets/fig_control_window/style.qss", self.theme.snapshot(),
+        ))
+        self._select_page("new_figure")
+        self.assertEqual(self._page_colors(), before)
+        self._assert_surface()
+        self._select_page("workspace")
+        workspace = self.dialog.findChild(QWidget, "settings_page_workspace")
+        self.assertEqual(workspace.palette().color(QPalette.Window).name(), "#ffffff")
+        late.deleteLater()
+
 
 class ThemePropagateLinearizationTests(unittest.TestCase):
     @classmethod
@@ -808,6 +1045,53 @@ class ThemePropagateLinearizationTests(unittest.TestCase):
         widget.deleteLater()
         theme.shutdown()
         self.app.processEvents()
+
+    def test_dynamic_participant_can_defer_initial_sync(self) -> None:
+        from mygui.application_theme import windows
+
+        parent = QWidget()
+        participant = QWidget(parent)
+        with mock.patch.object(windows, "_sync_widget") as sync_widget:
+            windows.subscribe_theme_window(
+                participant,
+                sync_initial=False,
+            )
+        sync_widget.assert_not_called()
+        self.assertIn(id(participant), windows.default_window_registry()._metrics)
+        parent.deleteLater()
+        self.app.processEvents()
+
+    def test_palette_memento_restores_viewport_flags_and_skips_departed_widgets(self) -> None:
+        from mygui.application_theme.windows import ThemeWindowRegistry
+
+        registry = ThemeWindowRegistry()
+        scroll = QScrollArea()
+        departed = QWidget()
+        destroyed = QWidget()
+        registry.register(scroll)
+        registry.register(departed)
+        registry.register(destroyed)
+        viewport = scroll.viewport()
+        original = QPalette(viewport.palette())
+        flag = viewport.testAttribute(Qt.WA_SetPalette)
+        captured = registry.capture_palettes()
+        self.assertEqual(len(captured), 4)
+        registry.unregister(departed)
+        departed_palette = QPalette(departed.palette())
+        departed_palette.setColor(QPalette.Window, QColor("magenta"))
+        departed.setPalette(departed_palette)
+        destroyed.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        changed = QPalette(original)
+        changed.setColor(QPalette.Window, QColor("cyan"))
+        registry.apply_palette(changed)
+        registry.restore_palettes(captured, original)
+        self.assertEqual(viewport.palette(), original)
+        self.assertEqual(viewport.testAttribute(Qt.WA_SetPalette), flag)
+        self.assertEqual(departed.palette(), departed_palette)
+        scroll.deleteLater()
+        departed.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_classify_icon_source_caches_absolute_user_paths(self) -> None:
         from mygui.application_theme.icons import (

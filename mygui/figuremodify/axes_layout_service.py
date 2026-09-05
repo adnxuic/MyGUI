@@ -851,6 +851,11 @@ class AxesLayoutService:
             )
             self._apply_outer_labels(descriptors, spec)
             self.registry.validate_axes_targets()
+            # New Axes own tick-label state whose Matplotlib positions settle
+            # only during a render.  This structural creation path therefore
+            # keeps one synchronous validation draw so the committed history
+            # snapshot is independent of the later coalesced redraw timing.
+            self.canvas.canva.draw()
             self.canvas.validate_component_snapshot()
             if component_ids:
                 first_controller = self.registry.get(component_ids[0])
@@ -860,7 +865,6 @@ class AxesLayoutService:
         self.canvas.message_presenter.discard_pending()
         if select and first_controller is not None:
             self.canvas.update_current_axes(first_controller.component_id)
-        self.canvas.redraw()
         return component_ids
 
     def materialize(self, axes_states: Iterable[ComponentState]) -> tuple[str, ...]:

@@ -351,7 +351,7 @@ class ComponentInspector(QFrame):
             raise
 
         self.layout.addStretch()
-        subscribe_theme_window(self)
+        subscribe_theme_window(self, sync_initial=False)
 
     def minimumSizeHint(self) -> QSize:
         hint = QFrame.minimumSizeHint(self)

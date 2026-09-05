@@ -128,7 +128,10 @@ class AxesInspectorPanel(QFrame):
                 f"Invalid Axes Inspector placement {profile.placement.value!r}."
             )
         editor_key: EditorKey = (controller.kind, controller.role)
-        toolbox = stack.ensure_toolbox(editor_key)
+        toolbox = stack.ensure_toolbox(
+            editor_key,
+            insert_into_owner_stack=False,
+        )
         toolbox.editor_manager = self.context.editor_manager
         toolbox.set_empty_callback(
             lambda target_stack=stack, target_key=editor_key: (
@@ -142,7 +145,10 @@ class AxesInspectorPanel(QFrame):
             remover=toolbox.remove_inspector,
         )
         try:
-            toolbox.add_inspector(inspector)
+            toolbox.add_inspector(
+                inspector,
+                insert_into_owner_stack=False,
+            )
         except Exception:
             isolate_cleanup_steps(
                 (
@@ -302,7 +308,10 @@ class FigureElementInspectorPanel(QFrame):
             raise
 
     def ensure_toolbox(self, editor_key: EditorKey) -> InspectorToolBox:
-        toolbox = self._element_stack.ensure_toolbox(editor_key)
+        toolbox = self._element_stack.ensure_toolbox(
+            editor_key,
+            insert_into_owner_stack=False,
+        )
         toolbox.editor_manager = self.context.editor_manager
         toolbox.set_empty_callback(
             lambda target_key=editor_key: self.remove_toolbox(target_key)
@@ -331,7 +340,10 @@ class FigureElementInspectorPanel(QFrame):
             remover=toolbox.remove_inspector,
         )
         try:
-            toolbox.add_inspector(inspector)
+            toolbox.add_inspector(
+                inspector,
+                insert_into_owner_stack=False,
+            )
         except Exception:
             isolate_cleanup_steps(
                 (
@@ -426,10 +438,6 @@ class FigureInspectorPanel(QFrame):
             self._figure_elements_panel = FigureElementInspectorPanel(context)
             self._figure_elements_panel.setParent(self._owner_root)
             self._inspector_stack.addWidget(self.root_inspector)
-            bind_widget_qss(
-                self._inspector_stack,
-                "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
-            )
 
             layout = QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)

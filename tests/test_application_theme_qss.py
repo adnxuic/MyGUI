@@ -462,3 +462,27 @@ class QssResourceBundleTests(unittest.TestCase):
         self.assertIn("setting_dialog", widget.styleSheet())
         widget.deleteLater()
         self.app.processEvents()
+
+    def test_workbench_scope_suppresses_covered_descendant_bindings(self) -> None:
+        from mygui.application_theme import (
+            WORKBENCH_QSS_BUNDLE,
+            workbench_qss_scope,
+        )
+
+        root = QWidget()
+        with workbench_qss_scope(root):
+            child = QWidget(root)
+            bind_widget_qss(child, "mygui/widgets/fig_control_window/style.qss")
+        late_child = QWidget(root)
+        bind_widget_qss(
+            late_child,
+            "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
+        )
+
+        self.assertTrue(root.styleSheet())
+        self.assertEqual(root.property("myguiWorkbenchQssResources"), WORKBENCH_QSS_BUNDLE.key)
+        self.assertEqual(child.styleSheet(), "")
+        self.assertEqual(late_child.styleSheet(), "")
+        self.assertEqual(binding_count(), 1)
+        root.deleteLater()
+        self.app.processEvents()

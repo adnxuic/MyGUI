@@ -112,10 +112,14 @@ once; it does not also record the widget on the module-level fallback used
 before the service exists.
 
 Bindings hold weak references and detach on `destroyed`, so hidden Settings
-and Style dialogs, Inspector hosts, live Fit dialogs, and parentless Canvas
-popouts still retokenize. Shared control rules live in
-`mygui/widgets/ui_components/style.qss` and are composed into every regional
-`bind_qss` sheet. The application stylesheet is only the small
+and Style dialogs, live Fit dialogs, and parentless Canvas popouts still
+retokenize. Shared control rules live in
+`mygui/widgets/ui_components/style.qss`. MainWindow binds one ordered
+`QssResourceBundle` containing those shared rules and every workbench regional
+document; covered descendant binds are suppressed during construction and for
+later descendants of that root. Reusable regional widgets constructed outside
+MainWindow still bind their own regional sheet. Independent top-level dialogs
+remain separate roots. The application stylesheet is only the small
 `app_style.qss` popup, combo-view, and `QMessageBox` document; it uses sizes
 and icon URLs, not scheme colors, so Light/Dark skips `QApplication.setStyleSheet`.
 Repeating the component rules there would polish the workbench twice because Qt local
@@ -129,9 +133,9 @@ cache resolves QSS only through `mygui.resources` and does not depend on CWD
 (`CORE-RESOURCE-BOUNDARY`). `QssResourceBundle` binds several bundled paths as
 one local stylesheet without copying rule text. Settings Center binds
 `settings_center/style.qss` and `settings_pages/style.qss` once on the dialog
-root; Settings pages do not each attach the same page QSS. After all Settings
-pages exist, a theme switch still applies one application stylesheet plus at
-most 13 changed regional roots.
+root; Settings pages do not each attach the same page QSS. A theme switch
+applies one changed workbench root plus each changed independent top-level
+root; component creation does not publish or rewrite QSS.
 
 `mygui.resources.load_qss_resource` only resolves a bundled QSS resource and
 expands the token mapping it is given. Callers pass `ThemeSnapshot` tokens
@@ -226,7 +230,15 @@ for the same transaction so application QSS does not redraw Figure pixels:
    publish the new snapshot and tokens without `setStyleSheet`.
    Publish the in-flight snapshot to the runtime hub before those widget
    steps so token readers see the new scheme.
-5. On any failure, roll back in reverse order of the steps that actually ran.
+5. On any failure, restore attempted steps, including a step that mutated some
+   participants before raising. Independent steps unwind in reverse order;
+   Palette, QSS, and icons form a dependency chain: restore Palette before QSS,
+   and restore icons last, after palette, QSS, font, and metrics. Matplotlib's
+   navigation toolbar builds its glyphs from the resolved widget palette;
+   replaying icons first caches bright Dark glyphs on the restored Light bar.
+   Qt resolves stylesheet palettes from that input: restoring QSS first can
+   leave cached scroll viewports on the preview scheme. Use the same ordering
+   for failure rollback and session cancellation, under chrome update batching.
    Keep the current `ThemeSnapshot` and emit no event.
 6. Settings Apply finishes the reversible preview first, then the dual-slot
    document commit. Storage failure restores both the persisted values and the
@@ -235,8 +247,17 @@ for the same transaction so application QSS does not redraw Figure pixels:
 
 Preview of `LIVE_REVERSIBLE` appearance follows the same rollback rules.
 A preview session records the union of steps it actually executed. Cancel,
-Esc, and dialog close restore those steps in reverse from the pre-session
-memento. `ThemeService.ensure_committed(preferences)` is a no-event, no-redraw
+Esc, dialog close, and reselecting the original appearance restore those steps
+from the pre-session memento using the same Palette-before-QSS-before-icons dependency.
+The memento captures exact palettes and `WA_SetPalette` for registered window
+roots and explicit palette participants (including their direct scroll
+viewports), using weak references, never a descendant scan. This also restores
+QSS-resolved root colors when an apply fails before writing any QSS. Destroyed
+or unregistered participants are skipped. Independent QSS roots created during
+preview render from the origin snapshot on restore; captured roots keep their
+exact saved sheets. Each changed root still receives at most one stylesheet
+write, with no blanket polish or extra application stylesheet write.
+`ThemeService.ensure_committed(preferences)` is a no-event, no-redraw
 no-op when the published effective theme already matches; it runs one apply
 when System Light/Dark changed during the session.
 

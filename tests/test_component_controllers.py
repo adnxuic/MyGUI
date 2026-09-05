@@ -300,6 +300,36 @@ class ComponentControllerContractTests(unittest.TestCase):
         self.registry.register(self.scatter_controller, target=self.scatter)
         self.figure.canvas.draw_idle = Mock()
 
+    def test_registry_ordering_uses_live_metadata_without_payload_clones(self):
+        before = self.line_controller.state
+        controllers = self.registry.query()
+        expected = sorted(controllers, key=lambda item: (item.state.order, item.component_id))
+        with patch.object(ComponentState, "clone", side_effect=AssertionError("metadata copied payload")):
+            self.assertEqual(self.registry.query(), expected)
+            self.assertEqual(self.line_controller.order, before.order)
+        changed = before.clone(order=102)
+        self.line_controller.restore(changed)
+        self.assertEqual(self.line_controller.order, 102)
+        ordered = self.registry.query(kind=ComponentKind.LINE)
+        self.assertIn(self.line_controller, ordered)
+        self.line_controller.restore(before)
+        self.assertEqual(self.line_controller.state, before)
+        self.registry.validate_tree()
+
+    def test_tree_validation_reuses_one_snapshot_per_controller(self):
+        before = [controller.state for controller in self.registry.query()]
+        copied = []
+        original_clone = ComponentState.clone
+
+        def clone(state, **kwargs):
+            copied.append(state.id)
+            return original_clone(state, **kwargs)
+
+        with patch.object(ComponentState, "clone", clone):
+            self.registry.validate_tree()
+        self.assertCountEqual(copied, [state.id for state in before])
+        self.assertEqual([controller.state for controller in self.registry.query()], before)
+
     def test_line_property_change_snapshot_restore_and_invalid_rollback(self):
         change = self.line_controller.set_property("linestyle", "Dashed")
         self.assertEqual(change.status, ChangeStatus.APPLIED)

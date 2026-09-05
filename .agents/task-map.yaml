@@ -93,6 +93,7 @@ tasks:
     skill: .agents/skills/debug-gui-regression/SKILL.md
     architecture:
       - .agents/architecture/ui-state-boundaries.md
+      - .agents/architecture/application-theme.md
       - .agents/architecture/inspector.md
       - .agents/architecture/testing-map.md
     checks: [verify_fast, verify_architecture]
@@ -103,6 +104,10 @@ tasks:
       - tests.test_component_inspector
       - tests.test_inspector_geometry
       - tests.test_background_task
+      - tests.test_application_theme
+      - tests.test_application_theme_transactions
+      - tests.test_application_theme_chrome
+      - tests.test_application_theme_qss
     documentation: []
     manual_smoke: true
   architecture_audit:

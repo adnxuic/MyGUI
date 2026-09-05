@@ -51,6 +51,7 @@ from .qss import (
     MAINWINDOW_QSS_RESOURCE,
     QssResourceBundle,
     QssThemeBinding,
+    WORKBENCH_QSS_BUNDLE,
     bind_qss,
     bind_qss_text,
     bind_widget_qss,
@@ -67,6 +68,7 @@ from .qss import (
     render_resource_stylesheet,
     reset_qss_bindings_for_tests,
     watch_qss_tokens,
+    workbench_qss_scope,
 )
 from .runtime import (
     apply_theme_chrome,
@@ -163,6 +165,7 @@ __all__ = [
     "ThemeSettingsBinder",
     "ThemeSnapshot",
     "ThemeValidationError",
+    "WORKBENCH_QSS_BUNDLE",
     "apply_committed_appearance",
     "apply_theme_chrome",
     "bind_qss",
@@ -196,4 +199,5 @@ __all__ = [
     "subscribe_theme_window",
     "theme_construction_batch",
     "watch_qss_tokens",
+    "workbench_qss_scope",
 ]

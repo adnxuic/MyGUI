@@ -602,16 +602,19 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
 
     def test_inspector_add_failure_rolls_back_stack_and_manager_tracking(self):
         _inspector, toolbox = self._add_curves()
+        visible_stack = self.canvas.figure_inspector._inspector_stack
         registry = self.canvas.component_registry
         original_entries = toolbox.component_ids()
         original_current = toolbox.currentWidget()
+        original_visible_count = visible_stack.count()
+        original_visible_current = visible_stack.currentWidget()
         original_lines = tuple(self.canvas.current_axes.lines)
         original_snapshot = self.canvas.component_snapshot()
         original_selection = self.canvas.current_component_id
         original_pending = dict(registry._pending)
         events = []
         unsubscribe = registry.subscribe(events.append)
-        original_add = toolbox.inspector_stack.addWidget
+        original_add = visible_stack.addWidget
 
         def fail_stack_add(*args, **kwargs):
             original_add(*args, **kwargs)
@@ -619,7 +622,7 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
 
         try:
             with mock.patch.object(
-                toolbox.inspector_stack,
+                visible_stack,
                 "addWidget",
                 side_effect=fail_stack_add,
             ):
@@ -642,6 +645,8 @@ class ComponentDeletionAndProjectCloseTests(unittest.TestCase):
 
         self.assertEqual(toolbox.component_ids(), original_entries)
         self.assertIs(toolbox.currentWidget(), original_current)
+        self.assertEqual(visible_stack.count(), original_visible_count)
+        self.assertIs(visible_stack.currentWidget(), original_visible_current)
         self.assertIsNone(
             self.canvas.component_editor_manager.editor("curve-third")
         )

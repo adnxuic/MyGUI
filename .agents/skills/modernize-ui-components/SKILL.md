@@ -42,17 +42,20 @@ Do not use this Skill for:
    `destructive`; toolbar glyphs and Restore defaults to `ghost`. Declare the
    variant at each call site. Derive heights from `DensityMetrics`.
 3. Put shared control rules in `mygui/widgets/ui_components/style.qss`.
-   `ThemeService` composes that document into every regional `bind_qss` sheet.
+   `ThemeService` composes that document and all workbench regional sheets into
+   one MainWindow `QssResourceBundle`; covered descendant binds are suppressed.
+   Standalone regional widgets and independent top-level dialogs bind one local
+   composed sheet.
    The application stylesheet stays the small popup/`QMessageBox` document so
    `QApplication.setStyleSheet` does not re-polish bound workbench trees.
    Light/Dark leaves the process-global popup sheet unchanged so that call is
    skipped; density still rewrites sizes. Regional unique files keep only
-   container chrome and are prefixed with the
-   shared component document because Qt local stylesheets isolate a subtree. `ThemeBindingRegistry` is
+   container chrome. `ThemeBindingRegistry` is
    the only bind table while ThemeService is live. Token publish
    (`publish_qss_tokens`) is separate from widget replay. Each transaction
    applies the application sheet only when that small document changed, plus one
-   sheet per changed regional root; identical strings skip `setStyleSheet`. Nested chrome is an explicit
+   workbench sheet and each changed independent root; identical strings skip
+   `setStyleSheet`. Nested chrome is an explicit
    theme participant; overlapping windows are not a second DFS of the same
    descendants. Settings Center binds a `QssResourceBundle` of center + pages QSS
    once. Do not blanket-polish the widget tree after QSS apply or rollback.
@@ -115,13 +118,15 @@ Cover the role/variant/size/text-role/section state matrix; Light/Dark ×
 defaults; layout signatures for Settings/create/export/34 Inspectors;
 the Inspector geometry matrix in `tests.test_inspector_geometry`;
 theme-switch isolation from project state; keyboard focus, accessible
-names, and disabled/read-only/invalid. Confirm a Light/Dark switch applies 0 extra application stylesheets plus at most 13 changed
-bind roots, with no second-registry replay and no whole-tree polish. Density/size
+names, and disabled/read-only/invalid. Confirm a Light/Dark switch applies 0 extra application stylesheets plus one changed workbench root and each changed independent top-level root, with no second-registry replay and no whole-tree polish. Density/size
 changes still apply the small application sheet once. Confirm
 lazy Layout/Chart/Element Galleries keep stacked indexes and final layout
 signatures after first activation. Confirm `pictures/icons/**` is unmodified.
 
 A required check that is failed, unknown, or not run blocks completion.
+For every related QSS, palette, icon, cached-window, Inspector visibility,
+or Figure toolbar change, the theme roundtrip acceptance in `.agents/architecture/testing-map.md`
+is mandatory, including actual painted colors and toolbar glyph contrast.
 `manual_smoke: true`: native dialogs, 100/125/150/200% DPI, dual-monitor, and
 OS System-theme are Windows desktop evidence; offscreen tests do not claim
 them.

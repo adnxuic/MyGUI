@@ -5,9 +5,9 @@ QFrame#figure_window
     border: 1px solid {{COLOR_BORDER}};
 }
 
-QScrollArea,
-QStackedWidget#figure_canvas_content_stack,
-QStackedWidget#figure_canvas_content_stack > QWidget
+QFrame#figure_window QScrollArea,
+QFrame#figure_window QStackedWidget#figure_canvas_content_stack,
+QFrame#figure_window QStackedWidget#figure_canvas_content_stack > QWidget
 {
     background-color: {{COLOR_CONTENT_BACKGROUND}};
     color: {{COLOR_TEXT_PRIMARY}};

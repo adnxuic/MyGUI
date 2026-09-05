@@ -15,7 +15,6 @@ from mygui.figuremodify.components import (
     AxesController,
     ComponentKind,
 )
-from mygui.application_theme import bind_widget_qss
 from mygui.widgets.common_widget.py_empty_state import PyEmptyState
 
 from .context import EditorContext
@@ -48,10 +47,6 @@ class AxesSemanticInspectorPanel(QFrame):
         self._disposed = False
 
         self.setObjectName("axes_semantic_inspector_panel")
-        bind_widget_qss(
-            self,
-            "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
-        )
         self.inspector_stack = CurrentPageStackedWidget(self)
 
         layout = QVBoxLayout(self)
@@ -244,10 +239,6 @@ class InspectorToolBox(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("inspector_toolbox")
-        bind_widget_qss(
-            self,
-            "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
-        )
         self._entries: list[tuple[str, QWidget]] = []
         self._entry_by_id: dict[str, QWidget] = {}
         self._empty_callback = None
@@ -266,8 +257,8 @@ class InspectorToolBox(QFrame):
 
         self._empty_callback = callback
 
-    def add_inspector(self, inspector):
-        """Add one Inspector keyed exclusively by its stable component ID."""
+    def add_inspector(self, inspector, *, insert_into_owner_stack: bool = True):
+        """Register one Inspector, optionally inserting its hidden owner page."""
 
         controller = getattr(inspector, "controller", None)
         component_id = getattr(controller, "component_id", None)
@@ -279,7 +270,8 @@ class InspectorToolBox(QFrame):
                 f"Duplicate Inspector component ID {component_id!r}."
             )
         try:
-            self.inspector_stack.addWidget(inspector)
+            if insert_into_owner_stack:
+                self.inspector_stack.addWidget(inspector)
             self._entries.append((component_id, inspector))
             self._entry_by_id[component_id] = inspector
         except Exception:
@@ -306,7 +298,7 @@ class InspectorToolBox(QFrame):
                 target=component_id,
             )
             raise
-        if len(self._entries) == 1:
+        if len(self._entries) == 1 and insert_into_owner_stack:
             self.inspector_stack.setCurrentWidget(inspector)
         return len(self._entries) - 1
 
@@ -444,6 +436,8 @@ class InspectorToolBox(QFrame):
         inspector = self._entry_by_id.get(str(component_id))
         if inspector is None:
             return False
+        if self.inspector_stack.indexOf(inspector) < 0:
+            self.inspector_stack.addWidget(inspector)
         self.inspector_stack.setCurrentWidget(inspector)
         return True
 
@@ -492,12 +486,20 @@ class _ComponentInspectorStack(QFrame):
         layout.addWidget(self.toolbox_stack)
         self.toolbox_stack.attach_switch_host(self)
 
-    def ensure_toolbox(self, key):
+    def ensure_toolbox(
+        self,
+        key,
+        *,
+        insert_into_owner_stack: bool = True,
+    ):
+        """Return one role toolbox, deferring hidden stack insertion on request."""
+
         toolbox = self._toolboxes.get(key)
         if toolbox is None:
             toolbox = InspectorToolBox(self.toolbox_stack)
             try:
-                self.toolbox_stack.addWidget(toolbox)
+                if insert_into_owner_stack:
+                    self.toolbox_stack.addWidget(toolbox)
                 self._toolboxes[key] = toolbox
             except Exception:
                 isolate_cleanup_steps(
@@ -515,6 +517,11 @@ class _ComponentInspectorStack(QFrame):
                     target=repr(key),
                 )
                 raise
+        elif (
+            insert_into_owner_stack
+            and self.toolbox_stack.indexOf(toolbox) < 0
+        ):
+            self.toolbox_stack.addWidget(toolbox)
         return toolbox
 
     def toolbox(self, key):
@@ -524,12 +531,16 @@ class _ComponentInspectorStack(QFrame):
         toolbox = self.toolbox(key)
         if toolbox is None:
             return False
+        if self.toolbox_stack.indexOf(toolbox) < 0:
+            self.toolbox_stack.addWidget(toolbox)
         self.toolbox_stack.setCurrentWidget(toolbox)
         return True
 
     def show_component(self, component_id: str) -> bool:
         for toolbox in self._toolboxes.values():
             if toolbox.show_inspector(component_id):
+                if self.toolbox_stack.indexOf(toolbox) < 0:
+                    self.toolbox_stack.addWidget(toolbox)
                 self.toolbox_stack.setCurrentWidget(toolbox)
                 return True
         return False

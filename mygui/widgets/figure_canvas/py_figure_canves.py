@@ -275,6 +275,8 @@ class PyFigureCanvas(QWidget):
         self._tex_render_listener = None
         self._restoring_component_tree_now = False
         self._selection_repair_pending = False
+        self._creation_defaults_cache_key: str | None = None
+        self._creation_defaults_cache: ComponentCreationDefaults | None = None
         if color_library is None:
             raise ValueError("PyFigureCanvas requires the shared ColorLibrary.")
         self.color_library = color_library
@@ -778,7 +780,14 @@ class PyFigureCanvas(QWidget):
     def component_creation_defaults(self) -> ComponentCreationDefaults:
         """Resolve creation defaults from the current Figure style."""
 
-        return resolve_component_creation_defaults(self.component_style)
+        style = self.component_style
+        if (
+            self._creation_defaults_cache is None
+            or self._creation_defaults_cache_key != style
+        ):
+            self._creation_defaults_cache = resolve_component_creation_defaults(style)
+            self._creation_defaults_cache_key = style
+        return self._creation_defaults_cache
 
     def _component_defaults_provider(self):
         window = self.figure_window
@@ -1377,7 +1386,7 @@ class PyFigureCanvas(QWidget):
     def redraw(self):
         """Schedule a coalesced canvas redraw."""
 
-        self.fig.canvas.draw()
+        self.canva.draw_idle()
 
     def _synchronize_before_draw(self) -> None:
         """Replay dynamic primary and Secondary Axis runtime styles."""
@@ -1390,6 +1399,14 @@ class PyFigureCanvas(QWidget):
 
         if hasattr(self.canva, "_draw_pending"):
             self.canva._draw_pending = False
+
+    def flush_pending_draw(self) -> None:
+        """Synchronously settle an already queued draw before a snapshot."""
+
+        if not bool(getattr(self.canva, "_draw_pending", False)):
+            return
+        self.cancel_pending_draw()
+        self.canva.draw()
 
     def dispose(self) -> None:
         """Idempotently detach project callbacks and editor resources."""
@@ -1600,18 +1617,34 @@ class PyFigureCanvas(QWidget):
 
         if self._restoring_component_tree_now or self.figure_inspector is None:
             return
-        if not self.select_component(controller.component_id):
-            raise RuntimeError(
-                f"Could not open Inspector for {controller.component_id!r}."
-            )
+        component_id = controller.component_id
+        if self.figure_inspector.inspector(component_id) is None:
+            if not self.select_component(component_id):
+                raise RuntimeError(
+                    f"Could not open Inspector for {component_id!r}."
+                )
+            return
+        axes_id = self._axes_ancestor_id(component_id)
+        self.commit_prepared_selection(
+            component_id,
+            axes_component_id=(
+                axes_id if axes_id is not None else self.current_axes_component_id
+            ),
+        )
 
-    def _finish_created_component(self, controller) -> None:
-        """Publish selection and one redraw after a single creation commits."""
+    def _finish_created_component(
+        self,
+        controller,
+        *,
+        schedule_redraw: bool = True,
+    ) -> None:
+        """Publish selection and arrange a redraw only when still required."""
 
         if self._restoring_component_tree_now:
             return
         self._select_created_component(controller)
-        self.redraw()
+        if schedule_redraw:
+            self.redraw()
 
     @staticmethod
     def _remove_created_artist(artist) -> None:
@@ -1626,10 +1659,6 @@ class PyFigureCanvas(QWidget):
         if self._restoring_component_tree_now or self.figure_inspector is None:
             return
         previous_component_id = self.current_component_id
-        if not self.figure_inspector.show_component(controller.component_id):
-            raise RuntimeError(
-                f"Inspector for {controller.component_id!r} is unavailable."
-            )
 
         def rollback_inspector() -> None:
             self.figure_inspector.remove_component_inspector(
@@ -1642,6 +1671,10 @@ class PyFigureCanvas(QWidget):
                 self.figure_inspector.show_component(previous_component_id)
 
         transaction.on_rollback(rollback_inspector)
+        if not self.figure_inspector.show_component(controller.component_id):
+            raise RuntimeError(
+                f"Inspector for {controller.component_id!r} is unavailable."
+            )
 
     def _normalize_batch_refs(
         self,
@@ -3137,8 +3170,9 @@ class PyFigureCanvas(QWidget):
         return json_component_value(value)
 
     def component_snapshot(self) -> dict[str, Any]:
-        """Return the canonical schema-v23 component tree used by persistence."""
+        """Return the settled canonical schema-v23 component tree."""
 
+        self.flush_pending_draw()
         components = []
         for controller in self.component_registry.query():
             try:

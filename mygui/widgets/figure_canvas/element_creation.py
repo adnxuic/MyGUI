@@ -205,7 +205,13 @@ class ElementCreationStager:
             host._prepare_created_component(controller, transaction)
         if not host._restoring_component_tree_now and (not result.ok or result.notices):
             host.message_presenter.present(result)
-        host._finish_created_component(controller)
+        # A successful TextRenderService transaction already performed the
+        # required synchronous render probe.  Do not queue the same Figure a
+        # second time; rejected probes still need a safe-state redraw.
+        host._finish_created_component(
+            controller,
+            schedule_redraw=not result.ok,
+        )
         return text_artist
 
     def create_annotation(self, request: AnnotationCreateRequest):

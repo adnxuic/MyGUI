@@ -128,7 +128,7 @@ def p95_ms(samples: list[float]) -> float:
 
 def measure_frame(
     target: QWidget,
-    action: Callable[[], None],
+    action: Callable[[], Any],
     *,
     timeout_s: float = FRAME_PROBE_TIMEOUT_S,
     visible_only: bool = False,
@@ -147,7 +147,16 @@ def measure_frame(
     app.installEventFilter(watcher)
     try:
         started = time.perf_counter()
-        action()
+        action_result = action()
+        dynamic_target = _alive(
+            action_result if isinstance(action_result, QWidget) else None
+        )
+        if dynamic_target is not None:
+            widget = dynamic_target
+            watcher.target_ids = _region_ids(
+                widget,
+                visible_only=visible_only,
+            )
         dispatch_at = time.perf_counter()
         dispatch_ms = (dispatch_at - started) * 1000.0
         deadline = started + max(0.001, float(timeout_s))
@@ -205,7 +214,7 @@ def wait_settle(
 
 def measure_samples(
     target: QWidget,
-    action: Callable[[], None],
+    action: Callable[[], Any],
     *,
     warmup: bool = True,
     count: int = 5,

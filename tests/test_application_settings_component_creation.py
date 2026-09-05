@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from tests.axes_helpers import create_regular_axes
@@ -32,6 +33,9 @@ from mygui.application_settings import (
 from mygui.application_settings.document import flatten_snapshot
 from mygui.database import ColumnRef
 from mygui.figuremodify.style_base.color_models import ColorSelection, normalize_color
+from mygui.figuremodify.style_base.creation_defaults import (
+    resolve_component_creation_defaults,
+)
 from mygui.project_io import (
     PROJECT_SCHEMA_VERSION,
     restore_project_snapshot,
@@ -101,6 +105,32 @@ class ComponentCreationDefaultsTests(unittest.TestCase):
         provider = CountingComponentDefaults(settings)
         self.window.figure_window.set_component_defaults_provider(provider)
         return provider
+
+    def test_figure_style_creation_defaults_are_cached_per_canvas(self):
+        self.canvas._creation_defaults_cache = None
+        self.canvas._creation_defaults_cache_key = None
+        target = (
+            "mygui.widgets.figure_canvas.py_figure_canves."
+            "resolve_component_creation_defaults"
+        )
+        with mock.patch(target, wraps=resolve_component_creation_defaults) as resolve:
+            first = self.canvas.component_creation_defaults()
+            second = self.canvas.component_creation_defaults()
+            self.assertIs(first, second)
+            resolve.assert_called_once_with("default")
+
+            root = self.canvas.component_registry.get(
+                self.canvas.root_component_id
+            )
+            self.assertTrue(root.set_property("style", "classic").ok)
+            classic = self.canvas.component_creation_defaults()
+            self.assertIsNot(classic, first)
+            self.assertIs(
+                self.canvas.component_creation_defaults(),
+                classic,
+            )
+            self.assertEqual(resolve.call_count, 2)
+            resolve.assert_called_with("classic")
 
     def test_inherit_curve_keeps_explicit_style_and_color(self):
         line = self.canvas.add_curve("x", 0, 1, "--", "#112233", "curve")

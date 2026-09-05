@@ -5,7 +5,14 @@ QFrame#inspector_toolbox {
     color: {{COLOR_TEXT_PRIMARY}};
 }
 
-QLabel, QCheckBox, QRadioButton, QGroupBox
+QFrame#axes_semantic_inspector_panel QLabel,
+QFrame#axes_semantic_inspector_panel QCheckBox,
+QFrame#axes_semantic_inspector_panel QRadioButton,
+QFrame#axes_semantic_inspector_panel QGroupBox,
+QFrame#inspector_toolbox QLabel,
+QFrame#inspector_toolbox QCheckBox,
+QFrame#inspector_toolbox QRadioButton,
+QFrame#inspector_toolbox QGroupBox
 {
     color: {{COLOR_TEXT_PRIMARY}};
 }

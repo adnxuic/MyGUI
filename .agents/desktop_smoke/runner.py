@@ -56,7 +56,7 @@ def run_smoke(
     from desktop_smoke.scenarios.project_lifecycle import (
         run_project_lifecycle_scenarios,
     )
-    from desktop_smoke.scenarios.settings import run_settings_scenarios
+    from desktop_smoke.scenarios.settings import run_settings_scenarios, run_theme_roundtrip_scenario
     from desktop_smoke.scenarios.styles import run_styles_scenarios
     from desktop_smoke.scenarios.templates import run_templates_scenarios
 
@@ -94,6 +94,8 @@ def run_smoke(
             scenario_results.extend(
                 run_styles_scenarios(harness, all_styles=all_styles)
             )
+        if "settings" in selected:
+            scenario_results.append(run_theme_roundtrip_scenario(harness))
     except Exception as exc:  # noqa: BLE001 — required check surfaces the failure
         status = "failed"
         scenario_results.append(

@@ -62,16 +62,15 @@ from mygui.application_settings import (
 )
 from mygui.application_settings.storage import SettingsBackend, create_settings_backend
 from mygui.application_theme import (
-    MAINWINDOW_QSS_RESOURCE,
     ThemeService,
     apply_committed_appearance,
-    bind_widget_qss,
     compose_theme_runtime_applier,
     compose_theme_service,
     current_density_metrics,
     default_theme_runtime,
     subscribe_theme_window,
     theme_construction_batch,
+    workbench_qss_scope,
 )
 from mygui.widgets.settings_center import compose_settings_center
 from mygui.widgets.template_workflow import TemplateWorkflow
@@ -235,14 +234,13 @@ class MainWindow(QMainWindow):
     def setup_ui(self):
         """Build the main window and connect its shared application services."""
 
+        self.setObjectName("MainWindow")
         with theme_construction_batch():
-            self._setup_ui_body()
+            with workbench_qss_scope(self):
+                self._setup_ui_body()
 
     def _setup_ui_body(self):
         """Construct chrome while theme subscribers only register."""
-
-        self.setObjectName("MainWindow")
-        bind_widget_qss(self, MAINWINDOW_QSS_RESOURCE)
 
         self.central_widget = QWidget()
         self.central_widget.setObjectName("central_widget")

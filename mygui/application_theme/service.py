@@ -39,6 +39,7 @@ from .ports import (
 )
 from .system import resolve_effective_scheme, scheme_from_palette
 from .tokens import ICON_ROLES, build_tokens
+from .windows import WindowPaletteMemento, default_window_registry
 
 ThemeListener = Callable[[ThemeSnapshot, ThemeSnapshot], None]
 
@@ -70,6 +71,7 @@ class _ChromeMemento:
     icons: object = None
     qss_tokens: dict[str, str] = field(default_factory=dict)
     hub_snapshot: ThemeSnapshot | None = None
+    window_palettes: tuple[WindowPaletteMemento, ...] = ()
 
 
 class ThemeService(QObject):
@@ -427,6 +429,9 @@ class ThemeService(QObject):
             icons=self._icons.capture() if need("icons") else None,
             qss_tokens=qss_tokens,
             hub_snapshot=hub_snapshot,
+            window_palettes=(
+                default_window_registry().capture_palettes() if need("palette") else ()
+            ),
         )
 
     def _apply_prepared(
@@ -454,9 +459,10 @@ class ThemeService(QObject):
                     if step == "qss" and not self._qss_documents_changed(prepared):
                         continue
                     started = time.perf_counter()
+                    # A step may mutate only some participants before raising.
+                    applied.append(step)
                     self._run_apply_step(step, prepared)
                     timings[step] = round((time.perf_counter() - started) * 1000, 3)
-                    applied.append(step)
         except Exception as exc:
             self._rollback_applied(applied, memento, primary=exc)
             raise
@@ -499,13 +505,14 @@ class ThemeService(QObject):
     ) -> None:
         self._set_hub_snapshot(memento.hub_snapshot)
         errors: list[BaseException] = []
-        while applied:
-            step = applied.pop()
-            try:
-                self._maybe_fail_rollback(step)
-                self._restore_step(step, memento)
-            except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
+        block_layout = "font" not in applied and "metrics" not in applied
+        with _batch_chrome_updates(self._app, block_layout=block_layout):
+            for step in _restore_steps(applied):
+                try:
+                    self._maybe_fail_rollback(step)
+                    self._restore_step(step, memento)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(exc)
         if errors:
             self._health = ThemeHealth.UNCERTAIN
             raise ThemeRollbackError(tuple(errors), primary=primary)
@@ -566,7 +573,7 @@ class ThemeService(QObject):
             from .qss import apply_application_stylesheet
 
             apply_application_stylesheet(self._app, memento.stylesheet)
-            binding_restore(self._bindings, memento.local_styles)
+            binding_restore(self._bindings, self._restore_stylesheets(memento))
             try:
                 from .qss import publish_qss_tokens
 
@@ -580,7 +587,9 @@ class ThemeService(QObject):
             try:
                 from .windows import default_window_registry
 
-                default_window_registry().apply_palette(memento.palette)
+                default_window_registry().restore_palettes(
+                    memento.window_palettes, memento.palette,
+                )
             except ImportError:
                 pass
             return
@@ -589,6 +598,22 @@ class ThemeService(QObject):
                 self._app.setFont(QFont(memento.font))
             return
         raise ThemeApplyError(f"Unknown theme restore step {step!r}.")
+
+    def _restore_stylesheets(self, memento: _ChromeMemento) -> dict[int, str]:
+        """Include roots created during preview, rendered from its origin snapshot."""
+
+        captured = dict(memento.local_styles)
+        snapshot = memento.hub_snapshot
+        if snapshot is None:
+            return captured
+        rendered: dict[str, str] = {}
+        for widget, resource in binding_iter(self._bindings):
+            if id(widget) in captured:
+                continue
+            if resource not in rendered:
+                rendered[resource] = self._qss.render_resource(resource, snapshot)
+            captured[id(widget)] = rendered[resource]
+        return captured
 
     def _restore(
         self,
@@ -602,11 +627,11 @@ class ThemeService(QObject):
         rollback: dict[str, float] = {}
         block_layout = "font" not in wanted and "metrics" not in wanted
         with _batch_chrome_updates(self._app, block_layout=block_layout):
-            for step in reversed(APPLY_STEPS):
-                if step in wanted:
-                    started = time.perf_counter()
-                    self._restore_step(step, memento)
-                    rollback[step] = round((time.perf_counter() - started) * 1000, 3)
+            for step in _restore_steps(selected):
+                started = time.perf_counter()
+                self._maybe_fail_rollback(step)
+                self._restore_step(step, memento)
+                rollback[step] = round((time.perf_counter() - started) * 1000, 3)
         self.last_rollback_timings_ms = rollback
 
     def _maybe_fail_apply(self, step: str) -> None:
@@ -622,6 +647,19 @@ class ThemeService(QObject):
     def _ensure_gui_thread(self) -> None:
         if QThread.currentThread() is not self._app.thread():
             raise ThemeApplyError("Theme apply must run on the GUI thread.")
+
+
+def _restore_steps(steps: Sequence[str]) -> tuple[str, ...]:
+    """Restore palette before QSS, then icons that consume the resolved chrome."""
+
+    ordered = [step for step in reversed(APPLY_STEPS) if step in steps]
+    if "palette" in ordered and "qss" in ordered:
+        qss_index, palette_index = ordered.index("qss"), ordered.index("palette")
+        ordered[qss_index], ordered[palette_index] = "palette", "qss"
+    if "icons" in ordered:
+        ordered.remove("icons")
+        ordered.append("icons")
+    return tuple(ordered)
 
 
 class _SkipHiddenFontFilter(QObject):

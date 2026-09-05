@@ -839,13 +839,16 @@ class ComponentRegistry:
         roots = [
             controller
             for controller in self._controllers.values()
-            if controller.state.parent_id is None
+            if controller.parent_id is None
         ]
-        if len(roots) != 1 or roots[0].state.kind is not ComponentKind.FIGURE:
+        if len(roots) != 1 or roots[0].kind is not ComponentKind.FIGURE:
             raise ComponentValidationError(
                 "Registry must have exactly one Figure root."
             )
-        root = roots[0].state
+        # One independent snapshot per Controller for this synchronous validation.
+        # Reuse it for parent and semantic checks, never across operations.
+        states = {key: controller.state for key, controller in self._controllers.items()}
+        root = states[roots[0].component_id]
         if root.selector.get("scope") != "figure":
             raise ComponentValidationError(
                 "Figure selector must use scope='figure'."
@@ -854,8 +857,7 @@ class ComponentRegistry:
         children_by_parent: dict[str | None, list[ComponentState]] = (
             defaultdict(list)
         )
-        for controller in self._controllers.values():
-            state = controller.state
+        for state in states.values():
             if state.parent_id is not None and state.parent_id not in self._controllers:
                 raise ComponentValidationError(
                     f"Component {state.id!r} has an unknown parent."
@@ -871,7 +873,7 @@ class ComponentRegistry:
                 )
             children_by_parent[state.parent_id].append(state)
             if state.parent_id is not None:
-                parent = self._controllers[state.parent_id].state
+                parent = states[state.parent_id]
                 self._validate_parent_kind(state, parent)
             self._validate_semantic_selector(state)
 
@@ -904,8 +906,7 @@ class ComponentRegistry:
             )
 
         semantic_keys: set[tuple[str | None, ComponentKind, str]] = set()
-        for controller in self._controllers.values():
-            state = controller.state
+        for state in states.values():
             try:
                 selector_key = json.dumps(
                     state.selector,
@@ -928,18 +929,18 @@ class ComponentRegistry:
 
         colorbar_sources: set[str] = set()
         for controller in self.query(kind=ComponentKind.COLORBAR):
-            state = controller.state
+            state = states[controller.component_id]
             source_id = state.data.get("source_component_id")
             source = self._controllers.get(source_id)
             scatter_source = (
                 source is not None
-                and source.state.kind is ComponentKind.SCATTER
-                and source.state.role is ComponentRole.SCATTER
+                and source.kind is ComponentKind.SCATTER
+                and source.role is ComponentRole.SCATTER
             )
             field_source = (
                 source is not None
-                and source.state.kind is ComponentKind.FIELD_2D
-                and source.state.role
+                and source.kind is ComponentKind.FIELD_2D
+                and source.role
                 in {
                     ComponentRole.PSEUDOCOLOR,
                     ComponentRole.HEATMAP,
@@ -951,7 +952,7 @@ class ComponentRegistry:
                     f"Colorbar component {state.id!r} requires a Scatter "
                     "or FIELD_2D source."
                 )
-            if source.state.parent_id != state.parent_id:
+            if source.parent_id != state.parent_id:
                 raise ComponentValidationError(
                     f"Colorbar component {state.id!r} and its source must "
                     "belong to the same owner Axes."
@@ -966,7 +967,7 @@ class ComponentRegistry:
 
         secondary_placements: set[tuple[str | None, ComponentRole, str, float]] = set()
         for controller in self.query(kind=ComponentKind.SECONDARY_AXIS):
-            state = controller.state
+            state = states[controller.component_id]
             orientation = (
                 "x" if state.role is ComponentRole.SECONDARY_X_AXIS else "y"
             )
@@ -981,9 +982,7 @@ class ComponentRegistry:
             secondary_placements.add(key)
 
         axes_states = [
-            controller.state
-            for controller in self._controllers.values()
-            if controller.state.kind is ComponentKind.AXES
+            state for state in states.values() if state.kind is ComponentKind.AXES
         ]
         axes_indexes = sorted(
             state.selector["index"] for state in axes_states
@@ -999,9 +998,9 @@ class ComponentRegistry:
             )
 
         chart_orders = [
-            controller.state.order
+            controller.order
             for controller in self._controllers.values()
-            if controller.state.kind in _CHART_KINDS
+            if controller.kind in _CHART_KINDS
         ]
         if len(chart_orders) != len(set(chart_orders)):
             raise ComponentValidationError(
@@ -1152,7 +1151,7 @@ class ComponentRegistry:
                     f"Component {state.id!r} requires axis=x|y and "
                     "level=major|minor selectors."
                 )
-            parent = self._controllers[state.parent_id].state
+            parent = self._controllers[state.parent_id]
             parent_axis = parent.selector.get("axis")
             parent_level = parent.selector.get("level")
             if parent_axis != axis_name:
@@ -1200,7 +1199,7 @@ class ComponentRegistry:
                 if state.role is ComponentRole.X_LABEL
                 else "y"
             )
-            parent = self._controllers[state.parent_id].state
+            parent = self._controllers[state.parent_id]
             if (
                 selector.get("axis") != expected
                 or parent.selector.get("axis") != expected
@@ -1267,7 +1266,7 @@ class ComponentRegistry:
                 )
             scope = selector.get("scope")
             if scope is not None:
-                parent = self._controllers[state.parent_id].state
+                parent = self._controllers[state.parent_id]
                 expected_scope = (
                     "figure"
                     if parent.kind is ComponentKind.FIGURE
@@ -1504,5 +1503,5 @@ class ComponentRegistry:
     ) -> list[ComponentController[Any]]:
         return sorted(
             controllers,
-            key=lambda item: (item.state.order, item.component_id),
+            key=lambda item: (item.order, item.component_id),
         )

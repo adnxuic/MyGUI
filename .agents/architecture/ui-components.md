@@ -142,13 +142,14 @@ at least 4.5:1; focus rings and control-boundary colors stay at least 3:1.
 `ThemeBindingRegistry` is the only QSS bind registry. `bind_widget_qss()`
 does not also register the module-level fallback. Token publish
 (`publish_qss_tokens`) updates watchers without replaying bound widgets.
-Each theme transaction applies the application stylesheet at most once and
-each changed regional root at most once; identical strings skip
-`setStyleSheet`. Theme windows are independent style roots; nested chrome
+Each theme transaction applies the application stylesheet at most once, the
+changed workbench stylesheet once, and each changed independent root once;
+identical strings skip `setStyleSheet`. Theme windows are independent style roots; nested chrome
 joins explicit metrics/icon participant sets and is not walked as a second
 tree. Dynamic properties call `refresh_ui_style()` only when
 `uiRole`, `uiVariant`, `uiSize`, `uiTone`, `uiInvalid`, or `uiTextRole`
-actually change.
+actually change. A widget that has not received its first Qt polish only stores
+the properties; Qt's first polish consumes them without an unpolish/polish pair.
 
 Style Gallery is created at startup. Layout, Chart, and Element Galleries are
 created on first legal activation or first property access, keep stacked
@@ -161,8 +162,13 @@ viewport, and needed scrollbars only.
 ## Component QSS composition
 
 Qt local stylesheets isolate a widget tree from the application stylesheet.
-`ThemeService` therefore composes `mygui/widgets/ui_components/style.qss`
-into every regional `bind_qss` document. The application stylesheet is only
+`ThemeService` therefore composes `mygui/widgets/ui_components/style.qss` and
+the workbench regional documents into one stylesheet bound at MainWindow.
+The construction scope suppresses covered child bindings before those widgets
+are parented; later dynamic Inspector children discover the workbench ancestor
+and inherit the same sheet. Reusable regional widgets outside a workbench and
+independent top-level dialogs keep one local composed sheet. The application
+stylesheet is only
 `app_style.qss` (combo popups, spin arrows, `QMessageBox` buttons) so a
 scheme change does not polish the workbench twice. Light/Dark keeps the
 process-global popup sheet byte-identical (structure, sizes, and icon URLs

@@ -6,6 +6,7 @@ import time
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -341,6 +342,64 @@ def run_settings_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
         )
     )
     return results
+
+
+def run_theme_roundtrip_scenario(harness: SmokeHarness) -> dict[str, Any]:
+    """Run color acceptance after the benchmarks so their inputs stay comparable."""
+
+    return _run_case(harness, "settings.theme_roundtrip", lambda: _scenario_theme_roundtrip(harness))
+
+
+def _scenario_theme_roundtrip(harness: SmokeHarness) -> None:
+    """Revisit a cached page after returning to the committed appearance."""
+
+    dialog = harness.present_settings(PAGE_APPEARANCE)
+    light = dialog.findChild(QRadioButton, "appearance_theme_light")
+    dark = dialog.findChild(QRadioButton, "appearance_theme_dark")
+    harness.click(light)
+    harness.click(dialog.apply_button)
+    harness.select_page(PAGE_NEW_FIGURE)
+    page = _page_inner(dialog, PAGE_NEW_FIGURE)
+    scroll = dialog.findChild(QScrollArea, f"settings_page_scroll_{PAGE_NEW_FIGURE}")
+    if page is None or scroll is None:
+        raise SmokeError("New Figure page or its scroll area is missing.")
+    widgets = (dialog, scroll, scroll.viewport(), page)
+
+    def colors():
+        return tuple(
+            tuple(widget.palette().color(role).rgba() for role in (QPalette.Window, QPalette.WindowText))
+            for widget in widgets
+        )
+
+    original = colors()
+    _assert_figure_toolbar_contrast(harness)
+    for index in range(3):
+        harness.select_page(PAGE_APPEARANCE)
+        harness.click(dark)
+        _assert_figure_toolbar_contrast(harness)
+        harness.click(light)
+        harness.select_page(PAGE_NEW_FIGURE)
+        if colors() != original:
+            raise SmokeError(f"Cached New Figure palette changed after roundtrip {index + 1}.")
+        _assert_figure_toolbar_contrast(harness)
+    harness.grab(dialog, "theme-roundtrip-cached-new-figure")
+    harness.grab_main("theme-roundtrip-main")
+    harness.close_settings(cancel=True)
+
+
+def _assert_figure_toolbar_contrast(harness: SmokeHarness) -> None:
+    toolbar = harness.window.figure_window.current_canva.navigation_toolbar
+    bright_surface = toolbar.palette().color(toolbar.backgroundRole()).lightness() >= 128
+    for name, action in toolbar._actions.items():
+        image = action.icon().pixmap(24, 24).toImage()
+        values = [
+            color.lightness()
+            for x in range(image.width())
+            for y in range(image.height())
+            if (color := image.pixelColor(x, y)).alpha() > 127
+        ]
+        if not values or (sum(values) / len(values) >= 128) == bright_surface:
+            raise SmokeError(f"Figure toolbar {name} glyph does not contrast with its surface.")
 
 
 def _run_case(

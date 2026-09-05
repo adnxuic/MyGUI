@@ -356,6 +356,19 @@ class AgentEngineeringTests(unittest.TestCase):
                     task_map["tasks"][task_id]["focused_tests"],
                 )
 
+    def test_theme_routes_require_roundtrip_tests_and_native_smoke(self):
+        routes = self.runner.load_task_map(ROOT)["tasks"]
+        required = {
+            "tests.test_application_theme",
+            "tests.test_application_theme_transactions",
+            "tests.test_application_theme_chrome",
+            "tests.test_application_theme_qss",
+        }
+        for name in ("debug_gui_regression", "modernize_ui_components", "modify_application_setting"):
+            with self.subTest(route=name):
+                self.assertTrue(required <= set(routes[name]["focused_tests"]))
+                self.assertTrue(routes[name]["manual_smoke"])
+
     def test_catalog_validation_is_bidirectional_and_checks_anchors_and_enforcement(self):
         catalog = self.runner.load_yaml(ROOT / ".agents/rule-catalog.yaml")
         agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
@@ -1142,6 +1155,42 @@ class AgentEngineeringTests(unittest.TestCase):
 
         self.assertEqual(len(visible_matplotlib_style_names()), 26)
         self.assertNotIn("Apply Template", visible_matplotlib_style_names())
+
+    def test_desktop_smoke_component_creation_performance_contract_is_enforced(
+        self,
+    ) -> None:
+        scenario = (
+            ROOT / ".agents" / "desktop_smoke" / "creation_performance.py"
+        ).read_text(encoding="utf-8")
+        gates = (ROOT / ".agents" / "desktop_smoke" / "gates.py").read_text(
+            encoding="utf-8"
+        )
+        testing_map = (ROOT / ".agents" / "architecture" / "testing-map.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("WARMUP_FRAMES = 3", gates)
+        self.assertIn("SAMPLE_FRAMES = 20", gates)
+        self.assertIn("COMPONENT_CREATE_IMPROVEMENT = 0.40", gates)
+        self.assertIn("assert_creation_gates", scenario)
+        self.assertIn("style_default_resolution", scenario)
+        self.assertIn("inspector_construction", scenario)
+        self.assertIn("selection_publication", scenario)
+        self.assertIn("canvas_draw_idle", scenario)
+        self.assertIn("creates then", testing_map)
+        self.assertIn("3-warmup/20-sample frame probe", testing_map)
+
+    def test_native_theme_roundtrip_runs_after_performance_scenarios(self) -> None:
+        runner = (ROOT / ".agents" / "desktop_smoke" / "runner.py").read_text(encoding="utf-8")
+        tree = ast.parse(runner)
+        smoke = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run_smoke")
+        calls = {
+            node.func.id: node.lineno
+            for node in ast.walk(smoke)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertIn("run_theme_roundtrip_scenario", calls)
+        for scenario in ("run_settings_scenarios", "run_charts_1d_scenarios", "run_inspectors_scenarios", "run_styles_scenarios"):
+            self.assertLess(calls[scenario], calls["run_theme_roundtrip_scenario"])
 
 
 if __name__ == "__main__":

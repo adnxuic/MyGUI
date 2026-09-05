@@ -247,6 +247,12 @@ class ComponentController(Generic[T]):
         return self._state.parent_id
 
     @property
+    def order(self) -> int:
+        """Return the live ordering key without copying component payloads."""
+
+        return self._state.order
+
+    @property
     def selector(self) -> Mapping[str, Any]:
         """Return the live selector mapping without copying state."""
 

@@ -198,6 +198,68 @@ class PyFigureCanvasBranchTests(unittest.TestCase):
                 self.assertEqual(label.get_fontweight(), "bold")
                 self.assertIsNotNone(label.get_bbox_patch())
 
+    def test_creation_prepares_inspector_once_and_queues_one_draw(self):
+        create_regular_axes(self.canvas)
+        shown: list[str] = []
+        self.canvas.componentSelectionChanged.connect(shown.append)
+        inspector = self.canvas.figure_inspector
+        with (
+            mock.patch.object(
+                inspector,
+                "show_component",
+                wraps=inspector.show_component,
+            ) as show_component,
+            mock.patch.object(self.canvas.canva, "draw_idle") as draw_idle,
+        ):
+            self.canvas.add_curve(
+                "x",
+                0.0,
+                1.0,
+                "-",
+                "#123456",
+                "queued",
+                object_id="queued-curve",
+            )
+
+        self.assertEqual(
+            [call.args[0] for call in show_component.call_args_list],
+            ["queued-curve"],
+        )
+        self.assertEqual(shown, ["queued-curve"])
+        draw_idle.assert_called_once_with()
+        created_inspector = inspector.inspector("queued-curve")
+        axes_id = self.canvas._axes_ancestor_id("queued-curve")
+        axes_panel = inspector.axes_inspector(axes_id)
+        owner_toolbox = axes_panel.inspector_owner("queued-curve")
+        self.assertEqual(
+            axes_panel._chart_stack.toolbox_stack.indexOf(owner_toolbox),
+            -1,
+        )
+        self.assertGreaterEqual(
+            inspector._inspector_stack.indexOf(created_inspector),
+            0,
+        )
+
+        with (
+            mock.patch.object(
+                self.canvas.canva,
+                "draw",
+                wraps=self.canvas.canva.draw,
+            ) as draw,
+            mock.patch.object(self.canvas.canva, "draw_idle") as draw_idle,
+        ):
+            self.canvas.add_text(
+                0.25,
+                0.75,
+                "validated",
+                "DejaVu Sans",
+                10.0,
+                object_id="validated-text",
+            )
+
+        draw.assert_called_once_with()
+        draw_idle.assert_not_called()
+
     def test_export_figure_and_save(self):
         # 1. export_figure type check
         with self.assertRaisesRegex(TypeError, "export_figure requires a FigureExportRequest"):
@@ -483,6 +545,13 @@ class PyFigureCanvasBranchTests(unittest.TestCase):
         self.canvas.cancel_pending_draw()
         if had_draw_pending:
             self.canvas.canva._draw_pending = False
+
+        with mock.patch.object(self.canvas.canva, "draw") as draw:
+            self.canvas.canva._draw_pending = True
+            self.canvas.flush_pending_draw()
+            self.canvas.flush_pending_draw()
+        self.assertFalse(self.canvas.canva._draw_pending)
+        draw.assert_called_once_with()
 
         failure = ObserverFailure(
             "registry",

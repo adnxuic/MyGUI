@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 from types import MappingProxyType
@@ -49,6 +50,25 @@ class QssResourceBundle:
     @property
     def key(self) -> str:
         return QSS_BUNDLE_SEPARATOR.join(self.resources)
+
+
+WORKBENCH_QSS_BUNDLE = QssResourceBundle(
+    (
+        MAINWINDOW_QSS_RESOURCE,
+        "mygui/widgets/title_bar/style.qss",
+        "mygui/widgets/table/style.qss",
+        "mygui/widgets/component_tree/style.qss",
+        "mygui/widgets/figure_canvas/style.qss",
+        "mygui/widgets/fig_control_window/style.qss",
+        "mygui/widgets/fig_control_window/all_mod_widgets/style.qss",
+        "mygui/widgets/fig_control_window/all_mod_widgets/chart_mod_style.qss",
+        "mygui/widgets/left_column/style.qss",
+        "mygui/widgets/right_column/style.qss",
+        "mygui/widgets/bottom_bar/style.qss",
+    )
+)
+_WORKBENCH_QSS_PROPERTY = "myguiWorkbenchQssResources"
+_WORKBENCH_SCOPE_STACK: list[frozenset[str]] = []
 
 
 def qss_bind_key(resource: str | QssResourceBundle) -> str:
@@ -504,6 +524,19 @@ def _live_registry() -> ThemeBindingPort | None:
     return default_theme_runtime().binding_port
 
 
+def _workbench_covers(widget: QWidget, resource: str) -> bool:
+    requested = frozenset(split_qss_resource_key(resource))
+    if any(requested <= resources for resources in _WORKBENCH_SCOPE_STACK):
+        return True
+    current: QWidget | None = widget.parentWidget()
+    while current is not None:
+        value = current.property(_WORKBENCH_QSS_PROPERTY)
+        if value and requested <= frozenset(split_qss_resource_key(str(value))):
+            return True
+        current = current.parentWidget()
+    return False
+
+
 def bind_widget_qss(
     widget: QWidget,
     resource: str | QssResourceBundle,
@@ -518,11 +551,32 @@ def bind_widget_qss(
     """
 
     path = qss_bind_key(resource)
+    if _workbench_covers(widget, path):
+        return
     port = theme_binding if theme_binding is not None else _live_registry()
     if port is not None:
         port.bind_qss(widget, path)
         return
     bind_qss(widget, path, current_qss_tokens())
+
+
+@contextmanager
+def workbench_qss_scope(
+    widget: QWidget,
+    resource: QssResourceBundle = WORKBENCH_QSS_BUNDLE,
+):
+    """Bind one workbench stylesheet and suppress covered descendant binds."""
+
+    bind_widget_qss(widget, resource)
+    resources = frozenset(resource.resources)
+    widget.setProperty(_WORKBENCH_QSS_PROPERTY, resource.key)
+    _WORKBENCH_SCOPE_STACK.append(resources)
+    try:
+        yield
+    finally:
+        popped = _WORKBENCH_SCOPE_STACK.pop()
+        if popped != resources:
+            raise RuntimeError("Workbench QSS construction scopes were unbalanced.")
 
 
 def compose_component_stylesheet(
@@ -533,10 +587,11 @@ def compose_component_stylesheet(
 ) -> str:
     """Prefix shared component QSS so local sheets keep control semantics.
 
-    Qt local stylesheets isolate a widget from the application sheet, so every
-    regional ``bind_qss`` document includes the component rules. Shared
-    component QSS expands once per token fingerprint; regional documents are
-    cached by fingerprint plus resource and never resolve from CWD.
+    A standalone regional ``bind_qss`` document includes the shared component
+    rules because Qt local stylesheets isolate that subtree from its ancestors.
+    Workbench regions instead share the one composed MainWindow document.
+    Shared component QSS expands once per token fingerprint; regional documents
+    are cached by fingerprint plus resource and never resolve from CWD.
     """
 
     component = _component_qss_for_tokens(tokens)
@@ -655,6 +710,7 @@ def reset_qss_bindings_for_tests() -> None:
     global _INSTALLED_BINDING, _DEFAULT_BINDING
     _BINDINGS.clear()
     _WATCHERS.clear()
+    _WORKBENCH_SCOPE_STACK.clear()
     _INSTALLED_BINDING = None
     _DEFAULT_BINDING = QssThemeBinding(LIGHT_QSS_TOKENS)
     clear_qss_document_cache_for_tests()

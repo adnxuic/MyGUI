@@ -16,11 +16,20 @@ from mygui.widgets.title_bar.titlebar_dialog.py_chart_dialog import (
 )
 
 from desktop_smoke.harness import SmokeError, SmokeHarness
+from desktop_smoke.creation_performance import measure_creation_performance
 
 
 def run_charts_1d_scenarios(harness: SmokeHarness) -> list[dict[str, Any]]:
     """Walk through 1D charts: Curve, Plot, Scatter, Error Bar, Fit, Interpolation."""
     results: list[dict[str, Any]] = []
+
+    results.append(
+        _run_case(
+            harness,
+            "charts_1d.creation_performance",
+            lambda: measure_creation_performance(harness),
+        )
+    )
 
     results.append(
         _run_case(harness, "charts_1d.curve", lambda: _scenario_curve(harness))

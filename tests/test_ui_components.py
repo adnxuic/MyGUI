@@ -256,10 +256,24 @@ class UiComponentFacadeTests(unittest.TestCase):
         group.setCheckable(True)
         group.setChecked(False)
         box.setEnabled(True)
-        annotate_section(group)
+        with (
+            patch.object(
+                group,
+                "setCheckable",
+                wraps=group.setCheckable,
+            ) as set_checkable,
+            patch.object(
+                group,
+                "setChecked",
+                wraps=group.setChecked,
+            ) as set_checked,
+        ):
+            annotate_section(group)
         self.assertEqual(group.property(PROPERTY_ROLE), "section")
         self.assertFalse(group.isChecked())
         self.assertTrue(box.isEnabled())
+        set_checkable.assert_not_called()
+        set_checked.assert_not_called()
 
     def test_style_button_requires_an_explicit_variant(self) -> None:
         button = QPushButton("OK")

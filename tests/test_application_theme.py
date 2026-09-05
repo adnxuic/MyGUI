@@ -429,7 +429,8 @@ class ThemeStartupIntegrationTests(_ThemeCase):
     def test_mainwindow_binds_qss_instead_of_import_time_light_sheet(self) -> None:
         source = (ROOT / "main.py").read_text(encoding="utf-8")
         setup = source[source.index("def setup_ui") : source.index("def _valid_splitter_sizes")]
-        self.assertIn("bind_widget_qss(self, MAINWINDOW_QSS_RESOURCE)", setup)
+        self.assertIn("with workbench_qss_scope(self)", setup)
+        self.assertNotIn("bind_widget_qss(self, MAINWINDOW_QSS_RESOURCE)", setup)
         self.assertIn("subscribe_theme_window(self)", setup)
         self.assertNotIn("mainwindow_qss", source)
         self.assertNotIn("setStyleSheet(mainwindow_qss)", source)

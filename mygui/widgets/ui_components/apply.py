@@ -106,6 +106,9 @@ def _set_property_if_changed(widget: QWidget, name: str, value) -> bool:
 def refresh_ui_style(widget: QWidget) -> QWidget:
     """Repolish ``widget`` after dynamic-property changes."""
 
+    if not widget.testAttribute(Qt.WidgetAttribute.WA_WState_Polished):
+        QWidget.update(widget)
+        return widget
     combo = widget if isinstance(widget, QComboBox) else None
     index = combo.currentIndex() if combo is not None else None
     checks = _combo_check_states(combo) if combo is not None else ()
@@ -187,8 +190,10 @@ def annotate_section(group: QWidget) -> QWidget:
     ]
     apply_ui_style(group, role=UiRole.SECTION)
     if checkable:
-        group.setCheckable(True)
-        group.setChecked(checked)
+        if not group.isCheckable():
+            group.setCheckable(True)
+        if group.isChecked() != checked:
+            group.setChecked(checked)
         restore = getattr(group, "_keep_children_enabled", None)
         if callable(restore):
             restore()

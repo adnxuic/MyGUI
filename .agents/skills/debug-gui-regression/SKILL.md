@@ -30,3 +30,10 @@ chrome settle.
 Tree/Inspector refresh regressions must keep `PyFigureCanvas.current_component_id`
 as selection authority and must not turn a UI projection into a second
 `ComponentState` store.
+
+Theme-related changes must pass the mandatory theme roundtrip acceptance in
+`.agents/architecture/testing-map.md`: cached Settings pages, Inspector/Canvas backgrounds, and
+every Figure navigation toolbar glyph after Light → Dark → Light and the
+reverse, including preview cancellation. A correct snapshot or QSS string
+alone is not evidence. Run the routed theme tests and native Settings smoke;
+do not report completion with an untested toolbar or cached page.

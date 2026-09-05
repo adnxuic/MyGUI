@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 import weakref
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,15 @@ if TYPE_CHECKING:
 
 _CONSTRUCTION_DEPTH = 0
 _SCREEN_HOOKS: dict[int, object] = {}
+
+
+@dataclass(frozen=True)
+class WindowPaletteMemento:
+    """Transient, weak capture of one registered palette participant."""
+
+    widget: Callable[[], QWidget | None]
+    palette: QPalette
+    explicitly_set: bool
 
 
 def _alive_widget(widget: QWidget | None) -> QWidget | None:
@@ -432,6 +442,48 @@ class ThemeWindowRegistry:
             _propagate_palette_one(widget, copied, registered=False)
         self.last_child_count = extra
 
+    def _palette_targets(self) -> dict[int, QWidget]:
+        targets = {id(widget): widget for widget in self.live_widgets()}
+        targets.update({id(widget): widget for widget in self.live_palette_participants()})
+        for widget in list(targets.values()):
+            if isinstance(widget, QAbstractScrollArea):
+                viewport = widget.viewport()
+                targets[id(viewport)] = viewport
+        return targets
+
+    def capture_palettes(self) -> tuple[WindowPaletteMemento, ...]:
+        """Capture the explicit registry only, never the descendant tree."""
+
+        return tuple(
+            WindowPaletteMemento(
+                weakref.ref(widget),
+                QPalette(widget.palette()),
+                widget.testAttribute(Qt.WidgetAttribute.WA_SetPalette),
+            )
+            for widget in self._palette_targets().values()
+        )
+
+    def restore_palettes(
+        self, captured: tuple[WindowPaletteMemento, ...], palette: QPalette,
+    ) -> None:
+        """Restore exact captured palettes; new subscribers use the target palette."""
+
+        targets = self._palette_targets()
+        restored: set[int] = set()
+        for item in captured:
+            widget = _alive_widget(item.widget())
+            if widget is None or targets.get(id(widget)) is not widget:
+                continue
+            widget.setPalette(QPalette(item.palette))
+            widget.setAttribute(Qt.WidgetAttribute.WA_SetPalette, item.explicitly_set)
+            restored.add(id(widget))
+        for widget in self.live_widgets():
+            if id(widget) not in restored:
+                _propagate_palette_one(widget, palette, registered=True)
+        for widget in self.live_palette_participants():
+            if id(widget) not in restored:
+                _propagate_palette_one(widget, palette, registered=False)
+
     def apply_metrics(self, metrics: DensityMetrics) -> None:
         from .participants import apply_metrics_to_one_widget
 
@@ -549,14 +601,21 @@ def in_theme_construction_batch() -> bool:
     return _CONSTRUCTION_DEPTH > 0
 
 
-def subscribe_theme_window(widget: QWidget) -> None:
+def subscribe_theme_window(
+    widget: QWidget,
+    *,
+    sync_initial: bool = True,
+) -> None:
     """Register a cached dialog, independent root, or nested chrome participant.
 
     The registry holds only weak QWidget references. Callers must not store
     ``ComponentState``, selection IDs, or color-cycle cursors on the window.
     During ``theme_construction_batch()`` this only registers; the batch exit
     syncs final top-level roots once. Nested chrome becomes an explicit
-    metrics/icon participant and is not walked as a second tree root.
+    metrics/icon participant and is not walked as a second tree root. Dynamic
+    widgets that already consumed the current metrics during construction may
+    pass ``sync_initial=False`` to avoid repeating that work before first
+    polish; later theme publications still visit the registered participant.
     """
 
     target = _alive_widget(widget)
@@ -570,6 +629,6 @@ def subscribe_theme_window(widget: QWidget) -> None:
         viewport = _alive_widget(target.viewport())
         if viewport is not None:
             registry.register_participant(viewport, metrics=False, icons=False, palette=True)
-    if _CONSTRUCTION_DEPTH > 0:
+    if _CONSTRUCTION_DEPTH > 0 or not sync_initial:
         return
     _sync_widget(target)

@@ -22,7 +22,12 @@ class CanvasRegistrationHost(Protocol):
     def _prepare_created_component(self, controller: Any, transaction: Any) -> None:
         ...
 
-    def _finish_created_component(self, controller: Any) -> None:
+    def _finish_created_component(
+        self,
+        controller: Any,
+        *,
+        schedule_redraw: bool = True,
+    ) -> None:
         ...
 
     def _remove_created_artist(self, artist: Any) -> None:

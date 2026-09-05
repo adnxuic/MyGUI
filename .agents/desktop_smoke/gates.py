@@ -16,6 +16,17 @@ WARMUP_FRAMES = 3
 SAMPLE_FRAMES = 20
 SWITCH_LEAK_ITERS = 1000
 THEME_LEAK_ITERS = 50
+DIALOG_DISPATCH_P95_MS = 50.0
+DIALOG_FIRST_PAINT_P95_MS = 100.0
+DIALOG_SETTLE_P95_MS = 150.0
+COMPONENT_CREATE_DISPATCH_P95_MS = 200.0
+COMPONENT_CREATE_FIRST_PAINT_P95_MS = 250.0
+COMPONENT_CREATE_SETTLE_P95_MS = 300.0
+COMPONENT_CREATE_IMPROVEMENT = 0.40
+# Native Windows measurements from archived commit 0740fe8.  Keep these fixed so
+# the relative improvement gate cannot drift with later implementation changes.
+PHASE0_CURVE_CREATE_P95_MS = 541.9215
+PHASE0_TEXT_CREATE_P95_MS = 549.0387
 
 
 def require_p95(name: str, actual: float, limit: float) -> None:
@@ -28,7 +39,7 @@ def require_p95(name: str, actual: float, limit: float) -> None:
 
 
 def require_improvement(name: str, actual: float, baseline: float) -> None:
-    """Raise unless ``actual`` is at least 30% faster than ``baseline``."""
+    """Raise unless ``actual`` satisfies the configured improvement ratio."""
 
     from desktop_smoke.harness import SmokeError
 
@@ -37,6 +48,23 @@ def require_improvement(name: str, actual: float, baseline: float) -> None:
         raise SmokeError(
             f"{name} p95 {actual:.1f}ms did not improve 30% vs baseline "
             f"{baseline:.1f}ms (need ≤ {limit:.1f}ms)."
+        )
+
+
+def require_creation_improvement(
+    name: str,
+    actual: float,
+    baseline: float,
+) -> None:
+    """Raise unless component creation is at least 40% faster than phase 0."""
+
+    from desktop_smoke.harness import SmokeError
+
+    limit = baseline * (1.0 - COMPONENT_CREATE_IMPROVEMENT)
+    if actual > limit:
+        raise SmokeError(
+            f"{name} p95 {actual:.1f}ms did not improve 40% vs phase-0 "
+            f"baseline {baseline:.1f}ms (need ≤ {limit:.1f}ms)."
         )
 
 
@@ -136,3 +164,96 @@ def assert_theme_gates(timings: dict[str, Any]) -> None:
         rollback,
         PHASE0_THEME_ROLLBACK_P95_MS,
     )
+
+
+def _require_counter_exact(
+    diagnostics: dict[str, Any],
+    scenario: str,
+    counter: str,
+    expected: int,
+) -> None:
+    from desktop_smoke.harness import SmokeError
+
+    samples = tuple(
+        int(value)
+        for value in diagnostics[scenario][counter]["samples"]
+    )
+    if any(value != expected for value in samples):
+        raise SmokeError(
+            f"{scenario} {counter} expected {expected} for every sample; "
+            f"observed {samples}."
+        )
+
+
+def assert_creation_gates(timings: dict[str, Any]) -> None:
+    """Enforce dialog-open and lightweight component-creation frame gates."""
+
+    measured = timings["creation_performance"]
+    for scenario in ("plot_dialog", "text_dialog"):
+        timing = measured[scenario]
+        require_p95(
+            f"{scenario} dispatch",
+            float(timing["dispatch_ms"]["p95"]),
+            DIALOG_DISPATCH_P95_MS,
+        )
+        require_p95(
+            f"{scenario} first paint",
+            float(timing["first_paint_ms"]["p95"]),
+            DIALOG_FIRST_PAINT_P95_MS,
+        )
+        require_p95(
+            f"{scenario} settle",
+            float(timing["settle_ms"]["p95"]),
+            DIALOG_SETTLE_P95_MS,
+        )
+
+    baselines = {
+        "curve_create": PHASE0_CURVE_CREATE_P95_MS,
+        "text_create": PHASE0_TEXT_CREATE_P95_MS,
+    }
+    for scenario, baseline in baselines.items():
+        timing = measured[scenario]
+        dispatch = float(timing["dispatch_ms"]["p95"])
+        require_p95(
+            f"{scenario} dispatch",
+            dispatch,
+            COMPONENT_CREATE_DISPATCH_P95_MS,
+        )
+        require_p95(
+            f"{scenario} first paint",
+            float(timing["first_paint_ms"]["p95"]),
+            COMPONENT_CREATE_FIRST_PAINT_P95_MS,
+        )
+        require_p95(
+            f"{scenario} settle",
+            float(timing["settle_ms"]["p95"]),
+            COMPONENT_CREATE_SETTLE_P95_MS,
+        )
+        require_creation_improvement(scenario, dispatch, baseline)
+
+    diagnostics = measured["diagnostics"]
+    for scenario in ("plot_dialog", "text_dialog"):
+        _require_counter_exact(
+            diagnostics,
+            scenario,
+            "style_default_resolution",
+            0,
+        )
+    for scenario in ("curve_create", "text_create"):
+        _require_counter_exact(diagnostics, scenario, "stylesheet_write", 0)
+        _require_counter_exact(
+            diagnostics,
+            scenario,
+            "inspector_construction",
+            1,
+        )
+        _require_counter_exact(
+            diagnostics,
+            scenario,
+            "selection_publication",
+            1,
+        )
+    _require_counter_exact(diagnostics, "curve_create", "canvas_draw_idle", 1)
+    _require_counter_exact(diagnostics, "curve_create", "canvas_draw", 0)
+    _require_counter_exact(diagnostics, "text_create", "canvas_draw", 1)
+    _require_counter_exact(diagnostics, "text_create", "canvas_draw_idle", 0)

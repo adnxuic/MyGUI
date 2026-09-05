@@ -106,6 +106,28 @@ architecture scanners without importing the Windows GUI runtime. Standalone
 Python and scanner enforcement; `--skip-python` is reserved for the Ubuntu
 Agent Core profile. Documentation uses `mkdocs build --strict`.
 
+## Mandatory theme roundtrip acceptance
+
+Every change to the theme publisher, palette/QSS/icon application or rollback,
+Settings page caching, Inspector visibility/style inheritance, or Figure
+toolbar creation/reparenting/theme participation must verify UI Style switching.
+The `debug_gui_regression`, `modernize_ui_components`, and
+`modify_application_setting` routes require `test_application_theme`,
+`test_application_theme_transactions`, `test_application_theme_chrome`, and
+`test_application_theme_qss`; Agent Core tests prevent dropping that coverage.
+Use the union with other matching feature routes.
+
+Run Light → Dark → Light and Dark → Light → Dark, repeated switching,
+reselecting the committed mode, Cancel/Esc/close, storage failure, and partial
+apply failure. Visit a Settings page before switching, revisit it afterward,
+and cover pages/windows created during preview. Check actual background,
+viewport, text, and every Matplotlib navigation-toolbar glyph (including cached
+or popped-out canvases); token equality or one Home icon on a direct committed
+apply is insufficient. Keep project state, selection, history, and Figure
+rendering unchanged. Native `settings.theme_roundtrip` must pass in addition
+to offscreen tests. Preserve the stylesheet-write and frame-time gates above;
+unrun or failed acceptance blocks completion.
+
 ## Fault injection
 
 When changing component registration, deletion, Inspector, project restore, or
@@ -143,6 +165,17 @@ gates are dispatch p95 ≤16 ms, first paint p95 ≤100 ms, and settle p95
 ≤150 ms, with 0 `ComponentState` clones, 0 Matplotlib redraws, and 0
 full-window polish. Theme preview and rollback settle p95 must be ≤1000 ms
 and at least 30% faster than the phase-0 native baseline (1500 ms / 2200 ms).
+The `charts_1d` group also recreates Plot and Text dialogs and creates then
+deletes Curve and Text components with the same 3-warmup/20-sample frame probe.
+Dialog gates are dispatch p95 ≤50 ms, first paint p95 ≤100 ms, and settle p95
+≤150 ms. Lightweight creation gates are dispatch p95 ≤200 ms, first paint
+p95 ≤250 ms, settle p95 ≤300 ms, and at least 40% faster than the recorded
+phase-0 baseline. Each measured creation permits no stylesheet write and
+requires exactly one Inspector construction and one selection publication.
+Curve requires exactly one queued canvas draw and no synchronous draw. Text
+requires exactly one synchronous TextRenderService validation draw and no
+redundant queued draw. Default-style resolution must not recur in measured
+dialog samples after the three warmups.
 The styles group opens Style Dialogs (default: `default`, `dark_background`, `seaborn-v0_8-colorblind`);
 `--all-styles` adds the styles group if needed and visits every visible
 Matplotlib Style Dialog (26), excluding Apply Template and hidden styles.

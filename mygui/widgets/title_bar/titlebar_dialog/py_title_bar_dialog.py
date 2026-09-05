@@ -376,7 +376,7 @@ class PyLayoutDialog(QDialog):
         self._sync_accept_enabled()
         if self._edit_session is not None and self._preview_timer is not None:
             if valid:
-                self._preview_timer.start(120)
+                self._preview_timer.start()
             else:
                 self._preview_timer.stop()
 

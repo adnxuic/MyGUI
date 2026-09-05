@@ -1,23 +1,43 @@
-QFrame
+QFrame#function_curve_section,
+QFrame#function_curve_section QFrame,
+QFrame#interpolation_section,
+QFrame#interpolation_section QFrame,
+QFrame#fit_domain_section,
+QFrame#fit_domain_section QFrame
 {
     background-color: {{COLOR_SURFACE_ALT}};
     color: {{COLOR_TEXT_PRIMARY}};
     border-radius: {{RADIUS_MD}}px;
 }
 
-QLabel, QCheckBox, QRadioButton, QGroupBox
+QFrame#function_curve_section QLabel,
+QFrame#function_curve_section QCheckBox,
+QFrame#function_curve_section QRadioButton,
+QFrame#function_curve_section QGroupBox,
+QFrame#interpolation_section QLabel,
+QFrame#interpolation_section QCheckBox,
+QFrame#interpolation_section QRadioButton,
+QFrame#interpolation_section QGroupBox,
+QFrame#fit_domain_section QLabel,
+QFrame#fit_domain_section QCheckBox,
+QFrame#fit_domain_section QRadioButton,
+QFrame#fit_domain_section QGroupBox
 {
     color: {{COLOR_TEXT_PRIMARY}};
 }
 
-QToolBox::tab
+QFrame#function_curve_section QToolBox::tab,
+QFrame#interpolation_section QToolBox::tab,
+QFrame#fit_domain_section QToolBox::tab
 {
     background-color: {{COLOR_SURFACE_ALT}};
     border-radius: {{RADIUS_SM}}px;
     color: {{COLOR_TEXT_MUTED}};
 }
 
-QToolBox::tab:selected
+QFrame#function_curve_section QToolBox::tab:selected,
+QFrame#interpolation_section QToolBox::tab:selected,
+QFrame#fit_domain_section QToolBox::tab:selected
 {
     background-color: {{COLOR_ACCENT}};
     color: {{COLOR_TEXT_ON_DARK}};

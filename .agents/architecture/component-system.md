@@ -10,6 +10,15 @@ serializable business record. UI code sends complete edits to Controllers or
 domain Services and observes committed Registry events; it does not mutate an
 Artist, Controller state dictionary, or a parallel UI state model.
 
+Registry ordering and scalar validation read Controller `kind`, `parent_id`,
+and `order` metadata directly. These read-only accessors reflect the current
+authoritative state without cloning data payloads. The `state` and snapshot
+APIs still return independent copies; no metadata cache bypasses restore or
+transaction validation.
+Tree validation reuses one independent snapshot per Controller within that
+synchronous call; it discards the local map afterward and retains every
+hierarchy, semantic selector, source, placement, and ordering check.
+
 The corresponding rules are `ARCH-SECOND-COMPONENT-STATE` and
 `ARCH-CONTROLLER-BYPASS`. The broader invariant is `CORE-COMPONENT-STATE`.
 
@@ -101,7 +110,11 @@ through the Canvas.
   current Figure style through the shared style-creation service. Display those
   defaults in Controller-free creation Inputs and create the Artist under the
   same style context. Do not treat a style probe as the effective creation
-  default once Components overrides exist.
+  default once Components overrides exist. Each Canvas caches the immutable
+  style-derived snapshot by its exact `component_style`; a style change or
+  restored different style invalidates the cache. Dialogs reuse that snapshot
+  for their whole construction. `ComponentDefaultsProvider` remains a separate
+  per-creation read and is never part of the style cache.
 - Effective Line/Scatter/free-Text creation uses explicit input >
   `ComponentDefaultsProvider` (`NEXT_USE`) > Axes palette (Line/Scatter
   color) or Figure style (other fields) > Matplotlib 3.9 fallback. Merge in
@@ -129,6 +142,13 @@ through the Canvas.
 - Create the Artist, synchronize the Controller from it, register Controller,
   Locator, materializer/deletion/editor declarations, then publish through one
   registration transaction. Do not expose partial events or selection.
+- Dynamic creation constructs one Inspector, inserts that leaf into the visible
+  Inspector stack once, publishes selection once, and schedules at most one
+  coalesced `draw_idle()`. Register Inspector rollback before visible insertion.
+  TextRenderService and structural Axes validation may retain their required
+  synchronous draw. Reading the canonical component snapshot flushes an already
+  pending coalesced draw so save and history comparisons observe settled
+  Matplotlib-derived state without moving that draw back into creation dispatch.
 - Creation dialogs may reuse Controller-free Inputs only. Acceptance still
   delegates component creation to the Canvas/Controller workflow; dialogs do
   not publish Artists or Registry state themselves. Chart and Element dialogs

@@ -24,7 +24,10 @@ QScrollArea#inspector_scroll_area > QWidget > QWidget
     color: {{COLOR_TEXT_PRIMARY}};
 }
 
-QLabel, QCheckBox, QRadioButton, QGroupBox
+QFrame#fig_control_window QLabel,
+QFrame#fig_control_window QCheckBox,
+QFrame#fig_control_window QRadioButton,
+QFrame#fig_control_window QGroupBox
 {
     color: {{COLOR_TEXT_PRIMARY}};
 }
